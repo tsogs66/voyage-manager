@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -55,6 +56,47 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS noon_meta (
+                key TEXT PRIMARY KEY,
+                data TEXT NOT NULL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS noon_entries (
+                id TEXT PRIMARY KEY,
+                data TEXT NOT NULL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS noon_receipts (
+                id TEXT PRIMARY KEY,
+                data TEXT NOT NULL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+
+NOON_STORE_TABLES = {
+    "meta": ("noon_meta", "key"),
+    "entries": ("noon_entries", "id"),
+    "receipts": ("noon_receipts", "id"),
+}
+
+
+def get_noon_store_config(store: str) -> tuple[str, str]:
+    try:
+        return NOON_STORE_TABLES[store]
+    except KeyError as exc:
+        raise ValueError(f"Unknown noon store '{store}'.") from exc
 
 
 def parse_float(payload: dict[str, Any], field: str) -> float:
@@ -181,6 +223,97 @@ def delete_voyage(voyage_id: int):
     if cursor.rowcount == 0:
         return jsonify({"error": "Voyage record not found."}), 404
     return jsonify({"status": "deleted", "id": voyage_id})
+
+
+@app.get("/api/noon/health")
+def noon_health():
+    return jsonify({"status": "ok"})
+
+
+@app.get("/api/noon/<store>")
+def noon_list(store: str):
+    try:
+        table_name, _ = get_noon_store_config(store)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            f"SELECT data FROM {table_name} ORDER BY updated_at ASC"
+        ).fetchall()
+
+    records = []
+    for row in rows:
+        try:
+            records.append(json.loads(row["data"]))
+        except json.JSONDecodeError:
+            continue
+
+    return jsonify(records)
+
+
+@app.put("/api/noon/<store>/<record_id>")
+def noon_upsert(store: str, record_id: str):
+    try:
+        table_name, key_column = get_noon_store_config(store)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Payload must be a JSON object."}), 400
+
+    payload_key = str(payload.get(key_column, "")).strip()
+    if not payload_key:
+        return jsonify({"error": f"Payload must include '{key_column}'."}), 400
+
+    if payload_key != record_id:
+        return jsonify({"error": "Path record id and payload key do not match."}), 400
+
+    with get_db_connection() as conn:
+        conn.execute(
+            f"""
+            INSERT INTO {table_name} ({key_column}, data, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT({key_column}) DO UPDATE SET
+                data = excluded.data,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (record_id, json.dumps(payload)),
+        )
+
+    return jsonify({"status": "saved", "store": store, "id": record_id})
+
+
+@app.delete("/api/noon/<store>/<record_id>")
+def noon_delete(store: str, record_id: str):
+    try:
+        table_name, key_column = get_noon_store_config(store)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    with get_db_connection() as conn:
+        cursor = conn.execute(
+            f"DELETE FROM {table_name} WHERE {key_column} = ?",
+            (record_id,),
+        )
+
+    if cursor.rowcount == 0:
+        return jsonify({"error": "Record not found."}), 404
+    return jsonify({"status": "deleted", "store": store, "id": record_id})
+
+
+@app.delete("/api/noon/<store>")
+def noon_clear(store: str):
+    try:
+        table_name, _ = get_noon_store_config(store)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    with get_db_connection() as conn:
+        conn.execute(f"DELETE FROM {table_name}")
+
+    return jsonify({"status": "cleared", "store": store})
 
 
 if __name__ == "__main__":

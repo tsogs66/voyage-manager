@@ -62,6 +62,22 @@ This project is an upgrade path from an Excel/VBA workflow into a full web app f
 - `POST /api/voyages` - create a voyage report and compute metrics
 - `DELETE /api/voyages/<id>` - delete a report
 
+### Noon Report server persistence API
+
+Used by `/` (`noon-report-v2_3.html`) to persist setup/log/receipt data in SQLite.
+
+- `GET /api/noon/health`
+- `GET /api/noon/meta`
+- `PUT /api/noon/meta/<key>`
+- `GET /api/noon/entries`
+- `PUT /api/noon/entries/<id>`
+- `DELETE /api/noon/entries/<id>`
+- `DELETE /api/noon/entries`
+- `GET /api/noon/receipts`
+- `PUT /api/noon/receipts/<id>`
+- `DELETE /api/noon/receipts/<id>`
+- `DELETE /api/noon/receipts`
+
 ## Input data fields
 
 Required text fields:
