@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Voyage Manager</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-icon">&#9875;</span>
+        <span class="brand-name">Voyage Manager</span>
+      </div>
+      <nav class="nav">
+        <button class="nav-link" data-view="dashboard">Dashboard</button>
+        <button class="nav-link" data-view="voyages">Voyages</button>
+        <button class="nav-link" data-view="vessels">Vessels</button>
+      </nav>
+      <div class="sidebar-footer">
+        Voyage estimation &amp; P&amp;L,<br />rebuilt from an Excel/VBA workbook.
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <h1 id="view-title">Dashboard</h1>
+      </header>
+
+      <section id="view-dashboard" class="view"></section>
+      <section id="view-voyages" class="view" hidden></section>
+      <section id="view-vessels" class="view" hidden></section>
+      <section id="view-voyage-detail" class="view" hidden></section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
