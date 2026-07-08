@@ -103,6 +103,11 @@ def extract_voyage_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], dic
 
 @app.get("/")
 def index() -> str:
+    return render_template("noon-report-v2_3.html")
+
+
+@app.get("/simple")
+def simple_dashboard() -> str:
     return render_template("index.html")
 
 

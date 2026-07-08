@@ -49,6 +49,12 @@ This project is an upgrade path from an Excel/VBA workflow into a full web app f
    ```
 4. Open:
    - `http://127.0.0.1:5000`
+   - `http://127.0.0.1:5000/simple` (simplified CRUD dashboard)
+
+## UI variants
+
+- `/` serves `noon-report-v2_3.html` sample-style noon report interface
+- `/simple` serves the lightweight form/table dashboard
 
 ## API
 
