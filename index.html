@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voyage Manager</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">&#9875;</span>
+      <div>
+        <h1>Voyage Manager</h1>
+        <p class="tagline">Voyage estimating &amp; results — replacing the VBA workbook</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="dashboard" role="tab">Dashboard</button>
+      <button class="tab" data-view="voyages" role="tab">Voyages</button>
+      <button class="tab" data-view="estimator" role="tab">Estimator</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ============ DASHBOARD ============ -->
+    <section id="view-dashboard" class="view active">
+      <div class="kpi-grid">
+        <div class="kpi"><span class="kpi-label">Voyages</span><span class="kpi-value" id="kpi-count">0</span></div>
+        <div class="kpi"><span class="kpi-label">Total Net Freight</span><span class="kpi-value" id="kpi-freight">$0</span></div>
+        <div class="kpi"><span class="kpi-label">Total Expenses</span><span class="kpi-value" id="kpi-expenses">$0</span></div>
+        <div class="kpi"><span class="kpi-label">Total Result</span><span class="kpi-value" id="kpi-result">$0</span></div>
+        <div class="kpi"><span class="kpi-label">Avg TCE / day</span><span class="kpi-value" id="kpi-tce">$0</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Result by voyage</h2>
+        </div>
+        <div id="dash-chart" class="bar-chart"></div>
+        <p class="empty-hint" id="dash-empty" hidden>No voyages yet — create one in the Estimator tab.</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Status overview</h2></div>
+        <div class="status-grid" id="status-grid"></div>
+      </div>
+    </section>
+
+    <!-- ============ VOYAGES REGISTER ============ -->
+    <section id="view-voyages" class="view">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Voyage register</h2>
+          <div class="actions">
+            <input type="search" id="voyage-search" placeholder="Search vessel, cargo, ports…" />
+            <button class="btn" id="btn-export-csv">Export CSV</button>
+            <label class="btn" for="csv-file-input">Import CSV</label>
+            <input type="file" id="csv-file-input" accept=".csv,text/csv" hidden />
+            <button class="btn primary" id="btn-new-voyage">+ New voyage</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="voyage-table">
+            <thead>
+              <tr>
+                <th data-sort="voyageNo">Voy #</th>
+                <th data-sort="vessel">Vessel</th>
+                <th data-sort="cargo">Cargo</th>
+                <th data-sort="loadPort">Load</th>
+                <th data-sort="dischPort">Discharge</th>
+                <th data-sort="status">Status</th>
+                <th data-sort="totalDays" class="num">Days</th>
+                <th data-sort="netFreight" class="num">Net freight</th>
+                <th data-sort="totalExpenses" class="num">Expenses</th>
+                <th data-sort="result" class="num">Result</th>
+                <th data-sort="tce" class="num">TCE/day</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="empty-hint" id="voyages-empty" hidden>No voyages recorded. Click “+ New voyage” or import a CSV exported from your Excel sheet.</p>
+      </div>
+    </section>
+
+    <!-- ============ ESTIMATOR ============ -->
+    <section id="view-estimator" class="view">
+      <form id="estimator-form" autocomplete="off">
+        <input type="hidden" id="f-id" />
+        <div class="est-grid">
+
+          <div class="panel">
+            <div class="panel-head"><h2>Voyage &amp; cargo</h2></div>
+            <div class="field-grid">
+              <label>Voyage # <input id="f-voyageNo" type="text" placeholder="V-001" required /></label>
+              <label>Vessel <input id="f-vessel" type="text" placeholder="MV Example" required /></label>
+              <label>Status
+                <select id="f-status">
+                  <option>Estimate</option>
+                  <option>Fixed</option>
+                  <option>In Progress</option>
+                  <option>Completed</option>
+                </select>
+              </label>
+              <label>Cargo <input id="f-cargo" type="text" placeholder="Grain" /></label>
+              <label>Load port <input id="f-loadPort" type="text" placeholder="Santos" /></label>
+              <label>Discharge port <input id="f-dischPort" type="text" placeholder="Qingdao" /></label>
+              <label>Cargo qty (mt) <input id="f-cargoQty" type="number" min="0" step="any" value="0" /></label>
+              <label>Freight rate ($/mt) <input id="f-freightRate" type="number" min="0" step="any" value="0" /></label>
+              <label>Lumpsum freight ($) <input id="f-lumpsum" type="number" min="0" step="any" value="0" /></label>
+              <label>Commission (%) <input id="f-commissionPct" type="number" min="0" max="100" step="any" value="0" /></label>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>Distances &amp; speed</h2></div>
+            <div class="field-grid">
+              <label>Ballast distance (nm) <input id="f-ballastDist" type="number" min="0" step="any" value="0" /></label>
+              <label>Laden distance (nm) <input id="f-ladenDist" type="number" min="0" step="any" value="0" /></label>
+              <label>Ballast speed (kn) <input id="f-ballastSpeed" type="number" min="0" step="any" value="13" /></label>
+              <label>Laden speed (kn) <input id="f-ladenSpeed" type="number" min="0" step="any" value="12.5" /></label>
+              <label>Sea margin (%) <input id="f-seaMargin" type="number" min="0" step="any" value="5" /></label>
+              <label>Port days (load) <input id="f-loadDays" type="number" min="0" step="any" value="0" /></label>
+              <label>Port days (discharge) <input id="f-dischDays" type="number" min="0" step="any" value="0" /></label>
+              <label>Idle / waiting days <input id="f-idleDays" type="number" min="0" step="any" value="0" /></label>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>Bunkers</h2></div>
+            <div class="field-grid">
+              <label>Sea cons. IFO (mt/day) <input id="f-seaConsIfo" type="number" min="0" step="any" value="0" /></label>
+              <label>Port cons. IFO (mt/day) <input id="f-portConsIfo" type="number" min="0" step="any" value="0" /></label>
+              <label>Sea cons. MGO (mt/day) <input id="f-seaConsMgo" type="number" min="0" step="any" value="0" /></label>
+              <label>Port cons. MGO (mt/day) <input id="f-portConsMgo" type="number" min="0" step="any" value="0" /></label>
+              <label>IFO price ($/mt) <input id="f-priceIfo" type="number" min="0" step="any" value="0" /></label>
+              <label>MGO price ($/mt) <input id="f-priceMgo" type="number" min="0" step="any" value="0" /></label>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>Other costs</h2></div>
+            <div class="field-grid">
+              <label>Port costs load ($) <input id="f-portCostLoad" type="number" min="0" step="any" value="0" /></label>
+              <label>Port costs disch ($) <input id="f-portCostDisch" type="number" min="0" step="any" value="0" /></label>
+              <label>Canal dues ($) <input id="f-canalDues" type="number" min="0" step="any" value="0" /></label>
+              <label>Other costs ($) <input id="f-otherCosts" type="number" min="0" step="any" value="0" /></label>
+            </div>
+          </div>
+
+          <div class="panel results-panel">
+            <div class="panel-head"><h2>Results</h2></div>
+            <table class="results-table">
+              <tbody>
+                <tr><td>Sea days (ballast)</td><td class="num" id="r-ballastDays">0.00</td></tr>
+                <tr><td>Sea days (laden)</td><td class="num" id="r-ladenDays">0.00</td></tr>
+                <tr><td>Port + idle days</td><td class="num" id="r-portDays">0.00</td></tr>
+                <tr class="strong"><td>Total voyage days</td><td class="num" id="r-totalDays">0.00</td></tr>
+                <tr class="sep"><td>Gross freight</td><td class="num" id="r-grossFreight">$0</td></tr>
+                <tr><td>Commission</td><td class="num" id="r-commission">$0</td></tr>
+                <tr class="strong"><td>Net freight</td><td class="num" id="r-netFreight">$0</td></tr>
+                <tr class="sep"><td>Bunkers IFO</td><td class="num" id="r-bunkerIfo">$0</td></tr>
+                <tr><td>Bunkers MGO</td><td class="num" id="r-bunkerMgo">$0</td></tr>
+                <tr><td>Port costs</td><td class="num" id="r-portCosts">$0</td></tr>
+                <tr><td>Canal + other</td><td class="num" id="r-canalOther">$0</td></tr>
+                <tr class="strong"><td>Total expenses</td><td class="num" id="r-totalExpenses">$0</td></tr>
+                <tr class="sep result-row"><td>Voyage result</td><td class="num" id="r-result">$0</td></tr>
+                <tr class="result-row"><td>TCE / day</td><td class="num" id="r-tce">$0</td></tr>
+              </tbody>
+            </table>
+            <div class="form-actions">
+              <button type="submit" class="btn primary" id="btn-save">Save voyage</button>
+              <button type="button" class="btn" id="btn-reset">Clear form</button>
+            </div>
+          </div>
+
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <footer class="footbar">
+    <span>Data is stored locally in your browser (localStorage). Use Export CSV for backups.</span>
+  </footer>
+
+  <script src="js/calc.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/csv.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
