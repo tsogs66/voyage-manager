@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voyage Performance Dashboard</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>Voyage Fuel & Engine Performance</h1>
+      <p>Local web app inspired by Excel/VBA workflow, backed by SQLite.</p>
+    </header>
+
+    <section class="card">
+      <h2>Create Voyage Report</h2>
+      <form id="voyage-form">
+        <div class="grid">
+          <label>Vessel Name<input name="vessel_name" required></label>
+          <label>Voyage No<input name="voyage_no" required></label>
+          <label>Report Date<input name="report_date" type="date" required></label>
+          <label>Departure Port<input name="departure_port" required></label>
+          <label>Arrival Port<input name="arrival_port" required></label>
+          <label>Distance (nm)<input name="distance_nm" type="number" min="0" step="0.01" required></label>
+          <label>Steaming Hours<input name="steaming_hours" type="number" min="0" step="0.01" required></label>
+          <label>ME Power (kW)<input name="me_power_kw" type="number" min="0" step="0.01" required></label>
+          <label>ME MCR (kW)<input name="me_mcr_kw" type="number" min="0" step="0.01" required></label>
+          <label>ME RPM<input name="me_rpm" type="number" min="0" step="0.01" required></label>
+          <label>Propeller Pitch (m)<input name="propeller_pitch_m" type="number" min="0" step="0.001" required></label>
+          <label>HFO Fuel (mt)<input name="fuel_hfo_mt" type="number" min="0" step="0.001" required></label>
+          <label>MGO Fuel (mt)<input name="fuel_mgo_mt" type="number" min="0" step="0.001" required></label>
+          <label>Cargo (mt)<input name="cargo_mt" type="number" min="0" step="0.01" required></label>
+        </div>
+        <label>Notes<textarea name="notes" rows="3"></textarea></label>
+        <button type="submit">Save Report</button>
+        <p id="form-message" class="message"></p>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Voyage Reports</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Date</th>
+              <th>Vessel</th>
+              <th>Voyage</th>
+              <th>Route</th>
+              <th>Fuel/Day (mt)</th>
+              <th>SFOC (g/kWh)</th>
+              <th>Speed (kn)</th>
+              <th>Load (%)</th>
+              <th>EEOI (gCO2/t·nm)</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="voyage-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

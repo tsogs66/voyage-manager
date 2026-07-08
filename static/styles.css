@@ -1,0 +1,101 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f2f5f8;
+  color: #1a1f2b;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+header h1 {
+  margin-bottom: 8px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #dbe3ee;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid #c6cfda;
+  border-radius: 6px;
+}
+
+button {
+  cursor: pointer;
+  background: #1956d1;
+  color: #fff;
+  border: none;
+  margin-top: 12px;
+}
+
+button:hover {
+  background: #1446ab;
+}
+
+button.danger {
+  margin-top: 0;
+  background: #b3122e;
+}
+
+button.danger:hover {
+  background: #8f1024;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid #edf1f7;
+  text-align: left;
+  padding: 10px 8px;
+  font-size: 14px;
+}
+
+th {
+  background: #f8fafe;
+}
+
+.message {
+  margin-top: 10px;
+  min-height: 18px;
+}
+
+.message.error {
+  color: #b3122e;
+}

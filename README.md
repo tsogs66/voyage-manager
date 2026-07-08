@@ -1,50 +1,84 @@
 # voyage-manager
 
-Excel VBA application template for managing records in a worksheet.
+Web-based voyage performance application with a local SQLite database.
 
-## What this provides
+This project is an upgrade path from an Excel/VBA workflow into a full web app for:
 
-This repository now includes a VBA-based application skeleton you can import into an `.xlsm` workbook:
+- fuel consumption tracking
+- main engine performance monitoring
+- ship performance during voyages
 
-- `VBADataAccess.bas`: read, add, update, delete records from sheet data
-- `VBAValidation.bas`: input validation helpers
-- `VBAApp.bas`: app entry points and user interaction flow
+## Stack
 
-The app assumes your workbook has a table-like sheet where row 1 contains headers.
+- Backend: Python + Flask
+- Database: SQLite (local file `voyage_performance.db`)
+- Frontend: HTML/CSS/JavaScript
 
-## Expected worksheet structure
+## Features
 
-Create a worksheet named `Data` with headers in row 1:
+- Create voyage reports from a web form
+- Persist records in local SQLite
+- Automatically compute performance metrics per voyage:
+  - Total fuel (mt)
+  - Fuel per day (mt/day)
+  - Fuel per nautical mile (mt/nm)
+  - Average speed (kn)
+  - SFOC (g/kWh)
+  - Engine load factor (% MCR)
+  - Propeller slip (%)
+  - Transport work (tonne-nautical-mile)
+  - CO2 emissions (tCO2)
+  - EEOI proxy (gCO2/t·nm)
+- List voyage history in dashboard table
+- Delete records from UI
 
-1. `ID`
-2. `Name`
-3. `Category`
-4. `Amount`
-5. `DueDate`
-6. `Status`
+## Run locally
 
-You can rename columns later by editing constants in `VBADataAccess.bas`.
+1. Create virtual environment:
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Start app:
+   ```bash
+   python app.py
+   ```
+4. Open:
+   - `http://127.0.0.1:5000`
 
-## How to run in Excel
+## API
 
-1. Open Excel and save workbook as **Excel Macro-Enabled Workbook (`.xlsm`)**.
-2. Press `ALT + F11` to open VBA editor.
-3. Right-click your VBA project > `Import File...` and import:
-   - `VBADataAccess.bas`
-   - `VBAValidation.bas`
-   - `VBAApp.bas`
-4. Ensure macros are enabled.
-5. Run macro `LaunchApp` from `VBAApp`.
+- `GET /api/voyages` - list all voyage reports
+- `POST /api/voyages` - create a voyage report and compute metrics
+- `DELETE /api/voyages/<id>` - delete a report
 
-## Available actions in the app menu
+## Input data fields
 
-- View all records
-- Add a record
-- Edit a record by ID
-- Delete a record by ID
-- Exit
+Required text fields:
+- `vessel_name`
+- `voyage_no`
+- `report_date`
+- `departure_port`
+- `arrival_port`
 
-## Notes
+Required numeric fields:
+- `distance_nm`
+- `steaming_hours`
+- `me_power_kw`
+- `me_mcr_kw`
+- `me_rpm`
+- `propeller_pitch_m`
+- `fuel_hfo_mt`
+- `fuel_mgo_mt`
+- `cargo_mt`
 
-- This template uses `InputBox` prompts so it works without building forms first.
-- If you share your exact Excel columns/business logic, this can be customized into a fully tailored app flow.
+Optional:
+- `notes`
+
+## VBA files
+
+The original VBA template files (`VBAApp.bas`, `VBADataAccess.bas`, `VBAValidation.bas`) are kept in the repository as a legacy reference for the Excel-based workflow.
