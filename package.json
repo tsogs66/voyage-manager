@@ -1,0 +1,16 @@
+{
+  "name": "voyage-manager",
+  "version": "1.0.0",
+  "description": "Maritime Voyage Management System",
+  "private": true,
+  "scripts": {
+    "dev:backend": "cd backend && node index.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && node index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
