@@ -1,0 +1,374 @@
+{
+  "setup": {
+    "vesselName": "CAPTAIN VENIAMIS",
+    "chEng": "MARVIN ENDOZO",
+    "voyageNumber": "11",
+    "shipCondition": "BALLAST",
+    "departPort": "CHINA",
+    "arrivePort": "BRAZIL",
+    "place": "FANGCHENG CHINA",
+    "flowArr": "SINGLE",
+    "initDateTime": "2025-10-28T17:24",
+    "initRuntime": null,
+    "pitch": 5.85,
+    "mcrRpm": 91,
+    "mcrKw": 18630,
+    "csrRpm": 82.7,
+    "csrKw": 13960,
+    "sfoc100": 173,
+    "sfoc85": 170.3,
+    "alternatorMaxKw": 660,
+    "flowmeters": {
+      "main": {
+        "reading": 32760845,
+        "digits": 8
+      },
+      "mainOut": {
+        "reading": null,
+        "digits": 8
+      },
+      "aux": {
+        "reading": 2476290,
+        "digits": 7
+      },
+      "auxOut": {
+        "reading": null,
+        "digits": 8
+      },
+      "boiler": {
+        "reading": 670588,
+        "digits": 6
+      },
+      "cyl": {
+        "reading": 490506,
+        "digits": 7
+      },
+      "rc": {
+        "reading": 6085877,
+        "digits": 8
+      }
+    },
+    "defaults": {
+      "cylTbn": "HIGH",
+      "meType": "LSFO",
+      "geType": "LSFO",
+      "blrType": "LSFO",
+      "meSg": 0.9669,
+      "geSg": 0.9669,
+      "blrSg": 0.9669
+    },
+    "voyageDistance": 5000,
+    "rob": {
+      "HFO": 0,
+      "LSFO": 1213.68,
+      "MDO/MGO": 0,
+      "LSMGO": 213.12
+    },
+    "robLube": {
+      "CYL HIGH": 43812,
+      "CYL LOW": 0,
+      "ME SYS OIL": 17000,
+      "GE SYS OIL": 5090,
+      "FRESH WATER": 50000
+    },
+    "capacity": {
+      "HFO": 1200,
+      "LSFO": 2000,
+      "MDO/MGO": 300,
+      "LSMGO": 400
+    },
+    "capacityLube": {
+      "CYL HIGH": 50000,
+      "CYL LOW": 15000,
+      "ME SYS OIL": 20000,
+      "GE SYS OIL": 8000,
+      "FRESH WATER": 150000
+    },
+    "carryover": null
+  },
+  "entries": [
+    {
+      "id": "import1",
+      "datetime": "2025-10-28T17:24",
+      "operation": "LAST LINE - DEPARTURE",
+      "condition": "BALLAST",
+      "distanceShip": 0,
+      "rpm": null,
+      "revCounter": 6085877,
+      "tbn": "HIGH",
+      "meRuntime": null,
+      "ge1Runtime": null,
+      "blrRuntime": null,
+      "me": {
+        "meter": 32760845,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "ge": {
+        "meter": 2476290,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "blr": {
+        "meter": 670588,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "cylMeter": 490506,
+      "meLo": 17000,
+      "geLo": 5090,
+      "fwProd": 0,
+      "fwRob": null,
+      "consOverride": null,
+      "miscCons": {
+        "MDO/MGO": 0,
+        "LSMGO": 0
+      },
+      "report": {
+        "erTemp": 45,
+        "bilgeRob": 22.56,
+        "sludgeRob": 2.84,
+        "stTemp": 24,
+        "swTemp": 27,
+        "remarks": "",
+        "port": "FANGCHENG CHINA",
+        "cargoOp": "DISCHARGING",
+        "perfTable": {}
+      }
+    },
+    {
+      "id": "import2",
+      "datetime": "2025-10-28T18:12",
+      "operation": "START - PASSAGE",
+      "condition": "BALLAST",
+      "distanceShip": 6,
+      "rpm": 40.479,
+      "revCounter": 6087820,
+      "tbn": "HIGH",
+      "meRuntime": 0.8,
+      "ge1Runtime": null,
+      "blrRuntime": null,
+      "me": {
+        "meter": 32761278,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "ge": {
+        "meter": 2476402,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "blr": {
+        "meter": 670647,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "cylMeter": 490516,
+      "meLo": 17000,
+      "geLo": 5090,
+      "fwProd": 0,
+      "fwRob": null,
+      "consOverride": null,
+      "miscCons": {
+        "MDO/MGO": 0,
+        "LSMGO": 0
+      }
+    },
+    {
+      "id": "import3",
+      "datetime": "2025-10-29T12:00",
+      "operation": "AT SEA - NOON",
+      "condition": "BALLAST",
+      "distanceShip": 217,
+      "rpm": 65.44,
+      "revCounter": 6157710,
+      "tbn": "HIGH",
+      "meRuntime": 17.8,
+      "ge1Runtime": null,
+      "blrRuntime": null,
+      "me": {
+        "meter": 32785599,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "ge": {
+        "meter": 2478870,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "blr": {
+        "meter": 670647,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "cylMeter": 490718,
+      "meLo": 17000,
+      "geLo": 5090,
+      "fwProd": 0,
+      "fwRob": null,
+      "consOverride": null,
+      "miscCons": {
+        "MDO/MGO": 0,
+        "LSMGO": 0
+      }
+    },
+    {
+      "id": "import4",
+      "datetime": "2025-10-30T12:00",
+      "operation": "AT SEA - NOON",
+      "condition": "BALLAST",
+      "distanceShip": 295,
+      "rpm": 56.342,
+      "revCounter": 6238843,
+      "tbn": "HIGH",
+      "meRuntime": 24,
+      "ge1Runtime": null,
+      "blrRuntime": null,
+      "me": {
+        "meter": 32808153,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "ge": {
+        "meter": 2482528,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "blr": {
+        "meter": 670647,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "cylMeter": 490940,
+      "meLo": 17000,
+      "geLo": 5090,
+      "fwProd": 0,
+      "fwRob": null,
+      "consOverride": null,
+      "miscCons": {
+        "MDO/MGO": 0,
+        "LSMGO": 0
+      }
+    },
+    {
+      "id": "import5",
+      "datetime": "2025-10-31T12:00",
+      "operation": "AT SEA - NOON",
+      "condition": "BALLAST",
+      "distanceShip": 329,
+      "rpm": 56.484,
+      "revCounter": 6320180,
+      "tbn": "HIGH",
+      "meRuntime": 24,
+      "ge1Runtime": null,
+      "blrRuntime": null,
+      "me": {
+        "meter": 32834052,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "ge": {
+        "meter": 2486393,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "blr": {
+        "meter": 670647,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "cylMeter": 491183,
+      "meLo": 17000,
+      "geLo": 5090,
+      "fwProd": 0,
+      "fwRob": null,
+      "consOverride": null,
+      "miscCons": {
+        "MDO/MGO": 0,
+        "LSMGO": 0
+      }
+    },
+    {
+      "id": "import6",
+      "datetime": "2025-11-01T12:00",
+      "operation": "AT SEA - NOON",
+      "condition": "BALLAST",
+      "distanceShip": 329,
+      "rpm": 65.415,
+      "revCounter": 6414378,
+      "tbn": "HIGH",
+      "meRuntime": 24,
+      "ge1Runtime": null,
+      "blrRuntime": null,
+      "me": {
+        "meter": 32867292,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "ge": {
+        "meter": 2490601,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "blr": {
+        "meter": 670647,
+        "type": "LSFO",
+        "sg": 0.9669
+      },
+      "cylMeter": 491460,
+      "meLo": 17000,
+      "geLo": 5090,
+      "fwProd": 0,
+      "fwRob": null,
+      "consOverride": null,
+      "miscCons": {
+        "MDO/MGO": 0,
+        "LSMGO": 0
+      },
+      "report": {
+        "erTemp": 45,
+        "bilgeRob": 22.56,
+        "sludgeRob": 5.02,
+        "stTemp": 37,
+        "swTemp": 34,
+        "remarks": "",
+        "eta": null,
+        "pumpRack": [
+          50,
+          49,
+          59,
+          49,
+          50,
+          50
+        ],
+        "exhaustTemp": [
+          329,
+          332,
+          323,
+          326,
+          339,
+          330
+        ],
+        "turbo1": {
+          "in": 411,
+          "out": 318,
+          "rpm": 6474
+        },
+        "turbo2": {
+          "in": null,
+          "out": null,
+          "rpm": null
+        },
+        "scavTemp": 36,
+        "scavPress": 0.72,
+        "fuelTemp": 126,
+        "pumpMark": 49.8,
+        "pressDiff": 18,
+        "perfTable": {}
+      }
+    }
+  ],
+  "receipts": [],
+  "documents": [],
+  "exportedAt": "2026-07-11T10:13:03.442Z"
+}

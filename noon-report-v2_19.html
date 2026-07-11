@@ -1,0 +1,3365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Noon Report — Engine Log</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0a1420; --panel:#122238; --panel2:#0e1c30;
+    --paper:#e9e4d6; --paper-dim:#a9a292;
+    --brass:#c99a53; --brass-dim:#8a6b3c;
+    --teal:#57b3ab; --alert:#c1573a; --good:#5f9e6e;
+    --line:rgba(233,228,214,0.12); --line-strong:rgba(233,228,214,0.24);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:radial-gradient(1200px 600px at 15% -10%, #16283f 0%, transparent 60%), var(--ink);
+    color:var(--paper); font-family:'Inter',sans-serif; min-height:100vh; padding:24px 20px 80px;
+  }
+  .wrap{max-width:1280px;margin:0 auto;}
+  .masthead{display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid var(--brass-dim); padding-bottom:14px; margin-bottom:6px; gap:20px; flex-wrap:wrap;}
+  .masthead-left{display:flex; align-items:center; gap:14px;}
+  .brass-dot{width:10px;height:10px;border-radius:50%;background:var(--brass);box-shadow:0 0 10px var(--brass);}
+  h1{font-family:'Oswald',sans-serif; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; font-size:24px; margin:0;}
+  .subtitle{font-size:11px; color:var(--paper-dim); letter-spacing:0.08em; text-transform:uppercase; margin-top:2px;}
+  #dbStatus{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--teal);}
+
+  .tabs{display:flex; gap:2px; margin:18px 0 20px; border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .tab{
+    font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:0.06em; text-transform:uppercase;
+    padding:10px 16px; cursor:pointer; color:var(--paper-dim); border-bottom:2px solid transparent;
+  }
+  .tab.active{color:var(--brass); border-bottom-color:var(--brass);}
+  .tab:hover{color:var(--paper);}
+  .page{display:none;}
+  .page.active{display:block;}
+
+  .panel{background:linear-gradient(180deg, var(--panel), var(--panel2)); border:1px solid var(--line); border-radius:6px; padding:20px 22px; margin-bottom:20px; position:relative;}
+  .panel::before{content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg, var(--brass), transparent); border-radius:6px 6px 0 0;}
+  .panel h2{font-family:'Oswald',sans-serif; font-size:14px; letter-spacing:0.1em; text-transform:uppercase; color:var(--brass); margin:0 0 16px; display:flex; align-items:center; gap:8px;}
+  .panel h2::after{content:''; flex:1; height:1px; background:var(--line);}
+  .panel h3.sub{font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:var(--teal); margin:18px 0 10px;}
+
+  .grid{display:grid; grid-template-columns:1.5fr 1fr; gap:20px; align-items:start;}
+  @media (max-width:960px){ .grid{grid-template-columns:1fr;} }
+
+  .form-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:12px 14px;}
+  .form-grid.cols3{grid-template-columns:repeat(3,1fr);}
+  .form-grid.cols2{grid-template-columns:repeat(2,1fr);}
+  .field{display:flex; flex-direction:column; gap:4px;}
+  .field.span2{grid-column:span 2;}
+  .field label{font-size:10px; letter-spacing:0.07em; text-transform:uppercase; color:var(--paper-dim);}
+  .field input, .field select{background:var(--ink); border:1px solid var(--line-strong); border-radius:3px; color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:7px 8px; width:100%;}
+  .field input:focus, .field select:focus{outline:none; border-color:var(--teal);}
+
+  .unit-group{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px;}
+  .unit-group.cols2{grid-template-columns:1fr 1fr;}
+  .unit-group.cols5{grid-template-columns:repeat(5,1fr);}
+  .unit-box{border:1px solid var(--line); border-radius:4px; padding:10px; background:rgba(0,0,0,0.15);}
+  .unit-box h3{margin:0 0 8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:var(--teal);}
+  .unit-box .field{margin-bottom:8px;}
+
+  .btn-row{display:flex; gap:10px; margin-top:16px; flex-wrap:wrap;}
+  button{font-family:'Oswald',sans-serif; letter-spacing:0.06em; text-transform:uppercase; font-size:12px; padding:10px 18px; border-radius:3px; border:1px solid var(--brass-dim); cursor:pointer; background:transparent; color:var(--brass); transition:all .15s ease;}
+  button.primary{background:var(--brass); color:var(--ink); font-weight:600;}
+  button.primary:hover{background:#dcae6c;}
+  button:hover{border-color:var(--brass); color:#dcae6c;}
+  button.ghost{border-color:var(--line-strong); color:var(--paper-dim);}
+  button.ghost:hover{color:var(--paper); border-color:var(--paper-dim);}
+  button.small{padding:5px 10px; font-size:10px;}
+  button.danger{border-color:var(--alert); color:var(--alert);}
+  button.danger:hover{background:var(--alert); color:var(--paper);}
+
+  .gauge-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  .gauge-grid.cols2{grid-template-columns:repeat(2,1fr);}
+  .gauge-grid.cols4{grid-template-columns:repeat(4,1fr);}
+  .gauge-grid.cols5{grid-template-columns:repeat(5,1fr);}
+  .gauge-grid.single{grid-template-columns:minmax(140px,220px); justify-content:center;}
+  .gauge-box{text-align:center; padding:8px 2px 2px;}
+  .gauge-box svg{width:100%; max-width:130px; height:auto;}
+  .gauge-grid.large .gauge-box svg{max-width:200px;}
+  .gauge-grid.large .gauge-value{font-size:22px;}
+  .gauge-grid.large .gauge-label{font-size:12px;}
+  .gauge-grid.large .gauge-cap{font-size:11px;}
+  .gauge-label{font-family:'Oswald',sans-serif; font-size:10px; letter-spacing:0.06em; text-transform:uppercase; color:var(--paper-dim); margin-top:2px;}
+  .gauge-value{font-family:'IBM Plex Mono',monospace; font-size:16px; color:var(--brass); font-weight:600;}
+  .gauge-cap{font-size:9px; color:var(--paper-dim); font-family:'IBM Plex Mono',monospace;}
+  .needle{transition:transform .6s cubic-bezier(.3,1.4,.4,1);}
+
+  .stat-strip{display:grid; grid-template-columns:repeat(4,1fr); gap:14px;}
+  .stat-strip.cols3{grid-template-columns:repeat(3,1fr);}
+  .stat-strip.cols2{grid-template-columns:repeat(2,1fr);}
+  .stat-strip.cols5{grid-template-columns:repeat(5,1fr);}
+  .stat{border-left:2px solid var(--brass-dim); padding-left:10px;}
+  .stat .num{font-family:'IBM Plex Mono',monospace; font-size:19px; color:var(--paper);}
+  .stat .lbl{font-size:9px; letter-spacing:0.06em; text-transform:uppercase; color:var(--paper-dim); margin-top:2px;}
+
+  table{width:100%; border-collapse:collapse; font-family:'IBM Plex Mono',monospace; font-size:11.5px;}
+  thead th{text-align:left; font-family:'Oswald',sans-serif; font-size:9.5px; letter-spacing:0.05em; text-transform:uppercase; color:var(--brass); border-bottom:1px solid var(--line-strong); padding:6px 7px; white-space:nowrap; position:sticky; top:0; background:var(--panel2);}
+  tbody td{padding:6px 7px; border-bottom:1px solid var(--line); color:var(--paper); white-space:nowrap;}
+  tbody tr:hover{background:rgba(255,255,255,0.03);}
+  .table-scroll{overflow-x:auto; max-height:460px; overflow-y:auto;}
+  table.freeze-cols th:nth-child(1), table.freeze-cols td:nth-child(1){position:sticky; left:0; z-index:2; width:150px; min-width:150px;}
+  table.freeze-cols th:nth-child(2), table.freeze-cols td:nth-child(2){position:sticky; left:150px; z-index:2; width:150px; min-width:150px;}
+  table.freeze-cols th:nth-child(1), table.freeze-cols th:nth-child(2){z-index:3; background:var(--panel2);}
+  table.freeze-cols td:nth-child(1), table.freeze-cols td:nth-child(2){background:var(--panel2); box-shadow:2px 0 4px rgba(0,0,0,0.25);}
+  .cond-tag{padding:2px 6px; border-radius:3px; font-size:10px;}
+  .cond-B{background:rgba(87,179,171,0.18); color:var(--teal);}
+  .cond-L{background:rgba(201,154,83,0.18); color:var(--brass);}
+  .empty-row td{text-align:center; color:var(--paper-dim); padding:24px; font-family:'Inter',sans-serif; font-style:italic;}
+
+  .receipts-list{display:flex; flex-direction:column; gap:8px; margin-bottom:14px;}
+  .receipt-row{display:flex; justify-content:space-between; align-items:center; font-family:'IBM Plex Mono',monospace; font-size:12px; border-bottom:1px dashed var(--line); padding-bottom:6px; gap:8px;}
+  .receipt-row span.qty{color:var(--teal); white-space:nowrap;}
+  .receipt-row span.desc{overflow:hidden; text-overflow:ellipsis;}
+
+  .hint{font-size:11px; color:var(--paper-dim); margin-top:4px; line-height:1.5;}
+  .ref-grid{display:grid; grid-template-columns:repeat(6,1fr); gap:10px 14px;}
+  @media (max-width:900px){ .ref-grid{grid-template-columns:repeat(3,1fr);} }
+  .ref-item{border-left:2px solid var(--line-strong); padding-left:8px;}
+  .ref-item .rv{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--brass); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .ref-item .rl{font-size:9px; letter-spacing:0.05em; text-transform:uppercase; color:var(--paper-dim); margin-top:1px;}
+  .footer-note{text-align:center; color:var(--paper-dim); font-size:11px; margin-top:30px; letter-spacing:0.03em;}
+  .badge{display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:10px; padding:2px 7px; border-radius:10px; border:1px solid var(--line-strong); color:var(--paper-dim); margin-left:8px;}
+  .pf-input{width:64px; background:var(--ink); border:1px solid var(--line-strong); color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:12px; padding:4px; border-radius:2px;}
+  .pf-computed{color:var(--teal); font-family:'IBM Plex Mono',monospace; font-size:12px;}
+
+  /* ---- print layout ---- */
+  #printArea{ display:none; }
+  @media print{
+    @page{ size: A4 landscape; margin: 6mm; }
+    body *{ visibility: hidden; }
+    #printArea, #printArea *{ visibility: visible; }
+    #printArea{
+      display:block; position:absolute; top:0; left:0; width:100%;
+      background:#fff; color:#111;
+    }
+  }
+  .pr-sheet{ font-family:'IBM Plex Mono',monospace; font-size:7.5px; color:#111; line-height:1.25; }
+  .pr-page{ display:flex; gap:5mm; }
+  .pr-copy{ flex:1; min-width:0; border-right:1px dashed #999; padding-right:5mm; }
+  .pr-copy:last-child{ border-right:none; padding-right:0; }
+  .pr-title{ font-family:'Oswald',sans-serif; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.02em; border-bottom:2px solid #111; padding-bottom:2px; margin-bottom:4px; display:flex; justify-content:space-between; align-items:baseline; }
+  .pr-title span{ font-size:8px; font-family:'IBM Plex Mono',monospace; font-weight:400; }
+  .pr-header{ display:grid; grid-template-columns:repeat(3,1fr); gap:2px; border:1px solid #111; padding:3px 5px; margin-bottom:4px; }
+  .pr-header div b{ display:block; font-size:6.5px; text-transform:uppercase; color:#555; letter-spacing:0.03em; }
+  .pr-cols{ column-count:3; column-gap:5px; }
+  .pr-box{ border:1px solid #111; padding:3px 5px; margin-bottom:4px; break-inside:avoid; -webkit-column-break-inside:avoid; display:inline-block; width:100%; }
+  .pr-box h4{ margin:0 0 2px; font-family:'Oswald',sans-serif; font-size:7.5px; text-transform:uppercase; letter-spacing:0.03em; border-bottom:1px solid #999; padding-bottom:1px; }
+  .pr-row{ display:flex; justify-content:space-between; padding:0.5px 0; border-bottom:1px dotted #ccc; gap:5px; }
+  .pr-row b{ font-weight:600; text-align:right; }
+  .pr-table{ width:100%; border-collapse:collapse; font-size:7px; }
+  .pr-table th, .pr-table td{ border:1px solid #999; padding:1px 2px; text-align:center; }
+  .pr-table th{ background:#eee; }
+  .pr-remarks{ border:1px solid #111; padding:3px 5px; min-height:16px; margin-bottom:3px; }
+  .pr-foot{ text-align:right; font-size:6.5px; color:#666; margin-top:3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="masthead-left">
+      <div class="brass-dot"></div>
+      <div>
+        <h1>Noon Report</h1>
+        <div class="subtitle">Engine Department — Voyage Log &amp; Performance</div>
+      </div>
+    </div>
+    <div id="dbStatus">● local database ready</div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-page="summary">Summary</div>
+    <div class="tab" data-page="entry">Log Entry</div>
+    <div class="tab" data-page="voyageabstract">Voyage Abstract</div>
+    <div class="tab" data-page="consumption">Consumption</div>
+    <div class="tab" data-page="rob">ROB</div>
+    <div class="tab" data-page="receipts">Receipts</div>
+    <div class="tab" data-page="reports">Reports</div>
+    <div class="tab" data-page="data">Data</div>
+    <div class="tab" data-page="setup">Setup</div>
+  </div>
+
+  <!-- SETUP -->
+  <div class="page" id="page-setup">
+    <div class="panel">
+      <h2>Vessel</h2>
+      <div class="form-grid cols2">
+        <div class="field"><label>Vessel Name</label><input id="s_vesselName"></div>
+        <div class="field"><label>Chief Engineer</label><input id="s_chEng"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Voyage Specifics</h2>
+      <div class="form-grid cols3">
+        <div class="field"><label>Voyage No.</label><input id="s_voyageNumber"></div>
+        <div class="field"><label>Ships Condition</label><select id="s_shipCondition"><option>BALLAST</option><option>LADEN</option></select></div>
+        <div class="field"><label>Date &amp; Time (initial)</label><input type="datetime-local" id="s_initDateTime"></div>
+        <div class="field"><label>Departure</label><input id="s_departPort"></div>
+        <div class="field"><label>Arrival</label><input id="s_arrivePort"></div>
+        <div class="field"><label>Voyage Distance (nm)</label><input type="number" step="0.1" id="s_voyageDistance"></div>
+      </div>
+      <div class="hint">Voyage Distance is the planned distance for this leg — used to calculate Distance To Go and Days To Go on the Voyage Summary shown after each Log Entry.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Remaining Onboard (Opening ROB)</h2>
+      <h3 class="sub">Fuel (metric tons)</h3>
+      <div class="unit-group cols5" id="setupFuelRob"></div>
+      <h3 class="sub">Lube Oil &amp; Fresh Water (litres)</h3>
+      <div class="unit-group cols5" id="setupLubeRob"></div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+        <button class="primary" id="btnSaveVoyageDetails">Update Voyage Details</button>
+        <button class="danger" id="btnResetVoyage">Create New Voyage…</button>
+        <button class="ghost" id="btnToggleShipDetails">Ship Details ▾</button>
+      </div>
+      <div class="hint" style="margin-top:12px; text-align:center;">Create New Voyage clears the voyage log and receipts to start fresh, but keeps everything continuous: your last entry's meter readings carry over as the opening reference for the next entry, current ROB becomes the new opening ROB, and Departure Port is set to this voyage's Arrival Port. Before it runs, Voyage No., Ships Condition, and Date &amp; Time above must be updated to reflect the new voyage.</div>
+    </div>
+
+    <div id="shipDetailsSection" style="display:none;">
+      <div class="panel">
+        <h2>Engine Data</h2>
+        <div class="form-grid cols3">
+          <div class="field"><label>M/E RPM (100% Load)</label><input type="number" step="0.1" id="s_mcrRpm" value="91"></div>
+          <div class="field"><label>M/E KW (100% Load)</label><input type="number" step="1" id="s_mcrKw" value="18630"></div>
+          <div class="field"><label>M/E RPM (85% Load)</label><input type="number" step="0.1" id="s_csrRpm"></div>
+          <div class="field"><label>M/E KW (85% Load)</label><input type="number" step="1" id="s_csrKw"></div>
+          <div class="field"><label>SFOC - 100% (g/kW.hr)</label><input type="number" step="0.1" id="s_sfoc100"></div>
+          <div class="field"><label>SFOC - 85% (g/kW.hr)</label><input type="number" step="0.1" id="s_sfoc85"></div>
+          <div class="field"><label>Alternator Max. Power (KW)</label><input type="number" step="1" id="s_alternatorMaxKw"></div>
+          <div class="field"><label>Propeller Pitch (m)</label><input type="number" step="0.01" id="s_pitch" value="5.85"></div>
+        </div>
+        <div class="hint">Speed by engine (kn) = RPM × Pitch × 60 ÷ 1852. %MCR = (RPM ÷ 100%-Load RPM)³ × 100. KW = (RPM ÷ 100%-Load RPM)³ × 100%-Load KW — this is the basis used throughout Performance and the Reports' M/E figures.</div>
+      </div>
+
+      <div class="panel">
+        <h2>Tank Capacities (gauge scale only)</h2>
+        <div class="unit-group cols5" id="capacitySettings"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Flowmeters &amp; Counters</h2>
+        <div class="form-grid cols3">
+          <div class="field">
+            <label>Setup Type</label>
+            <select id="s_flowArr">
+              <option value="SINGLE">SINGLE</option>
+              <option value="DUAL_ME">DUAL ME</option>
+              <option value="DUAL_GE">DUAL GE</option>
+              <option value="DUAL_BOTH">DUAL BOTH</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-scroll" style="margin-top:10px;">
+          <table>
+            <thead><tr><th></th><th>Reading (initial)</th><th>Max Digits</th></tr></thead>
+            <tbody id="fmMainAuxRows"></tbody>
+            <tbody id="fmCounterRows">
+              <tr id="fmBoilerRow"><td>Boiler</td><td><input type="number" id="s_fm_boiler_reading"></td><td><input type="number" min="1" max="15" id="s_fm_boiler_digits" value="8"></td></tr>
+              <tr id="fmCylRow"><td>Cylinder Oil</td><td><input type="number" id="s_fm_cyl_reading"></td><td><input type="number" min="1" max="15" id="s_fm_cyl_digits" value="8"></td></tr>
+              <tr id="fmRcRow"><td>Rev. Counter</td><td><input type="number" id="s_fm_rc_reading"></td><td><input type="number" min="1" max="15" id="s_fm_rc_digits" value="8"></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="hint">Max Digits sets each meter's rollover point (rollover = 10^digits) — used for rollover-safe consumption calc if a flowmeter counter resets. Setup Type is the same Flowmeter Arrangement used on the Log Entry form.</div>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <h2>Oil &amp; Fuel Type (defaults)</h2>
+          <div class="form-grid cols2">
+            <div class="field"><label>M/E Cyl. Oil (default TBN)</label><select id="s_def_cylTbn"><option>HIGH</option><option>LOW</option></select></div>
+            <div class="field"><label>M/E Fuel</label><select id="s_def_meType"><option>HFO</option><option>LSFO</option><option>MDO/MGO</option><option>LSMGO</option></select></div>
+            <div class="field"><label>D/G Fuel</label><select id="s_def_geType"><option>HFO</option><option>LSFO</option><option selected>MDO/MGO</option><option>LSMGO</option></select></div>
+            <div class="field"><label>Boiler Fuel</label><select id="s_def_blrType"><option>HFO</option><option>LSFO</option><option selected>MDO/MGO</option><option>LSMGO</option></select></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Fuel Specific Gravity (defaults)</h2>
+          <div class="form-grid cols3">
+            <div class="field"><label>M/E Fuel</label><input type="number" step="0.001" id="s_def_meSg" value="0.980"></div>
+            <div class="field"><label>D/G Fuel</label><input type="number" step="0.001" id="s_def_geSg" value="0.870"></div>
+            <div class="field"><label>Boiler Fuel</label><input type="number" step="0.001" id="s_def_blrSg" value="0.870"></div>
+          </div>
+          <div class="hint">These defaults pre-fill the Fuel Type / Spec. Gravity fields on a new Log Entry — you can still override them per entry.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="btn-row">
+          <button class="primary" id="btnSaveSetup">Update Ship Details</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOG ENTRY -->
+  <div class="page" id="page-entry">
+    <div class="panel">
+      <h2>Edit a Previous Entry</h2>
+      <div class="form-grid cols3">
+        <div class="field span2">
+          <label>Select Entry</label>
+          <select id="in_selectEntry"><option value="">— New Entry —</option></select>
+        </div>
+      </div>
+      <div class="hint">Pick a saved entry to load it into the form below for editing. Saving will recalculate consumption and ROB for that entry and every entry after it.</div>
+    </div>
+    <div class="panel" id="lastEntryPanel">
+      <h2 id="lastEntryPanelTitle">Last Saved Entry — Reference</h2>
+      <div id="lastEntryRef"></div>
+    </div>
+    <div class="panel" id="logEntryFormPanel">
+      <h2 id="logEntryTitle">New Log Entry</h2>
+      <h3 class="sub" style="margin-top:0;">Live Calculation Preview</h3>
+      <div class="stat-strip" id="livePreviewBox" style="margin-bottom:14px;"></div>
+      <div class="form-grid">
+        <div class="field span2"><label>Date &amp; Time</label><input type="datetime-local" id="in_datetime"></div>
+        <div class="field span2"><label>Operation</label>
+          <select id="in_operation">
+            <option>LAST LINE - DEPARTURE</option>
+            <option>START - PASSAGE</option>
+            <option selected>AT SEA - NOON</option>
+            <option>END - PASSAGE</option>
+            <option>STAND BY - ARRIVAL</option>
+            <option>FIRST LINE - ARRIVAL</option>
+            <option>IN PORT - NOON</option>
+            <option>DRIFTING</option>
+            <option>SHIFTING</option>
+            <option>BUNKERING</option>
+            <option>ECA - ENTRY</option>
+            <option>ECA - EXIT</option>
+            <option>CHANGE OF SPEED</option>
+          </select>
+        </div>
+        <div class="field"><label>Condition</label><select id="in_condition"><option>BALLAST</option><option>LADEN</option></select></div>
+        <div class="field"><label>Distance Run — Ship/GPS (nm)</label><input type="number" step="0.1" id="in_distanceShip" value="0"></div>
+        <div class="field"><label>M/E Avg RPM</label><input type="number" step="0.1" id="in_rpm"></div>
+        <div class="field"><label>M/E Rev. Counter (cumulative)</label><input type="number" step="1" id="in_revCounter"></div>
+      </div>
+      <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous Rev. Counter) ÷ (Run Hours × 60), where Run Hours = this entry's time − the previous entry's time. Type either field and the other fills in automatically.</div>
+
+      <h3 class="sub">Running Hour Meters (cumulative)</h3>
+      <div class="unit-group cols3">
+        <div class="unit-box"><h3>Main Engine</h3><div class="field"><label>Runtime (hrs)</label><input type="number" step="0.1" id="me_runtime"></div></div>
+        <div class="unit-box"><h3>Generator</h3><div class="field"><label>Runtime (hrs)</label><input type="number" step="0.1" id="ge1_runtime"></div></div>
+        <div class="unit-box"><h3>Boiler</h3><div class="field"><label>Runtime (hrs)</label><input type="number" step="0.1" id="blr_runtime"></div></div>
+      </div>
+
+      <h3 class="sub">Fuel Meters (litres, cumulative)</h3>
+      <div class="unit-group">
+        <div class="unit-box">
+          <h3>Main Engine</h3>
+          <div id="meMeterFields"></div>
+          <div class="field"><label>Fuel Type</label><select id="me_type"><option>HFO</option><option>LSFO</option><option>MDO/MGO</option><option>LSMGO</option></select></div>
+          <div class="field"><label>Spec. Gravity</label><input type="number" step="0.001" id="me_sg" value="0.980"></div>
+          <div class="field"><label>Consumption (MT, calculated — edit to override)</label><input class="pf-input" type="number" step="0.001" id="entry_unit_me"></div>
+        </div>
+        <div class="unit-box">
+          <h3>Generator</h3>
+          <div id="geMeterFields"></div>
+          <div class="field"><label>Fuel Type</label><select id="ge_type"><option>HFO</option><option selected>MDO/MGO</option><option>LSFO</option><option>LSMGO</option></select></div>
+          <div class="field"><label>Spec. Gravity</label><input type="number" step="0.001" id="ge_sg" value="0.870"></div>
+          <div class="field"><label>Consumption (MT, calculated — edit to override)</label><input class="pf-input" type="number" step="0.001" id="entry_unit_ge"></div>
+        </div>
+        <div class="unit-box">
+          <h3>Boiler</h3>
+          <div class="field"><label>Fuel Meter</label><input type="number" id="blr_meter"></div>
+          <div class="field"><label>Fuel Type</label><select id="blr_type"><option>HFO</option><option selected>MDO/MGO</option><option>LSFO</option><option>LSMGO</option></select></div>
+          <div class="field"><label>Spec. Gravity</label><input type="number" step="0.001" id="blr_sg" value="0.870"></div>
+          <div class="field"><label>Consumption (MT, calculated — edit to override)</label><input class="pf-input" type="number" step="0.001" id="entry_unit_blr"></div>
+        </div>
+      </div>
+      <div class="hint">Each Consumption field auto-fills from that unit's own meter reading — edit it directly to correct one unit without touching the others.</div>
+
+      <h3 class="sub">Lube Oil Meters (litres, cumulative)</h3>
+      <div class="unit-group">
+        <div class="unit-box">
+          <h3>Cylinder Oil</h3>
+          <div class="field"><label>TBN in Use</label><select id="in_tbn"><option>HIGH</option><option>LOW</option></select></div>
+          <div class="field"><label>Cylinder Oil Meter</label><input type="number" id="cyl_meter"></div>
+        </div>
+        <div class="unit-box"><h3>M/E System Oil</h3><div class="field"><label>Meter</label><input type="number" id="me_lo_meter"></div></div>
+        <div class="unit-box"><h3>G/E System Oil</h3><div class="field"><label>Meter</label><input type="number" id="ge_lo_meter"></div></div>
+      </div>
+
+      <h3 class="sub">Misc. Consumption (manual, added to Consumption below)</h3>
+      <div class="form-grid cols3">
+        <div class="field"><label>MDO/MGO</label><input type="number" step="0.01" id="entry_misc_mdomgo" value="0"></div>
+        <div class="field"><label>LS MGO</label><input type="number" step="0.01" id="entry_misc_lsmgo" value="0"></div>
+      </div>
+
+      <h3 class="sub">Fresh Water</h3>
+      <div class="form-grid cols3">
+        <div class="field"><label>Flowmeter (cumulative)</label><input type="number" id="fw_prod_meter"></div>
+        <div class="field"><label>R.O.B. (tank sounding, present)</label><input type="number" id="fw_rob_reading"></div>
+        <div class="field"><label>Produced (calculated, L)</label><input type="text" id="fw_produced_display" readonly></div>
+      </div>
+      <div class="stat-strip cols2" id="fwLivePreview" style="margin-top:10px;"></div>
+      <div class="hint">Produced = flowmeter delta (present − previous). Consumed is derived: Previous R.O.B. + Produced − Present R.O.B. (whatever isn't accounted for by production is assumed consumed).</div>
+
+      <h3 class="sub">Consumption — Calculated (edit any cell to override before saving)</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th></th><th>Consumption</th></tr></thead>
+          <tbody id="entryConsBody"></tbody>
+        </table>
+      </div>
+      <div class="hint">Cells auto-fill from the meter readings above as you type. Click into any cell to type your own value instead — it will be saved as an override for this entry and used for R.O.B. going forward. Click "Reset to Calculated" to clear all overrides and use the calculated values again.</div>
+
+      <div class="btn-row">
+        <button class="primary" id="btnAdd">Add Entry</button>
+        <button class="ghost" id="btnClearForm">Clear Form</button>
+        <button class="ghost" id="btnResetConsOverride">Reset to Calculated</button>
+        <button class="danger" id="btnCancelEdit" style="display:none;">Cancel Edit</button>
+        <span class="badge" id="editingBadge" style="display:none;">Editing saved entry</span>
+      </div>
+    </div>
+
+    <div class="panel" id="voyageSummaryPanel" style="display:none;">
+      <h2>Voyage Summary — Reference &amp; Consumption Review</h2>
+      <div class="stat-strip" id="vsTopStrip" style="margin-bottom:14px;"></div>
+
+      <div class="grid">
+        <div>
+          <h3 class="sub">Fuel Cons. (by unit, computed)</h3>
+          <div class="unit-box" id="vsFuelConsBox"></div>
+          <h3 class="sub">Fresh Water</h3>
+          <div class="unit-box" id="vsFreshWaterBox"></div>
+          <h3 class="sub">Misc. Cons. (manual, added to Consumption)</h3>
+          <div class="unit-box">
+            <div class="field"><label>MDO/MGO</label><input type="number" step="0.01" id="vs_misc_mdomgo" value="0"></div>
+            <div class="field"><label>LS MGO</label><input type="number" step="0.01" id="vs_misc_lsmgo" value="0"></div>
+          </div>
+        </div>
+        <div>
+          <h3 class="sub">Fuel &amp; Lube ROB — Previous / Consumption / R.O.B.</h3>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th></th><th>Previous</th><th>Consumption</th><th>R.O.B.</th></tr></thead>
+              <tbody id="vsRobBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="primary" id="btnSaveVoyageSummary">Save Consumption &amp; Misc.</button>
+        <button class="ghost" id="btnPrintVoyageSummary">Print (A4 Landscape, 2-Up)</button>
+        <button class="ghost" id="btnCloseVoyageSummary">Close</button>
+      </div>
+      <div class="hint">Consumption cells default to the calculated value from meter readings — edit any cell to override it (e.g. to match a manual sounding). R.O.B. updates live as you type. Overrides apply only to this entry; every later entry's R.O.B. recalculates from it automatically.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Print History</h2>
+      <div class="hint">A copy is saved here automatically every time you print from Log Entry — this is this browser's local equivalent of a "reports" folder, since a web page can't write files directly to a folder on your computer. Click "Download" to save an actual file, or use your browser's "Print to PDF" from the Print button above to get a real PDF on disk.</div>
+      <div class="table-scroll" style="margin-top:10px;">
+        <table>
+          <thead><tr><th>Printed</th><th>Entry Date/Time</th><th>Operation</th><th></th></tr></thead>
+          <tbody id="printHistoryBody"><tr class="empty-row"><td colspan="4">No prints yet.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- VOYAGE LOG -->
+  <div class="page" id="page-voyageabstract">
+    <div class="panel">
+      <h2>Voyage Abstract</h2>
+      <div class="table-scroll">
+        <table class="freeze-cols">
+          <thead><tr>
+            <th>Date/Time</th><th>Operation</th><th>Run Hrs</th><th>RPM</th>
+            <th>Dist by Engine</th><th>Speed by Engine</th>
+            <th>Dist by Ship</th><th>Speed by Ship</th>
+            <th>Slip %</th><th>%MCR</th><th>Est. KW</th>
+            <th>Cond</th><th>Hrs</th><th>Dist Ship</th><th>RPM</th>
+            <th>Rev. Counter</th><th>Daily Revs</th>
+            <th>ME Run</th><th>GE Run</th><th>Blr Run</th>
+            <th>ME Cons</th><th>GE Cons</th><th>Blr Cons</th><th>Total Cons</th>
+            <th>Cyl Oil Cons (Grade)</th><th>ME LO</th><th>GE LO</th><th>FW Meter</th><th>FW Produced</th><th>FW ROB</th><th>FW Cons</th><th></th>
+          </tr></thead>
+          <tbody id="voyageAbstractBody"><tr class="empty-row"><td colspan="32">No entries yet.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Saved Voyage Abstracts</h2>
+      <div class="hint">A snapshot of the Voyage Abstract table is saved here automatically every time "Create New Voyage" runs, alongside the downloaded backup file. Browsers can't write to a folder on disk directly, so this list is this browser's local equivalent of a "root/abstract" folder — select one below to view it, or download a copy.</div>
+      <div class="table-scroll" style="margin-top:10px;">
+        <table>
+          <thead><tr><th>Saved</th><th>Voyage No.</th><th>Condition</th><th>Filename</th><th></th></tr></thead>
+          <tbody id="abstractListBody"><tr class="empty-row"><td colspan="5">No saved abstracts yet — these are created automatically when you start a new voyage.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="panel" id="abstractViewerPanel" style="display:none; margin-top:14px;">
+        <h2 id="abstractViewerTitle">Voyage Abstract</h2>
+        <div class="table-scroll">
+          <table class="freeze-cols">
+            <thead><tr>
+              <th>Date/Time</th><th>Operation</th><th>Run Hrs</th><th>RPM</th>
+              <th>Dist by Engine</th><th>Speed by Engine</th>
+              <th>Dist by Ship</th><th>Speed by Ship</th>
+              <th>Slip %</th><th>%MCR</th><th>Est. KW</th>
+              <th>Cond</th><th>Hrs</th><th>Dist Ship</th><th>RPM</th>
+              <th>Rev. Counter</th><th>Daily Revs</th>
+              <th>ME Run</th><th>GE Run</th><th>Blr Run</th>
+              <th>ME Cons</th><th>GE Cons</th><th>Blr Cons</th><th>Total Cons</th>
+              <th>Cyl Oil Cons (Grade)</th><th>ME LO</th><th>GE LO</th><th>FW Meter</th><th>FW Produced</th><th>FW ROB</th><th>FW Cons</th>
+            </tr></thead>
+            <tbody id="abstractViewerBody"></tbody>
+          </table>
+        </div>
+        <div class="btn-row">
+          <button class="ghost small" id="btnDownloadAbstract">Download CSV</button>
+          <button class="ghost small" id="btnCloseAbstractViewer">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONSUMPTION -->
+  <div class="page" id="page-consumption">
+    <div class="panel">
+      <h2>Consumption by Fuel Type &amp; Unit</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>Date/Time</th><th>Operation</th>
+            <th>HFO M/E</th><th>HFO G/E</th><th>HFO Blr</th><th>HFO Total</th>
+            <th>LSFO M/E</th><th>LSFO G/E</th><th>LSFO Blr</th><th>LSFO Total</th>
+            <th>MDO/MGO M/E</th><th>MDO/MGO G/E</th><th>MDO/MGO Blr</th><th>MDO/MGO Total</th>
+            <th>LSMGO M/E</th><th>LSMGO G/E</th><th>LSMGO Blr</th><th>LSMGO Total</th>
+            <th>FW Cons</th>
+          </tr></thead>
+          <tbody id="consumptionBody"><tr class="empty-row"><td colspan="19">No entries yet.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- ROB -->
+  <div class="page" id="page-rob">
+    <div class="panel">
+      <h2>Fuel — Remaining On Board</h2>
+      <div class="gauge-grid cols4 large" id="fuelGauges"></div>
+    </div>
+    <div class="panel">
+      <h2>Lube Oil — Remaining On Board</h2>
+      <div class="gauge-grid cols4 large" id="lubeGauges"></div>
+    </div>
+    <div class="panel">
+      <h2>Fresh Water — Remaining On Board</h2>
+      <div class="gauge-grid single large" id="fwGauge"></div>
+    </div>
+  </div>
+
+  <!-- RECEIPTS -->
+  <div class="page" id="page-receipts">
+    <div class="panel">
+      <h2>Bunker / Lube / Fresh Water Receipts</h2>
+      <div class="receipts-list" id="receiptsList"></div>
+      <div class="form-grid cols3">
+        <div class="field"><label>Date</label><input type="date" id="rcpt_date"></div>
+        <div class="field"><label>Category</label>
+          <select id="rcpt_category">
+            <option value="fuel">Fuel</option>
+            <option value="lube">Lube Oil</option>
+            <option value="fw">Fresh Water</option>
+          </select>
+        </div>
+        <div class="field"><label>Type</label>
+          <select id="rcpt_type">
+            <option>HFO</option><option>LSFO</option><option>MDO/MGO</option><option>LSMGO</option>
+          </select>
+        </div>
+        <div class="field"><label>Quantity</label><input type="number" step="0.01" id="rcpt_qty"></div>
+        <div class="field"><label>Unit</label><input id="rcpt_unit" value="MT" readonly></div>
+        <div class="field"><label>BDN No.</label><input id="rcpt_bdn"></div>
+        <div class="field"><label>Company</label><input id="rcpt_company"></div>
+        <div class="field"><label>Location</label><input id="rcpt_location"></div>
+      </div>
+      <div class="btn-row"><button class="primary small" id="btnAddReceipt">Log Receipt</button></div>
+    </div>
+
+    <div class="panel">
+      <h2>BDN Documents</h2>
+      <div class="hint">PDF only. Files are stored in this browser's local database (not on disk) so they can be viewed anytime you reopen this app in the same browser — there's no way for a web page to save files directly into a folder on your computer, so use "Download" below to save a copy wherever you like.</div>
+      <div class="form-grid cols3" style="margin-top:10px;">
+        <div class="field"><label>BDN No.</label><input id="doc_bdn"></div>
+        <div class="field"><label>Company</label><input id="doc_company"></div>
+        <div class="field"><label>Location</label><input id="doc_location"></div>
+      </div>
+      <div class="btn-row">
+        <input type="file" id="doc_file" accept="application/pdf,.pdf" style="max-width:280px;">
+        <button class="primary small" id="btnUploadDoc">Upload PDF</button>
+      </div>
+      <div class="table-scroll" style="margin-top:12px;">
+        <table>
+          <thead><tr><th>Date</th><th>BDN No.</th><th>Company</th><th>Location</th><th>File</th><th></th></tr></thead>
+          <tbody id="docListBody"><tr class="empty-row"><td colspan="6">No documents uploaded yet.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="panel" id="docViewerPanel" style="display:none; margin-top:14px;">
+        <h2 id="docViewerTitle">Document</h2>
+        <embed id="docViewerEmbed" type="application/pdf" style="width:100%; height:600px; border:1px solid var(--line-strong); border-radius:4px;">
+        <div class="btn-row">
+          <a id="docViewerDownload" class="ghost small" style="text-decoration:none; padding:10px 18px; border:1px solid var(--brass-dim); border-radius:3px; color:var(--brass); font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:0.06em; font-size:12px;" download>Download</a>
+          <button class="ghost small" id="btnCloseDocViewer">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="page active" id="page-summary">
+    <div class="panel">
+      <h2>Voyage Progress</h2>
+      <div id="voyageProgressViz"></div>
+      <div class="stat-strip" id="voyageProgressStrip" style="margin-top:14px;"></div>
+      <div class="hint">Distance To Go, Days To Go and ETA are based on Total Voyage Distance (Setup → Voyage Specifics) minus cumulative distance run as of the last log entry, divided by that entry's own speed (falling back to the voyage average speed if the last entry has none).</div>
+    </div>
+    <div class="panel">
+      <h2>Performance Averages</h2>
+      <div class="stat-strip cols5" id="perfTotalsStrip"></div>
+    </div>
+    <div class="panel">
+      <h2>Average Consumption Per Day</h2>
+      <h3 class="sub">Fuel (MT/day)</h3>
+      <div class="stat-strip" id="fuelPerDayStrip"></div>
+      <h3 class="sub">Lube Oil &amp; Fresh Water (L/day)</h3>
+      <div class="stat-strip cols5" id="lubePerDayStrip"></div>
+    </div>
+    <div class="panel">
+      <h2>CONSUMPTION VS ROB</h2>
+      <h3 class="sub">Fuel</h3>
+      <div class="gauge-grid cols4" id="fuelDualGauges"></div>
+      <h3 class="sub">Lube Oil &amp; Fresh Water</h3>
+      <div class="gauge-grid cols5" id="lubeDualGauges"></div>
+      <div class="hint">The brass arc shows the current R.O.B. level; the white tick mark shows where R.O.B. started this voyage. The gap between them is what's been consumed.</div>
+    </div>
+  </div>
+
+  <!-- REPORTS -->
+  <div class="page" id="page-reports">
+    <div class="panel" id="robSnapshotPanel" style="display:none;">
+      <h2>REMAINING ONBOARD</h2>
+      <div class="form-grid cols3">
+        <div class="field"><label>Vessel</label><input id="robSnapshotVessel" readonly></div>
+        <div class="field"><label>Date</label><input id="robSnapshotDate" readonly></div>
+        <div class="field"><label>Time</label><input id="robSnapshotTime" readonly></div>
+        <div class="field span2"><label>Operation</label><input id="robSnapshotOperation" readonly></div>
+      </div>
+      <div class="table-scroll" style="margin-top:12px;">
+        <table>
+          <thead><tr><th></th><th>Previous</th><th>Consumption</th><th>Present</th></tr></thead>
+          <tbody id="robSnapshotBody"></tbody>
+        </table>
+      </div>
+      <div class="btn-row">
+        <button class="primary small" id="btnPrintRobSnapshot">Print</button>
+        <button class="ghost small" id="btnCloseRobSnapshot">Close</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Select Report Category</h2>
+      <div class="hint">Pick a category to list matching log entries — same as the report buttons in the original workbook's Voyage Report tab. Selecting an entry opens its supplementary report for additional data not captured on the main Log Entry form.</div>
+      <div class="btn-row" id="reportCategoryButtons"></div>
+    </div>
+    <div class="panel" id="reportListPanel" style="display:none;">
+      <h2 id="reportListTitle">Matching Entries</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Date/Time</th><th>Operation</th><th>Condition</th><th></th></tr></thead>
+          <tbody id="reportListBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel" id="reportEditorPanel" style="display:none;">
+      <h2 id="reportEditorTitle">Supplementary Report</h2>
+      <div class="form-grid cols3" id="reportEditorHeader"></div>
+
+      <div id="reportPortFields">
+        <h3 class="sub">Port Details</h3>
+        <div class="form-grid cols3">
+          <div class="field"><label>Port</label><input id="rep_port"></div>
+          <div class="field span2"><label>Cargo Operation</label><input id="rep_cargoOp" placeholder="e.g. LOADING, DISCHARGING, IDLE"></div>
+        </div>
+      </div>
+
+      <h3 class="sub">Common — Engine Room &amp; Tank Readings</h3>
+      <div class="form-grid cols3">
+        <div class="field"><label>E/R Temp (°C)</label><input type="number" step="0.1" id="rep_erTemp"></div>
+        <div class="field"><label>Bilge ROB (m³)</label><input type="number" step="0.01" id="rep_bilgeRob"></div>
+        <div class="field"><label>Sludge ROB (m³)</label><input type="number" step="0.01" id="rep_sludgeRob"></div>
+        <div class="field"><label>S/T Temp — Settling Tank (°C)</label><input type="number" step="0.1" id="rep_stTemp"></div>
+        <div class="field"><label>S/W Temp — Sea Water (°C)</label><input type="number" step="0.1" id="rep_swTemp"></div>
+      </div>
+
+      <div id="reportSeaFields">
+        <h3 class="sub">Voyage / Steaming Details</h3>
+        <div class="form-grid cols3">
+          <div class="field"><label>ETA</label><input type="datetime-local" id="rep_eta"></div>
+        </div>
+
+        <h3 class="sub">Main Engine — Cylinder Readings</h3>
+        <div class="unit-group cols5" id="reportCylFields"></div>
+
+        <h3 class="sub">Turbochargers &amp; Scavenge</h3>
+        <div class="form-grid cols3">
+          <div class="field"><label>T/C #1 In Temp (°C)</label><input type="number" step="0.1" id="rep_t1in"></div>
+          <div class="field"><label>T/C #1 Out Temp (°C)</label><input type="number" step="0.1" id="rep_t1out"></div>
+          <div class="field"><label>T/C #1 RPM</label><input type="number" step="1" id="rep_t1rpm"></div>
+          <div class="field"><label>T/C #2 In Temp (°C)</label><input type="number" step="0.1" id="rep_t2in"></div>
+          <div class="field"><label>T/C #2 Out Temp (°C)</label><input type="number" step="0.1" id="rep_t2out"></div>
+          <div class="field"><label>T/C #2 RPM</label><input type="number" step="1" id="rep_t2rpm"></div>
+          <div class="field"><label>Scavenge Temp (°C)</label><input type="number" step="0.1" id="rep_scavTemp"></div>
+          <div class="field"><label>Scavenge Pressure (bar)</label><input type="number" step="0.01" id="rep_scavPress"></div>
+          <div class="field"><label>Fuel Temp (°C)</label><input type="number" step="0.1" id="rep_fuelTemp"></div>
+          <div class="field"><label>Pump Mark</label><input type="number" step="0.1" id="rep_pumpMark"></div>
+          <div class="field"><label>Pressure Diff. (bar)</label><input type="number" step="0.01" id="rep_pressDiff"></div>
+        </div>
+      </div>
+
+      <h3 class="sub">Performance — By Unit</h3>
+      <div class="hint">M/E column is calculated automatically from this entry's own data (RPM → %MCR/KW; Max = Avg × 1.15, Min = Avg × 0.90). Other units are entered manually.</div>
+      <div class="table-scroll">
+        <table id="reportPerfTable">
+          <thead><tr><th></th><th>M/E (auto)</th><th>A/E #1</th><th>A/E #2</th><th>A/E #3</th><th>Boiler</th><th>Incinerator</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <h3 class="sub">Remarks</h3>
+      <div class="field"><textarea id="rep_remarks" rows="3" style="width:100%; background:var(--ink); border:1px solid var(--line-strong); border-radius:3px; color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:8px;"></textarea></div>
+
+      <div class="btn-row">
+        <button class="primary" id="btnSaveReport">Save Supplementary Report</button>
+        <button class="ghost" id="btnPrintReport">Print Report (A4 Landscape, 2-Up)</button>
+        <button class="ghost" id="btnCloseReport">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DATA -->
+  <div class="page" id="page-data">
+    <div class="panel">
+      <h2>Local Database</h2>
+      <p class="hint">All data (setup, every log entry, receipts) is stored automatically in this browser's local database (IndexedDB) — nothing is lost when you close the tab, reload, or reopen this file later <em>in the same browser</em>. Use Export as a portable backup or to move data to another browser/computer.</p>
+      <div class="btn-row">
+        <button class="ghost small" id="btnExportJSON">Export Full Backup (JSON)</button>
+        <button class="ghost small" id="btnExportSetupJSON">Export Setup Only (JSON)</button>
+        <button class="ghost small" id="btnImportSetupJSON">Import Setup Only (JSON)</button>
+        <button class="ghost small" id="btnImportJSON">Import Backup (JSON)</button>
+        <button class="ghost small" id="btnExportCSVLog">Export Voyage Log (CSV)</button>
+        <button class="ghost small" id="btnExportCSVCons">Export Consumption (CSV)</button>
+        <input type="file" id="fileImport" accept="application/json" style="display:none;">
+        <input type="file" id="fileImportSetup" accept="application/json" style="display:none;">
+      </div>
+      <div class="hint">"Export Setup Only" saves just the Setup tab's configuration (vessel details, engine data, flowmeter arrangement, fuel/lube defaults, opening ROB, tank capacities) without any voyage log entries or receipts — handy as a reusable template for a new voyage. "Import Setup Only" loads just that configuration back in and leaves your current log entries and receipts untouched (unlike "Import Backup", which replaces everything).</div>
+      <div class="hint" id="entryCount"></div>
+    </div>
+  </div>
+
+  <div class="footer-note">Standalone recreation of the Voyage Log / Noon Report — Setup, Consumption, Performance, ROB, Receipts &amp; Summary — runs entirely in your browser with its own local database.</div>
+</div>
+
+<div id="printArea"></div>
+
+<script>
+/* ---------------- constants ---------------- */
+const FUEL_TYPES = ["HFO","LSFO","MDO/MGO","LSMGO"];
+const LUBE_TYPES = ["CYL HIGH","CYL LOW","ME SYS OIL","GE SYS OIL","FRESH WATER"];
+const PERF_UNITS = ['ME','AE1','AE2','AE3','BOILER','INCINERATOR'];
+const PERF_UNIT_LABELS = {ME:'M/E', AE1:'A/E #1', AE2:'A/E #2', AE3:'A/E #3', BOILER:'Boiler', INCINERATOR:'Incinerator'};
+const PERF_ROWS = [
+  ['avgPower','Average Power (KW)'], ['avgLoad','Average Load (%)'],
+  ['minLoad','Minimum Load (%)'], ['maxLoad','Maximum Load (%)'], ['runTime','Run Time (hrs)']
+];
+const GAUGE_COLORS = {
+  'HFO': '#7a1f2b', 'LSFO': '#7a1f2b',
+  'MDO/MGO': '#e0679a', 'LSMGO': '#e0679a',
+  'CYL HIGH': '#d9b64e', 'CYL LOW': '#d9b64e', 'ME SYS OIL': '#d9b64e', 'GE SYS OIL': '#d9b64e',
+  'FRESH WATER': '#3fc8dc'
+};
+
+/* ---------------- local database (IndexedDB) ---------------- */
+let db;
+let dbOpenPromise = null;
+function openDB(){
+  if (dbOpenPromise) return dbOpenPromise;
+  dbOpenPromise = new Promise((resolve,reject)=>{
+    const req = indexedDB.open('noonReportDB', 4);
+    req.onupgradeneeded = (e)=>{
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta', {keyPath:'key'});
+      if (!d.objectStoreNames.contains('entries')) d.createObjectStore('entries', {keyPath:'id'});
+      if (!d.objectStoreNames.contains('receipts')) d.createObjectStore('receipts', {keyPath:'id'});
+      if (!d.objectStoreNames.contains('documents')) d.createObjectStore('documents', {keyPath:'id'});
+      if (!d.objectStoreNames.contains('abstracts')) d.createObjectStore('abstracts', {keyPath:'id'});
+      if (!d.objectStoreNames.contains('printHistory')) d.createObjectStore('printHistory', {keyPath:'id'});
+    };
+    req.onsuccess = (e)=>{ db = e.target.result; db.onversionchange = ()=>{ db.close(); db = null; dbOpenPromise = null; }; resolve(db); };
+    req.onerror = (e)=>{ dbOpenPromise = null; reject(req.error || new Error('IndexedDB failed to open')); };
+    req.onblocked = ()=>{ console.warn('IndexedDB open blocked — another tab of this app is probably open with an older version. Close it and reload.'); };
+  });
+  return dbOpenPromise;
+}
+/* Every DB call goes through this so a not-yet-open or closed connection self-heals instead of throwing "Cannot read properties of undefined". */
+async function ensureDB(){
+  if (!db) await openDB();
+  return db;
+}
+async function txStore(name, mode){ const d = await ensureDB(); return d.transaction(name, mode).objectStore(name); }
+async function dbPut(store, obj){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.put(obj); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+async function dbDelete(store, key){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.delete(key); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+async function dbGetAll(store){ const s = await txStore(store,'readonly'); return new Promise((res,rej)=>{ const r = s.getAll(); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function dbClear(store){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+
+/* ---------------- state ---------------- */
+const state = {
+  setup: {
+    vesselName:'M/V FANGCHENG', chEng:'', voyageNumber:'11-B', shipCondition:'BALLAST',
+    departPort:'CHINA', arrivePort:'BRAZIL', place:'', flowArr:'SINGLE',
+    initDateTime:'', initRuntime:null,
+    pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
+    sfoc100:null, sfoc85:null, alternatorMaxKw:null,
+    flowmeters:{
+      main:{ reading:null, digits:8 }, mainOut:{ reading:null, digits:8 },
+      aux:{ reading:null, digits:8 }, auxOut:{ reading:null, digits:8 },
+      boiler:{ reading:null, digits:8 },
+      cyl:{ reading:null, digits:8 }, rc:{ reading:null, digits:8 }
+    },
+    defaults:{ cylTbn:'HIGH', meType:'HFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.980, geSg:0.870, blrSg:0.870 },
+    voyageDistance: null,
+    rob:{ "HFO":500,"LSFO":150,"MDO/MGO":120,"LSMGO":60 },
+    robLube:{ "CYL HIGH":8000,"CYL LOW":0,"ME SYS OIL":5000,"GE SYS OIL":2000,"FRESH WATER":50000 },
+    capacity:{ "HFO":1200,"LSFO":400,"MDO/MGO":300,"LSMGO":150 },
+    capacityLube:{ "CYL HIGH":15000,"CYL LOW":15000,"ME SYS OIL":8000,"GE SYS OIL":4000,"FRESH WATER":150000 },
+    carryover: null
+  },
+  entries: [],
+  receipts: [],
+  documents: [],
+  abstracts: [],
+  printHistory: []
+};
+
+/* Synthetic starting baseline built from Setup's initial readings, used only when no explicit
+   carryover (from Create New Voyage) and no log entries exist yet. */
+function effectiveCarryover(){
+  if (state.setup.carryover) return state.setup.carryover;
+  const fm = state.setup.flowmeters || {};
+  const arr = state.setup.flowArr || 'SINGLE';
+  const meDual = arr==='DUAL_ME' || arr==='DUAL_BOTH';
+  const geDual = arr==='DUAL_GE' || arr==='DUAL_BOTH';
+  const hasAny = fm.main?.reading!=null || fm.aux?.reading!=null || fm.boiler?.reading!=null || fm.cyl?.reading!=null || fm.rc?.reading!=null;
+  if (!state.setup.initDateTime || !hasAny) return null;
+  const d = state.setup.defaults || {};
+  return {
+    datetime: state.setup.initDateTime,
+    me: {
+      meter: fm.main?.reading ?? null,
+      meterIn: fm.main?.reading ?? null,
+      meterOut: meDual ? (fm.mainOut?.reading ?? null) : null,
+      type: d.meType, sg: d.meSg
+    },
+    ge: {
+      meter: fm.aux?.reading ?? null,
+      meterIn: fm.aux?.reading ?? null,
+      meterOut: geDual ? (fm.auxOut?.reading ?? null) : null,
+      type: d.geType, sg: d.geSg
+    },
+    blr:{ meter: fm.boiler?.reading ?? null, type: d.blrType, sg: d.blrSg },
+    cylMeter: fm.cyl?.reading ?? null,
+    revCounter: fm.rc?.reading ?? null,
+    meLo: null, geLo: null, fwProd: null, fwRob: state.setup.robLube ? state.setup.robLube['FRESH WATER'] : null,
+    meRuntime: state.setup.initRuntime, tbn: d.cylTbn
+  };
+}
+
+function uid(){ return Math.random().toString(36).slice(2,10); }
+let editingId = null;
+function fmt(n,d=2){ if (n===null||n===undefined||isNaN(n)) return "—"; return Number(n).toFixed(d); }
+function meterCellText(unit){
+  if (unit.meterIn!==undefined && unit.meterOut!==undefined && unit.meterIn!==null && unit.meterOut!==null){
+    return `In ${fmt(unit.meterIn,0)} / Out ${fmt(unit.meterOut,0)}`;
+  }
+  return fmt(unit.meter,0);
+}
+function sortedEntries(){ return [...state.entries].sort((a,b)=> new Date(a.datetime)-new Date(b.datetime)); }
+
+/* rollover-safe delta */
+function meterDelta(curr, prev, rollover){
+  if (curr===null||curr===undefined||isNaN(curr)||prev===null||prev===undefined||isNaN(prev)) return null;
+  let d = curr - prev;
+  if (d < 0) d = (curr + rollover) - prev;
+  return d;
+}
+
+/* dual-meter mass-balance delta: (inlet delta) - (outlet delta), rollover-safe. Returns null if inputs incomplete. */
+function dualDelta(currIn, prevIn, currOut, prevOut, rollIn, rollOut){
+  const inD = meterDelta(currIn, prevIn, rollIn);
+  const outD = meterDelta(currOut, prevOut, rollOut ?? rollIn);
+  if (inD===null || outD===null) return null;
+  return inD - outD;
+}
+
+/* Compute ME & GE raw consumption (litres) for one period, based on the flowmeter arrangement. */
+function meGeRawLitres(e, prev, rolls){
+  const arr = state.setup.flowArr || 'SINGLE';
+  let meRaw=null, geRaw=null;
+  if (arr === 'SINGLE'){
+    meRaw = meterDelta(e.me.meter, prev.me.meter, rolls.main);
+    geRaw = meterDelta(e.ge.meter, prev.ge.meter, rolls.aux);
+  } else if (arr === 'DUAL_ME'){
+    meRaw = dualDelta(e.me.meterIn, prev.me.meterIn, e.me.meterOut, prev.me.meterOut, rolls.main, rolls.mainOut);
+    const geMeterD = meterDelta(e.ge.meter, prev.ge.meter, rolls.aux);
+    geRaw = (geMeterD!==null && meRaw!==null) ? (geMeterD - meRaw) : null;
+  } else if (arr === 'DUAL_GE'){
+    geRaw = dualDelta(e.ge.meterIn, prev.ge.meterIn, e.ge.meterOut, prev.ge.meterOut, rolls.aux, rolls.auxOut);
+    const meMeterD = meterDelta(e.me.meter, prev.me.meter, rolls.main);
+    meRaw = (meMeterD!==null && geRaw!==null) ? (meMeterD - geRaw) : null;
+  } else if (arr === 'DUAL_BOTH'){
+    meRaw = dualDelta(e.me.meterIn, prev.me.meterIn, e.me.meterOut, prev.me.meterOut, rolls.main, rolls.mainOut);
+    geRaw = dualDelta(e.ge.meterIn, prev.ge.meterIn, e.ge.meterOut, prev.ge.meterOut, rolls.aux, rolls.auxOut);
+  }
+  return {meRaw, geRaw};
+}
+
+function meterRollovers(){
+  const fm = state.setup.flowmeters || {};
+  const dig = (m, d=8) => Math.pow(10, (fm[m] && fm[m].digits) || d);
+  return {
+    main: dig('main'), mainOut: dig('mainOut'), aux: dig('aux'), auxOut: dig('auxOut'),
+    boiler: dig('boiler'), cyl: dig('cyl'), rc: dig('rc'), generic: 100000000
+  };
+}
+
+/* ---------------- derived calculations ---------------- */
+function computeDerived(){
+  const list = sortedEntries();
+  const rolls = meterRollovers();
+  const pitch = state.setup.pitch || 0;
+  const mcrRpm = state.setup.mcrRpm || 1;
+  const mcrKw = state.setup.mcrKw || 0;
+  const propConstant = pitch * 60 / 1852;
+
+  const consByFuel = {"HFO":0,"LSFO":0,"MDO/MGO":0,"LSMGO":0};
+  const consByLube = {"CYL HIGH":0,"CYL LOW":0,"ME SYS OIL":0,"GE SYS OIL":0,"FRESH WATER":0};
+  let totalDistShip=0, totalDistEngine=0, totalHrs=0;
+  let sumRpm=0, cntRpm=0, sumMcr=0, cntMcr=0, sumKw=0, cntKw=0, sumSpeedShip=0, cntSpeedShip=0, sumSlip=0, cntSlip=0;
+
+  let prev = effectiveCarryover();
+  const rows = list.map(e=>{
+    let hrs=null, meCons=null, geCons=null, blrCons=null, total=null;
+    let cylCons=null, meLoCons=null, geLoCons=null, dailyRevs=null, fwProdD=null, fwConsD=null;
+    let distEngine=null, speedEngine=null, speedShip=null, slip=null, mcrPct=null, kwEst=null;
+    let consByType = {"HFO":null,"LSFO":null,"MDO/MGO":null,"LSMGO":null};
+    let lubeByType = {"CYL HIGH":null,"CYL LOW":null,"ME SYS OIL":null,"GE SYS OIL":null,"FRESH WATER":null};
+    const override = e.consOverride || {};
+    const misc = e.miscCons || {"MDO/MGO":0,"LSMGO":0};
+
+    if (e.rpm!==null && e.rpm!==undefined && !isNaN(e.rpm)){
+      speedEngine = e.rpm * propConstant;
+      mcrPct = Math.pow(e.rpm/mcrRpm, 3) * 100;
+      kwEst = Math.pow(e.rpm/mcrRpm, 3) * mcrKw;
+      sumRpm += e.rpm; cntRpm++;
+      sumMcr += mcrPct; cntMcr++;
+      sumKw += kwEst; cntKw++;
+    }
+
+    if (prev){
+      hrs = (new Date(e.datetime) - new Date(prev.datetime)) / 3600000;
+
+      const {meRaw, geRaw} = meGeRawLitres(e, prev, rolls);
+      const blrD = meterDelta(e.blr.meter, prev.blr.meter, rolls.boiler);
+      meCons = meRaw!==null ? (meRaw*e.me.sg)/1000 : null;
+      geCons = geRaw!==null ? (geRaw*e.ge.sg)/1000 : null;
+      blrCons = blrD!==null ? (blrD*e.blr.sg)/1000 : null;
+      const unitOv = e.unitOverride || {};
+      if (unitOv.ME!=null) meCons = unitOv.ME;
+      if (unitOv.GE!=null) geCons = unitOv.GE;
+      if (unitOv.BLR!=null) blrCons = unitOv.BLR;
+      total = (meCons||0)+(geCons||0)+(blrCons||0);
+
+      const rawFuel = {"HFO":0,"LSFO":0,"MDO/MGO":0,"LSMGO":0};
+      if (meCons) rawFuel[e.me.type] += meCons;
+      if (geCons) rawFuel[e.ge.type] += geCons;
+      if (blrCons) rawFuel[e.blr.type] += blrCons;
+      rawFuel['MDO/MGO'] += (misc['MDO/MGO']||0);
+      rawFuel['LSMGO'] += (misc['LSMGO']||0);
+      FUEL_TYPES.forEach(t=>{
+        consByType[t] = (override[t]!=null) ? override[t] : rawFuel[t];
+        consByFuel[t] += consByType[t];
+      });
+
+      const cylD = meterDelta(e.cylMeter, prev.cylMeter, rolls.cyl);
+      const meLoD = meterDelta(e.meLo, prev.meLo, rolls.generic);
+      const geLoD = meterDelta(e.geLo, prev.geLo, rolls.generic);
+      cylCons = cylD; meLoCons = meLoD; geLoCons = geLoD;
+      const rawLube = {"CYL HIGH":0,"CYL LOW":0,"ME SYS OIL":0,"GE SYS OIL":0};
+      if (cylCons) rawLube[e.tbn==='LOW' ? 'CYL LOW' : 'CYL HIGH'] += cylCons;
+      if (meLoCons) rawLube["ME SYS OIL"] += meLoCons;
+      if (geLoCons) rawLube["GE SYS OIL"] += geLoCons;
+      ['CYL HIGH','CYL LOW','ME SYS OIL','GE SYS OIL'].forEach(t=>{
+        lubeByType[t] = (override[t]!=null) ? override[t] : rawLube[t];
+        consByLube[t] += lubeByType[t];
+      });
+
+      // Fresh water: produced = flowmeter delta; consumed = previous ROB + produced - present ROB (direct tank sounding)
+      fwProdD = meterDelta(e.fwProd, prev.fwProd, rolls.generic) || 0;
+      const prevFwRob = prev.fwRob;
+      let rawFwCons = null;
+      if (prevFwRob!=null && e.fwRob!=null){
+        rawFwCons = prevFwRob + fwProdD - e.fwRob;
+      }
+      fwConsD = (override['FRESH WATER']!=null) ? override['FRESH WATER'] : rawFwCons;
+      lubeByType['FRESH WATER'] = fwConsD;
+      if (fwConsD!=null) consByLube["FRESH WATER"] += fwConsD;
+
+      // performance
+      dailyRevs = meterDelta(e.revCounter, prev.revCounter, rolls.rc);
+      if (e.rpm!==null && e.rpm!==undefined && !isNaN(e.rpm) && hrs>0){
+        distEngine = e.rpm * propConstant * hrs;
+      }
+      if (hrs>0) speedShip = e.distanceShip / hrs;
+      if (distEngine && distEngine>0 && e.distanceShip!==null){
+        slip = ((distEngine - e.distanceShip)/distEngine)*100;
+        sumSlip += slip; cntSlip++;
+      }
+      if (speedShip!==null && !isNaN(speedShip)){ sumSpeedShip+=speedShip; cntSpeedShip++; }
+
+      totalDistShip += (e.distanceShip||0);
+      totalDistEngine += (distEngine||0);
+      totalHrs += hrs;
+    }
+
+    prev = e;
+    return {...e, hrs, meCons, geCons, blrCons, total, cylCons, meLoCons, geLoCons, fwProdD, fwConsD,
+             consByType, lubeByType,
+             distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, dailyRevs,
+             cumFuel: {...consByFuel}, cumLube: {...consByLube}, cumDistShip: totalDistShip};
+  });
+
+  const perf = {
+    avgRpm: cntRpm? sumRpm/cntRpm : null,
+    avgMcr: cntMcr? sumMcr/cntMcr : null,
+    avgKw: cntKw? sumKw/cntKw : null,
+    avgSpeedShip: cntSpeedShip? sumSpeedShip/cntSpeedShip : null,
+    avgSlip: cntSlip? sumSlip/cntSlip : null,
+    totalDistShip, totalDistEngine, totalHrs
+  };
+
+  return { rows, consByFuel, consByLube, perf };
+}
+
+function latestFwRob(cutoffDate){
+  const list = sortedEntries().filter(e => !cutoffDate || new Date(e.datetime) <= cutoffDate);
+  for (let i=list.length-1; i>=0; i--){
+    if (list[i].fwRob!=null && list[i].fwRob!==undefined) return list[i].fwRob;
+  }
+  const co = effectiveCarryover();
+  if (co && co.fwRob!=null) return co.fwRob;
+  return state.setup.robLube['FRESH WATER'];
+}
+
+function currentROB(consByFuel, consByLube){
+  const rob = {};
+  FUEL_TYPES.forEach(t=>{
+    const received = state.receipts.filter(r=>r.category==='fuel' && r.type===t).reduce((s,r)=>s+r.qty,0);
+    rob[t] = state.setup.rob[t] + received - (consByFuel[t]||0);
+  });
+  const robLube = {};
+  LUBE_TYPES.forEach(t=>{
+    if (t==='FRESH WATER'){ robLube[t] = latestFwRob(null); return; }
+    const received = state.receipts.filter(r=>r.category==='lube' && r.type===t).reduce((s,r)=>s+r.qty,0);
+    robLube[t] = state.setup.robLube[t] + received - (consByLube[t]||0);
+  });
+  return {rob, robLube};
+}
+
+function getComputedRow(entryId){
+  const {rows} = computeDerived();
+  return rows.find(r=>r.id===entryId) || null;
+}
+
+/* ROB as it stood at the time of a specific entry (not the voyage's final/current ROB) */
+function robAsOfEntry(entryId){
+  const row = getComputedRow(entryId);
+  if (!row) return null;
+  const cutoff = new Date(row.datetime);
+  const rob = {};
+  FUEL_TYPES.forEach(t=>{
+    const received = state.receipts.filter(r=>r.category==='fuel' && r.type===t && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
+    rob[t] = state.setup.rob[t] + received - (row.cumFuel[t]||0);
+  });
+  const robLube = {};
+  LUBE_TYPES.forEach(t=>{
+    if (t==='FRESH WATER'){ robLube[t] = row.fwRob!=null ? row.fwRob : latestFwRob(cutoff); return; }
+    const received = state.receipts.filter(r=>r.category==='lube' && r.type===t && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
+    robLube[t] = state.setup.robLube[t] + received - (row.cumLube[t]||0);
+  });
+  return {rob, robLube};
+}
+
+/* ---------------- gauge rendering ---------------- */
+function gaugeSVG(pct, colorOverride){
+  pct = Math.max(0, Math.min(1, pct||0));
+  const angle = -135 + pct*270;
+  const arcColor = colorOverride || (pct < 0.15 ? 'var(--alert)' : (pct < 0.35 ? 'var(--brass)' : 'var(--teal)'));
+  // Arc endpoints (30,108)-(130,108), radius 62 => true center is (80, 71.34), not (80,108).
+  const cx = 80, cy = 71.34, r = 62;
+  return `<svg viewBox="0 0 160 140">
+    <path d="M 30 108 A ${r} ${r} 0 1 1 130 108" fill="none" stroke="rgba(233,228,214,0.15)" stroke-width="10" stroke-linecap="round"/>
+    <path d="M 30 108 A ${r} ${r} 0 1 1 130 108" fill="none" stroke="${arcColor}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${pct*292} 292"/>
+    <g class="needle" transform="rotate(${angle} ${cx} ${cy})">
+      <line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy-53}" stroke="var(--paper)" stroke-width="2.5"/>
+      <circle cx="${cx}" cy="${cy}" r="5" fill="var(--brass)"/>
+    </g>
+  </svg>`;
+}
+
+/* Gauge with a fixed tick marking the starting ROB position, plus a needle for current ROB.
+   Same arc geometry as gaugeSVG so the two read consistently side by side. */
+function dualGaugeSVG(startPct, currentPct, colorOverride){
+  startPct = Math.max(0, Math.min(1, startPct||0));
+  currentPct = Math.max(0, Math.min(1, currentPct||0));
+  const curAngle = -135 + currentPct*270;
+  const startAngle = -135 + startPct*270;
+  const arcColor = colorOverride || (currentPct < 0.15 ? 'var(--alert)' : (currentPct < 0.35 ? 'var(--brass)' : 'var(--teal)'));
+  const cx = 80, cy = 71.34, r = 62;
+  return `<svg viewBox="0 0 160 140">
+    <path d="M 30 108 A ${r} ${r} 0 1 1 130 108" fill="none" stroke="rgba(233,228,214,0.15)" stroke-width="10" stroke-linecap="round"/>
+    <path d="M 30 108 A ${r} ${r} 0 1 1 130 108" fill="none" stroke="${arcColor}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${currentPct*292} 292"/>
+    <g transform="rotate(${startAngle} ${cx} ${cy})">
+      <line x1="${cx}" y1="${cy-50}" x2="${cx}" y2="${cy-67}" stroke="var(--paper)" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <g class="needle" transform="rotate(${curAngle} ${cx} ${cy})">
+      <line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy-53}" stroke="var(--paper)" stroke-width="2.5"/>
+      <circle cx="${cx}" cy="${cy}" r="5" fill="var(--brass)"/>
+    </g>
+  </svg>`;
+}
+
+function renderLastEntryRef(){
+  const list = sortedEntries();
+  const box = document.getElementById('lastEntryRef');
+  const title = document.getElementById('lastEntryPanelTitle');
+  const source = list.length ? list[list.length-1] : state.setup.carryover;
+  if (!source){
+    title.textContent = 'Last Saved Entry — Reference';
+    box.innerHTML = `<div class="hint">No entries saved yet — this panel will show your most recent entry's readings here once you add one, so you can check new meter values against it.</div>`;
+    return;
+  }
+  title.textContent = list.length ? 'Last Saved Entry — Reference' : 'Carried Over From Previous Voyage — Reference';
+  const e = source;
+  const dt = new Date(e.datetime);
+  const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const item = (label, val) => `<div class="ref-item"><div class="rv">${val===null||val===undefined||val===''?'—':val}</div><div class="rl">${label}</div></div>`;
+  const arr = state.setup.flowArr || 'SINGLE';
+  const meDual = arr==='DUAL_ME' || arr==='DUAL_BOTH';
+  const geDual = arr==='DUAL_GE' || arr==='DUAL_BOTH';
+  box.innerHTML = `<div class="ref-grid">
+    ${item('Date/Time', dtStr)}
+    ${item('Operation', e.operation)}
+    ${item('Condition', e.condition)}
+    ${item('Dist Ship (nm)', e.distanceShip)}
+    ${item('RPM', e.rpm)}
+    ${item('Rev. Counter', e.revCounter)}
+    ${item('Cyl TBN', e.tbn)}
+    ${item('M/E Runtime', e.meRuntime)}
+    ${item('Generator Runtime', e.ge1Runtime)}
+    ${item('Blr Runtime', e.blrRuntime)}
+    ${meDual ? item('M/E Inlet Meter (L)', e.me.meterIn) : item('M/E Meter (L)', e.me.meter)}
+    ${meDual ? item('M/E Outlet Meter (L)', e.me.meterOut) : ''}
+    ${item('M/E Type / SG', e.me.type+' / '+e.me.sg)}
+    ${geDual ? item('G/E Inlet Meter (L)', e.ge.meterIn) : item('G/E Meter (L)', e.ge.meter)}
+    ${geDual ? item('G/E Outlet Meter (L)', e.ge.meterOut) : ''}
+    ${item('G/E Type / SG', e.ge.type+' / '+e.ge.sg)}
+    ${item('Blr Meter (L)', e.blr.meter)}
+    ${item('Blr Type / SG', e.blr.type+' / '+e.blr.sg)}
+    ${item('Cylinder Oil Meter', e.cylMeter)}
+    ${item('M/E LO Meter', e.meLo)}
+    ${item('G/E LO Meter', e.geLo)}
+    ${item('FW Produced Meter', e.fwProd)}
+    ${item('FW ROB Reading (L)', e.fwRob)}
+  </div>`;
+}
+
+function renderFuelMeterFields(){
+  const arr = state.setup.flowArr || 'SINGLE';
+  const meDual = arr==='DUAL_ME' || arr==='DUAL_BOTH';
+  const geDual = arr==='DUAL_GE' || arr==='DUAL_BOTH';
+  const meBox = document.getElementById('meMeterFields');
+  const geBox = document.getElementById('geMeterFields');
+  if (meBox){
+    meBox.innerHTML = meDual
+      ? `<div class="field"><label>Inlet Flowmeter</label><input type="number" id="me_meter_in"></div>
+         <div class="field"><label>Outlet Flowmeter</label><input type="number" id="me_meter_out"></div>`
+      : `<div class="field"><label>Fuel Meter</label><input type="number" id="me_meter"></div>`;
+  }
+  if (geBox){
+    geBox.innerHTML = geDual
+      ? `<div class="field"><label>Inlet Flowmeter</label><input type="number" id="ge_meter_in"></div>
+         <div class="field"><label>Outlet Flowmeter</label><input type="number" id="ge_meter_out"></div>`
+      : `<div class="field"><label>Fuel Meter</label><input type="number" id="ge_meter"></div>`;
+  }
+}
+
+function renderFlowmeterCounterRows(){
+  const arr = state.setup.flowArr || 'SINGLE';
+  const meDual = arr==='DUAL_ME' || arr==='DUAL_BOTH';
+  const geDual = arr==='DUAL_GE' || arr==='DUAL_BOTH';
+  const box = document.getElementById('fmMainAuxRows');
+  if (!box) return;
+  const singleRow = (label, prefix) => `
+    <tr><td>${label}</td><td><input type="number" id="s_fm_${prefix}_reading"></td><td><input type="number" min="1" max="15" id="s_fm_${prefix}_digits" value="8"></td></tr>`;
+  const dualRows = (label, prefix) => `
+    <tr><td>${label} — Inlet</td><td><input type="number" id="s_fm_${prefix}_reading"></td><td><input type="number" min="1" max="15" id="s_fm_${prefix}_digits" value="8"></td></tr>
+    <tr><td>${label} — Outlet</td><td><input type="number" id="s_fm_${prefix}Out_reading"></td><td><input type="number" min="1" max="15" id="s_fm_${prefix}Out_digits" value="8"></td></tr>`;
+  box.innerHTML =
+    (meDual ? dualRows('Main (M/E)','main') : singleRow('Main (M/E)','main')) +
+    (geDual ? dualRows('Auxiliary (G/E)','aux') : singleRow('Auxiliary (G/E)','aux'));
+
+  const fm = state.setup.flowmeters;
+  document.getElementById('s_fm_main_reading').value = fm.main.reading ?? '';
+  document.getElementById('s_fm_main_digits').value = fm.main.digits;
+  document.getElementById('s_fm_aux_reading').value = fm.aux.reading ?? '';
+  document.getElementById('s_fm_aux_digits').value = fm.aux.digits;
+  if (meDual){
+    document.getElementById('s_fm_mainOut_reading').value = fm.mainOut?.reading ?? '';
+    document.getElementById('s_fm_mainOut_digits').value = fm.mainOut?.digits ?? 8;
+  }
+  if (geDual){
+    document.getElementById('s_fm_auxOut_reading').value = fm.auxOut?.reading ?? '';
+    document.getElementById('s_fm_auxOut_digits').value = fm.auxOut?.digits ?? 8;
+  }
+}
+
+/* ---------------- render ---------------- */
+function abstractRowCells(r){
+  const dt = new Date(r.datetime);
+  const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const condClass = r.condition==='BALLAST' ? 'cond-B':'cond-L';
+  const cylText = r.cylCons===null||r.cylCons===undefined ? '—' : `${fmt(r.cylCons,1)} (${r.tbn})`;
+  return `<td>${dtStr}</td><td>${r.operation}</td>
+    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,1)}</td><td>${r.rpm??'—'}</td>
+    <td>${r.distEngine===null||r.distEngine===undefined?'—':fmt(r.distEngine,1)}</td><td>${r.speedEngine===null||r.speedEngine===undefined?'—':fmt(r.speedEngine,2)}</td>
+    <td>${fmt(r.distanceShip,1)}</td><td>${r.speedShip===null||r.speedShip===undefined?'—':fmt(r.speedShip,2)}</td>
+    <td>${r.slip===null||r.slip===undefined?'—':fmt(r.slip,1)}</td><td>${r.mcrPct===null||r.mcrPct===undefined?'—':fmt(r.mcrPct,1)}</td><td>${r.kwEst===null||r.kwEst===undefined?'—':fmt(r.kwEst,0)}</td>
+    <td><span class="cond-tag ${condClass}">${r.condition[0]}</span></td>
+    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,1)}</td><td>${fmt(r.distanceShip,1)}</td><td>${r.rpm??'—'}</td>
+    <td>${r.revCounter??'—'}</td><td>${r.dailyRevs===null||r.dailyRevs===undefined?'—':fmt(r.dailyRevs,0)}</td>
+    <td>${meterCellText(r.me)}</td><td>${meterCellText(r.ge)}</td><td>${fmt(r.blr.meter,0)}</td>
+    <td>${r.meCons===null||r.meCons===undefined?'—':fmt(r.meCons,3)}</td><td>${r.geCons===null||r.geCons===undefined?'—':fmt(r.geCons,3)}</td>
+    <td>${r.blrCons===null||r.blrCons===undefined?'—':fmt(r.blrCons,3)}</td>
+    <td>${r.total===null||r.total===undefined?'—':fmt(r.total,3)}</td>
+    <td>${cylText}</td>
+    <td>${r.meLoCons===null||r.meLoCons===undefined?'—':fmt(r.meLoCons,1)}</td><td>${r.geLoCons===null||r.geLoCons===undefined?'—':fmt(r.geLoCons,1)}</td>
+    <td>${r.fwProd===null||r.fwProd===undefined?'—':fmt(r.fwProd,0)}</td>
+    <td>${r.fwProdD===null||r.fwProdD===undefined?'—':fmt(r.fwProdD,0)}</td>
+    <td>${r.fwRob===null||r.fwRob===undefined?'—':fmt(r.fwRob,0)}</td>
+    <td>${r.fwConsD===null||r.fwConsD===undefined?'—':fmt(r.fwConsD,0)}</td>`;
+}
+
+const ABSTRACT_CSV_HEADER = ["DateTime","Operation","RunHrs","RPM","DistEngine","SpeedEngine","DistShip","SpeedShip","Slip%","%MCR","EstKW",
+  "Cond","Hrs","DistShip2","RPM2","RevCounter","DailyRevs","MERun","GERun","BlrRun","MECons","GECons","BlrCons","TotalCons",
+  "CylOilCons","CylGrade","MELO","GELO","FWMeter","FWProduced","FWRob","FWCons"];
+function abstractRowToCsv(r){
+  return [r.datetime, r.operation, r.hrs??'', r.rpm??'', r.distEngine??'', r.speedEngine??'', r.distanceShip, r.speedShip??'',
+    r.slip??'', r.mcrPct??'', r.kwEst??'', r.condition, r.hrs??'', r.distanceShip, r.rpm??'', r.revCounter??'', r.dailyRevs??'',
+    meterCellText(r.me), meterCellText(r.ge), r.blr.meter, r.meCons??'', r.geCons??'', r.blrCons??'', r.total??'',
+    r.cylCons??'', r.tbn, r.meLoCons??'', r.geLoCons??'', r.fwProd??'', r.fwProdD??'', r.fwRob??'', r.fwConsD??''];
+}
+function csvEscape(v){
+  const s = (v===null||v===undefined) ? '' : String(v);
+  return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+
+function render(){
+  const {rows, consByFuel, consByLube, perf} = computeDerived();
+  const {rob, robLube} = currentROB(consByFuel, consByLube);
+  renderLastEntryRef();
+  renderEntrySelector();
+
+  // setup fields reflect state
+  document.getElementById('s_vesselName').value = state.setup.vesselName;
+  document.getElementById('s_chEng').value = state.setup.chEng;
+  document.getElementById('s_voyageNumber').value = state.setup.voyageNumber;
+  document.getElementById('s_shipCondition').value = state.setup.shipCondition;
+  document.getElementById('s_departPort').value = state.setup.departPort;
+  document.getElementById('s_arrivePort').value = state.setup.arrivePort;
+  document.getElementById('s_initDateTime').value = state.setup.initDateTime || '';
+  document.getElementById('s_voyageDistance').value = state.setup.voyageDistance ?? '';
+  document.getElementById('s_flowArr').value = state.setup.flowArr;
+  document.getElementById('s_pitch').value = state.setup.pitch;
+  document.getElementById('s_mcrRpm').value = state.setup.mcrRpm;
+  document.getElementById('s_mcrKw').value = state.setup.mcrKw;
+  document.getElementById('s_csrRpm').value = state.setup.csrRpm ?? '';
+  document.getElementById('s_csrKw').value = state.setup.csrKw ?? '';
+  document.getElementById('s_sfoc100').value = state.setup.sfoc100 ?? '';
+  document.getElementById('s_sfoc85').value = state.setup.sfoc85 ?? '';
+  document.getElementById('s_alternatorMaxKw').value = state.setup.alternatorMaxKw ?? '';
+
+  const fm = state.setup.flowmeters;
+  renderFlowmeterCounterRows();
+  document.getElementById('s_fm_boiler_reading').value = fm.boiler.reading ?? '';
+  document.getElementById('s_fm_boiler_digits').value = fm.boiler.digits;
+  document.getElementById('s_fm_cyl_reading').value = fm.cyl.reading ?? '';
+  document.getElementById('s_fm_cyl_digits').value = fm.cyl.digits;
+  document.getElementById('s_fm_rc_reading').value = fm.rc.reading ?? '';
+  document.getElementById('s_fm_rc_digits').value = fm.rc.digits;
+
+  const d = state.setup.defaults;
+  document.getElementById('s_def_cylTbn').value = d.cylTbn;
+  document.getElementById('s_def_meType').value = d.meType;
+  document.getElementById('s_def_geType').value = d.geType;
+  document.getElementById('s_def_blrType').value = d.blrType;
+  document.getElementById('s_def_meSg').value = d.meSg;
+  document.getElementById('s_def_geSg').value = d.geSg;
+  document.getElementById('s_def_blrSg').value = d.blrSg;
+
+  document.getElementById('setupFuelRob').innerHTML = FUEL_TYPES.map(t=>`
+    <div class="unit-box"><h3>${t}</h3><div class="field"><label>Opening ROB (MT)</label><input type="number" step="0.1" data-setup-fuel-rob="${t}" value="${state.setup.rob[t]}"></div></div>`).join('');
+  document.getElementById('setupLubeRob').innerHTML = LUBE_TYPES.map(t=>`
+    <div class="unit-box"><h3>${t}</h3><div class="field"><label>Opening ROB (L)</label><input type="number" step="1" data-setup-lube-rob="${t}" value="${state.setup.robLube[t]}"></div></div>`).join('');
+
+  document.getElementById('capacitySettings').innerHTML =
+    FUEL_TYPES.map(t=>`<div class="unit-box"><h3>${t} (MT)</h3><div class="field"><input type="number" data-cap-fuel="${t}" value="${state.setup.capacity[t]}"></div></div>`).join('') +
+    LUBE_TYPES.map(t=>`<div class="unit-box"><h3>${t} (L)</h3><div class="field"><input type="number" data-cap-lube="${t}" value="${state.setup.capacityLube[t]}"></div></div>`).join('');
+  document.querySelectorAll('[data-cap-fuel]').forEach(inp=> inp.addEventListener('change', ()=>{ state.setup.capacity[inp.dataset.capFuel]=parseFloat(inp.value)||1; saveSetup(); render(); }));
+  document.querySelectorAll('[data-cap-lube]').forEach(inp=> inp.addEventListener('change', ()=>{ state.setup.capacityLube[inp.dataset.capLube]=parseFloat(inp.value)||1; saveSetup(); render(); }));
+
+  renderFuelMeterFields();
+
+  // fuel gauges
+  document.getElementById('fuelGauges').innerHTML = FUEL_TYPES.map(t=>{
+    const cap = state.setup.capacity[t]||1;
+    return `<div class="gauge-box">${gaugeSVG(rob[t]/cap, GAUGE_COLORS[t])}<div class="gauge-value">${fmt(rob[t],1)}</div><div class="gauge-cap">of ${fmt(cap,0)} MT</div><div class="gauge-label">${t}</div></div>`;
+  }).join('');
+  // lube/fw gauges
+  document.getElementById('lubeGauges').innerHTML = LUBE_TYPES.filter(t=>t!=='FRESH WATER').map(t=>{
+    const cap = state.setup.capacityLube[t]||1;
+    return `<div class="gauge-box">${gaugeSVG(robLube[t]/cap, GAUGE_COLORS[t])}<div class="gauge-value">${fmt(robLube[t],0)}</div><div class="gauge-cap">of ${fmt(cap,0)} L</div><div class="gauge-label">${t}</div></div>`;
+  }).join('');
+  document.getElementById('fwGauge').innerHTML = (()=>{
+    const cap = state.setup.capacityLube['FRESH WATER']||1;
+    return `<div class="gauge-box">${gaugeSVG(robLube['FRESH WATER']/cap, GAUGE_COLORS['FRESH WATER'])}<div class="gauge-value">${fmt(robLube['FRESH WATER'],0)}</div><div class="gauge-cap">of ${fmt(cap,0)} L</div><div class="gauge-label">FRESH WATER</div></div>`;
+  })();
+
+  // receipts
+  const rl = document.getElementById('receiptsList');
+  if (state.receipts.length===0){
+    rl.innerHTML = `<div class="hint">No receipts logged yet.</div>`;
+  } else {
+    rl.innerHTML = state.receipts.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).map(r=>{
+      const extra = [r.bdnNo?`BDN ${r.bdnNo}`:'', r.company||'', r.location||''].filter(Boolean).join(' · ');
+      return `<div class="receipt-row">
+        <span class="desc">${r.date} — ${r.category.toUpperCase()} — ${r.type}${extra?' — '+extra:''}</span>
+        <span class="qty">+${fmt(r.qty,2)} ${r.category==='fuel'?'MT':'L'}</span>
+        <button class="small danger" data-del-receipt="${r.id}">✕</button>
+      </div>`;
+    }).join('');
+    rl.querySelectorAll('[data-del-receipt]').forEach(b=> b.addEventListener('click', async ()=>{
+      state.receipts = state.receipts.filter(r=>r.id!==b.dataset.delReceipt);
+      await dbDelete('receipts', b.dataset.delReceipt);
+      render();
+    }));
+  }
+
+  // voyage log table
+  const vlBody = document.getElementById('voyageAbstractBody');
+  if (rows.length===0){
+    vlBody.innerHTML = `<tr class="empty-row"><td colspan="32">No entries yet.</td></tr>`;
+  } else {
+    vlBody.innerHTML = rows.map(r=> `<tr>${abstractRowCells(r)}
+        <td style="display:flex; gap:4px;">
+          <button class="small ghost" data-view="${r.id}">View</button>
+          <button class="small danger" data-del="${r.id}">✕</button>
+        </td>
+      </tr>`).join('');
+    vlBody.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', async ()=>{
+      if (!confirm('Delete this log entry permanently?')) return;
+      state.entries = state.entries.filter(e=>e.id!==b.dataset.del);
+      await dbDelete('entries', b.dataset.del);
+      render();
+    }));
+    vlBody.querySelectorAll('[data-view]').forEach(b=> b.addEventListener('click', ()=>{
+      loadEntryIntoForm(b.dataset.view);
+    }));
+  }
+
+  // consumption table
+  const consBody = document.getElementById('consumptionBody');
+  if (rows.length===0){
+    consBody.innerHTML = `<tr class="empty-row"><td colspan="19">No entries yet.</td></tr>`;
+  } else {
+    consBody.innerHTML = rows.map(r=>{
+      const dt = new Date(r.datetime);
+      const dtStr = dt.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'2-digit'});
+      const hfoMe = r.me.type==='HFO'?r.meCons:null, hfoGe = r.ge.type==='HFO'?r.geCons:null, hfoBlr = r.blr.type==='HFO'?r.blrCons:null;
+      const lsfoMe = r.me.type==='LSFO'?r.meCons:null, lsfoGe = r.ge.type==='LSFO'?r.geCons:null, lsfoBlr = r.blr.type==='LSFO'?r.blrCons:null;
+      const mdoMe = r.me.type==='MDO/MGO'?r.meCons:null, mdoGe = r.ge.type==='MDO/MGO'?r.geCons:null, mdoBlr = r.blr.type==='MDO/MGO'?r.blrCons:null;
+      const lsmgoMe = r.me.type==='LSMGO'?r.meCons:null, lsmgoGe = r.ge.type==='LSMGO'?r.geCons:null, lsmgoBlr = r.blr.type==='LSMGO'?r.blrCons:null;
+      const sum = (...vals)=> vals.reduce((a,v)=> a+(v||0),0);
+      const c = v => v===null||v===undefined? '—': fmt(v,3);
+      return `<tr><td>${dtStr}</td><td>${r.operation}</td>
+        <td>${c(hfoMe)}</td><td>${c(hfoGe)}</td><td>${c(hfoBlr)}</td><td>${fmt(sum(hfoMe,hfoGe,hfoBlr),3)}</td>
+        <td>${c(lsfoMe)}</td><td>${c(lsfoGe)}</td><td>${c(lsfoBlr)}</td><td>${fmt(sum(lsfoMe,lsfoGe,lsfoBlr),3)}</td>
+        <td>${c(mdoMe)}</td><td>${c(mdoGe)}</td><td>${c(mdoBlr)}</td><td>${fmt(sum(mdoMe,mdoGe,mdoBlr),3)}</td>
+        <td>${c(lsmgoMe)}</td><td>${c(lsmgoGe)}</td><td>${c(lsmgoBlr)}</td><td>${fmt(sum(lsmgoMe,lsmgoGe,lsmgoBlr),3)}</td>
+        <td>${r.fwConsD===null||r.fwConsD===undefined?'—':fmt(r.fwConsD,0)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // summary
+  const totalCons = Object.values(consByFuel).reduce((a,b)=>a+b,0);
+  const daysAtSea = perf.totalHrs / 24;
+
+  // Average consumption per day
+  document.getElementById('fuelPerDayStrip').innerHTML = FUEL_TYPES.map(t=>`
+    <div class="stat"><div class="num">${daysAtSea>0 ? fmt(consByFuel[t]/daysAtSea,2) : '—'}</div><div class="lbl">${t} /day</div></div>`).join('');
+  document.getElementById('lubePerDayStrip').innerHTML = ["CYL HIGH","CYL LOW","ME SYS OIL","GE SYS OIL","FRESH WATER"].map(t=>`
+    <div class="stat"><div class="num">${daysAtSea>0 ? fmt(consByLube[t]/daysAtSea,1) : '—'}</div><div class="lbl">${t} /day</div></div>`).join('');
+
+  // Voyage Progress strip: merges former Voyage Summary + ETA stats
+  const lastRow = rows.length ? rows[rows.length-1] : null;
+  let etaStr = '—', distToGoStr = '—', daysToGoStr = '—';
+  if (lastRow && state.setup.voyageDistance!=null){
+    const distToGo = state.setup.voyageDistance - (lastRow.cumDistShip||0);
+    const refSpeed = lastRow.speedShip || perf.avgSpeedShip;
+    if (refSpeed>0){
+      const daysToGo = (distToGo/refSpeed)/24;
+      const eta = new Date(new Date(lastRow.datetime).getTime() + daysToGo*24*3600000);
+      etaStr = eta.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      daysToGoStr = fmt(daysToGo,2);
+    }
+    distToGoStr = fmt(distToGo,1);
+  }
+  document.getElementById('voyageProgressStrip').innerHTML = `
+    <div class="stat"><div class="num">${fmt(perf.totalHrs/24,2)}</div><div class="lbl">Days at Sea</div></div>
+    <div class="stat"><div class="num">${daysToGoStr}</div><div class="lbl">Days To Go</div></div>
+    <div class="stat"><div class="num">${etaStr}</div><div class="lbl">ETA</div></div>
+  `;
+
+  // Consumption dual gauges: starting ROB vs current ROB
+  document.getElementById('fuelDualGauges').innerHTML = FUEL_TYPES.map(t=>{
+    const cap = state.setup.capacity[t] || 1;
+    const startVal = state.setup.rob[t] || 0;
+    const curVal = rob[t];
+    return `<div class="gauge-box">${dualGaugeSVG(startVal/cap, curVal/cap, GAUGE_COLORS[t])}
+      <div class="gauge-value">${fmt(curVal,1)}</div>
+      <div class="gauge-cap">start ${fmt(startVal,1)} · used ${fmt(consByFuel[t],2)} MT</div>
+      <div class="gauge-label">${t}</div></div>`;
+  }).join('');
+  const lubeGaugeOrder = ["CYL HIGH","CYL LOW","ME SYS OIL","GE SYS OIL","FRESH WATER"];
+  document.getElementById('lubeDualGauges').innerHTML = lubeGaugeOrder.map(t=>{
+    const cap = state.setup.capacityLube[t] || 1;
+    const startVal = state.setup.robLube[t] || 0;
+    const curVal = robLube[t];
+    return `<div class="gauge-box">${dualGaugeSVG(startVal/cap, curVal/cap, GAUGE_COLORS[t])}
+      <div class="gauge-value">${fmt(curVal,0)}</div>
+      <div class="gauge-cap">start ${fmt(startVal,0)} · used ${fmt(consByLube[t],1)} L</div>
+      <div class="gauge-label">${t}</div></div>`;
+  }).join('');
+
+  // Average distance during sea passage: from START - PASSAGE to END - PASSAGE (or latest entry if no end yet)
+  let seaAvgDistStr = '—';
+  const startIdx = rows.findIndex(r => r.operation === 'START - PASSAGE');
+  if (startIdx > -1){
+    let endIdx = rows.findIndex((r,i) => i > startIdx && r.operation === 'END - PASSAGE');
+    if (endIdx === -1) endIdx = rows.length - 1;
+    if (endIdx > startIdx){
+      let sumDist = 0;
+      for (let i = startIdx+1; i <= endIdx; i++) sumDist += (rows[i].distanceShip || 0);
+      const hoursElapsed = (new Date(rows[endIdx].datetime) - new Date(rows[startIdx].datetime)) / 3600000;
+      const daysElapsed = hoursElapsed / 24;
+      if (daysElapsed > 0) seaAvgDistStr = fmt(sumDist/daysElapsed, 1);
+    }
+  }
+
+  document.getElementById('perfTotalsStrip').innerHTML = `
+    <div class="stat"><div class="num">${perf.avgRpm===null?'—':fmt(perf.avgRpm,1)}</div><div class="lbl">RPM</div></div>
+    <div class="stat"><div class="num">${perf.avgSlip===null?'—':fmt(perf.avgSlip,1)}</div><div class="lbl">Slip %</div></div>
+    <div class="stat"><div class="num">${perf.avgMcr===null?'—':fmt(perf.avgMcr,1)}</div><div class="lbl">%MCR</div></div>
+    <div class="stat"><div class="num">${perf.avgKw===null?'—':fmt(perf.avgKw,0)}</div><div class="lbl">KW</div></div>
+    <div class="stat"><div class="num">${seaAvgDistStr}</div><div class="lbl">Distance (nm/day)</div></div>
+  `;
+
+  document.getElementById('entryCount').textContent = `${state.entries.length} log entries · ${state.receipts.length} receipts stored locally.`;
+  renderVoyageProgress();
+  renderDocList();
+  renderAbstractList();
+  renderPrintHistoryList();
+}
+
+/* ---------------- persistence helpers ---------------- */
+async function saveSetup(){ await dbPut('meta', {key:'setup', value: state.setup}); }
+
+/* ---------------- tabs ---------------- */
+function switchTab(pageName){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.page===pageName));
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+pageName));
+}
+document.getElementById('tabs').addEventListener('click', (e)=>{
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  switchTab(tab.dataset.page);
+});
+
+/* ---------------- reports (supplementary data per entry) ---------------- */
+const REPORT_CATEGORIES = [
+  { label: 'All Entries', keyword: null },
+  { label: 'Departure', keyword: 'DEPART' },
+  { label: 'Sea Passage', keyword: 'PASSAGE' },
+  { label: 'Noon', keyword: 'NOON' },
+  { label: 'Arrival', keyword: 'ARRIVAL' },
+  { label: 'Waiting / Anchor / Drifting', keyword: 'DRIFT' },
+  { label: 'Shifting', keyword: 'SHIFTING' },
+  { label: 'Bunkering', keyword: 'BUNKER' },
+  { label: 'ECA', keyword: 'ECA' },
+  { label: 'Change of Speed', keyword: 'SPEED' },
+];
+const SEA_TYPE_OPS = new Set([
+  'START - PASSAGE','AT SEA - NOON','END - PASSAGE','DRIFTING','ECA - ENTRY','ECA - EXIT','CHANGE OF SPEED'
+]);
+
+function renderReportCategoryButtons(){
+  const box = document.getElementById('reportCategoryButtons');
+  if (!box) return;
+  box.innerHTML = REPORT_CATEGORIES.map((c,i)=>`<button class="ghost small" data-cat="${i}">${c.label}</button>`).join('');
+  box.querySelectorAll('[data-cat]').forEach(btn=>{
+    btn.addEventListener('click', ()=> showReportList(REPORT_CATEGORIES[parseInt(btn.dataset.cat)]));
+  });
+}
+
+function showReportList(category){
+  const list = sortedEntries().slice().reverse().filter(e=>{
+    if (!category.keyword) return true;
+    return (e.operation||'').toUpperCase().includes(category.keyword);
+  });
+  document.getElementById('reportEditorPanel').style.display = 'none';
+  const panel = document.getElementById('reportListPanel');
+  const title = document.getElementById('reportListTitle');
+  const body = document.getElementById('reportListBody');
+  title.textContent = `Matching Entries — ${category.label}`;
+  panel.style.display = '';
+  if (list.length===0){
+    body.innerHTML = `<tr class="empty-row"><td colspan="4">No entries found for this category.</td></tr>`;
+    return;
+  }
+  body.innerHTML = list.map(e=>{
+    const dt = new Date(e.datetime);
+    const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const condClass = e.condition==='BALLAST' ? 'cond-B':'cond-L';
+    const hasReport = e.report ? ' <span class="badge">has report</span>' : '';
+    return `<tr>
+      <td>${dtStr}</td><td>${e.operation}${hasReport}</td>
+      <td><span class="cond-tag ${condClass}">${e.condition[0]}</span></td>
+      <td style="display:flex; gap:4px;">
+        <button class="small primary" data-open="${e.id}">Select</button>
+        <button class="small ghost" data-rob="${e.id}">ROB</button>
+      </td>
+    </tr>`;
+  }).join('');
+  body.querySelectorAll('[data-open]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openReportEditor(btn.dataset.open));
+  });
+  body.querySelectorAll('[data-rob]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openRobSnapshot(btn.dataset.rob));
+  });
+}
+
+function computeMePerf(entryId){
+  const row = getComputedRow(entryId);
+  const avgLoad = row ? row.mcrPct : null;
+  return {
+    avgPower: row ? row.kwEst : null,
+    avgLoad: avgLoad,
+    minLoad: (avgLoad===null||avgLoad===undefined||isNaN(avgLoad)) ? null : avgLoad*0.90,
+    maxLoad: (avgLoad===null||avgLoad===undefined||isNaN(avgLoad)) ? null : avgLoad*1.15,
+    runTime: row ? row.hrs : null
+  };
+}
+
+let currentReportEntryId = null;
+function openReportEditor(entryId){
+  currentReportEntryId = entryId;
+  const e = state.entries.find(x=>x.id===entryId);
+  if (!e) return;
+  const isSea = SEA_TYPE_OPS.has(e.operation);
+  const dt = new Date(e.datetime);
+  const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+
+  document.getElementById('reportEditorPanel').style.display = '';
+  document.getElementById('reportEditorTitle').textContent = `Supplementary Report — ${e.operation}`;
+  document.getElementById('reportEditorHeader').innerHTML = `
+    <div class="field"><label>Vessel</label><input value="${state.setup.vesselName||''}" readonly></div>
+    <div class="field"><label>Voyage No.</label><input value="${state.setup.voyageNumber||''}" readonly></div>
+    <div class="field"><label>Date / Time</label><input value="${dtStr}" readonly></div>
+    <div class="field"><label>Operation</label><input value="${e.operation}" readonly></div>
+    <div class="field"><label>Condition</label><input value="${e.condition}" readonly></div>
+    <div class="field"><label>Report Type</label><input value="${isSea ? 'Sea / Underway (full)' : 'Port / Maneuvering (common only)'}" readonly></div>
+  `;
+  document.getElementById('reportSeaFields').style.display = isSea ? '' : 'none';
+  document.getElementById('reportPortFields').style.display = isSea ? 'none' : '';
+
+  const cylBox = document.getElementById('reportCylFields');
+  if (isSea){
+    cylBox.innerHTML = [1,2,3,4,5,6].map(n=>`
+      <div class="unit-box">
+        <h3>Cyl ${n}</h3>
+        <div class="field"><label>Pump Rack</label><input type="number" step="0.1" id="rep_pumpRack${n}"></div>
+        <div class="field"><label>Exhaust Temp (°C)</label><input type="number" step="0.1" id="rep_exhaust${n}"></div>
+      </div>`).join('');
+  } else {
+    cylBox.innerHTML = '';
+  }
+
+  const perfBody = document.querySelector('#reportPerfTable tbody');
+  const mePerf = computeMePerf(entryId);
+  perfBody.innerHTML = PERF_ROWS.map(([key,label])=>
+    `<tr><td>${label}</td><td class="pf-computed">${fmtP(mePerf[key], key==='avgPower'||key==='runTime'?0:1)}</td>${PERF_UNITS.slice(1).map(u=>`<td><input class="pf-input" type="number" step="0.01" id="rep_pf_${key}_${u}"></td>`).join('')}</tr>`
+  ).join('');
+
+  const r = e.report || {};
+  document.getElementById('rep_port').value = r.port ?? '';
+  document.getElementById('rep_cargoOp').value = r.cargoOp ?? '';
+  document.getElementById('rep_erTemp').value = r.erTemp ?? '';
+  document.getElementById('rep_bilgeRob').value = r.bilgeRob ?? '';
+  document.getElementById('rep_sludgeRob').value = r.sludgeRob ?? '';
+  document.getElementById('rep_stTemp').value = r.stTemp ?? '';
+  document.getElementById('rep_swTemp').value = r.swTemp ?? '';
+  document.getElementById('rep_remarks').value = r.remarks ?? '';
+  const perfTable = r.perfTable || {};
+  PERF_UNITS.slice(1).forEach(u=>{
+    PERF_ROWS.forEach(([key])=>{
+      const v = perfTable[u] ? perfTable[u][key] : null;
+      document.getElementById(`rep_pf_${key}_${u}`).value = (v===null||v===undefined) ? '' : v;
+    });
+  });
+  if (isSea){
+    document.getElementById('rep_eta').value = r.eta ?? '';
+    [1,2,3,4,5,6].forEach(n=>{
+      document.getElementById(`rep_pumpRack${n}`).value = (r.pumpRack && r.pumpRack[n-1]!=null) ? r.pumpRack[n-1] : '';
+      document.getElementById(`rep_exhaust${n}`).value = (r.exhaustTemp && r.exhaustTemp[n-1]!=null) ? r.exhaustTemp[n-1] : '';
+    });
+    document.getElementById('rep_t1in').value = r.turbo1?.in ?? '';
+    document.getElementById('rep_t1out').value = r.turbo1?.out ?? '';
+    document.getElementById('rep_t1rpm').value = r.turbo1?.rpm ?? '';
+    document.getElementById('rep_t2in').value = r.turbo2?.in ?? '';
+    document.getElementById('rep_t2out').value = r.turbo2?.out ?? '';
+    document.getElementById('rep_t2rpm').value = r.turbo2?.rpm ?? '';
+    document.getElementById('rep_scavTemp').value = r.scavTemp ?? '';
+    document.getElementById('rep_scavPress').value = r.scavPress ?? '';
+    document.getElementById('rep_fuelTemp').value = r.fuelTemp ?? '';
+    document.getElementById('rep_pumpMark').value = r.pumpMark ?? '';
+    document.getElementById('rep_pressDiff').value = r.pressDiff ?? '';
+  }
+
+  function readReportFormValues(){
+    const num = id => { const v = document.getElementById(id).value; return v===''? null : parseFloat(v); };
+    const report = {
+      erTemp: num('rep_erTemp'), bilgeRob: num('rep_bilgeRob'), sludgeRob: num('rep_sludgeRob'),
+      stTemp: num('rep_stTemp'), swTemp: num('rep_swTemp'),
+      remarks: document.getElementById('rep_remarks').value
+    };
+    if (!isSea){
+      report.port = document.getElementById('rep_port').value;
+      report.cargoOp = document.getElementById('rep_cargoOp').value;
+    }
+    const perfTable = { ME: computeMePerf(entryId) };
+    PERF_UNITS.slice(1).forEach(u=>{
+      perfTable[u] = {};
+      PERF_ROWS.forEach(([key])=>{ perfTable[u][key] = num(`rep_pf_${key}_${u}`); });
+    });
+    report.perfTable = perfTable;
+    if (isSea){
+      report.eta = document.getElementById('rep_eta').value;
+      report.pumpRack = [1,2,3,4,5,6].map(n=>num(`rep_pumpRack${n}`));
+      report.exhaustTemp = [1,2,3,4,5,6].map(n=>num(`rep_exhaust${n}`));
+      report.turbo1 = { in: num('rep_t1in'), out: num('rep_t1out'), rpm: num('rep_t1rpm') };
+      report.turbo2 = { in: num('rep_t2in'), out: num('rep_t2out'), rpm: num('rep_t2rpm') };
+      report.scavTemp = num('rep_scavTemp'); report.scavPress = num('rep_scavPress');
+      report.fuelTemp = num('rep_fuelTemp'); report.pumpMark = num('rep_pumpMark'); report.pressDiff = num('rep_pressDiff');
+    }
+    return report;
+  }
+
+  document.getElementById('btnSaveReport').onclick = async ()=>{
+    e.report = readReportFormValues();
+    await dbPut('entries', e);
+    alert('Supplementary report saved.');
+    document.getElementById('reportEditorPanel').style.display = 'none';
+  };
+  document.getElementById('btnCloseReport').onclick = ()=>{
+    document.getElementById('reportEditorPanel').style.display = 'none';
+  };
+  document.getElementById('btnPrintReport').onclick = ()=>{
+    const liveReport = readReportFormValues();
+    printSupplementaryReport(e, isSea, liveReport);
+  };
+}
+
+function fmtP(n, d=1){ return (n===null||n===undefined||isNaN(n)) ? '—' : Number(n).toFixed(d); }
+
+function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
+  const fuelRows = FUEL_TYPES.map(t=>`<div class="pr-row"><span>${t}:</span><b>${fmtP(asOf.rob[t],2)} MT</b></div>`).join('');
+  const totalLube = LUBE_TYPES.filter(t=>t!=='FRESH WATER').reduce((s,t)=> s+(asOf.robLube[t]||0),0);
+  const lubeRows = `
+    <div class="pr-row"><span>M/E Cyl. Oil (High):</span><b>${fmtP(asOf.robLube['CYL HIGH'],0)} L</b></div>
+    <div class="pr-row"><span>M/E Cyl. Oil (Low):</span><b>${fmtP(asOf.robLube['CYL LOW'],0)} L</b></div>
+    <div class="pr-row"><span>M/E System Oil:</span><b>${fmtP(asOf.robLube['ME SYS OIL'],0)} L</b></div>
+    <div class="pr-row"><span>A/E System Oil:</span><b>${fmtP(asOf.robLube['GE SYS OIL'],0)} L</b></div>
+    <div class="pr-row"><span>Total Lube Oil:</span><b>${fmtP(totalLube,0)} L</b></div>`;
+
+  const fwRob = asOf.robLube['FRESH WATER'];
+  const fwBox = `
+    <div class="pr-box">
+      <h4>Fresh Water</h4>
+      <div class="pr-row"><span>FW Prod.:</span><b>${row.fwProdD===null||row.fwProdD===undefined?'—':fmtP(row.fwProdD,0)} L</b></div>
+      <div class="pr-row"><span>FW Cons.:</span><b>${row.fwConsD===null||row.fwConsD===undefined?'—':fmtP(row.fwConsD,0)} L</b></div>
+      <div class="pr-row"><span>FW R.O.B.:</span><b>${fmtP(fwRob,0)} L</b></div>
+    </div>`;
+
+  const engineRoomBox = `
+    <div class="pr-box">
+      <h4>Engine Room &amp; Tank Readings</h4>
+      <div class="pr-row"><span>E.R. Temp.:</span><b>${fmtP(report.erTemp,1)} °C</b></div>
+      <div class="pr-row"><span>Bilge ROB:</span><b>${fmtP(report.bilgeRob,2)} m³</b></div>
+      <div class="pr-row"><span>Sludge ROB:</span><b>${fmtP(report.sludgeRob,2)} m³</b></div>
+      <div class="pr-row"><span>S/T Temp.:</span><b>${fmtP(report.stTemp,1)} °C</b></div>
+      <div class="pr-row"><span>S/W Temp.:</span><b>${fmtP(report.swTemp,1)} °C</b></div>
+    </div>`;
+
+  let voyageBox = '', cylTable = '', turboBox = '', scavBox = '';
+  if (isSea){
+    voyageBox = `
+      <div class="pr-box">
+        <h4>Voyage / Steaming</h4>
+        <div class="pr-row"><span>Steam Time:</span><b>${fmtP(row.hrs,1)} hrs</b></div>
+        <div class="pr-row"><span>ETA:</span><b>${report.eta ? new Date(report.eta).toLocaleString() : '—'}</b></div>
+        <div class="pr-row"><span>Rev. Counter:</span><b>${fmtP(entry.revCounter,0)}</b></div>
+        <div class="pr-row"><span>Daily Revs.:</span><b>${fmtP(row.dailyRevs,0)}</b></div>
+        <div class="pr-row"><span>Average RPM:</span><b>${fmtP(entry.rpm,2)}</b></div>
+        <div class="pr-row"><span>Power (KW):</span><b>${fmtP(row.kwEst,0)}</b></div>
+        <div class="pr-row"><span>Power (%):</span><b>${fmtP(row.mcrPct,2)}</b></div>
+        <div class="pr-row"><span>Ship's Dist.:</span><b>${fmtP(entry.distanceShip,2)} nm</b></div>
+        <div class="pr-row"><span>Engine Dist.:</span><b>${fmtP(row.distEngine,2)} nm</b></div>
+        <div class="pr-row"><span>Ship's Slip:</span><b>${fmtP(row.slip,2)} %</b></div>
+      </div>`;
+    const pr = report.pumpRack||[], ex = report.exhaustTemp||[];
+    cylTable = `
+      <div class="pr-box">
+        <h4>Pump Rack &amp; M/E Exhaust</h4>
+        <table class="pr-table">
+          <tr><th></th>${[1,2,3,4,5,6].map(n=>`<th>Cyl ${n}</th>`).join('')}</tr>
+          <tr><td>Pump Rack</td>${[0,1,2,3,4,5].map(i=>`<td>${fmtP(pr[i],1)}</td>`).join('')}</tr>
+          <tr><td>Exhaust (°C)</td>${[0,1,2,3,4,5].map(i=>`<td>${fmtP(ex[i],0)}</td>`).join('')}</tr>
+        </table>
+      </div>`;
+    const t1 = report.turbo1||{}, t2 = report.turbo2||{};
+    turboBox = `
+      <div class="pr-box">
+        <h4>Turbochargers &amp; Scavenge</h4>
+        <div class="pr-row"><span>T/C #1 In/Out/RPM:</span><b>${fmtP(t1.in,0)} / ${fmtP(t1.out,0)} / ${fmtP(t1.rpm,0)}</b></div>
+        <div class="pr-row"><span>T/C #2 In/Out/RPM:</span><b>${fmtP(t2.in,0)} / ${fmtP(t2.out,0)} / ${fmtP(t2.rpm,0)}</b></div>
+        <div class="pr-row"><span>Scav. Temp.:</span><b>${fmtP(report.scavTemp,1)} °C</b></div>
+        <div class="pr-row"><span>Scav. Pressure:</span><b>${fmtP(report.scavPress,2)} bar</b></div>
+        <div class="pr-row"><span>Fuel Temp.:</span><b>${fmtP(report.fuelTemp,1)} °C</b></div>
+        <div class="pr-row"><span>Pump Mark:</span><b>${fmtP(report.pumpMark,1)}</b></div>
+        <div class="pr-row"><span>Press. Diff.:</span><b>${fmtP(report.pressDiff,2)} bar</b></div>
+      </div>`;
+  }
+
+  const portBox = !isSea ? `
+    <div class="pr-box">
+      <h4>Port Details</h4>
+      <div class="pr-row"><span>Port:</span><b>${report.port || '—'}</b></div>
+      <div class="pr-row"><span>Operation:</span><b>${report.cargoOp || '—'}</b></div>
+    </div>` : '';
+
+  const perfTable = report.perfTable || {};
+  const perfTableHTML = `
+    <div class="pr-box">
+      <h4>Performance</h4>
+      <table class="pr-table">
+        <tr><th></th>${PERF_UNITS.map(u=>`<th>${PERF_UNIT_LABELS[u]}</th>`).join('')}</tr>
+        ${PERF_ROWS.map(([key,label])=>
+          `<tr><td>${label}</td>${PERF_UNITS.map(u=>`<td>${fmtP(perfTable[u]?perfTable[u][key]:null,1)}</td>`).join('')}</tr>`
+        ).join('')}
+      </table>
+    </div>`;
+
+  const consTableHTML = `
+    <div class="pr-box">
+      <h4>Consumption</h4>
+      <table class="pr-table">
+        <tr><th></th><th>M/E</th><th>Generator</th><th>Boiler</th><th>Total</th></tr>
+        <tr><td>HFO</td><td>${entry.me.type==='HFO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='HFO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='HFO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='HFO'?row.meCons:0)+(entry.ge.type==='HFO'?row.geCons:0)+(entry.blr.type==='HFO'?row.blrCons:0),3)}</td></tr>
+        <tr><td>LSFO</td><td>${entry.me.type==='LSFO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='LSFO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='LSFO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='LSFO'?row.meCons:0)+(entry.ge.type==='LSFO'?row.geCons:0)+(entry.blr.type==='LSFO'?row.blrCons:0),3)}</td></tr>
+        <tr><td>MDO/MGO</td><td>${entry.me.type==='MDO/MGO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='MDO/MGO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='MDO/MGO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='MDO/MGO'?row.meCons:0)+(entry.ge.type==='MDO/MGO'?row.geCons:0)+(entry.blr.type==='MDO/MGO'?row.blrCons:0),3)}</td></tr>
+        <tr><td>LSMGO</td><td>${entry.me.type==='LSMGO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='LSMGO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='LSMGO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='LSMGO'?row.meCons:0)+(entry.ge.type==='LSMGO'?row.geCons:0)+(entry.blr.type==='LSMGO'?row.blrCons:0),3)}</td></tr>
+      </table>
+      <div class="pr-row" style="margin-top:4px;"><span>Total Fuel Consumption:</span><b>${fmtP(row.total,3)} MT</b></div>
+      <div class="pr-row"><span>Cyl. Oil (${entry.tbn}) Consumption:</span><b>${fmtP(row.cylCons,1)} L</b></div>
+      <div class="pr-row"><span>M/E Sys. Oil Consumption:</span><b>${fmtP(row.meLoCons,1)} L</b></div>
+      <div class="pr-row"><span>A/E Sys. Oil Consumption:</span><b>${fmtP(row.geLoCons,1)} L</b></div>
+    </div>`;
+
+  return `
+    <div class="pr-sheet">
+      <div class="pr-title">${entry.operation}<span>Voyage ${state.setup.voyageNumber||''}</span></div>
+      <div class="pr-header">
+        <div><b>Vessel</b>${state.setup.vesselName||'—'}</div>
+        <div><b>Voyage No.</b>${state.setup.voyageNumber||'—'}</div>
+        <div><b>Date &amp; Time</b>${dtStr}</div>
+        <div><b>Condition</b>${entry.condition}</div>
+        <div><b>Route</b>${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}</div>
+      </div>
+      <div class="pr-cols">
+        <div class="pr-box"><h4>Fuel ROB (as of this entry)</h4>${fuelRows}</div>
+        <div class="pr-box"><h4>Lube Oil ROB (as of this entry)</h4>${lubeRows}</div>
+        ${fwBox}
+        ${engineRoomBox}
+        ${portBox}
+        ${voyageBox}
+        ${cylTable}
+        ${turboBox}
+        ${perfTableHTML}
+        ${consTableHTML}
+      </div>
+      <div class="pr-remarks"><b style="font-size:8.5px; text-transform:uppercase; color:#555;">Remarks</b><div style="margin-top:4px;">${(report.remarks||'').replace(/</g,'&lt;')||'—'}</div></div>
+      <div class="pr-row" style="border:none; margin-top:8px;"><span></span><b>${state.setup.chEng || '—'}<br><span style="font-weight:400; font-size:8.5px; text-transform:uppercase;">Chief Engineer</span></b></div>
+    </div>`;
+}
+
+function printSupplementaryReport(entry, isSea, report){
+  const row = getComputedRow(entry.id) || {};
+  const asOf = robAsOfEntry(entry.id) || {rob:{}, robLube:{}};
+  const dt = new Date(entry.datetime);
+  const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+
+  const sheetHTML = buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr);
+  // Duplicated side-by-side (2-up), same as the original workbook's report sheets
+  document.getElementById('printArea').innerHTML = `
+    <div class="pr-page">
+      <div class="pr-copy">${sheetHTML}</div>
+      <div class="pr-copy">${sheetHTML}</div>
+    </div>`;
+  window.print();
+}
+
+function loadEntryIntoForm(id){
+  const e = state.entries.find(x=>x.id===id);
+  if (!e) return;
+  editingId = id;
+  const sel = document.getElementById('in_selectEntry');
+  if (sel) sel.value = id;
+  document.getElementById('in_datetime').value = e.datetime;
+  document.getElementById('in_operation').value = e.operation;
+  document.getElementById('in_condition').value = e.condition;
+  document.getElementById('in_distanceShip').value = e.distanceShip;
+  document.getElementById('in_rpm').value = e.rpm ?? '';
+  document.getElementById('in_revCounter').value = e.revCounter ?? '';
+  document.getElementById('in_tbn').value = e.tbn;
+  document.getElementById('me_runtime').value = e.meRuntime ?? '';
+  document.getElementById('ge1_runtime').value = e.ge1Runtime ?? '';
+  document.getElementById('blr_runtime').value = e.blrRuntime ?? '';
+
+  const meIn = document.getElementById('me_meter_in'), meOut = document.getElementById('me_meter_out'), meSingle = document.getElementById('me_meter');
+  if (meIn && meOut){ meIn.value = e.me.meterIn ?? ''; meOut.value = e.me.meterOut ?? ''; }
+  else if (meSingle){ meSingle.value = e.me.meter ?? ''; }
+  document.getElementById('me_type').value = e.me.type;
+  document.getElementById('me_sg').value = e.me.sg;
+
+  const geIn = document.getElementById('ge_meter_in'), geOut = document.getElementById('ge_meter_out'), geSingle = document.getElementById('ge_meter');
+  if (geIn && geOut){ geIn.value = e.ge.meterIn ?? ''; geOut.value = e.ge.meterOut ?? ''; }
+  else if (geSingle){ geSingle.value = e.ge.meter ?? ''; }
+  document.getElementById('ge_type').value = e.ge.type;
+  document.getElementById('ge_sg').value = e.ge.sg;
+
+  document.getElementById('blr_meter').value = e.blr.meter;
+  document.getElementById('blr_type').value = e.blr.type;
+  document.getElementById('blr_sg').value = e.blr.sg;
+  document.getElementById('cyl_meter').value = e.cylMeter;
+  document.getElementById('me_lo_meter').value = e.meLo;
+  document.getElementById('ge_lo_meter').value = e.geLo;
+  document.getElementById('fw_prod_meter').value = e.fwProd;
+  document.getElementById('fw_rob_reading').value = e.fwRob;
+  document.getElementById('entry_misc_mdomgo').value = (e.miscCons && e.miscCons['MDO/MGO']) || 0;
+  document.getElementById('entry_misc_lsmgo').value = (e.miscCons && e.miscCons['LSMGO']) || 0;
+
+  document.getElementById('btnAdd').textContent = 'Update Entry';
+  document.getElementById('logEntryTitle').textContent = 'EDIT LOG ENTRY';
+  document.getElementById('btnCancelEdit').style.display = '';
+  document.getElementById('editingBadge').style.display = '';
+  switchTab('entry');
+  updateLivePreview();
+  renderEntryUnitFields();
+  renderFwLivePreview();
+  const rowForUnits = getComputedRow(id);
+  if (rowForUnits){
+    document.getElementById('entry_unit_me').value = rowForUnits.meCons===null||rowForUnits.meCons===undefined ? '' : rowForUnits.meCons;
+    document.getElementById('entry_unit_ge').value = rowForUnits.geCons===null||rowForUnits.geCons===undefined ? '' : rowForUnits.geCons;
+    document.getElementById('entry_unit_blr').value = rowForUnits.blrCons===null||rowForUnits.blrCons===undefined ? '' : rowForUnits.blrCons;
+  }
+  // populate consumption table with this entry's saved values (override if present, else calculated)
+  const body = document.getElementById('entryConsBody');
+  if (body) body.innerHTML = '';
+  renderEntryConsTable();
+  const row = getComputedRow(id);
+  if (row){
+    ROB_ROWS.forEach(r=>{
+      const el = document.getElementById('entry_cons_'+slugKey(r.key));
+      if (!el) return;
+      const val = r.cat==='fuel' ? row.consByType[r.key] : row.lubeByType[r.key];
+      el.value = (val===null||val===undefined) ? '' : val;
+    });
+  }
+  openVoyageSummary(id);
+}
+
+/* ---------------- setup handlers ---------------- */
+document.getElementById('s_flowArr').addEventListener('change', (e)=>{
+  state.setup.flowArr = e.target.value;
+  renderFlowmeterCounterRows();
+});
+async function saveVoyageDetails(){
+  state.setup.vesselName = document.getElementById('s_vesselName').value;
+  state.setup.chEng = document.getElementById('s_chEng').value;
+  state.setup.voyageNumber = document.getElementById('s_voyageNumber').value;
+  state.setup.shipCondition = document.getElementById('s_shipCondition').value;
+  state.setup.departPort = document.getElementById('s_departPort').value;
+  state.setup.arrivePort = document.getElementById('s_arrivePort').value;
+  state.setup.initDateTime = document.getElementById('s_initDateTime').value;
+  state.setup.voyageDistance = parseFloat(document.getElementById('s_voyageDistance').value)||null;
+
+  document.querySelectorAll('[data-setup-fuel-rob]').forEach(inp=> state.setup.rob[inp.dataset.setupFuelRob] = parseFloat(inp.value)||0);
+  document.querySelectorAll('[data-setup-lube-rob]').forEach(inp=> state.setup.robLube[inp.dataset.setupLubeRob] = parseFloat(inp.value)||0);
+  await saveSetup();
+  render();
+  alert('Voyage Details saved.');
+}
+document.getElementById('btnSaveVoyageDetails').addEventListener('click', saveVoyageDetails);
+
+document.getElementById('btnToggleShipDetails').addEventListener('click', ()=>{
+  const section = document.getElementById('shipDetailsSection');
+  const btn = document.getElementById('btnToggleShipDetails');
+  const showing = section.style.display !== 'none';
+  section.style.display = showing ? 'none' : '';
+  btn.textContent = showing ? 'Ship Details ▾' : 'Ship Details ▴';
+});
+
+function normalizeEntry(e){
+  e.me = e.me || { meter:null, type:'HFO', sg:0.98 };
+  e.ge = e.ge || { meter:null, type:'MDO/MGO', sg:0.87 };
+  e.blr = e.blr || { meter:null, type:'MDO/MGO', sg:0.87 };
+  e.miscCons = e.miscCons || {"MDO/MGO":0,"LSMGO":0};
+  e.consOverride = e.consOverride || null;
+  e.unitOverride = e.unitOverride || {ME:null,GE:null,BLR:null};
+  if (e.cylMeter===undefined) e.cylMeter = null;
+  if (e.meLo===undefined) e.meLo = null;
+  if (e.geLo===undefined) e.geLo = null;
+  if (e.fwProd===undefined) e.fwProd = null;
+  if (e.fwRob===undefined) e.fwRob = null;
+  if (e.revCounter===undefined) e.revCounter = null;
+  if (e.rpm===undefined) e.rpm = null;
+  if (!e.id) e.id = uid();
+  return e;
+}
+
+async function saveSetupFromForm(){
+  const prevArr = state.setup.flowArr;
+  state.setup.flowArr = document.getElementById('s_flowArr').value;
+  state.setup.pitch = parseFloat(document.getElementById('s_pitch').value)||0;
+  state.setup.mcrRpm = parseFloat(document.getElementById('s_mcrRpm').value)||1;
+  state.setup.mcrKw = parseFloat(document.getElementById('s_mcrKw').value)||0;
+  state.setup.csrRpm = parseFloat(document.getElementById('s_csrRpm').value)||null;
+  state.setup.csrKw = parseFloat(document.getElementById('s_csrKw').value)||null;
+  state.setup.sfoc100 = parseFloat(document.getElementById('s_sfoc100').value)||null;
+  state.setup.sfoc85 = parseFloat(document.getElementById('s_sfoc85').value)||null;
+  state.setup.alternatorMaxKw = parseFloat(document.getElementById('s_alternatorMaxKw').value)||null;
+
+  const meDualNow = state.setup.flowArr==='DUAL_ME' || state.setup.flowArr==='DUAL_BOTH';
+  const geDualNow = state.setup.flowArr==='DUAL_GE' || state.setup.flowArr==='DUAL_BOTH';
+  const numOrNull = id => { const el = document.getElementById(id); if (!el) return null; const v = parseFloat(el.value); return isNaN(v) ? null : v; };
+  const intOr8 = id => { const el = document.getElementById(id); if (!el) return 8; const v = parseInt(el.value); return isNaN(v) ? 8 : v; };
+  state.setup.flowmeters = {
+    main: { reading: numOrNull('s_fm_main_reading'), digits: intOr8('s_fm_main_digits') },
+    mainOut: meDualNow ? { reading: numOrNull('s_fm_mainOut_reading'), digits: intOr8('s_fm_mainOut_digits') } : (state.setup.flowmeters.mainOut||{reading:null,digits:8}),
+    aux: { reading: numOrNull('s_fm_aux_reading'), digits: intOr8('s_fm_aux_digits') },
+    auxOut: geDualNow ? { reading: numOrNull('s_fm_auxOut_reading'), digits: intOr8('s_fm_auxOut_digits') } : (state.setup.flowmeters.auxOut||{reading:null,digits:8}),
+    boiler: { reading: numOrNull('s_fm_boiler_reading'), digits: intOr8('s_fm_boiler_digits') },
+    cyl: { reading: numOrNull('s_fm_cyl_reading'), digits: intOr8('s_fm_cyl_digits') },
+    rc: { reading: numOrNull('s_fm_rc_reading'), digits: intOr8('s_fm_rc_digits') }
+  };
+
+  state.setup.defaults = {
+    cylTbn: document.getElementById('s_def_cylTbn').value,
+    meType: document.getElementById('s_def_meType').value,
+    geType: document.getElementById('s_def_geType').value,
+    blrType: document.getElementById('s_def_blrType').value,
+    meSg: parseFloat(document.getElementById('s_def_meSg').value)||0,
+    geSg: parseFloat(document.getElementById('s_def_geSg').value)||0,
+    blrSg: parseFloat(document.getElementById('s_def_blrSg').value)||0
+  };
+
+  await saveSetup();
+  applyEntryDefaults();
+  render();
+  if (prevArr !== state.setup.flowArr){
+    alert('Ship Details saved. Flowmeter Arrangement changed — the Log Entry fuel meter fields have been updated to match.');
+  } else {
+    alert('Ship Details saved.');
+  }
+}
+document.getElementById('btnSaveSetup').addEventListener('click', saveSetupFromForm);
+
+document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
+  if (state.entries.length===0){
+    alert('There are no log entries yet for this voyage.');
+    return;
+  }
+
+  // Fail-safe: Voyage No., Ships Condition, and Date & Time must be filled in and must
+  // actually reflect a new voyage before this is allowed to proceed.
+  const newVoyageNo = document.getElementById('s_voyageNumber').value.trim();
+  const newCondition = document.getElementById('s_shipCondition').value;
+  const newDateTime = document.getElementById('s_initDateTime').value;
+  const oldVoyageNo = (state.setup.voyageNumber||'').trim();
+  const oldCondition = state.setup.shipCondition;
+  const oldDateTime = state.setup.initDateTime || '';
+
+  if (!newVoyageNo || !newCondition || !newDateTime){
+    alert('Cannot create a new voyage: Voyage No., Ships Condition, and Date & Time must all be filled in first.');
+    return;
+  }
+  if (newDateTime === oldDateTime){
+    alert('Cannot create a new voyage: Date & Time must be updated to reflect the new voyage before proceeding.');
+    return;
+  }
+  if (newVoyageNo === oldVoyageNo && newCondition === oldCondition){
+    alert('Cannot create a new voyage: Voyage No. and Ships Condition are both unchanged. Change at least one of them before proceeding.');
+    return;
+  }
+
+  const ok = confirm(
+    'Create New Voyage?\n\n' +
+    'A full backup of the current voyage (entries, receipts, documents, setup) and a Voyage Abstract CSV will be downloaded automatically before anything is cleared — the abstract is also saved to the Voyage Abstract tab\'s local library.\n\n' +
+    'This will then permanently delete all log entries and receipts for the CURRENT voyage.\n\n' +
+    "Your last entry's meter readings will be kept as the opening reference for the next entry, " +
+    'current ROB will become the new opening ROB, and Port of Departure will be set to this voyage\'s Port of Arrival.\n\n' +
+    'This cannot be undone. Continue?'
+  );
+  if (!ok) return;
+
+  const {rows, consByFuel, consByLube} = computeDerived();
+  const {rob, robLube} = currentROB(consByFuel, consByLube);
+  const last = sortedEntries()[sortedEntries().length-1];
+
+  // Auto-export a full backup of everything before this voyage is cleared, named with
+  // voyage no. + condition + execution timestamp (browsers can only save via a download
+  // prompt — there's no way for a web page to write directly into a folder on disk).
+  const backupPayload = { setup: state.setup, entries: state.entries, receipts: state.receipts, documents: state.documents, exportedAt: new Date().toISOString() };
+  const now = new Date();
+  const stamp = now.getFullYear().toString() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0')
+    + '-' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0');
+  const safe = s => (s||'unknown').toString().replace(/[^a-zA-Z0-9-_]/g,'_');
+  const backupName = `noon-report-backup_${safe(state.setup.voyageNumber)}_${safe(state.setup.shipCondition)}_${stamp}.json`;
+  const backupBlob = new Blob([JSON.stringify(backupPayload, null, 2)], {type:'application/json'});
+  const backupLink = document.createElement('a');
+  backupLink.href = URL.createObjectURL(backupBlob);
+  backupLink.download = backupName;
+  backupLink.click();
+
+  // Also save + download a Voyage Abstract snapshot, same naming scheme with an "abstract" identifier
+  const abstractName = `noon-report-backup_${safe(state.setup.voyageNumber)}_${safe(state.setup.shipCondition)}_${stamp}_abstract.csv`;
+  const abstractRecord = {
+    id: uid(), savedAt: new Date().toISOString(),
+    voyageNumber: state.setup.voyageNumber, condition: state.setup.shipCondition,
+    filename: abstractName, rows: rows
+  };
+  state.abstracts.push(abstractRecord);
+  await dbPut('abstracts', abstractRecord);
+  downloadAbstractCsv(abstractRecord);
+
+  // Backup/abstract filenames above used the OLD voyage identity; now apply the new one.
+  state.setup.voyageNumber = newVoyageNo;
+  state.setup.shipCondition = newCondition;
+  state.setup.initDateTime = newDateTime;
+
+  state.setup.carryover = JSON.parse(JSON.stringify(last));
+  state.setup.rob = rob;
+  state.setup.robLube = robLube;
+  state.setup.departPort = state.setup.arrivePort;
+  state.setup.arrivePort = '';
+
+  state.entries = [];
+  state.receipts = [];
+  await dbClear('entries');
+  await dbClear('receipts');
+  await saveSetup();
+  render();
+  switchTab('setup');
+  alert(`New voyage started. Downloaded "${backupName}" and "${abstractName}". Opening ROB and reference meter readings carried over — set the new Port of Arrival when known.`);
+});
+
+const ROB_ROWS = [
+  {key:'HFO', label:'HFO', cat:'fuel'},
+  {key:'LSFO', label:'LS HFO', cat:'fuel'},
+  {key:'MDO/MGO', label:'MDO/MGO', cat:'fuel'},
+  {key:'LSMGO', label:'LS MGO', cat:'fuel'},
+  {key:'CYL HIGH', label:'Cyl. Oil High', cat:'lube'},
+  {key:'CYL LOW', label:'Cyl Oil Low', cat:'lube'},
+  {key:'ME SYS OIL', label:'M/E Sys. Oil', cat:'lube'},
+  {key:'GE SYS OIL', label:'D/G Sys. Oil', cat:'lube'},
+  {key:'FRESH WATER', label:'Fresh Water', cat:'lube'}
+];
+function slugKey(k){ return k.replace(/[^a-zA-Z]/g,'').toLowerCase(); }
+
+let currentVsEntryId = null;
+
+/* ---------------- all-entries ROB snapshot (Reports tab) ---------------- */
+function openRobSnapshot(entryId){
+  const entry = state.entries.find(e=>e.id===entryId);
+  const row = getComputedRow(entryId);
+  if (!entry || !row) return;
+
+  const sorted = sortedEntries();
+  const idx = sorted.findIndex(x=>x.id===entryId);
+  const priorEntry = idx>0 ? sorted[idx-1] : null;
+  const prevRobData = priorEntry ? robAsOfEntry(priorEntry.id) : { rob: state.setup.rob, robLube: state.setup.robLube };
+  const asOf = robAsOfEntry(entryId);
+
+  const dt = new Date(entry.datetime);
+  document.getElementById('robSnapshotVessel').value = state.setup.vesselName || '';
+  document.getElementById('robSnapshotDate').value = dt.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'2-digit'});
+  document.getElementById('robSnapshotTime').value = dt.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('robSnapshotOperation').value = entry.operation;
+
+  const rowsForPrint = ROB_ROWS.filter(r=>r.key!=='FRESH WATER').map(r=>{
+    const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
+    const consVal = r.cat==='fuel' ? row.consByType[r.key] : row.lubeByType[r.key];
+    const nowVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
+    const dec = r.cat==='fuel' ? 2 : 0;
+    return { label:r.label, prevVal, consVal, nowVal, dec, consDec: r.cat==='fuel'?3:1 };
+  });
+
+  document.getElementById('robSnapshotBody').innerHTML = rowsForPrint.map(r=>`<tr>
+      <td>${r.label}</td>
+      <td>${fmt(r.prevVal,r.dec)}</td>
+      <td>${r.consVal===null||r.consVal===undefined?'—':fmt(r.consVal,r.consDec)}</td>
+      <td>${fmt(r.nowVal,r.dec)}</td>
+    </tr>`).join('');
+
+  document.getElementById('btnPrintRobSnapshot').onclick = () => printRobSnapshot(entry, dt, rowsForPrint);
+
+  document.getElementById('robSnapshotPanel').style.display = '';
+  switchTab('reports');
+  document.getElementById('robSnapshotPanel').scrollIntoView({behavior:'smooth', block:'start'});
+}
+document.getElementById('btnCloseRobSnapshot').addEventListener('click', ()=>{
+  document.getElementById('robSnapshotPanel').style.display = 'none';
+});
+
+function printRobSnapshot(entry, dt, rowsForPrint){
+  const dateStr = dt.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'2-digit'});
+  const timeStr = dt.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+  const tableRows = rowsForPrint.map(r=>`
+    <tr><td>${r.label}</td><td>${fmt(r.prevVal,r.dec)}</td><td>${r.consVal===null||r.consVal===undefined?'—':fmt(r.consVal,r.consDec)}</td><td>${fmt(r.nowVal,r.dec)}</td></tr>`).join('');
+  const sheetHtml = `
+    <div class="pr-sheet" style="font-size:11px;">
+      <div class="pr-title">
+        <span>${state.setup.vesselName||''}</span>
+        <span style="font-size:11px; font-family:'Oswald',sans-serif; font-weight:700; text-transform:uppercase; letter-spacing:0.02em;">REMAINING ONBOARD</span>
+      </div>
+      <div class="pr-header" style="grid-template-columns:repeat(3,1fr);">
+        <div><b>Date</b>${dateStr}</div>
+        <div><b>Time</b>${timeStr}</div>
+        <div><b>Operation</b>${entry.operation}</div>
+      </div>
+      <table class="pr-table" style="font-size:10.5px;">
+        <tr><th></th><th>Previous</th><th>Consumption</th><th>Present</th></tr>
+        ${tableRows}
+      </table>
+    </div>`;
+  // Duplicated side-by-side (2-up) on one A4 landscape page, same as the other printed reports.
+  document.getElementById('printArea').innerHTML = `
+    <div class="pr-page">
+      <div class="pr-copy">${sheetHtml}</div>
+      <div class="pr-copy">${sheetHtml}</div>
+    </div>`;
+  window.print();
+}
+
+function openVoyageSummary(entryId){
+  const entry = state.entries.find(e=>e.id===entryId);
+  const row = getComputedRow(entryId);
+  if (!entry || !row) return;
+  currentVsEntryId = entryId;
+
+  const {perf} = computeDerived();
+  const sorted = sortedEntries();
+  const idx = sorted.findIndex(x=>x.id===entryId);
+  const priorEntry = idx>0 ? sorted[idx-1] : null;
+  const prevRobData = priorEntry ? robAsOfEntry(priorEntry.id) : { rob: state.setup.rob, robLube: state.setup.robLube };
+  const asOf = robAsOfEntry(entryId);
+
+  const dt = new Date(entry.datetime);
+  const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+
+  const voyageDist = state.setup.voyageDistance;
+  const distanceToGo = (voyageDist!=null && row.cumDistShip!=null) ? (voyageDist - row.cumDistShip) : null;
+  const refSpeed = row.speedShip || perf.avgSpeedShip;
+  const daysToGoVal = (distanceToGo!=null && refSpeed>0) ? (distanceToGo/refSpeed)/24 : null;
+  const eta = (daysToGoVal!=null) ? new Date(dt.getTime() + daysToGoVal*24*3600000) : null;
+
+  const stat = (label,val) => `<div class="stat"><div class="num">${val}</div><div class="lbl">${label}</div></div>`;
+  document.getElementById('vsTopStrip').innerHTML = `
+    ${stat('Voyage', state.setup.voyageNumber||'—')}
+    ${stat('Run Time (hrs)', fmt(row.hrs,1))}
+    ${stat('Date &amp; Time', dtStr)}
+    ${stat("Ship's Distance", fmt(entry.distanceShip,1))}
+    ${stat('RPM', fmt(entry.rpm,2))}
+    ${stat('ETA', eta ? eta.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—')}
+    ${stat('Engine Distance', fmt(row.distEngine,2))}
+    ${stat('Load (KW)', fmt(row.kwEst,0))}
+    ${stat('Distance To Go', distanceToGo!=null? fmt(distanceToGo,1):'—')}
+    ${stat('Slip %', fmt(row.slip,2))}
+    ${stat('Load %', fmt(row.mcrPct,2))}
+    ${stat('Speed', fmt(row.speedShip,2))}
+    ${stat('Total Rev.', fmt(row.dailyRevs,0))}
+    ${stat('Ave. KW (voyage)', fmt(perf.avgKw,0))}
+    ${stat('Days To Go', daysToGoVal!=null? fmt(daysToGoVal,2):'—')}
+  `;
+
+  document.getElementById('vsFuelConsBox').innerHTML = `
+    <div class="field"><label>M/E</label><input value="${fmt(row.meCons,2)}" readonly></div>
+    <div class="field"><label>D/G</label><input value="${fmt(row.geCons,2)}" readonly></div>
+    <div class="field"><label>Boiler</label><input value="${fmt(row.blrCons,2)}" readonly></div>
+    <div class="field"><label>TOTAL</label><input value="${fmt(row.total,2)}" readonly></div>
+  `;
+
+  document.getElementById('vsFreshWaterBox').innerHTML = `
+    <div class="field"><label>Produced (L)</label><input value="${row.fwProdD==null?'—':fmt(row.fwProdD,0)}" readonly></div>
+    <div class="field"><label>Consumed (L)</label><input value="${row.fwConsD==null?'—':fmt(row.fwConsD,0)}" readonly></div>
+    <div class="field"><label>R.O.B. (L)</label><input value="${entry.fwRob==null?'—':fmt(entry.fwRob,0)}" readonly></div>
+  `;
+
+  const misc = entry.miscCons || {"MDO/MGO":0,"LSMGO":0};
+  document.getElementById('vs_misc_mdomgo').value = misc['MDO/MGO'] ?? 0;
+  document.getElementById('vs_misc_lsmgo').value = misc['LSMGO'] ?? 0;
+
+  const robBody = document.getElementById('vsRobBody');
+  robBody.innerHTML = ROB_ROWS.map(r=>{
+    const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
+    const consVal = r.cat==='fuel' ? row.consByType[r.key] : row.lubeByType[r.key];
+    const robVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
+    return `<tr>
+      <td>${r.label}</td>
+      <td>${fmt(prevVal, r.cat==='fuel'?2:0)}</td>
+      <td><input class="pf-input" style="width:80px;" type="number" step="0.001" id="vs_cons_${slugKey(r.key)}" value="${consVal!=null?consVal:0}" data-prev="${prevVal||0}" data-cat="${r.cat}" data-key="${r.key}"></td>
+      <td id="vs_rob_${slugKey(r.key)}">${fmt(robVal, r.cat==='fuel'?2:0)}</td>
+    </tr>`;
+  }).join('');
+
+  robBody.querySelectorAll('.pf-input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const prevVal = parseFloat(inp.dataset.prev)||0;
+      const consVal = parseFloat(inp.value)||0;
+      const cat = inp.dataset.cat;
+      document.getElementById(`vs_rob_${slugKey(inp.dataset.key)}`).textContent = fmt(prevVal - consVal, cat==='fuel'?2:0);
+    });
+  });
+
+  document.getElementById('voyageSummaryPanel').style.display = '';
+  switchTab('entry');
+  document.getElementById('voyageSummaryPanel').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+document.getElementById('btnSaveVoyageSummary').addEventListener('click', async ()=>{
+  const entry = state.entries.find(e=>e.id===currentVsEntryId);
+  if (!entry) return;
+  const num = id => { const v = document.getElementById(id).value; return isNaN(parseFloat(v)) ? 0 : parseFloat(v); };
+  entry.miscCons = { 'MDO/MGO': num('vs_misc_mdomgo'), 'LSMGO': num('vs_misc_lsmgo') };
+  entry.consOverride = {};
+  ROB_ROWS.forEach(r=>{
+    const el = document.getElementById('vs_cons_'+slugKey(r.key));
+    entry.consOverride[r.key] = el ? (parseFloat(el.value)||0) : null;
+  });
+  await dbPut('entries', entry);
+  render();
+  document.getElementById('voyageSummaryPanel').style.display = 'none';
+  alert('Consumption and Misc. saved — R.O.B. recalculated for this and all later entries.');
+});
+/* ---------------- print history (Log Entry) ---------------- */
+async function recordPrintHistory(label, entry, htmlContent){
+  const fullDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${label}</title>
+    <style>
+      body{ font-family:'IBM Plex Mono',monospace; background:#fff; color:#111; margin:0; padding:10mm; }
+      @page{ size: A4 landscape; margin:6mm; }
+      .pr-page{ display:flex; gap:5mm; }
+      .pr-copy{ flex:1; min-width:0; border-right:1px dashed #999; padding-right:5mm; }
+      .pr-copy:last-child{ border-right:none; padding-right:0; }
+      .pr-sheet{ font-size:8.5px; }
+      .pr-title{ font-family:Oswald,sans-serif; font-size:11px; font-weight:700; text-transform:uppercase; border-bottom:2px solid #111; padding-bottom:2px; margin-bottom:4px; display:flex; justify-content:space-between; }
+      .pr-header{ display:grid; grid-template-columns:repeat(3,1fr); gap:2px; border:1px solid #111; padding:3px 5px; margin-bottom:4px; }
+      .pr-header div b{ display:block; font-size:6.5px; text-transform:uppercase; color:#555; }
+      .pr-cols{ column-count:3; column-gap:5px; }
+      .pr-box{ border:1px solid #111; padding:3px 5px; margin-bottom:4px; break-inside:avoid; display:inline-block; width:100%; }
+      .pr-box h4{ margin:0 0 2px; font-family:Oswald,sans-serif; font-size:7.5px; text-transform:uppercase; border-bottom:1px solid #999; padding-bottom:1px; }
+      .pr-row{ display:flex; justify-content:space-between; padding:0.5px 0; border-bottom:1px dotted #ccc; gap:5px; }
+      .pr-row b{ font-weight:600; text-align:right; }
+      .pr-table{ width:100%; border-collapse:collapse; font-size:7px; }
+      .pr-table th, .pr-table td{ border:1px solid #999; padding:1px 2px; text-align:center; }
+      .pr-table th{ background:#eee; }
+      .pr-remarks{ border:1px solid #111; padding:3px 5px; min-height:16px; }
+    </style>
+  </head><body>${htmlContent}</body></html>`;
+  const record = {
+    id: uid(), printedAt: new Date().toISOString(), label,
+    entryDatetime: entry ? entry.datetime : null,
+    operation: entry ? entry.operation : null,
+    html: fullDoc
+  };
+  state.printHistory.push(record);
+  await dbPut('printHistory', record);
+  renderPrintHistoryList();
+}
+
+function renderPrintHistoryList(){
+  const body = document.getElementById('printHistoryBody');
+  if (!body) return;
+  if (state.printHistory.length===0){
+    body.innerHTML = `<tr class="empty-row"><td colspan="4">No prints yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = state.printHistory.slice().sort((a,b)=>new Date(b.printedAt)-new Date(a.printedAt)).map(p=>{
+    const entryDt = p.entryDatetime ? new Date(p.entryDatetime).toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+    return `<tr>
+      <td>${new Date(p.printedAt).toLocaleString()}</td>
+      <td>${entryDt}</td>
+      <td>${p.operation||'—'}</td>
+      <td style="display:flex; gap:4px;">
+        <button class="small ghost" data-view-print="${p.id}">View</button>
+        <button class="small ghost" data-dl-print="${p.id}">Download</button>
+        <button class="small danger" data-del-print="${p.id}">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+  body.querySelectorAll('[data-view-print]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const p = state.printHistory.find(x=>x.id===b.dataset.viewPrint);
+      if (!p) return;
+      const blob = new Blob([p.html], {type:'text/html'});
+      window.open(URL.createObjectURL(blob), '_blank');
+    });
+  });
+  body.querySelectorAll('[data-dl-print]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const p = state.printHistory.find(x=>x.id===b.dataset.dlPrint);
+      if (!p) return;
+      const blob = new Blob([p.html], {type:'text/html'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${p.label.replace(/[^a-zA-Z0-9-_]/g,'_')}_${p.printedAt.slice(0,19).replace(/[:T]/g,'')}.html`;
+      a.click();
+    });
+  });
+  body.querySelectorAll('[data-del-print]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      if (!confirm('Delete this print history entry?')) return;
+      state.printHistory = state.printHistory.filter(p=>p.id!==b.dataset.delPrint);
+      await dbDelete('printHistory', b.dataset.delPrint);
+      renderPrintHistoryList();
+    });
+  });
+}
+
+function printVoyageSummary(entryId){
+  const entry = state.entries.find(e=>e.id===entryId);
+  const row = getComputedRow(entryId);
+  if (!entry || !row) return;
+
+  const {perf} = computeDerived();
+  const sorted = sortedEntries();
+  const idx = sorted.findIndex(x=>x.id===entryId);
+  const priorEntry = idx>0 ? sorted[idx-1] : null;
+  const prevRobData = priorEntry ? robAsOfEntry(priorEntry.id) : { rob: state.setup.rob, robLube: state.setup.robLube };
+  const asOf = robAsOfEntry(entryId);
+
+  const dtStr = new Date(entry.datetime).toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+
+  const voyageDist = state.setup.voyageDistance;
+  const distanceToGo = (voyageDist!=null && row.cumDistShip!=null) ? (voyageDist - row.cumDistShip) : null;
+  const refSpeed = row.speedShip || perf.avgSpeedShip;
+  const daysToGoVal = (distanceToGo!=null && refSpeed>0) ? (distanceToGo/refSpeed)/24 : null;
+  const eta = (daysToGoVal!=null) ? new Date(new Date(entry.datetime).getTime() + daysToGoVal*24*3600000) : null;
+
+  const dataBox = `
+    <div class="pr-box"><h4>Voyage Data</h4>
+      <div class="pr-row"><span>Run Time (hrs)</span><b>${fmt(row.hrs,1)}</b></div>
+      <div class="pr-row"><span>Ship's Distance</span><b>${fmt(entry.distanceShip,1)}</b></div>
+      <div class="pr-row"><span>RPM</span><b>${fmt(entry.rpm,2)}</b></div>
+      <div class="pr-row"><span>ETA</span><b>${eta ? eta.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}</b></div>
+      <div class="pr-row"><span>Engine Distance</span><b>${fmt(row.distEngine,2)}</b></div>
+      <div class="pr-row"><span>Distance To Go</span><b>${distanceToGo!=null?fmt(distanceToGo,1):'—'}</b></div>
+      <div class="pr-row"><span>Slip %</span><b>${fmt(row.slip,2)}</b></div>
+      <div class="pr-row"><span>Load %</span><b>${fmt(row.mcrPct,2)}</b></div>
+      <div class="pr-row"><span>Load (KW)</span><b>${fmt(row.kwEst,0)}</b></div>
+      <div class="pr-row"><span>Speed</span><b>${fmt(row.speedShip,2)}</b></div>
+      <div class="pr-row"><span>Days To Go</span><b>${daysToGoVal!=null?fmt(daysToGoVal,2):'—'}</b></div>
+    </div>`;
+
+  const fuelBox = `
+    <div class="pr-box"><h4>Fuel Consumption</h4>
+      <div class="pr-row"><span>M/E</span><b>${fmt(row.meCons,2)}</b></div>
+      <div class="pr-row"><span>D/G</span><b>${fmt(row.geCons,2)}</b></div>
+      <div class="pr-row"><span>Boiler</span><b>${fmt(row.blrCons,2)}</b></div>
+      <div class="pr-row"><span>Total</span><b>${fmt(row.total,2)}</b></div>
+    </div>`;
+
+  const fwBox = `
+    <div class="pr-box"><h4>Fresh Water</h4>
+      <div class="pr-row"><span>Produced (L)</span><b>${row.fwProdD==null?'—':fmt(row.fwProdD,0)}</b></div>
+      <div class="pr-row"><span>Consumed (L)</span><b>${row.fwConsD==null?'—':fmt(row.fwConsD,0)}</b></div>
+      <div class="pr-row"><span>R.O.B. (L)</span><b>${entry.fwRob==null?'—':fmt(entry.fwRob,0)}</b></div>
+    </div>`;
+
+  const robTable = `
+    <table class="pr-table"><tr><th></th><th>Previous</th><th>Consumption</th><th>R.O.B.</th></tr>
+      ${ROB_ROWS.map(r=>{
+        const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
+        const consVal = r.cat==='fuel' ? row.consByType[r.key] : row.lubeByType[r.key];
+        const nowVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
+        const dec = r.cat==='fuel' ? 2 : 0;
+        return `<tr><td>${r.label}</td><td>${fmt(prevVal,dec)}</td><td>${consVal===null||consVal===undefined?'—':fmt(consVal,r.cat==='fuel'?3:1)}</td><td>${fmt(nowVal,dec)}</td></tr>`;
+      }).join('')}
+    </table>`;
+
+  const sheetHtml = `
+    <div class="pr-sheet">
+      <div class="pr-title"><span>${state.setup.vesselName||''}</span><span>Voyage Summary — ${entry.operation}</span></div>
+      <div class="pr-header"><div><b>Voyage No.</b>${state.setup.voyageNumber||'—'}</div><div><b>Date &amp; Time</b>${dtStr}</div><div><b>Condition</b>${entry.condition}</div></div>
+      <div class="pr-cols">${dataBox}${fuelBox}${fwBox}</div>
+      ${robTable}
+    </div>`;
+
+  document.getElementById('printArea').innerHTML = `
+    <div class="pr-page">
+      <div class="pr-copy">${sheetHtml}</div>
+      <div class="pr-copy">${sheetHtml}</div>
+    </div>`;
+  window.print();
+  recordPrintHistory('voyage-summary', entry, document.getElementById('printArea').innerHTML);
+}
+document.getElementById('btnPrintVoyageSummary').addEventListener('click', ()=>{
+  if (!currentVsEntryId) return;
+  printVoyageSummary(currentVsEntryId);
+});
+
+document.getElementById('btnCloseVoyageSummary').addEventListener('click', ()=>{
+  document.getElementById('voyageSummaryPanel').style.display = 'none';
+});
+
+/* Find the chronologically previous entry (or carryover) relative to a given datetime,
+   excluding the entry currently being edited. Used to link RPM <-> Rev Counter live. */
+function getPrevReferenceFor(dtValue, excludeId){
+  if (!dtValue) return null;
+  const target = new Date(dtValue);
+  const candidates = sortedEntries().filter(e => e.id!==excludeId && new Date(e.datetime) < target);
+  if (candidates.length) return candidates[candidates.length-1];
+  return effectiveCarryover();
+}
+
+let rpmSyncGuard = false;
+function syncRpmRevCounter(sourceId){
+  if (rpmSyncGuard) return;
+  const prevRef = getPrevReferenceFor(document.getElementById('in_datetime').value, editingId);
+  if (!prevRef || prevRef.revCounter==null) return;
+  const curDt = document.getElementById('in_datetime').value;
+  if (!curDt) return;
+  const runHours = (new Date(curDt) - new Date(prevRef.datetime)) / 3600000;
+  if (!(runHours>0)) return;
+  rpmSyncGuard = true;
+  if (sourceId === 'in_rpm'){
+    const rpm = parseFloat(document.getElementById('in_rpm').value);
+    if (!isNaN(rpm)){
+      const revCounter = prevRef.revCounter + rpm*runHours*60;
+      document.getElementById('in_revCounter').value = Math.round(revCounter);
+    }
+  } else {
+    const rc = parseFloat(document.getElementById('in_revCounter').value);
+    if (!isNaN(rc)){
+      const rpm = (rc - prevRef.revCounter)/(runHours*60);
+      document.getElementById('in_rpm').value = rpm.toFixed(2);
+    }
+  }
+  rpmSyncGuard = false;
+}
+document.getElementById('in_rpm').addEventListener('input', ()=>syncRpmRevCounter('in_rpm'));
+document.getElementById('in_revCounter').addEventListener('input', ()=>syncRpmRevCounter('in_revCounter'));
+document.getElementById('in_datetime').addEventListener('change', ()=>{
+  // re-sync whichever field has a value, preferring RPM as the "master" input
+  if (document.getElementById('in_rpm').value !== '') syncRpmRevCounter('in_rpm');
+  else if (document.getElementById('in_revCounter').value !== '') syncRpmRevCounter('in_revCounter');
+});
+
+/* ---------------- live calculation preview ---------------- */
+function readCurrentFormAsEntry(){
+  const arr = state.setup.flowArr || 'SINGLE';
+  const meDual = arr==='DUAL_ME' || arr==='DUAL_BOTH';
+  const geDual = arr==='DUAL_GE' || arr==='DUAL_BOTH';
+  const num = id => { const el = document.getElementById(id); if (!el) return null; const v = parseFloat(el.value); return isNaN(v) ? null : v; };
+  const txt = id => { const el = document.getElementById(id); return el ? el.value : null; };
+  const meField = meDual
+    ? { meterIn: num('me_meter_in'), meterOut: num('me_meter_out'), type: txt('me_type'), sg: num('me_sg') }
+    : { meter: num('me_meter'), type: txt('me_type'), sg: num('me_sg') };
+  const geField = geDual
+    ? { meterIn: num('ge_meter_in'), meterOut: num('ge_meter_out'), type: txt('ge_type'), sg: num('ge_sg') }
+    : { meter: num('ge_meter'), type: txt('ge_type'), sg: num('ge_sg') };
+  return {
+    datetime: txt('in_datetime'),
+    distanceShip: num('in_distanceShip'),
+    rpm: num('in_rpm'),
+    revCounter: num('in_revCounter'),
+    tbn: txt('in_tbn'),
+    me: meField, ge: geField,
+    blr: { meter: num('blr_meter'), type: txt('blr_type'), sg: num('blr_sg') },
+    cylMeter: num('cyl_meter'), meLo: num('me_lo_meter'), geLo: num('ge_lo_meter'),
+    fwProd: num('fw_prod_meter'), fwRob: num('fw_rob_reading')
+  };
+}
+
+function updateLivePreview(){
+  const box = document.getElementById('livePreviewBox');
+  if (!box) return;
+  const curEntry = readCurrentFormAsEntry();
+  const prevRef = getPrevReferenceFor(curEntry.datetime, editingId);
+  const rolls = meterRollovers();
+  const pitch = state.setup.pitch||0, mcrRpm = state.setup.mcrRpm||1, mcrKw = state.setup.mcrKw||0;
+  const propConstant = pitch*60/1852;
+
+  let hrs=null, meCons=null, geCons=null, blrCons=null, total=null, distEngine=null, slip=null, kwEst=null, mcrPct=null, dailyRevs=null, speedEngine=null;
+
+  if (curEntry.rpm!=null){
+    mcrPct = Math.pow(curEntry.rpm/mcrRpm, 3) * 100;
+    kwEst = Math.pow(curEntry.rpm/mcrRpm, 3) * mcrKw;
+    speedEngine = curEntry.rpm * propConstant;
+  }
+
+  if (prevRef && curEntry.datetime){
+    hrs = (new Date(curEntry.datetime) - new Date(prevRef.datetime)) / 3600000;
+    if (curEntry.revCounter!=null && prevRef.revCounter!=null){
+      dailyRevs = meterDelta(curEntry.revCounter, prevRef.revCounter, rolls.rc);
+    }
+    if (hrs>0){
+      const {meRaw, geRaw} = meGeRawLitres(curEntry, prevRef, rolls);
+      const blrD = meterDelta(curEntry.blr.meter, prevRef.blr.meter, rolls.boiler);
+      meCons = (meRaw!=null && curEntry.me.sg!=null) ? (meRaw*curEntry.me.sg)/1000 : null;
+      geCons = (geRaw!=null && curEntry.ge.sg!=null) ? (geRaw*curEntry.ge.sg)/1000 : null;
+      blrCons = (blrD!=null && curEntry.blr.sg!=null) ? (blrD*curEntry.blr.sg)/1000 : null;
+      const unitMe = document.getElementById('entry_unit_me');
+      const unitGe = document.getElementById('entry_unit_ge');
+      const unitBlr = document.getElementById('entry_unit_blr');
+      if (unitMe && unitMe.value!=='') meCons = parseFloat(unitMe.value);
+      if (unitGe && unitGe.value!=='') geCons = parseFloat(unitGe.value);
+      if (unitBlr && unitBlr.value!=='') blrCons = parseFloat(unitBlr.value);
+      total = (meCons||0)+(geCons||0)+(blrCons||0);
+      if (curEntry.rpm!=null){
+        distEngine = curEntry.rpm * propConstant * hrs;
+        if (distEngine>0 && curEntry.distanceShip!=null){
+          slip = ((distEngine - curEntry.distanceShip)/distEngine)*100;
+        }
+      }
+    }
+  }
+
+  const stat = (label,val) => `<div class="stat"><div class="num">${val}</div><div class="lbl">${label}</div></div>`;
+  box.innerHTML =
+    stat('Rev. Counter', curEntry.revCounter==null?'—':curEntry.revCounter) +
+    stat('Daily Revs', dailyRevs==null?'—':fmt(dailyRevs,0)) +
+    stat('M/E Cons (MT)', meCons==null?'—':fmt(meCons,3)) +
+    stat('G/E Cons (MT)', geCons==null?'—':fmt(geCons,3)) +
+    stat('Boiler Cons (MT)', blrCons==null?'—':fmt(blrCons,3)) +
+    stat('Total Cons (MT)', total==null?'—':fmt(total,3)) +
+    stat('M/E Load (KW)', kwEst==null?'—':fmt(kwEst,0)) +
+    stat('M/E Load (%)', mcrPct==null?'—':fmt(mcrPct,1)) +
+    stat('Engine Speed (kn)', speedEngine==null?'—':fmt(speedEngine,2)) +
+    stat('Engine Distance (nm)', distEngine==null?'—':fmt(distEngine,2)) +
+    stat('Slip (%)', slip==null?'—':fmt(slip,2));
+}
+document.getElementById('logEntryFormPanel').addEventListener('input', updateLivePreview);
+document.getElementById('logEntryFormPanel').addEventListener('change', updateLivePreview);
+
+/* ---------------- editable consumption table on Log Entry form ---------------- */
+function computeRawUnitCons(curEntry, prevRef, rolls){
+  const {meRaw, geRaw} = meGeRawLitres(curEntry, prevRef, rolls);
+  const blrD = meterDelta(curEntry.blr.meter, prevRef.blr.meter, rolls.boiler);
+  const meCons = (meRaw!=null && curEntry.me.sg!=null) ? (meRaw*curEntry.me.sg)/1000 : null;
+  const geCons = (geRaw!=null && curEntry.ge.sg!=null) ? (geRaw*curEntry.ge.sg)/1000 : null;
+  const blrCons = (blrD!=null && curEntry.blr.sg!=null) ? (blrD*curEntry.blr.sg)/1000 : null;
+  return {meCons, geCons, blrCons};
+}
+
+function renderEntryUnitFields(){
+  const curEntry = readCurrentFormAsEntry();
+  const prevRef = getPrevReferenceFor(curEntry.datetime, editingId);
+  if (!prevRef || !curEntry.datetime) return;
+  const hrs = (new Date(curEntry.datetime) - new Date(prevRef.datetime)) / 3600000;
+  if (!(hrs>0)) return;
+  const rolls = meterRollovers();
+  const {meCons, geCons, blrCons} = computeRawUnitCons(curEntry, prevRef, rolls);
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && document.activeElement!==el) el.value = (val===null||val===undefined) ? '' : val;
+  };
+  set('entry_unit_me', meCons);
+  set('entry_unit_ge', geCons);
+  set('entry_unit_blr', blrCons);
+}
+
+function renderVoyageProgress(){
+  const box = document.getElementById('voyageProgressViz');
+  if (!box) return;
+  const {rows, perf} = computeDerived();
+  const totalDistance = state.setup.voyageDistance;
+  const lastRow = rows.length ? rows[rows.length-1] : null;
+  const traveled = lastRow ? (lastRow.cumDistShip||0) : 0;
+
+  if (totalDistance==null || totalDistance<=0){
+    box.innerHTML = `<div class="hint">Set Total Voyage Distance in Setup → Voyage Specifics to see the voyage progress chart.</div>`;
+    return;
+  }
+
+  const y = 130;
+  const pct = Math.max(0, Math.min(1, traveled/totalDistance));
+  const togo = Math.max(0, totalDistance - traveled);
+  const x0 = 70, x1 = 830;
+  const shipX = x0 + pct*(x1-x0);
+  const depPort = state.setup.departPort || 'Departure';
+  const arrPort = state.setup.arrivePort || 'Arrival';
+
+  // gentle sea wave squiggle beneath the track (two layered wavy lines)
+  let wave1 = `M ${x0-20} ${y+22}`, wave2 = `M ${x0-20} ${y+34}`;
+  for (let x=x0-20; x<=x1+20; x+=24){
+    wave1 += ` q 12 8 24 0`;
+    wave2 += ` q 12 8 24 0`;
+  }
+
+  // Bulk carrier silhouette: flat stern, long deck, tapered bow (facing direction of travel),
+  // aft superstructure/bridge, funnel, and a row of cargo hatch covers.
+  const waterlineY = y+9;
+  const upperHull = `M ${shipX-44} ${waterlineY} L ${shipX-44} ${y+4} L ${shipX+24} ${y+4} L ${shipX+46} ${waterlineY} Z`;
+  const lowerHull = `M ${shipX-44} ${y+18} L ${shipX-44} ${waterlineY} L ${shipX+46} ${waterlineY} L ${shipX+24} ${y+18} Z`;
+  const bridgeLower = `M ${shipX-40} ${y-8} h 20 v 12 h -20 Z`;
+  const bridgeUpper = `M ${shipX-35} ${y-16} h 12 v 8 h -12 Z`;
+  const funnelPath = `M ${shipX-31} ${y-25} h 6 v 9 h -6 Z`;
+  const hatchXs = [shipX-10, shipX+2, shipX+14];
+  const hatches = hatchXs.map(hx => `<rect x="${hx}" y="${y}" width="9" height="4" rx="0.5" fill="var(--ink)" stroke="rgba(10,20,32,0.4)" stroke-width="0.5"/>`).join('');
+  const wakeLines = `
+    <path d="M ${shipX-44} ${y+14} q -10 4 -22 2" fill="none" stroke="var(--paper-dim)" stroke-width="1.5" opacity="0.4"/>
+    <path d="M ${shipX-44} ${y+18} q -14 6 -30 4" fill="none" stroke="var(--paper-dim)" stroke-width="1.5" opacity="0.25"/>`;
+
+  const currentSpeed = lastRow && lastRow.speedShip!=null ? lastRow.speedShip : null;
+  const currentRpm = lastRow && lastRow.rpm!=null ? lastRow.rpm : null;
+  const currentSlip = lastRow && lastRow.slip!=null ? lastRow.slip : null;
+  const currentKw = lastRow && lastRow.kwEst!=null ? lastRow.kwEst : null;
+  const currentMcr = lastRow && lastRow.mcrPct!=null ? lastRow.mcrPct : null;
+  const avgSpeed = perf.avgSpeedShip;
+
+  // Determine ship status: underway, at port, or at anchorage — based on operation,
+  // falling back to "no distance / no engine power" when the operation itself is ambiguous.
+  const PORT_OPS = new Set(['LAST LINE - DEPARTURE','IN PORT - NOON','STAND BY - ARRIVAL','FIRST LINE - ARRIVAL','SHIFTING','BUNKERING']);
+  const ANCHOR_OPS = new Set(['DRIFTING']);
+  let shipStatus = 'UNDERWAY';
+  if (lastRow){
+    if (ANCHOR_OPS.has(lastRow.operation)) shipStatus = 'ANCHORED';
+    else if (PORT_OPS.has(lastRow.operation)) shipStatus = 'PORT';
+    else if (!(currentKw>0) && !(lastRow.distanceShip>0)) shipStatus = 'PORT';
+  }
+  const isUnderway = shipStatus === 'UNDERWAY';
+
+  // Pier (shown when at port): a post and deck the ship sits alongside, plus bollards.
+  const pierPath = `M ${shipX+50} ${y+34} L ${shipX+50} ${y-2} L ${shipX+70} ${y-2} L ${shipX+70} ${y+34} Z`;
+  const gangway = `M ${shipX+24} ${y+2} L ${shipX+50} ${y-2}`;
+  const bollards = `<circle cx="${shipX+56}" cy="${y-6}" r="2.5" fill="var(--ink)"/><circle cx="${shipX+64}" cy="${y-6}" r="2.5" fill="var(--ink)"/>`;
+
+  // Anchor + chain (shown when anchored): dashed chain from bow down to an anchor glyph.
+  const chainLine = `M ${shipX+30} ${y+18} L ${shipX+30} ${y+40}`;
+  const anchorGlyph = `M ${shipX+30} ${y+40} m -7 0 a 7 7 0 1 0 14 0 M ${shipX+30} ${y+40} l 0 8 M ${shipX+24} ${y+48} l 12 0`;
+
+  const statusExtras = shipStatus==='PORT'
+    ? `<path d="${pierPath}" fill="var(--ink)" stroke="var(--line-strong)" stroke-width="1"/>
+       <line x1="${shipX+24}" y1="${y+2}" x2="${shipX+50}" y2="${y-2}" stroke="var(--paper-dim)" stroke-width="2"/>
+       ${bollards}`
+    : shipStatus==='ANCHORED'
+    ? `<line x1="${shipX+30}" y1="${y+18}" x2="${shipX+30}" y2="${y+40}" stroke="var(--paper-dim)" stroke-width="1.5" stroke-dasharray="3 3"/>
+       <path d="${anchorGlyph}" fill="none" stroke="var(--paper-dim)" stroke-width="2" stroke-linecap="round"/>`
+    : '';
+
+  box.innerHTML = `
+    <svg viewBox="0 0 900 270" style="width:100%; height:auto; max-height:290px;">
+      <path d="${wave1}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.25"/>
+      <path d="${wave2}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.15"/>
+
+      <line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="var(--line-strong)" stroke-width="3" stroke-dasharray="2 6" stroke-linecap="round"/>
+      <line x1="${x0}" y1="${y}" x2="${shipX}" y2="${y}" stroke="var(--brass)" stroke-width="3" stroke-linecap="round"/>
+
+      <circle cx="${x0}" cy="${y}" r="7" fill="var(--teal)"/>
+      <circle cx="${x1}" cy="${y}" r="7" fill="none" stroke="var(--paper-dim)" stroke-width="2"/>
+
+      <text x="${x0}" y="${y-46}" text-anchor="start" fill="var(--paper)" font-family="Oswald, sans-serif" font-size="15" font-weight="600">${depPort}</text>
+      <text x="${x0}" y="${y-28}" text-anchor="start" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">0 nm</text>
+      <text x="${x1}" y="${y-46}" text-anchor="end" fill="var(--paper)" font-family="Oswald, sans-serif" font-size="15" font-weight="600">${arrPort}</text>
+      <text x="${x1}" y="${y-28}" text-anchor="end" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(totalDistance,0)} nm</text>
+
+      <g>
+        ${isUnderway ? wakeLines : ''}
+        <path d="${upperHull}" fill="#7a1f2b" stroke="var(--ink)" stroke-width="1"/>
+        <path d="${lowerHull}" fill="#0d0d0d" stroke="var(--ink)" stroke-width="1"/>
+        <line x1="${shipX-44}" y1="${waterlineY}" x2="${shipX+46}" y2="${waterlineY}" stroke="var(--brass)" stroke-width="2"/>
+        <path d="${bridgeLower}" fill="var(--paper)" stroke="var(--ink)" stroke-width="1"/>
+        <path d="${bridgeUpper}" fill="var(--paper)" stroke="var(--ink)" stroke-width="1"/>
+        <path d="${funnelPath}" fill="var(--ink)"/>
+        ${hatches}
+        ${statusExtras}
+      </g>
+
+      ${isUnderway ? `
+      <text x="${shipX}" y="${y-70}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentRpm!=null ? fmt(currentRpm,1)+' RPM' : '—'}</text>
+      <text x="${shipX}" y="${y-58}" text-anchor="middle" fill="var(--teal)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentSpeed!=null ? fmt(currentSpeed,2)+' kn' : '—'}</text>
+      <text x="${shipX}" y="${y-46}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">Slip ${currentSlip!=null ? fmt(currentSlip,2)+'%' : '—'}</text>
+      ` : `
+      <text x="${shipX}" y="${y-58}" text-anchor="middle" fill="${shipStatus==='ANCHORED' ? 'var(--brass)' : 'var(--teal)'}" font-family="Oswald, sans-serif" font-size="13" font-weight="600" letter-spacing="0.06em">${shipStatus==='ANCHORED' ? 'AT ANCHOR' : 'AT PORT'}</text>
+      `}
+
+      ${isUnderway ? `
+      <text x="${shipX}" y="${y+38}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentKw!=null ? fmt(currentKw,0)+' KW' : '—'}</text>
+      <text x="${shipX}" y="${y+52}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentMcr!=null ? fmt(currentMcr,1)+'% MCR' : '—'}</text>
+      ` : `
+      <text x="${shipX}" y="${y+48}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">Engine idle</text>
+      `}
+      <text x="${shipX}" y="${y+70}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="13" font-weight="600">${fmt(traveled,1)} nm</text>
+      <text x="${shipX}" y="${y+86}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${fmt(pct*100,1)}% complete</text>
+
+      <text x="${(shipX+x1)/2}" y="${y-8}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(togo,1)} nm to go</text>
+      <text x="${(x0+x1)/2}" y="${y+106}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">Average Speed: ${avgSpeed!=null ? fmt(avgSpeed,2)+' kn' : '—'}</text>
+    </svg>
+  `;
+}
+
+function renderFwLivePreview(){
+  const box = document.getElementById('fwLivePreview');
+  const producedField = document.getElementById('fw_produced_display');
+  if (!box) return;
+  const curEntry = readCurrentFormAsEntry();
+  const prevRef = getPrevReferenceFor(curEntry.datetime, editingId);
+  const stat = (label,val) => `<div class="stat"><div class="num">${val}</div><div class="lbl">${label}</div></div>`;
+  if (!prevRef){
+    box.innerHTML = stat('Consumed (L)','—') + stat('Previous R.O.B. (L)','—');
+    if (producedField) producedField.value = '';
+    return;
+  }
+  const rolls = meterRollovers();
+  const fwProdD = meterDelta(curEntry.fwProd, prevRef.fwProd, rolls.generic);
+  let fwCons = null;
+  if (prevRef.fwRob!=null && curEntry.fwRob!=null && fwProdD!=null){
+    fwCons = prevRef.fwRob + fwProdD - curEntry.fwRob;
+  }
+  if (producedField) producedField.value = fwProdD==null ? '' : fmt(fwProdD,0);
+  box.innerHTML =
+    stat('Consumed (L)', fwCons==null?'—':fmt(fwCons,0)) +
+    stat('Previous R.O.B. (L)', prevRef.fwRob==null?'—':fmt(prevRef.fwRob,0));
+}
+
+function computeLiveConsByType(){
+  const consByType = {"HFO":null,"LSFO":null,"MDO/MGO":null,"LSMGO":null};
+  const lubeByType = {"CYL HIGH":null,"CYL LOW":null,"ME SYS OIL":null,"GE SYS OIL":null,"FRESH WATER":null};
+  const curEntry = readCurrentFormAsEntry();
+  const prevRef = getPrevReferenceFor(curEntry.datetime, editingId);
+  if (!prevRef || !curEntry.datetime) return {consByType, lubeByType};
+  const hrs = (new Date(curEntry.datetime) - new Date(prevRef.datetime)) / 3600000;
+  if (!(hrs>0)) return {consByType, lubeByType};
+  const rolls = meterRollovers();
+
+  let {meCons, geCons, blrCons} = computeRawUnitCons(curEntry, prevRef, rolls);
+  const unitMe = document.getElementById('entry_unit_me');
+  const unitGe = document.getElementById('entry_unit_ge');
+  const unitBlr = document.getElementById('entry_unit_blr');
+  if (unitMe && unitMe.value!=='') meCons = parseFloat(unitMe.value);
+  if (unitGe && unitGe.value!=='') geCons = parseFloat(unitGe.value);
+  if (unitBlr && unitBlr.value!=='') blrCons = parseFloat(unitBlr.value);
+  const rawFuel = {"HFO":0,"LSFO":0,"MDO/MGO":0,"LSMGO":0};
+  if (meCons && curEntry.me.type) rawFuel[curEntry.me.type] += meCons;
+  if (geCons && curEntry.ge.type) rawFuel[curEntry.ge.type] += geCons;
+  if (blrCons && curEntry.blr.type) rawFuel[curEntry.blr.type] += blrCons;
+  const miscMdo = parseFloat((document.getElementById('entry_misc_mdomgo')||{}).value) || 0;
+  const miscLs = parseFloat((document.getElementById('entry_misc_lsmgo')||{}).value) || 0;
+  rawFuel['MDO/MGO'] += miscMdo;
+  rawFuel['LSMGO'] += miscLs;
+  FUEL_TYPES.forEach(t=> consByType[t] = rawFuel[t]);
+
+  const cylD = meterDelta(curEntry.cylMeter, prevRef.cylMeter, rolls.cyl);
+  const meLoD = meterDelta(curEntry.meLo, prevRef.meLo, rolls.generic);
+  const geLoD = meterDelta(curEntry.geLo, prevRef.geLo, rolls.generic);
+  const rawLube = {"CYL HIGH":0,"CYL LOW":0,"ME SYS OIL":0,"GE SYS OIL":0};
+  if (cylD) rawLube[curEntry.tbn==='LOW' ? 'CYL LOW' : 'CYL HIGH'] += cylD;
+  if (meLoD) rawLube["ME SYS OIL"] += meLoD;
+  if (geLoD) rawLube["GE SYS OIL"] += geLoD;
+  ['CYL HIGH','CYL LOW','ME SYS OIL','GE SYS OIL'].forEach(t=> lubeByType[t] = rawLube[t]);
+
+  const fwProdD = meterDelta(curEntry.fwProd, prevRef.fwProd, rolls.generic) || 0;
+  let fwCons = null;
+  if (prevRef.fwRob!=null && curEntry.fwRob!=null){
+    fwCons = prevRef.fwRob + fwProdD - curEntry.fwRob;
+  }
+  lubeByType['FRESH WATER'] = fwCons;
+
+  return {consByType, lubeByType};
+}
+
+function renderEntryConsTable(){
+  const body = document.getElementById('entryConsBody');
+  if (!body) return;
+  if (!body.children.length){
+    body.innerHTML = ROB_ROWS.map(r=>{
+      const id = 'entry_cons_' + slugKey(r.key);
+      return `<tr><td>${r.label}</td><td><input class="pf-input" style="width:120px;" type="number" step="0.001" id="${id}" data-key="${r.key}" data-cat="${r.cat}"></td></tr>`;
+    }).join('');
+  }
+  const {consByType, lubeByType} = computeLiveConsByType();
+  const focusedId = document.activeElement ? document.activeElement.id : null;
+  ROB_ROWS.forEach(r=>{
+    const id = 'entry_cons_' + slugKey(r.key);
+    const inp = document.getElementById(id);
+    if (!inp || focusedId===id) return;
+    const val = r.cat==='fuel' ? consByType[r.key] : lubeByType[r.key];
+    inp.value = (val===null||val===undefined) ? '' : val;
+  });
+}
+
+document.getElementById('btnResetConsOverride').addEventListener('click', ()=>{
+  ['entry_unit_me','entry_unit_ge','entry_unit_blr'].forEach(id=>{ document.getElementById(id).value=''; });
+  renderEntryUnitFields();
+  renderEntryConsTable();
+  ROB_ROWS.forEach(r=>{
+    const id = 'entry_cons_' + slugKey(r.key);
+    const inp = document.getElementById(id);
+    if (inp) inp.removeAttribute('data-touched');
+  });
+  // force refresh ignoring focus
+  const body = document.getElementById('entryConsBody');
+  if (body) body.innerHTML = '';
+  renderEntryConsTable();
+});
+
+document.getElementById('logEntryFormPanel').addEventListener('input', renderEntryUnitFields);
+document.getElementById('logEntryFormPanel').addEventListener('change', renderEntryUnitFields);
+document.getElementById('logEntryFormPanel').addEventListener('input', renderFwLivePreview);
+document.getElementById('logEntryFormPanel').addEventListener('change', renderFwLivePreview);
+document.getElementById('logEntryFormPanel').addEventListener('input', renderEntryConsTable);
+document.getElementById('logEntryFormPanel').addEventListener('change', renderEntryConsTable);
+
+/* ---------------- entry form handlers ---------------- */
+document.getElementById('btnAdd').addEventListener('click', async ()=>{
+  const dtVal = document.getElementById('in_datetime').value;
+  if (!dtVal){ alert('Please set the date & time for this entry.'); return; }
+
+  const arr = state.setup.flowArr || 'SINGLE';
+  const meDual = arr==='DUAL_ME' || arr==='DUAL_BOTH';
+  const geDual = arr==='DUAL_GE' || arr==='DUAL_BOTH';
+
+  let meField;
+  if (meDual){
+    const meterIn = parseFloat(document.getElementById('me_meter_in').value);
+    const meterOut = parseFloat(document.getElementById('me_meter_out').value);
+    if (isNaN(meterIn) || isNaN(meterOut)){ alert('Please enter both Main Engine Inlet and Outlet flowmeter readings.'); return; }
+    meField = { meterIn, meterOut, type: document.getElementById('me_type').value, sg: parseFloat(document.getElementById('me_sg').value)||0 };
+  } else {
+    const meter = parseFloat(document.getElementById('me_meter').value);
+    if (isNaN(meter)){ alert('Please enter the Main Engine fuel meter reading.'); return; }
+    meField = { meter, type: document.getElementById('me_type').value, sg: parseFloat(document.getElementById('me_sg').value)||0 };
+  }
+
+  let geField;
+  if (geDual){
+    const meterIn = parseFloat(document.getElementById('ge_meter_in').value);
+    const meterOut = parseFloat(document.getElementById('ge_meter_out').value);
+    if (isNaN(meterIn) || isNaN(meterOut)){ alert('Please enter both Generator Inlet and Outlet flowmeter readings.'); return; }
+    geField = { meterIn, meterOut, type: document.getElementById('ge_type').value, sg: parseFloat(document.getElementById('ge_sg').value)||0 };
+  } else {
+    const meter = parseFloat(document.getElementById('ge_meter').value);
+    if (isNaN(meter)){ alert('Please enter the Generator fuel meter reading.'); return; }
+    geField = { meter, type: document.getElementById('ge_type').value, sg: parseFloat(document.getElementById('ge_sg').value)||0 };
+  }
+
+  const blrMeter = parseFloat(document.getElementById('blr_meter').value);
+  if (isNaN(blrMeter)){ alert('Please enter the Boiler fuel meter reading.'); return; }
+
+  const existing = editingId ? state.entries.find(x=>x.id===editingId) : null;
+
+  const entry = {
+    id: editingId || uid(),
+    datetime: dtVal,
+    operation: document.getElementById('in_operation').value,
+    condition: document.getElementById('in_condition').value,
+    distanceShip: parseFloat(document.getElementById('in_distanceShip').value)||0,
+    rpm: document.getElementById('in_rpm').value===''? null : parseFloat(document.getElementById('in_rpm').value),
+    revCounter: document.getElementById('in_revCounter').value===''? null : parseFloat(document.getElementById('in_revCounter').value),
+    tbn: document.getElementById('in_tbn').value,
+    meRuntime: parseFloat(document.getElementById('me_runtime').value)||null,
+    ge1Runtime: parseFloat(document.getElementById('ge1_runtime').value)||null,
+    blrRuntime: parseFloat(document.getElementById('blr_runtime').value)||null,
+    me: meField,
+    ge: geField,
+    blr:{ meter: blrMeter, type: document.getElementById('blr_type').value, sg: parseFloat(document.getElementById('blr_sg').value)||0 },
+    cylMeter: parseFloat(document.getElementById('cyl_meter').value)||0,
+    meLo: parseFloat(document.getElementById('me_lo_meter').value)||0,
+    geLo: parseFloat(document.getElementById('ge_lo_meter').value)||0,
+    fwProd: parseFloat(document.getElementById('fw_prod_meter').value)||0,
+    fwRob: document.getElementById('fw_rob_reading').value===''? null : parseFloat(document.getElementById('fw_rob_reading').value),
+    consOverride: (function(){
+      const o = {};
+      ROB_ROWS.forEach(r=>{
+        const el = document.getElementById('entry_cons_'+slugKey(r.key));
+        o[r.key] = (el && el.value!=='') ? parseFloat(el.value) : null;
+      });
+      return o;
+    })(),
+    miscCons: {
+      'MDO/MGO': parseFloat(document.getElementById('entry_misc_mdomgo').value)||0,
+      'LSMGO': parseFloat(document.getElementById('entry_misc_lsmgo').value)||0
+    },
+    unitOverride: {
+      ME: document.getElementById('entry_unit_me').value==='' ? null : parseFloat(document.getElementById('entry_unit_me').value),
+      GE: document.getElementById('entry_unit_ge').value==='' ? null : parseFloat(document.getElementById('entry_unit_ge').value),
+      BLR: document.getElementById('entry_unit_blr').value==='' ? null : parseFloat(document.getElementById('entry_unit_blr').value)
+    }
+  };
+  if (editingId){
+    const idx = state.entries.findIndex(e=>e.id===editingId);
+    if (idx>-1) state.entries[idx] = entry; else state.entries.push(entry);
+  } else {
+    state.entries.push(entry);
+  }
+  await dbPut('entries', entry);
+  exitEditMode();
+  render();
+  openVoyageSummary(entry.id);
+});
+
+function exitEditMode(){
+  editingId = null;
+  document.getElementById('btnAdd').textContent = 'Add Entry';
+  document.getElementById('logEntryTitle').textContent = 'New Log Entry';
+  document.getElementById('btnCancelEdit').style.display = 'none';
+  document.getElementById('editingBadge').style.display = 'none';
+  const sel = document.getElementById('in_selectEntry');
+  if (sel) sel.value = '';
+}
+
+document.getElementById('btnCancelEdit').addEventListener('click', ()=>{
+  exitEditMode();
+  document.getElementById('btnClearForm').click();
+});
+
+function renderEntrySelector(){
+  const sel = document.getElementById('in_selectEntry');
+  const currentVal = sel.value;
+  const list = sortedEntries().slice().reverse();
+  sel.innerHTML = `<option value="">— New Entry —</option>` + list.map(e=>{
+    const dt = new Date(e.datetime);
+    const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    return `<option value="${e.id}">${dtStr} — ${e.operation}</option>`;
+  }).join('');
+  if (list.some(e=>e.id===currentVal)) sel.value = currentVal;
+}
+document.getElementById('in_selectEntry').addEventListener('change', (e)=>{
+  const val = e.target.value;
+  if (!val){
+    exitEditMode();
+    document.getElementById('btnClearForm').click();
+  } else {
+    loadEntryIntoForm(val);
+  }
+});
+
+function applyEntryDefaults(){
+  const d = state.setup.defaults || {};
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val!=null && val!=='') el.value = val; };
+  set('in_tbn', d.cylTbn);
+  set('me_type', d.meType); set('me_sg', d.meSg);
+  set('ge_type', d.geType); set('ge_sg', d.geSg);
+  set('blr_type', d.blrType); set('blr_sg', d.blrSg);
+  updateLivePreview();
+  renderEntryUnitFields();
+  renderFwLivePreview();
+  const body = document.getElementById('entryConsBody');
+  if (body) body.innerHTML = '';
+  renderEntryConsTable();
+}
+
+document.getElementById('btnClearForm').addEventListener('click', ()=>{
+  ['in_distanceShip'].forEach(id=>document.getElementById(id).value='0');
+  ['in_rpm','in_revCounter','me_meter','ge_meter','me_meter_in','me_meter_out','ge_meter_in','ge_meter_out',
+   'blr_meter','me_runtime','ge1_runtime','blr_runtime',
+   'cyl_meter','me_lo_meter','ge_lo_meter','fw_prod_meter','fw_rob_reading'].forEach(id=>{
+    const el = document.getElementById(id); if (el) el.value='';
+  });
+  document.getElementById('entry_misc_mdomgo').value = '0';
+  document.getElementById('entry_misc_lsmgo').value = '0';
+  ['entry_unit_me','entry_unit_ge','entry_unit_blr'].forEach(id=>{ document.getElementById(id).value=''; });
+  applyEntryDefaults();
+});
+
+/* ---------------- receipts ---------------- */
+/* ---------------- BDN documents (PDF only, stored in-browser) ---------------- */
+/* ---------------- saved voyage abstracts ---------------- */
+function renderAbstractList(){
+  const body = document.getElementById('abstractListBody');
+  if (!body) return;
+  if (state.abstracts.length===0){
+    body.innerHTML = `<tr class="empty-row"><td colspan="5">No saved abstracts yet — these are created automatically when you start a new voyage.</td></tr>`;
+    return;
+  }
+  body.innerHTML = state.abstracts.slice().sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt)).map(a=>`
+    <tr>
+      <td>${new Date(a.savedAt).toLocaleString()}</td>
+      <td>${a.voyageNumber||'—'}</td>
+      <td>${a.condition||'—'}</td>
+      <td>${a.filename}</td>
+      <td style="display:flex; gap:4px;">
+        <button class="small ghost" data-view-abstract="${a.id}">View</button>
+        <button class="small danger" data-del-abstract="${a.id}">✕</button>
+      </td>
+    </tr>`).join('');
+  body.querySelectorAll('[data-view-abstract]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const a = state.abstracts.find(x=>x.id===b.dataset.viewAbstract);
+      if (!a) return;
+      document.getElementById('abstractViewerTitle').textContent = `${a.filename}`;
+      document.getElementById('abstractViewerBody').innerHTML = a.rows.map(r=>`<tr>${abstractRowCells(r)}</tr>`).join('');
+      document.getElementById('abstractViewerPanel').style.display = '';
+      document.getElementById('btnDownloadAbstract').onclick = () => downloadAbstractCsv(a);
+      document.getElementById('abstractViewerPanel').scrollIntoView({behavior:'smooth', block:'nearest'});
+    });
+  });
+  body.querySelectorAll('[data-del-abstract]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      if (!confirm('Delete this saved abstract permanently?')) return;
+      state.abstracts = state.abstracts.filter(a=>a.id!==b.dataset.delAbstract);
+      await dbDelete('abstracts', b.dataset.delAbstract);
+      renderAbstractList();
+    });
+  });
+}
+document.getElementById('btnCloseAbstractViewer').addEventListener('click', ()=>{
+  document.getElementById('abstractViewerPanel').style.display = 'none';
+});
+function downloadAbstractCsv(a){
+  const lines = [ABSTRACT_CSV_HEADER.map(csvEscape).join(',')].concat(a.rows.map(r=> abstractRowToCsv(r).map(csvEscape).join(',')));
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = a.filename.replace(/\.json$/i,'.csv');
+  link.click();
+}
+
+function renderDocList(){
+  const body = document.getElementById('docListBody');
+  if (!body) return;
+  if (state.documents.length===0){
+    body.innerHTML = `<tr class="empty-row"><td colspan="6">No documents uploaded yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = state.documents.slice().sort((a,b)=>new Date(b.uploadedAt)-new Date(a.uploadedAt)).map(d=>`
+    <tr>
+      <td>${new Date(d.uploadedAt).toLocaleDateString()}</td>
+      <td>${d.bdnNo||'—'}</td>
+      <td>${d.company||'—'}</td>
+      <td>${d.location||'—'}</td>
+      <td>${d.filename}</td>
+      <td style="display:flex; gap:4px;">
+        <button class="small ghost" data-view-doc="${d.id}">View</button>
+        <button class="small danger" data-del-doc="${d.id}">✕</button>
+      </td>
+    </tr>`).join('');
+  body.querySelectorAll('[data-view-doc]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const doc = state.documents.find(d=>d.id===b.dataset.viewDoc);
+      if (!doc) return;
+      document.getElementById('docViewerTitle').textContent = doc.filename;
+      document.getElementById('docViewerEmbed').setAttribute('src', doc.dataUrl);
+      const dl = document.getElementById('docViewerDownload');
+      dl.href = doc.dataUrl;
+      dl.download = doc.filename;
+      document.getElementById('docViewerPanel').style.display = '';
+      document.getElementById('docViewerPanel').scrollIntoView({behavior:'smooth', block:'nearest'});
+    });
+  });
+  body.querySelectorAll('[data-del-doc]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      if (!confirm('Delete this document permanently?')) return;
+      state.documents = state.documents.filter(d=>d.id!==b.dataset.delDoc);
+      await dbDelete('documents', b.dataset.delDoc);
+      renderDocList();
+    });
+  });
+}
+
+document.getElementById('btnCloseDocViewer').addEventListener('click', ()=>{
+  document.getElementById('docViewerPanel').style.display = 'none';
+  document.getElementById('docViewerEmbed').removeAttribute('src');
+});
+
+document.getElementById('btnUploadDoc').addEventListener('click', async ()=>{
+  const fileInput = document.getElementById('doc_file');
+  const file = fileInput.files[0];
+  if (!file){ alert('Choose a PDF file first.'); return; }
+  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  if (!isPdf){ alert('Only PDF files are allowed.'); return; }
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const doc = {
+      id: uid(),
+      filename: file.name,
+      bdnNo: document.getElementById('doc_bdn').value,
+      company: document.getElementById('doc_company').value,
+      location: document.getElementById('doc_location').value,
+      uploadedAt: new Date().toISOString(),
+      dataUrl: reader.result
+    };
+    state.documents.push(doc);
+    await dbPut('documents', doc);
+    fileInput.value = '';
+    document.getElementById('doc_bdn').value = '';
+    document.getElementById('doc_company').value = '';
+    document.getElementById('doc_location').value = '';
+    renderDocList();
+    alert('PDF uploaded and stored in this browser\'s local database.');
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('rcpt_category').addEventListener('change', (e)=>{
+  const sel = document.getElementById('rcpt_type');
+  const unit = document.getElementById('rcpt_unit');
+  if (e.target.value === 'fuel'){
+    sel.innerHTML = FUEL_TYPES.map(t=>`<option>${t}</option>`).join('');
+    unit.value = 'MT';
+  } else if (e.target.value === 'lube'){
+    sel.innerHTML = ['CYL HIGH','CYL LOW','ME SYS OIL','GE SYS OIL'].map(t=>`<option>${t}</option>`).join('');
+    unit.value = 'L';
+  } else {
+    sel.innerHTML = `<option>FRESH WATER</option>`;
+    unit.value = 'L';
+  }
+});
+
+document.getElementById('btnAddReceipt').addEventListener('click', async ()=>{
+  const date = document.getElementById('rcpt_date').value;
+  const qty = parseFloat(document.getElementById('rcpt_qty').value);
+  if (!date || isNaN(qty) || qty<=0){ alert('Enter a date and a positive quantity.'); return; }
+  const receipt = {
+    id: uid(), date, category: document.getElementById('rcpt_category').value, type: document.getElementById('rcpt_type').value, qty,
+    bdnNo: document.getElementById('rcpt_bdn').value,
+    company: document.getElementById('rcpt_company').value,
+    location: document.getElementById('rcpt_location').value
+  };
+  state.receipts.push(receipt);
+  await dbPut('receipts', receipt);
+  document.getElementById('rcpt_qty').value = '';
+  document.getElementById('rcpt_bdn').value = '';
+  document.getElementById('rcpt_company').value = '';
+  document.getElementById('rcpt_location').value = '';
+  render();
+});
+
+/* ---------------- export / import ---------------- */
+document.getElementById('btnExportJSON').addEventListener('click', ()=>{
+  const payload = { setup: state.setup, entries: state.entries, receipts: state.receipts, documents: state.documents, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `noon-report-${(state.setup.voyageNumber||'voyage')}.json`;
+  a.click();
+});
+
+document.getElementById('btnExportSetupJSON').addEventListener('click', ()=>{
+  const payload = { setup: state.setup, entries: [], receipts: [], exportedAt: new Date().toISOString(), setupOnly: true };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `noon-report-setup-${(state.setup.voyageNumber||'template')}.json`;
+  a.click();
+});
+
+document.getElementById('btnImportJSON').addEventListener('click', ()=> document.getElementById('fileImport').click());
+document.getElementById('fileImport').addEventListener('change', (ev)=>{
+  const file = ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try{
+      const payload = JSON.parse(reader.result);
+      if (payload.setup) state.setup = migrateSetup(payload.setup);
+      state.entries = (payload.entries || []).map(normalizeEntry);
+      state.receipts = payload.receipts || [];
+      state.documents = payload.documents || [];
+      await dbClear('entries'); await dbClear('receipts'); await dbClear('documents');
+      for (const en of state.entries) await dbPut('entries', en);
+      for (const r of state.receipts) await dbPut('receipts', r);
+      for (const doc of state.documents) await dbPut('documents', doc);
+      await saveSetup();
+      render();
+      applyEntryDefaults();
+      alert('Backup imported and saved to local database.');
+    }catch(e){ alert('Could not import this file: ' + e.message + '\n\n(Check the browser console for full details.)'); console.error('Import error:', e); }
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById('btnImportSetupJSON').addEventListener('click', ()=> document.getElementById('fileImportSetup').click());
+document.getElementById('fileImportSetup').addEventListener('change', (ev)=>{
+  const file = ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try{
+      const payload = JSON.parse(reader.result);
+      if (!payload.setup) throw new Error('no setup');
+      state.setup = migrateSetup(payload.setup);
+      // entries and receipts are left untouched
+      await saveSetup();
+      render();
+      applyEntryDefaults();
+      alert('Setup imported — your log entries and receipts were not changed.');
+    }catch(e){ alert('Could not import this file: ' + e.message + '\n\n(Check the browser console for full details.)'); console.error('Import error:', e); }
+  };
+  reader.readAsText(file);
+  ev.target.value = '';
+});
+
+function downloadCSV(filename, header, lines){
+  const csv = [header.join(","), ...lines.map(l=>l.join(","))].join("\n");
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+document.getElementById('btnExportCSVLog').addEventListener('click', ()=>{
+  const {rows} = computeDerived();
+  const header = ["DateTime","Operation","Condition","Hours","DistShip","RPM","RevCounter","DailyRevs","MECons","GECons","BlrCons","Total","CylCons","CylGrade","MELo","GELo","FWMeter","FWProduced","FWRob","FWCons"];
+  const lines = rows.map(r=>[r.datetime,r.operation,r.condition,r.hrs??'',r.distanceShip,r.rpm??'',r.revCounter??'',r.dailyRevs??'',r.meCons??'',r.geCons??'',r.blrCons??'',r.total??'',r.cylCons??'',r.tbn,r.meLoCons??'',r.geLoCons??'',r.fwProd??'',r.fwProdD??'',r.fwRob??'',r.fwConsD??'']);
+  downloadCSV('voyage-log.csv', header, lines);
+});
+document.getElementById('btnExportCSVCons').addEventListener('click', ()=>{
+  const {rows} = computeDerived();
+  const header = ["DateTime","Operation","METype","MECons","GEType","GECons","BlrType","BlrCons","Total","FWCons"];
+  const lines = rows.map(r=>[r.datetime,r.operation,r.me.type,r.meCons??'',r.ge.type,r.geCons??'',r.blr.type,r.blrCons??'',r.total??'',r.fwConsD??'']);
+  downloadCSV('consumption.csv', header, lines);
+});
+
+function migrateSetup(setup){
+  if (!setup || typeof setup !== 'object') setup = {};
+  if (!setup.flowArr){
+    setup.flowArr = (setup.genMode === 'PARALLEL') ? 'DUAL_GE' : 'SINGLE';
+  }
+  delete setup.genMode;
+  if (setup.carryover === undefined) setup.carryover = null;
+  if (setup.rollover && !setup.flowmeters){
+    const digits = Math.max(1, Math.round(Math.log10(setup.rollover)));
+    setup.flowmeters = {
+      main:{reading:null,digits}, mainOut:{reading:null,digits}, aux:{reading:null,digits}, auxOut:{reading:null,digits},
+      boiler:{reading:null,digits}, cyl:{reading:null,digits}, rc:{reading:null,digits}
+    };
+  }
+  if (!setup.flowmeters){
+    setup.flowmeters = { main:{reading:null,digits:8}, mainOut:{reading:null,digits:8}, aux:{reading:null,digits:8}, auxOut:{reading:null,digits:8}, boiler:{reading:null,digits:8}, cyl:{reading:null,digits:8}, rc:{reading:null,digits:8} };
+  }
+  ['main','mainOut','aux','auxOut','boiler','cyl','rc'].forEach(k=>{
+    if (!setup.flowmeters[k]) setup.flowmeters[k] = {reading:null,digits:8};
+    if (setup.flowmeters[k].digits==null) setup.flowmeters[k].digits = 8;
+  });
+  if (!setup.defaults){
+    setup.defaults = {};
+  }
+  const defDefaults = { cylTbn:'HIGH', meType:'HFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.980, geSg:0.870, blrSg:0.870 };
+  Object.keys(defDefaults).forEach(k=>{ if (setup.defaults[k]===undefined) setup.defaults[k] = defDefaults[k]; });
+
+  if (!setup.rob) setup.rob = {};
+  FUEL_TYPES.forEach(t=>{ if (setup.rob[t]==null) setup.rob[t] = 0; });
+  if (!setup.robLube) setup.robLube = {};
+  LUBE_TYPES.forEach(t=>{ if (setup.robLube[t]==null) setup.robLube[t] = 0; });
+  if (!setup.capacity) setup.capacity = {};
+  FUEL_TYPES.forEach(t=>{ if (!setup.capacity[t]) setup.capacity[t] = 1000; });
+  if (!setup.capacityLube) setup.capacityLube = {};
+  LUBE_TYPES.forEach(t=>{ if (!setup.capacityLube[t]) setup.capacityLube[t] = (t==='FRESH WATER'?150000:15000); });
+
+  if (setup.vesselName===undefined) setup.vesselName = '';
+  if (setup.chEng===undefined) setup.chEng = '';
+  if (setup.voyageNumber===undefined) setup.voyageNumber = '';
+  if (setup.shipCondition===undefined) setup.shipCondition = 'BALLAST';
+  if (setup.departPort===undefined) setup.departPort = '';
+  if (setup.arrivePort===undefined) setup.arrivePort = '';
+  if (setup.initDateTime===undefined) setup.initDateTime = '';
+  if (setup.voyageDistance===undefined) setup.voyageDistance = null;
+  if (setup.pitch==null) setup.pitch = 5.85;
+  if (setup.mcrRpm==null) setup.mcrRpm = 91;
+  if (setup.mcrKw==null) setup.mcrKw = 18630;
+
+  delete setup.rollover;
+  return setup;
+}
+
+/* ---------------- init ---------------- */
+(async function init(){
+  try {
+    await openDB();
+    const metaAll = await dbGetAll('meta');
+    const setupRow = metaAll.find(m=>m.key==='setup');
+    if (setupRow) state.setup = migrateSetup(Object.assign(state.setup, setupRow.value));
+    state.entries = await dbGetAll('entries');
+    state.receipts = await dbGetAll('receipts');
+    state.documents = await dbGetAll('documents');
+    state.abstracts = await dbGetAll('abstracts');
+    state.printHistory = await dbGetAll('printHistory');
+
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.getElementById('in_datetime').value = now.toISOString().slice(0,16);
+    document.getElementById('rcpt_date').value = now.toISOString().slice(0,10);
+    document.getElementById('rcpt_category').dispatchEvent(new Event('change'));
+    renderReportCategoryButtons();
+
+    render();
+    applyEntryDefaults();
+    document.getElementById('dbStatus').textContent = '● local database ready';
+  } catch(e){
+    console.error('Startup error:', e);
+    document.getElementById('dbStatus').textContent = '● local database error — see console';
+    alert('This app could not open its local database on startup: ' + e.message + '\n\nTry closing any other tabs/windows with this same file open, then reload this page. (Check the browser console for full details.)');
+  }
+})();
+</script>
+</body>
+</html>
