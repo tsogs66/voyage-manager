@@ -238,7 +238,8 @@
           <div class="field"><label>Alternator Max. Power (KW)</label><input type="number" step="1" id="s_alternatorMaxKw"></div>
           <div class="field"><label>Propeller Pitch (m)</label><input type="number" step="0.01" id="s_pitch" value="5.85"></div>
         </div>
-        <div class="hint">Speed by engine (kn) = RPM × Pitch × 60 ÷ 1852. %MCR = (RPM ÷ 100%-Load RPM)³ × 100. KW = (RPM ÷ 100%-Load RPM)³ × 100%-Load KW — this is the basis used throughout Performance and the Reports' M/E figures.</div>
+        <div class="hint">Speed by engine (kn) = RPM × Pitch × 60 ÷ 1852. %MCR = (RPM ÷ 100%-Load RPM)³ × 100. KW = (RPM ÷ 100%-Load RPM)³ × 100%-Load KW — this is the basis used throughout Performance and the Reports' M/E figures. SFOC (g/kWh) = M/E fuel (g) ÷ (KW × hrs). Reference SFOC interpolates between the 85% and 100% shop-trial values. A/E load % = Avg KW ÷ Alternator Max KW × 100.</div>
+        <div class="hint" id="csrValidationHint"></div>
       </div>
 
       <div class="panel">
@@ -482,14 +483,14 @@
             <th>Date/Time</th><th>Operation</th><th>Run Hrs</th><th>RPM</th>
             <th>Dist by Engine</th><th>Speed by Engine</th>
             <th>Dist by Ship</th><th>Speed by Ship</th>
-            <th>Slip %</th><th>%MCR</th><th>Est. KW</th>
+            <th>Slip %</th><th>%MCR</th><th>Est. KW</th><th>SFOC</th><th>Ref SFOC</th>
             <th>Cond</th><th>Hrs</th><th>Dist Ship</th><th>RPM</th>
             <th>Rev. Counter</th><th>Daily Revs</th>
-            <th>ME Run</th><th>GE Run</th><th>Blr Run</th>
+            <th>ME Run (hrs)</th><th>GE Run (hrs)</th><th>Blr Run (hrs)</th>
             <th>ME Cons</th><th>GE Cons</th><th>Blr Cons</th><th>Total Cons</th>
             <th>Cyl Oil Cons (Grade)</th><th>ME LO</th><th>GE LO</th><th>FW Meter</th><th>FW Produced</th><th>FW ROB</th><th>FW Cons</th><th></th>
           </tr></thead>
-          <tbody id="voyageAbstractBody"><tr class="empty-row"><td colspan="32">No entries yet.</td></tr></tbody>
+          <tbody id="voyageAbstractBody"><tr class="empty-row"><td colspan="34">No entries yet.</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -511,10 +512,10 @@
               <th>Date/Time</th><th>Operation</th><th>Run Hrs</th><th>RPM</th>
               <th>Dist by Engine</th><th>Speed by Engine</th>
               <th>Dist by Ship</th><th>Speed by Ship</th>
-              <th>Slip %</th><th>%MCR</th><th>Est. KW</th>
+              <th>Slip %</th><th>%MCR</th><th>Est. KW</th><th>SFOC</th><th>Ref SFOC</th>
               <th>Cond</th><th>Hrs</th><th>Dist Ship</th><th>RPM</th>
               <th>Rev. Counter</th><th>Daily Revs</th>
-              <th>ME Run</th><th>GE Run</th><th>Blr Run</th>
+              <th>ME Run (hrs)</th><th>GE Run (hrs)</th><th>Blr Run (hrs)</th>
               <th>ME Cons</th><th>GE Cons</th><th>Blr Cons</th><th>Total Cons</th>
               <th>Cyl Oil Cons (Grade)</th><th>ME LO</th><th>GE LO</th><th>FW Meter</th><th>FW Produced</th><th>FW ROB</th><th>FW Cons</th>
             </tr></thead>
@@ -634,7 +635,7 @@
     </div>
     <div class="panel">
       <h2>Performance Averages</h2>
-      <div class="stat-strip cols5" id="perfTotalsStrip"></div>
+      <div class="stat-strip cols5" id="perfTotalsStrip" style="grid-template-columns:repeat(6,1fr);"></div>
     </div>
     <div class="panel">
       <h2>Average Consumption Per Day</h2>
@@ -736,7 +737,7 @@
       </div>
 
       <h3 class="sub">Performance — By Unit</h3>
-      <div class="hint">M/E column is calculated automatically from this entry's own data (RPM → %MCR/KW; Max = Avg × 1.15, Min = Avg × 0.90). Other units are entered manually.</div>
+      <div class="hint">M/E column is calculated automatically from this entry's own data (RPM → %MCR/KW; run time from M/E Runtime or elapsed hours; Max = Avg × 1.15, Min = Avg × 0.90). A/E load % auto-fills from Avg KW when Alternator Max KW is set in Setup. Boiler run time uses Blr Runtime when entered.</div>
       <div class="table-scroll">
         <table id="reportPerfTable">
           <thead><tr><th></th><th>M/E (auto)</th><th>A/E #1</th><th>A/E #2</th><th>A/E #3</th><th>Boiler</th><th>Incinerator</th></tr></thead>
@@ -950,6 +951,76 @@ function meterRollovers(){
   };
 }
 
+/* M/E SFOC from fuel mass (MT), estimated KW, and elapsed hours. */
+function computeActualSfoc(meConsMt, kw, hrs){
+  if (meConsMt==null || kw==null || hrs==null || meConsMt<=0 || kw<=0 || hrs<=0) return null;
+  return (meConsMt * 1e6) / (kw * hrs);
+}
+
+/* Interpolate shop-trial SFOC between 85% CSR and 100% MCR load points. */
+function referenceSfocAtLoad(mcrPct){
+  const s100 = state.setup.sfoc100;
+  const s85 = state.setup.sfoc85;
+  if (mcrPct==null || isNaN(mcrPct)) return null;
+  if (s100!=null && s85!=null){
+    if (mcrPct >= 85) return s85 + (s100 - s85) * (mcrPct - 85) / 15;
+    return s85 + (s85 - s100) * (85 - mcrPct) / 15;
+  }
+  return s100 ?? s85 ?? null;
+}
+
+/* CSR (85% load) RPM/KW predicted from 100% MCR via cubic propeller law. */
+function expectedCsrFromMcr(){
+  const mcrRpm = state.setup.mcrRpm;
+  const mcrKw = state.setup.mcrKw;
+  if (!mcrRpm || !mcrKw) return { rpm: null, kw: null };
+  return { rpm: mcrRpm * Math.pow(0.85, 1/3), kw: mcrKw * 0.85 };
+}
+
+/* A/E alternator load % from average KW and setup alternator rating. */
+function aeLoadFromPower(powerKw){
+  const maxKw = state.setup.alternatorMaxKw;
+  if (maxKw==null || maxKw<=0 || powerKw==null || isNaN(powerKw)) return null;
+  return (powerKw / maxKw) * 100;
+}
+
+function formatRuntime(val){
+  return (val===null || val===undefined || val==='') ? '—' : fmt(val, 1);
+}
+
+function updateCsrValidationHint(){
+  const hint = document.getElementById('csrValidationHint');
+  if (!hint) return;
+  const mcrRpm = parseFloat(document.getElementById('s_mcrRpm')?.value) || state.setup.mcrRpm;
+  const mcrKw = parseFloat(document.getElementById('s_mcrKw')?.value) || state.setup.mcrKw;
+  const exp = (mcrRpm && mcrKw) ? { rpm: mcrRpm * Math.pow(0.85, 1/3), kw: mcrKw * 0.85 } : { rpm: null, kw: null };
+  const csrRpm = parseFloat(document.getElementById('s_csrRpm')?.value);
+  const csrKw = parseFloat(document.getElementById('s_csrKw')?.value);
+  const csrRpmVal = isNaN(csrRpm) ? state.setup.csrRpm : csrRpm;
+  const csrKwVal = isNaN(csrKw) ? state.setup.csrKw : csrKw;
+  if (!exp.rpm){ hint.textContent = ''; return; }
+  let text = `CSR reference (cubic law at 85% load): ${fmt(exp.rpm, 2)} RPM / ${fmt(exp.kw, 0)} KW`;
+  if (csrRpmVal!=null && csrKwVal!=null){
+    const rpmDiff = Math.abs(csrRpmVal - exp.rpm) / exp.rpm * 100;
+    const kwDiff = Math.abs(csrKwVal - exp.kw) / exp.kw * 100;
+    if (rpmDiff > 2 || kwDiff > 2){
+      text += ` — entered CSR differs (${fmt(rpmDiff,1)}% RPM / ${fmt(kwDiff,1)}% KW)`;
+    } else {
+      text += ' — matches entered CSR';
+    }
+  }
+  hint.textContent = text;
+}
+
+function bindCsrHintInputs(){
+  ['s_mcrRpm','s_mcrKw','s_csrRpm','s_csrKw'].forEach(id=>{
+    const el = document.getElementById(id);
+    if (!el || el.dataset.csrBound) return;
+    el.dataset.csrBound = '1';
+    el.addEventListener('input', updateCsrValidationHint);
+  });
+}
+
 /* ---------------- derived calculations ---------------- */
 function computeDerived(){
   const list = sortedEntries();
@@ -963,12 +1034,14 @@ function computeDerived(){
   const consByLube = {"CYL HIGH":0,"CYL LOW":0,"ME SYS OIL":0,"GE SYS OIL":0,"FRESH WATER":0};
   let totalDistShip=0, totalDistEngine=0, totalHrs=0;
   let sumRpm=0, cntRpm=0, sumMcr=0, cntMcr=0, sumKw=0, cntKw=0, sumSpeedShip=0, cntSpeedShip=0, sumSlip=0, cntSlip=0;
+  let sumSfocEnergy=0, sumEnergy=0;
 
   let prev = effectiveCarryover();
   const rows = list.map(e=>{
     let hrs=null, meCons=null, geCons=null, blrCons=null, total=null;
     let cylCons=null, meLoCons=null, geLoCons=null, dailyRevs=null, fwProdD=null, fwConsD=null;
     let distEngine=null, speedEngine=null, speedShip=null, slip=null, mcrPct=null, kwEst=null;
+    let sfoc=null, sfocRef=null;
     let consByType = {"HFO":null,"LSFO":null,"MDO/MGO":null,"LSMGO":null};
     let lubeByType = {"CYL HIGH":null,"CYL LOW":null,"ME SYS OIL":null,"GE SYS OIL":null,"FRESH WATER":null};
     const override = e.consOverride || {};
@@ -1044,6 +1117,14 @@ function computeDerived(){
       }
       if (speedShip!==null && !isNaN(speedShip)){ sumSpeedShip+=speedShip; cntSpeedShip++; }
 
+      sfoc = computeActualSfoc(meCons, kwEst, hrs);
+      sfocRef = referenceSfocAtLoad(mcrPct);
+      if (sfoc!=null && kwEst!=null && hrs!=null && hrs>0){
+        const energy = kwEst * hrs;
+        sumSfocEnergy += sfoc * energy;
+        sumEnergy += energy;
+      }
+
       totalDistShip += (e.distanceShip||0);
       totalDistEngine += (distEngine||0);
       totalHrs += hrs;
@@ -1052,7 +1133,7 @@ function computeDerived(){
     prev = e;
     return {...e, hrs, meCons, geCons, blrCons, total, cylCons, meLoCons, geLoCons, fwProdD, fwConsD,
              consByType, lubeByType,
-             distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, dailyRevs,
+             distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, dailyRevs, sfoc, sfocRef,
              cumFuel: {...consByFuel}, cumLube: {...consByLube}, cumDistShip: totalDistShip};
   });
 
@@ -1062,6 +1143,7 @@ function computeDerived(){
     avgKw: cntKw? sumKw/cntKw : null,
     avgSpeedShip: cntSpeedShip? sumSpeedShip/cntSpeedShip : null,
     avgSlip: cntSlip? sumSlip/cntSlip : null,
+    avgSfoc: sumEnergy>0 ? sumSfocEnergy/sumEnergy : null,
     totalDistShip, totalDistEngine, totalHrs
   };
 
@@ -1262,10 +1344,11 @@ function abstractRowCells(r){
     <td>${r.distEngine===null||r.distEngine===undefined?'—':fmt(r.distEngine,1)}</td><td>${r.speedEngine===null||r.speedEngine===undefined?'—':fmt(r.speedEngine,2)}</td>
     <td>${fmt(r.distanceShip,1)}</td><td>${r.speedShip===null||r.speedShip===undefined?'—':fmt(r.speedShip,2)}</td>
     <td>${r.slip===null||r.slip===undefined?'—':fmt(r.slip,1)}</td><td>${r.mcrPct===null||r.mcrPct===undefined?'—':fmt(r.mcrPct,1)}</td><td>${r.kwEst===null||r.kwEst===undefined?'—':fmt(r.kwEst,0)}</td>
+    <td>${r.sfoc===null||r.sfoc===undefined?'—':fmt(r.sfoc,1)}</td><td>${r.sfocRef===null||r.sfocRef===undefined?'—':fmt(r.sfocRef,1)}</td>
     <td><span class="cond-tag ${condClass}">${r.condition[0]}</span></td>
     <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,1)}</td><td>${fmt(r.distanceShip,1)}</td><td>${r.rpm??'—'}</td>
     <td>${r.revCounter??'—'}</td><td>${r.dailyRevs===null||r.dailyRevs===undefined?'—':fmt(r.dailyRevs,0)}</td>
-    <td>${meterCellText(r.me)}</td><td>${meterCellText(r.ge)}</td><td>${fmt(r.blr.meter,0)}</td>
+    <td>${formatRuntime(r.meRuntime)}</td><td>${formatRuntime(r.ge1Runtime)}</td><td>${formatRuntime(r.blrRuntime)}</td>
     <td>${r.meCons===null||r.meCons===undefined?'—':fmt(r.meCons,3)}</td><td>${r.geCons===null||r.geCons===undefined?'—':fmt(r.geCons,3)}</td>
     <td>${r.blrCons===null||r.blrCons===undefined?'—':fmt(r.blrCons,3)}</td>
     <td>${r.total===null||r.total===undefined?'—':fmt(r.total,3)}</td>
@@ -1277,13 +1360,13 @@ function abstractRowCells(r){
     <td>${r.fwConsD===null||r.fwConsD===undefined?'—':fmt(r.fwConsD,0)}</td>`;
 }
 
-const ABSTRACT_CSV_HEADER = ["DateTime","Operation","RunHrs","RPM","DistEngine","SpeedEngine","DistShip","SpeedShip","Slip%","%MCR","EstKW",
-  "Cond","Hrs","DistShip2","RPM2","RevCounter","DailyRevs","MERun","GERun","BlrRun","MECons","GECons","BlrCons","TotalCons",
+const ABSTRACT_CSV_HEADER = ["DateTime","Operation","RunHrs","RPM","DistEngine","SpeedEngine","DistShip","SpeedShip","Slip%","%MCR","EstKW","SFOC","RefSFOC",
+  "Cond","Hrs","DistShip2","RPM2","RevCounter","DailyRevs","MERunHrs","GERunHrs","BlrRunHrs","MECons","GECons","BlrCons","TotalCons",
   "CylOilCons","CylGrade","MELO","GELO","FWMeter","FWProduced","FWRob","FWCons"];
 function abstractRowToCsv(r){
   return [r.datetime, r.operation, r.hrs??'', r.rpm??'', r.distEngine??'', r.speedEngine??'', r.distanceShip, r.speedShip??'',
-    r.slip??'', r.mcrPct??'', r.kwEst??'', r.condition, r.hrs??'', r.distanceShip, r.rpm??'', r.revCounter??'', r.dailyRevs??'',
-    meterCellText(r.me), meterCellText(r.ge), r.blr.meter, r.meCons??'', r.geCons??'', r.blrCons??'', r.total??'',
+    r.slip??'', r.mcrPct??'', r.kwEst??'', r.sfoc??'', r.sfocRef??'', r.condition, r.hrs??'', r.distanceShip, r.rpm??'', r.revCounter??'', r.dailyRevs??'',
+    r.meRuntime??'', r.ge1Runtime??'', r.blrRuntime??'', r.meCons??'', r.geCons??'', r.blrCons??'', r.total??'',
     r.cylCons??'', r.tbn, r.meLoCons??'', r.geLoCons??'', r.fwProd??'', r.fwProdD??'', r.fwRob??'', r.fwConsD??''];
 }
 function csvEscape(v){
@@ -1347,6 +1430,9 @@ function render(){
 
   renderFuelMeterFields();
 
+  updateCsrValidationHint();
+  bindCsrHintInputs();
+
   // fuel gauges
   document.getElementById('fuelGauges').innerHTML = FUEL_TYPES.map(t=>{
     const cap = state.setup.capacity[t]||1;
@@ -1385,7 +1471,7 @@ function render(){
   // voyage log table
   const vlBody = document.getElementById('voyageAbstractBody');
   if (rows.length===0){
-    vlBody.innerHTML = `<tr class="empty-row"><td colspan="32">No entries yet.</td></tr>`;
+    vlBody.innerHTML = `<tr class="empty-row"><td colspan="34">No entries yet.</td></tr>`;
   } else {
     vlBody.innerHTML = rows.map(r=> `<tr>${abstractRowCells(r)}
         <td style="display:flex; gap:4px;">
@@ -1499,6 +1585,7 @@ function render(){
     <div class="stat"><div class="num">${perf.avgSlip===null?'—':fmt(perf.avgSlip,1)}</div><div class="lbl">Slip %</div></div>
     <div class="stat"><div class="num">${perf.avgMcr===null?'—':fmt(perf.avgMcr,1)}</div><div class="lbl">%MCR</div></div>
     <div class="stat"><div class="num">${perf.avgKw===null?'—':fmt(perf.avgKw,0)}</div><div class="lbl">KW</div></div>
+    <div class="stat"><div class="num">${perf.avgSfoc===null?'—':fmt(perf.avgSfoc,1)}</div><div class="lbl">Avg SFOC (g/kWh)</div></div>
     <div class="stat"><div class="num">${seaAvgDistStr}</div><div class="lbl">Distance (nm/day)</div></div>
   `;
 
@@ -1587,15 +1674,41 @@ function showReportList(category){
 }
 
 function computeMePerf(entryId){
+  const entry = state.entries.find(x=>x.id===entryId);
   const row = getComputedRow(entryId);
   const avgLoad = row ? row.mcrPct : null;
+  const runTime = entry?.meRuntime ?? row?.hrs ?? null;
   return {
     avgPower: row ? row.kwEst : null,
     avgLoad: avgLoad,
     minLoad: (avgLoad===null||avgLoad===undefined||isNaN(avgLoad)) ? null : avgLoad*0.90,
     maxLoad: (avgLoad===null||avgLoad===undefined||isNaN(avgLoad)) ? null : avgLoad*1.15,
-    runTime: row ? row.hrs : null
+    runTime
   };
+}
+
+function auxUnitRunTime(unit, entry, row){
+  if (unit==='BOILER') return entry.blrRuntime ?? row?.hrs ?? null;
+  if (unit==='AE1') return entry.ge1Runtime ?? row?.hrs ?? null;
+  if (unit.startsWith('AE')) return entry.ge1Runtime ?? row?.hrs ?? null;
+  return row?.hrs ?? null;
+}
+
+function wireAeLoadAutoFill(){
+  if (!state.setup.alternatorMaxKw) return;
+  ['AE1','AE2','AE3'].forEach(u=>{
+    const powerEl = document.getElementById(`rep_pf_avgPower_${u}`);
+    const loadEl = document.getElementById(`rep_pf_avgLoad_${u}`);
+    if (!powerEl || !loadEl || powerEl.dataset.aeBound) return;
+    powerEl.dataset.aeBound = '1';
+    powerEl.addEventListener('input', ()=>{
+      const p = parseFloat(powerEl.value);
+      if (!isNaN(p)){
+        const load = aeLoadFromPower(p);
+        if (load!=null) loadEl.value = load.toFixed(1);
+      }
+    });
+  });
 }
 
 let currentReportEntryId = null;
@@ -1634,11 +1747,28 @@ function openReportEditor(entryId){
 
   const perfBody = document.querySelector('#reportPerfTable tbody');
   const mePerf = computeMePerf(entryId);
+  const row = getComputedRow(entryId);
   perfBody.innerHTML = PERF_ROWS.map(([key,label])=>
     `<tr><td>${label}</td><td class="pf-computed">${fmtP(mePerf[key], key==='avgPower'||key==='runTime'?0:1)}</td>${PERF_UNITS.slice(1).map(u=>`<td><input class="pf-input" type="number" step="0.01" id="rep_pf_${key}_${u}"></td>`).join('')}</tr>`
   ).join('');
 
   const r = e.report || {};
+  const perfTable = r.perfTable || {};
+  PERF_UNITS.slice(1).forEach(u=>{
+    PERF_ROWS.forEach(([key])=>{
+      const el = document.getElementById(`rep_pf_${key}_${u}`);
+      if (!el) return;
+      let v = perfTable[u] ? perfTable[u][key] : null;
+      if (v==null && key==='runTime') v = auxUnitRunTime(u, e, row);
+      if (v==null && key==='avgLoad' && u.startsWith('AE')){
+        const p = perfTable[u]?.avgPower;
+        if (p!=null) v = aeLoadFromPower(p);
+      }
+      el.value = (v===null||v===undefined) ? '' : v;
+    });
+  });
+  wireAeLoadAutoFill();
+
   document.getElementById('rep_port').value = r.port ?? '';
   document.getElementById('rep_cargoOp').value = r.cargoOp ?? '';
   document.getElementById('rep_erTemp').value = r.erTemp ?? '';
@@ -1647,13 +1777,6 @@ function openReportEditor(entryId){
   document.getElementById('rep_stTemp').value = r.stTemp ?? '';
   document.getElementById('rep_swTemp').value = r.swTemp ?? '';
   document.getElementById('rep_remarks').value = r.remarks ?? '';
-  const perfTable = r.perfTable || {};
-  PERF_UNITS.slice(1).forEach(u=>{
-    PERF_ROWS.forEach(([key])=>{
-      const v = perfTable[u] ? perfTable[u][key] : null;
-      document.getElementById(`rep_pf_${key}_${u}`).value = (v===null||v===undefined) ? '' : v;
-    });
-  });
   if (isSea){
     document.getElementById('rep_eta').value = r.eta ?? '';
     [1,2,3,4,5,6].forEach(n=>{
@@ -1687,7 +1810,16 @@ function openReportEditor(entryId){
     const perfTable = { ME: computeMePerf(entryId) };
     PERF_UNITS.slice(1).forEach(u=>{
       perfTable[u] = {};
-      PERF_ROWS.forEach(([key])=>{ perfTable[u][key] = num(`rep_pf_${key}_${u}`); });
+      PERF_ROWS.forEach(([key])=>{
+        if (key==='avgLoad' && u.startsWith('AE')){
+          let load = num(`rep_pf_avgLoad_${u}`);
+          const power = num(`rep_pf_avgPower_${u}`);
+          if (load==null && power!=null) load = aeLoadFromPower(power);
+          perfTable[u][key] = load;
+        } else {
+          perfTable[u][key] = num(`rep_pf_${key}_${u}`);
+        }
+      });
     });
     report.perfTable = perfTable;
     if (isSea){
@@ -2245,6 +2377,8 @@ function openVoyageSummary(entryId){
     ${stat('Slip %', fmt(row.slip,2))}
     ${stat('Load %', fmt(row.mcrPct,2))}
     ${stat('Speed', fmt(row.speedShip,2))}
+    ${stat('SFOC', row.sfoc==null?'—':fmt(row.sfoc,1))}
+    ${stat('Ref SFOC', row.sfocRef==null?'—':fmt(row.sfocRef,1))}
     ${stat('Total Rev.', fmt(row.dailyRevs,0))}
     ${stat('Ave. KW (voyage)', fmt(perf.avgKw,0))}
     ${stat('Days To Go', daysToGoVal!=null? fmt(daysToGoVal,2):'—')}
@@ -2275,7 +2409,7 @@ function openVoyageSummary(entryId){
     return `<tr>
       <td>${r.label}</td>
       <td>${fmt(prevVal, r.cat==='fuel'?2:0)}</td>
-      <td><input class="pf-input" style="width:80px;" type="number" step="0.001" id="vs_cons_${slugKey(r.key)}" value="${consVal!=null?consVal:0}" data-prev="${prevVal||0}" data-cat="${r.cat}" data-key="${r.key}"></td>
+      <td><input class="pf-input" style="width:80px;" type="number" step="0.001" id="vs_cons_${slugKey(r.key)}" value="${consVal!=null?consVal:''}" data-prev="${prevVal||0}" data-cat="${r.cat}" data-key="${r.key}"></td>
       <td id="vs_rob_${slugKey(r.key)}">${fmt(robVal, r.cat==='fuel'?2:0)}</td>
     </tr>`;
   }).join('');
@@ -2302,8 +2436,12 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   entry.consOverride = {};
   ROB_ROWS.forEach(r=>{
     const el = document.getElementById('vs_cons_'+slugKey(r.key));
-    entry.consOverride[r.key] = el ? (parseFloat(el.value)||0) : null;
+    if (el && el.value !== ''){
+      const v = parseFloat(el.value);
+      if (!isNaN(v)) entry.consOverride[r.key] = v;
+    }
   });
+  if (Object.keys(entry.consOverride).length === 0) entry.consOverride = null;
   await dbPut('entries', entry);
   render();
   document.getElementById('voyageSummaryPanel').style.display = 'none';
@@ -2557,7 +2695,7 @@ function updateLivePreview(){
   const pitch = state.setup.pitch||0, mcrRpm = state.setup.mcrRpm||1, mcrKw = state.setup.mcrKw||0;
   const propConstant = pitch*60/1852;
 
-  let hrs=null, meCons=null, geCons=null, blrCons=null, total=null, distEngine=null, slip=null, kwEst=null, mcrPct=null, dailyRevs=null, speedEngine=null;
+  let hrs=null, meCons=null, geCons=null, blrCons=null, total=null, distEngine=null, slip=null, kwEst=null, mcrPct=null, dailyRevs=null, speedEngine=null, sfoc=null, sfocRef=null;
 
   if (curEntry.rpm!=null){
     mcrPct = Math.pow(curEntry.rpm/mcrRpm, 3) * 100;
@@ -2589,6 +2727,8 @@ function updateLivePreview(){
           slip = ((distEngine - curEntry.distanceShip)/distEngine)*100;
         }
       }
+      sfoc = computeActualSfoc(meCons, kwEst, hrs);
+      sfocRef = referenceSfocAtLoad(mcrPct);
     }
   }
 
@@ -2602,6 +2742,8 @@ function updateLivePreview(){
     stat('Total Cons (MT)', total==null?'—':fmt(total,3)) +
     stat('M/E Load (KW)', kwEst==null?'—':fmt(kwEst,0)) +
     stat('M/E Load (%)', mcrPct==null?'—':fmt(mcrPct,1)) +
+    stat('SFOC (g/kWh)', sfoc==null?'—':fmt(sfoc,1)) +
+    stat('Ref SFOC', sfocRef==null?'—':fmt(sfocRef,1)) +
     stat('Engine Speed (kn)', speedEngine==null?'—':fmt(speedEngine,2)) +
     stat('Engine Distance (nm)', distEngine==null?'—':fmt(distEngine,2)) +
     stat('Slip (%)', slip==null?'—':fmt(slip,2));
@@ -3268,8 +3410,8 @@ function downloadCSV(filename, header, lines){
 }
 document.getElementById('btnExportCSVLog').addEventListener('click', ()=>{
   const {rows} = computeDerived();
-  const header = ["DateTime","Operation","Condition","Hours","DistShip","RPM","RevCounter","DailyRevs","MECons","GECons","BlrCons","Total","CylCons","CylGrade","MELo","GELo","FWMeter","FWProduced","FWRob","FWCons"];
-  const lines = rows.map(r=>[r.datetime,r.operation,r.condition,r.hrs??'',r.distanceShip,r.rpm??'',r.revCounter??'',r.dailyRevs??'',r.meCons??'',r.geCons??'',r.blrCons??'',r.total??'',r.cylCons??'',r.tbn,r.meLoCons??'',r.geLoCons??'',r.fwProd??'',r.fwProdD??'',r.fwRob??'',r.fwConsD??'']);
+  const header = ["DateTime","Operation","Condition","Hours","DistShip","RPM","RevCounter","DailyRevs","MECons","GECons","BlrCons","Total","SFOC","RefSFOC","CylCons","CylGrade","MELo","GELo","FWMeter","FWProduced","FWRob","FWCons"];
+  const lines = rows.map(r=>[r.datetime,r.operation,r.condition,r.hrs??'',r.distanceShip,r.rpm??'',r.revCounter??'',r.dailyRevs??'',r.meCons??'',r.geCons??'',r.blrCons??'',r.total??'',r.sfoc??'',r.sfocRef??'',r.cylCons??'',r.tbn,r.meLoCons??'',r.geLoCons??'',r.fwProd??'',r.fwProdD??'',r.fwRob??'',r.fwConsD??'']);
   downloadCSV('voyage-log.csv', header, lines);
 });
 document.getElementById('btnExportCSVCons').addEventListener('click', ()=>{
