@@ -30,10 +30,10 @@
   .subtitle{font-size:11px; color:var(--paper-dim); letter-spacing:0.08em; text-transform:uppercase; margin-top:2px;}
   #dbStatus{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--teal);}
 
-  .tabs{display:flex; gap:2px; margin:18px 0 20px; border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .tabs{display:flex; gap:2px; margin:18px 0 20px; border-bottom:1px solid var(--line); flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch;}
   .tab{
     font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:0.06em; text-transform:uppercase;
-    padding:10px 16px; cursor:pointer; color:var(--paper-dim); border-bottom:2px solid transparent;
+    padding:10px 16px; cursor:pointer; color:var(--paper-dim); border-bottom:2px solid transparent; white-space:nowrap;
   }
   .tab.active{color:var(--brass); border-bottom-color:var(--brass);}
   .tab:hover{color:var(--paper);}
@@ -137,8 +137,8 @@
   @media (max-width:720px){
     body{padding:14px 10px 60px;}
     .masthead{align-items:flex-start;}
-    .tabs{overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px;}
-    .tab{white-space:nowrap; padding:10px 12px;}
+    .tabs{padding-bottom:4px;}
+    .tab{padding:10px 12px;}
     .panel{padding:16px 14px;}
     .form-grid, .form-grid.cols2, .form-grid.cols3, .unit-group, .unit-group.cols2, .unit-group.cols5,
     .gauge-grid, .gauge-grid.cols2, .gauge-grid.cols4, .gauge-grid.cols5, .stat-strip, .stat-strip.cols2, .stat-strip.cols3, .stat-strip.cols5{
