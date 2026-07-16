@@ -1,0 +1,26 @@
+# Example systemd unit for the Noon Report sync server.
+# 1. Copy the repository to /opt/noon-report
+# 2. Edit SYNC_TOKEN below (use a long random string)
+# 3. sudo cp server/noon-report.service /etc/systemd/system/
+# 4. sudo systemctl daemon-reload && sudo systemctl enable --now noon-report
+
+[Unit]
+Description=Noon Report sync server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/noon-report/server
+Environment=PORT=8088
+Environment=SYNC_TOKEN=change-me-to-a-long-random-secret
+ExecStart=/usr/bin/node /opt/noon-report/server/server.js
+Restart=on-failure
+RestartSec=5
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/noon-report/server/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <title>Noon Report — Engine Log</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a1420">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -182,6 +189,7 @@
     <div class="tab" data-page="receipts">Receipts</div>
     <div class="tab" data-page="reports">Reports</div>
     <div class="tab" data-page="data">Data</div>
+    <div class="tab" data-page="sync">Sync</div>
     <div class="tab" data-page="setup">Setup</div>
   </div>
 
@@ -487,9 +495,10 @@
             <th>Rev. Counter</th><th>Daily Revs</th>
             <th>ME Run</th><th>GE Run</th><th>Blr Run</th>
             <th>ME Cons</th><th>GE Cons</th><th>Blr Cons</th><th>Total Cons</th>
+            <th>SFOC (g/kWh)</th><th>Fuel (kg/nm)</th><th>CO₂ (MT)</th>
             <th>Cyl Oil Cons (Grade)</th><th>ME LO</th><th>GE LO</th><th>FW Meter</th><th>FW Produced</th><th>FW ROB</th><th>FW Cons</th><th></th>
           </tr></thead>
-          <tbody id="voyageAbstractBody"><tr class="empty-row"><td colspan="32">No entries yet.</td></tr></tbody>
+          <tbody id="voyageAbstractBody"><tr class="empty-row"><td colspan="35">No entries yet.</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -516,6 +525,7 @@
               <th>Rev. Counter</th><th>Daily Revs</th>
               <th>ME Run</th><th>GE Run</th><th>Blr Run</th>
               <th>ME Cons</th><th>GE Cons</th><th>Blr Cons</th><th>Total Cons</th>
+              <th>SFOC (g/kWh)</th><th>Fuel (kg/nm)</th><th>CO₂ (MT)</th>
               <th>Cyl Oil Cons (Grade)</th><th>ME LO</th><th>GE LO</th><th>FW Meter</th><th>FW Produced</th><th>FW ROB</th><th>FW Cons</th>
             </tr></thead>
             <tbody id="abstractViewerBody"></tbody>
@@ -637,6 +647,11 @@
       <div class="stat-strip cols5" id="perfTotalsStrip"></div>
     </div>
     <div class="panel">
+      <h2>Efficiency &amp; Emissions</h2>
+      <div class="stat-strip cols5" id="efficiencyStrip"></div>
+      <div class="hint">Actual SFOC = M/E fuel (g) ÷ [estimated kW × running hrs], voyage-to-date. Reference SFOC comes from the shop test values in Setup → Engine Data (85%/100% load, interpolated at the voyage average load, clamped to the 85–100% test range). CO₂ uses IMO conversion factors: 3.114 t CO₂/t for HFO &amp; LSFO, 3.206 t CO₂/t for MDO/MGO &amp; LSMGO.</div>
+    </div>
+    <div class="panel">
       <h2>Average Consumption Per Day</h2>
       <h3 class="sub">Fuel (MT/day)</h3>
       <div class="stat-strip" id="fuelPerDayStrip"></div>
@@ -755,6 +770,36 @@
     </div>
   </div>
 
+  <!-- SYNC -->
+  <div class="page" id="page-sync">
+    <div class="panel">
+      <h2>Server Connection</h2>
+      <p class="hint">This app works fully offline — all data lives in this device's local database. When internet is available it can push/pull changes to your own self-hosted sync server (see the included <span style="font-family:'IBM Plex Mono',monospace;">server/server.js</span> and README for setup on a Linux box behind a Cloudflare Tunnel). The same Ship ID on several devices keeps them all in sync; the newest change to each record wins.</p>
+      <div class="form-grid cols2" style="margin-top:12px;">
+        <div class="field"><label>Server URL</label><input id="sync_url" placeholder="https://noonreport.example.com"></div>
+        <div class="field"><label>API Token</label><input id="sync_token" type="password" placeholder="shared secret configured on the server"></div>
+        <div class="field"><label>Ship ID (same on all devices of this vessel)</label><input id="sync_shipId" placeholder="e.g. captain-veniamis"></div>
+        <div class="field"><label>Auto Sync</label>
+          <select id="sync_auto">
+            <option value="off">OFF — manual only</option>
+            <option value="on">ON — after every change &amp; when back online</option>
+          </select>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="primary" id="btnSaveSyncConfig">Save Sync Settings</button>
+        <button class="ghost" id="btnTestSync">Test Connection</button>
+        <button class="ghost" id="btnSyncNow">Sync Now</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Sync Status</h2>
+      <div class="stat-strip cols3" id="syncStatusStrip"></div>
+      <h3 class="sub">Activity Log</h3>
+      <div id="syncLog" style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--paper-dim); max-height:220px; overflow-y:auto; border:1px solid var(--line); border-radius:4px; padding:10px; line-height:1.7;">No sync activity yet this session.</div>
+    </div>
+  </div>
+
   <!-- DATA -->
   <div class="page" id="page-data">
     <div class="panel">
@@ -796,6 +841,8 @@ const GAUGE_COLORS = {
   'CYL HIGH': '#d9b64e', 'CYL LOW': '#d9b64e', 'ME SYS OIL': '#d9b64e', 'GE SYS OIL': '#d9b64e',
   'FRESH WATER': '#3fc8dc'
 };
+/* IMO MEPC fuel-mass to CO2 conversion factors (t CO2 per t fuel) */
+const CO2_FACTORS = { 'HFO': 3.114, 'LSFO': 3.114, 'MDO/MGO': 3.206, 'LSMGO': 3.206 };
 
 /* ---------------- local database (IndexedDB) ---------------- */
 let db;
@@ -825,10 +872,26 @@ async function ensureDB(){
   return db;
 }
 async function txStore(name, mode){ const d = await ensureDB(); return d.transaction(name, mode).objectStore(name); }
-async function dbPut(store, obj){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.put(obj); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+/* Local writes stamp updatedAt (used for last-write-wins sync). Applying records that came
+   FROM the server passes {touch:false} so the original device's timestamp is preserved. */
+async function dbPut(store, obj, opts){
+  const touch = !opts || opts.touch !== false;
+  if (touch && store !== 'meta') obj.updatedAt = new Date().toISOString();
+  const s = await txStore(store,'readwrite');
+  await new Promise((res,rej)=>{ const r = s.put(obj); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
+  if (touch) scheduleAutoSync();
+}
 async function dbDelete(store, key){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.delete(key); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
 async function dbGetAll(store){ const s = await txStore(store,'readonly'); return new Promise((res,rej)=>{ const r = s.getAll(); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function dbClear(store){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+/* Deletions are kept as tombstones so they propagate to the sync server (and to the other
+   devices of this vessel) instead of silently resurrecting on the next pull. */
+async function softDelete(store, id){ await dbPut(store, {id, deleted:true}); }
+async function tombstoneAllRecords(store){
+  const all = await dbGetAll(store);
+  for (const rec of all){ if (!rec.deleted) await dbPut(store, {id: rec.id, deleted:true}); }
+}
+function liveRecords(list){ return (list||[]).filter(r=>!r.deleted); }
 
 /* ---------------- state ---------------- */
 const state = {
@@ -903,12 +966,29 @@ function meterCellText(unit){
 }
 function sortedEntries(){ return [...state.entries].sort((a,b)=> new Date(a.datetime)-new Date(b.datetime)); }
 
-/* rollover-safe delta */
+/* rollover-safe delta. A decrease only counts as a rollover when the counter dropped by
+   more than half its range — a small decrease is far more likely a typo, so it is kept
+   negative to surface as an obviously-wrong (flagged) consumption instead of a silent
+   near-rollover-sized one. */
 function meterDelta(curr, prev, rollover){
   if (curr===null||curr===undefined||isNaN(curr)||prev===null||prev===undefined||isNaN(prev)) return null;
   let d = curr - prev;
-  if (d < 0) d = (curr + rollover) - prev;
+  if (d < 0 && (prev - curr) > rollover/2) d = (curr + rollover) - prev;
   return d;
+}
+
+/* Reference SFOC (g/kWh) from Setup's shop-test values, interpolated linearly between the
+   85% and 100% load points and clamped to that tested range. */
+function refSfocAtLoad(loadPct){
+  const s85 = state.setup.sfoc85, s100 = state.setup.sfoc100;
+  if (loadPct==null || isNaN(loadPct)) return null;
+  if (s85!=null && s100!=null){
+    const L = Math.max(85, Math.min(100, loadPct));
+    return s85 + (L-85)*(s100-s85)/15;
+  }
+  if (s100!=null) return s100;
+  if (s85!=null) return s85;
+  return null;
 }
 
 /* dual-meter mass-balance delta: (inlet delta) - (outlet delta), rollover-safe. Returns null if inputs incomplete. */
@@ -963,12 +1043,14 @@ function computeDerived(){
   const consByLube = {"CYL HIGH":0,"CYL LOW":0,"ME SYS OIL":0,"GE SYS OIL":0,"FRESH WATER":0};
   let totalDistShip=0, totalDistEngine=0, totalHrs=0;
   let sumRpm=0, cntRpm=0, sumMcr=0, cntMcr=0, sumKw=0, cntKw=0, sumSpeedShip=0, cntSpeedShip=0, sumSlip=0, cntSlip=0;
+  let sumMeFuelMt=0, sumKwh=0, totalCo2=0;
 
   let prev = effectiveCarryover();
   const rows = list.map(e=>{
     let hrs=null, meCons=null, geCons=null, blrCons=null, total=null;
     let cylCons=null, meLoCons=null, geLoCons=null, dailyRevs=null, fwProdD=null, fwConsD=null;
     let distEngine=null, speedEngine=null, speedShip=null, slip=null, mcrPct=null, kwEst=null;
+    let sfocAct=null, sfocDev=null, foPerNm=null, co2=null;
     let consByType = {"HFO":null,"LSFO":null,"MDO/MGO":null,"LSMGO":null};
     let lubeByType = {"CYL HIGH":null,"CYL LOW":null,"ME SYS OIL":null,"GE SYS OIL":null,"FRESH WATER":null};
     const override = e.consOverride || {};
@@ -995,7 +1077,7 @@ function computeDerived(){
       if (unitOv.ME!=null) meCons = unitOv.ME;
       if (unitOv.GE!=null) geCons = unitOv.GE;
       if (unitOv.BLR!=null) blrCons = unitOv.BLR;
-      total = (meCons||0)+(geCons||0)+(blrCons||0);
+      total = (meCons===null && geCons===null && blrCons===null) ? null : (meCons||0)+(geCons||0)+(blrCons||0);
 
       const rawFuel = {"HFO":0,"LSFO":0,"MDO/MGO":0,"LSMGO":0};
       if (meCons) rawFuel[e.me.type] += meCons;
@@ -1044,6 +1126,17 @@ function computeDerived(){
       }
       if (speedShip!==null && !isNaN(speedShip)){ sumSpeedShip+=speedShip; cntSpeedShip++; }
 
+      // efficiency & emissions for this period
+      if (meCons!==null && kwEst!==null && kwEst>0 && hrs>0){
+        sfocAct = (meCons*1e6) / (kwEst*hrs);
+        const ref = refSfocAtLoad(mcrPct);
+        if (ref) sfocDev = ((sfocAct-ref)/ref)*100;
+        sumMeFuelMt += meCons; sumKwh += kwEst*hrs;
+      }
+      if (total!==null && e.distanceShip>0) foPerNm = (total*1000)/e.distanceShip;
+      co2 = FUEL_TYPES.reduce((s,t)=> s + (consByType[t]||0)*CO2_FACTORS[t], 0);
+      totalCo2 += co2;
+
       totalDistShip += (e.distanceShip||0);
       totalDistEngine += (distEngine||0);
       totalHrs += hrs;
@@ -1053,16 +1146,26 @@ function computeDerived(){
     return {...e, hrs, meCons, geCons, blrCons, total, cylCons, meLoCons, geLoCons, fwProdD, fwConsD,
              consByType, lubeByType,
              distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, dailyRevs,
+             sfocAct, sfocDev, foPerNm, co2,
              cumFuel: {...consByFuel}, cumLube: {...consByLube}, cumDistShip: totalDistShip};
   });
 
+  const totalFuelMt = Object.values(consByFuel).reduce((a,b)=>a+b,0);
+  const avgMcr = cntMcr? sumMcr/cntMcr : null;
+  const avgSfocAct = sumKwh>0 ? (sumMeFuelMt*1e6)/sumKwh : null;
+  const avgSfocRef = refSfocAtLoad(avgMcr);
   const perf = {
     avgRpm: cntRpm? sumRpm/cntRpm : null,
-    avgMcr: cntMcr? sumMcr/cntMcr : null,
+    avgMcr,
     avgKw: cntKw? sumKw/cntKw : null,
     avgSpeedShip: cntSpeedShip? sumSpeedShip/cntSpeedShip : null,
     avgSlip: cntSlip? sumSlip/cntSlip : null,
-    totalDistShip, totalDistEngine, totalHrs
+    totalDistShip, totalDistEngine, totalHrs,
+    avgSfocAct, avgSfocRef,
+    avgSfocDev: (avgSfocAct!=null && avgSfocRef) ? ((avgSfocAct-avgSfocRef)/avgSfocRef)*100 : null,
+    avgFoPerNm: totalDistShip>0 ? (totalFuelMt*1000)/totalDistShip : null,
+    totalCo2,
+    co2PerDay: totalHrs>0 ? totalCo2/(totalHrs/24) : null
   };
 
   return { rows, consByFuel, consByLube, perf };
@@ -1269,6 +1372,9 @@ function abstractRowCells(r){
     <td>${r.meCons===null||r.meCons===undefined?'—':fmt(r.meCons,3)}</td><td>${r.geCons===null||r.geCons===undefined?'—':fmt(r.geCons,3)}</td>
     <td>${r.blrCons===null||r.blrCons===undefined?'—':fmt(r.blrCons,3)}</td>
     <td>${r.total===null||r.total===undefined?'—':fmt(r.total,3)}</td>
+    <td>${r.sfocAct===null||r.sfocAct===undefined?'—':fmt(r.sfocAct,1)}</td>
+    <td>${r.foPerNm===null||r.foPerNm===undefined?'—':fmt(r.foPerNm,1)}</td>
+    <td>${r.co2===null||r.co2===undefined?'—':fmt(r.co2,2)}</td>
     <td>${cylText}</td>
     <td>${r.meLoCons===null||r.meLoCons===undefined?'—':fmt(r.meLoCons,1)}</td><td>${r.geLoCons===null||r.geLoCons===undefined?'—':fmt(r.geLoCons,1)}</td>
     <td>${r.fwProd===null||r.fwProd===undefined?'—':fmt(r.fwProd,0)}</td>
@@ -1279,11 +1385,13 @@ function abstractRowCells(r){
 
 const ABSTRACT_CSV_HEADER = ["DateTime","Operation","RunHrs","RPM","DistEngine","SpeedEngine","DistShip","SpeedShip","Slip%","%MCR","EstKW",
   "Cond","Hrs","DistShip2","RPM2","RevCounter","DailyRevs","MERun","GERun","BlrRun","MECons","GECons","BlrCons","TotalCons",
+  "SFOC_g_kWh","Fuel_kg_nm","CO2_MT",
   "CylOilCons","CylGrade","MELO","GELO","FWMeter","FWProduced","FWRob","FWCons"];
 function abstractRowToCsv(r){
   return [r.datetime, r.operation, r.hrs??'', r.rpm??'', r.distEngine??'', r.speedEngine??'', r.distanceShip, r.speedShip??'',
     r.slip??'', r.mcrPct??'', r.kwEst??'', r.condition, r.hrs??'', r.distanceShip, r.rpm??'', r.revCounter??'', r.dailyRevs??'',
     meterCellText(r.me), meterCellText(r.ge), r.blr.meter, r.meCons??'', r.geCons??'', r.blrCons??'', r.total??'',
+    r.sfocAct??'', r.foPerNm??'', r.co2??'',
     r.cylCons??'', r.tbn, r.meLoCons??'', r.geLoCons??'', r.fwProd??'', r.fwProdD??'', r.fwRob??'', r.fwConsD??''];
 }
 function csvEscape(v){
@@ -1377,7 +1485,7 @@ function render(){
     }).join('');
     rl.querySelectorAll('[data-del-receipt]').forEach(b=> b.addEventListener('click', async ()=>{
       state.receipts = state.receipts.filter(r=>r.id!==b.dataset.delReceipt);
-      await dbDelete('receipts', b.dataset.delReceipt);
+      await softDelete('receipts', b.dataset.delReceipt);
       render();
     }));
   }
@@ -1385,7 +1493,7 @@ function render(){
   // voyage log table
   const vlBody = document.getElementById('voyageAbstractBody');
   if (rows.length===0){
-    vlBody.innerHTML = `<tr class="empty-row"><td colspan="32">No entries yet.</td></tr>`;
+    vlBody.innerHTML = `<tr class="empty-row"><td colspan="35">No entries yet.</td></tr>`;
   } else {
     vlBody.innerHTML = rows.map(r=> `<tr>${abstractRowCells(r)}
         <td style="display:flex; gap:4px;">
@@ -1396,7 +1504,7 @@ function render(){
     vlBody.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', async ()=>{
       if (!confirm('Delete this log entry permanently?')) return;
       state.entries = state.entries.filter(e=>e.id!==b.dataset.del);
-      await dbDelete('entries', b.dataset.del);
+      await softDelete('entries', b.dataset.del);
       render();
     }));
     vlBody.querySelectorAll('[data-view]').forEach(b=> b.addEventListener('click', ()=>{
@@ -1502,6 +1610,15 @@ function render(){
     <div class="stat"><div class="num">${seaAvgDistStr}</div><div class="lbl">Distance (nm/day)</div></div>
   `;
 
+  const devColor = perf.avgSfocDev==null ? '' : (perf.avgSfocDev > 5 ? 'style="color:var(--alert);"' : (perf.avgSfocDev < 0 ? 'style="color:var(--good);"' : ''));
+  document.getElementById('efficiencyStrip').innerHTML = `
+    <div class="stat"><div class="num">${perf.avgSfocAct==null?'—':fmt(perf.avgSfocAct,1)}</div><div class="lbl">Actual SFOC (g/kWh)</div></div>
+    <div class="stat"><div class="num">${perf.avgSfocRef==null?'—':fmt(perf.avgSfocRef,1)}</div><div class="lbl">Shop Test SFOC (g/kWh)</div></div>
+    <div class="stat"><div class="num" ${devColor}>${perf.avgSfocDev==null?'—':(perf.avgSfocDev>0?'+':'')+fmt(perf.avgSfocDev,1)+'%'}</div><div class="lbl">SFOC Deviation</div></div>
+    <div class="stat"><div class="num">${perf.avgFoPerNm==null?'—':fmt(perf.avgFoPerNm,1)}</div><div class="lbl">Fuel (kg/nm)</div></div>
+    <div class="stat"><div class="num">${fmt(perf.totalCo2,1)}</div><div class="lbl">CO₂ Emitted (MT)</div></div>
+  `;
+
   document.getElementById('entryCount').textContent = `${state.entries.length} log entries · ${state.receipts.length} receipts stored locally.`;
   renderVoyageProgress();
   renderDocList();
@@ -1510,7 +1627,10 @@ function render(){
 }
 
 /* ---------------- persistence helpers ---------------- */
-async function saveSetup(){ await dbPut('meta', {key:'setup', value: state.setup}); }
+async function saveSetup(opts){
+  if (!opts || opts.touch !== false) state.setup.updatedAt = new Date().toISOString();
+  await dbPut('meta', {key:'setup', value: state.setup}, opts);
+}
 
 /* ---------------- tabs ---------------- */
 function switchTab(pageName){
@@ -2113,8 +2233,8 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
 
   state.entries = [];
   state.receipts = [];
-  await dbClear('entries');
-  await dbClear('receipts');
+  await tombstoneAllRecords('entries');
+  await tombstoneAllRecords('receipts');
   await saveSetup();
   render();
   switchTab('setup');
@@ -2248,6 +2368,9 @@ function openVoyageSummary(entryId){
     ${stat('Total Rev.', fmt(row.dailyRevs,0))}
     ${stat('Ave. KW (voyage)', fmt(perf.avgKw,0))}
     ${stat('Days To Go', daysToGoVal!=null? fmt(daysToGoVal,2):'—')}
+    ${stat('SFOC (g/kWh)', row.sfocAct==null?'—':fmt(row.sfocAct,1))}
+    ${stat('Fuel (kg/nm)', row.foPerNm==null?'—':fmt(row.foPerNm,1))}
+    ${stat('CO₂ (MT)', row.co2==null?'—':fmt(row.co2,2))}
   `;
 
   document.getElementById('vsFuelConsBox').innerHTML = `
@@ -2387,7 +2510,7 @@ function renderPrintHistoryList(){
     b.addEventListener('click', async ()=>{
       if (!confirm('Delete this print history entry?')) return;
       state.printHistory = state.printHistory.filter(p=>p.id!==b.dataset.delPrint);
-      await dbDelete('printHistory', b.dataset.delPrint);
+      await softDelete('printHistory', b.dataset.delPrint);
       renderPrintHistoryList();
     });
   });
@@ -2508,8 +2631,9 @@ function syncRpmRevCounter(sourceId){
   } else {
     const rc = parseFloat(document.getElementById('in_revCounter').value);
     if (!isNaN(rc)){
-      const rpm = (rc - prevRef.revCounter)/(runHours*60);
-      document.getElementById('in_rpm').value = rpm.toFixed(2);
+      const revs = meterDelta(rc, prevRef.revCounter, meterRollovers().rc);
+      const rpm = revs===null ? null : revs/(runHours*60);
+      if (rpm!==null) document.getElementById('in_rpm').value = rpm.toFixed(2);
     }
   }
   rpmSyncGuard = false;
@@ -2916,26 +3040,30 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
 
   const existing = editingId ? state.entries.find(x=>x.id===editingId) : null;
 
+  /* Blank optional meters MUST stay null (not 0): a saved 0 would make the next entry's
+     rollover-safe delta read as an enormous false consumption. */
+  const numOrNullField = id => { const v = document.getElementById(id).value; return v===''? null : (isNaN(parseFloat(v)) ? null : parseFloat(v)); };
+
   const entry = {
     id: editingId || uid(),
     datetime: dtVal,
     operation: document.getElementById('in_operation').value,
     condition: document.getElementById('in_condition').value,
     distanceShip: parseFloat(document.getElementById('in_distanceShip').value)||0,
-    rpm: document.getElementById('in_rpm').value===''? null : parseFloat(document.getElementById('in_rpm').value),
-    revCounter: document.getElementById('in_revCounter').value===''? null : parseFloat(document.getElementById('in_revCounter').value),
+    rpm: numOrNullField('in_rpm'),
+    revCounter: numOrNullField('in_revCounter'),
     tbn: document.getElementById('in_tbn').value,
-    meRuntime: parseFloat(document.getElementById('me_runtime').value)||null,
-    ge1Runtime: parseFloat(document.getElementById('ge1_runtime').value)||null,
-    blrRuntime: parseFloat(document.getElementById('blr_runtime').value)||null,
+    meRuntime: numOrNullField('me_runtime'),
+    ge1Runtime: numOrNullField('ge1_runtime'),
+    blrRuntime: numOrNullField('blr_runtime'),
     me: meField,
     ge: geField,
     blr:{ meter: blrMeter, type: document.getElementById('blr_type').value, sg: parseFloat(document.getElementById('blr_sg').value)||0 },
-    cylMeter: parseFloat(document.getElementById('cyl_meter').value)||0,
-    meLo: parseFloat(document.getElementById('me_lo_meter').value)||0,
-    geLo: parseFloat(document.getElementById('ge_lo_meter').value)||0,
-    fwProd: parseFloat(document.getElementById('fw_prod_meter').value)||0,
-    fwRob: document.getElementById('fw_rob_reading').value===''? null : parseFloat(document.getElementById('fw_rob_reading').value),
+    cylMeter: numOrNullField('cyl_meter'),
+    meLo: numOrNullField('me_lo_meter'),
+    geLo: numOrNullField('ge_lo_meter'),
+    fwProd: numOrNullField('fw_prod_meter'),
+    fwRob: numOrNullField('fw_rob_reading'),
     consOverride: (function(){
       const o = {};
       ROB_ROWS.forEach(r=>{
@@ -2954,6 +3082,35 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
       BLR: document.getElementById('entry_unit_blr').value==='' ? null : parseFloat(document.getElementById('entry_unit_blr').value)
     }
   };
+
+  /* Sanity checks — inspired by validation-at-source in commercial noon report systems.
+     None of these block saving; they list everything suspicious in one confirm dialog. */
+  const warnings = [];
+  const prevRef = getPrevReferenceFor(dtVal, editingId);
+  if (prevRef){
+    const hrsChk = (new Date(dtVal) - new Date(prevRef.datetime)) / 3600000;
+    if (hrsChk<=0) warnings.push('Date & Time is not after the previous entry — run hours and consumption cannot be calculated for this period.');
+    else if (hrsChk>48) warnings.push(`Period length is ${hrsChk.toFixed(1)} hrs (more than 2 days) — check the Date & Time.`);
+    const rollsChk = meterRollovers();
+    const {meRaw, geRaw} = meGeRawLitres(entry, prevRef, rollsChk);
+    const blrDChk = meterDelta(entry.blr.meter, prevRef.blr.meter, rollsChk.boiler);
+    if (meRaw!==null && meRaw<0) warnings.push('M/E fuel meter reads LESS than the previous entry — consumption would be negative.');
+    if (geRaw!==null && geRaw<0) warnings.push('G/E fuel meter reads LESS than the previous entry — consumption would be negative.');
+    if (blrDChk!==null && blrDChk<0) warnings.push('Boiler fuel meter reads LESS than the previous entry — consumption would be negative.');
+    if (entry.rpm!=null && hrsChk>0){
+      const distEngChk = entry.rpm * (state.setup.pitch||0) * 60 / 1852 * hrsChk;
+      if (distEngChk>0 && entry.distanceShip!=null){
+        const slipChk = ((distEngChk - entry.distanceShip)/distEngChk)*100;
+        if (slipChk < -15 || slipChk > 50) warnings.push(`Slip works out to ${slipChk.toFixed(1)}% — check RPM, run hours and ship's distance.`);
+      }
+    }
+  }
+  if (entry.rpm!=null && state.setup.mcrRpm && entry.rpm > state.setup.mcrRpm*1.05) warnings.push(`RPM ${entry.rpm} exceeds the 100% load RPM (${state.setup.mcrRpm}) from Setup.`);
+  if (warnings.length){
+    const ok = confirm('Please double-check this entry:\n\n• ' + warnings.join('\n• ') + '\n\nSave anyway?');
+    if (!ok) return;
+  }
+
   if (editingId){
     const idx = state.entries.findIndex(e=>e.id===editingId);
     if (idx>-1) state.entries[idx] = entry; else state.entries.push(entry);
@@ -3066,7 +3223,7 @@ function renderAbstractList(){
     b.addEventListener('click', async ()=>{
       if (!confirm('Delete this saved abstract permanently?')) return;
       state.abstracts = state.abstracts.filter(a=>a.id!==b.dataset.delAbstract);
-      await dbDelete('abstracts', b.dataset.delAbstract);
+      await softDelete('abstracts', b.dataset.delAbstract);
       renderAbstractList();
     });
   });
@@ -3119,7 +3276,7 @@ function renderDocList(){
     b.addEventListener('click', async ()=>{
       if (!confirm('Delete this document permanently?')) return;
       state.documents = state.documents.filter(d=>d.id!==b.dataset.delDoc);
-      await dbDelete('documents', b.dataset.delDoc);
+      await softDelete('documents', b.dataset.delDoc);
       renderDocList();
     });
   });
@@ -3195,7 +3352,7 @@ document.getElementById('btnAddReceipt').addEventListener('click', async ()=>{
 
 /* ---------------- export / import ---------------- */
 document.getElementById('btnExportJSON').addEventListener('click', ()=>{
-  const payload = { setup: state.setup, entries: state.entries, receipts: state.receipts, documents: state.documents, exportedAt: new Date().toISOString() };
+  const payload = { setup: state.setup, entries: state.entries, receipts: state.receipts, documents: state.documents, abstracts: state.abstracts, printHistory: state.printHistory, exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -3224,10 +3381,12 @@ document.getElementById('fileImport').addEventListener('change', (ev)=>{
       state.entries = (payload.entries || []).map(normalizeEntry);
       state.receipts = payload.receipts || [];
       state.documents = payload.documents || [];
-      await dbClear('entries'); await dbClear('receipts'); await dbClear('documents');
+      await tombstoneAllRecords('entries'); await tombstoneAllRecords('receipts'); await tombstoneAllRecords('documents');
       for (const en of state.entries) await dbPut('entries', en);
       for (const r of state.receipts) await dbPut('receipts', r);
       for (const doc of state.documents) await dbPut('documents', doc);
+      if (payload.abstracts) { state.abstracts = payload.abstracts; for (const a of payload.abstracts) await dbPut('abstracts', a); }
+      if (payload.printHistory) { state.printHistory = payload.printHistory; for (const p of payload.printHistory) await dbPut('printHistory', p); }
       await saveSetup();
       render();
       applyEntryDefaults();
@@ -3338,11 +3497,26 @@ function migrateSetup(setup){
     const metaAll = await dbGetAll('meta');
     const setupRow = metaAll.find(m=>m.key==='setup');
     if (setupRow) state.setup = migrateSetup(Object.assign(state.setup, setupRow.value));
-    state.entries = await dbGetAll('entries');
-    state.receipts = await dbGetAll('receipts');
-    state.documents = await dbGetAll('documents');
-    state.abstracts = await dbGetAll('abstracts');
-    state.printHistory = await dbGetAll('printHistory');
+
+    // One-time migration: stamp updatedAt on records saved by older versions so the
+    // sync engine knows to push them on the first sync.
+    for (const store of SYNC_STORES){
+      const all = await dbGetAll(store);
+      for (const rec of all){ if (!rec.updatedAt) await dbPut(store, rec); }
+    }
+    if (setupRow && !state.setup.updatedAt) await saveSetup();
+
+    state.entries = liveRecords(await dbGetAll('entries'));
+    state.receipts = liveRecords(await dbGetAll('receipts'));
+    state.documents = liveRecords(await dbGetAll('documents'));
+    state.abstracts = liveRecords(await dbGetAll('abstracts'));
+    state.printHistory = liveRecords(await dbGetAll('printHistory'));
+
+    const syncRow = metaAll.find(m=>m.key==='syncConfig');
+    if (syncRow) Object.assign(syncConfig, syncRow.value);
+    const syncMetaRow = metaAll.find(m=>m.key==='syncMeta');
+    if (syncMetaRow) Object.assign(syncMeta, syncMetaRow.value);
+    initSyncUI();
 
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -3353,13 +3527,213 @@ function migrateSetup(setup){
 
     render();
     applyEntryDefaults();
-    document.getElementById('dbStatus').textContent = '● local database ready';
+    updateDbStatus();
+    if (syncConfig.auto && navigator.onLine && syncConfig.url) syncNow(true);
   } catch(e){
     console.error('Startup error:', e);
     document.getElementById('dbStatus').textContent = '● local database error — see console';
     alert('This app could not open its local database on startup: ' + e.message + '\n\nTry closing any other tabs/windows with this same file open, then reload this page. (Check the browser console for full details.)');
   }
 })();
+
+/* ---------------- sync engine (offline-first, self-hosted server) ---------------- */
+const SYNC_STORES = ['entries','receipts','documents','abstracts','printHistory'];
+const syncConfig = { url:'', token:'', shipId:'', auto:false };
+/* sinceRev: server-side revision watermark (what we've already pulled).
+   pushWatermark: client-side updatedAt watermark (what we've already pushed) — compared
+   against timestamps this device wrote itself, so clock skew between devices is irrelevant. */
+const syncMeta = { sinceRev: 0, pushWatermark: '' };
+let syncInFlight = false;
+let autoSyncTimer = null;
+
+function updateDbStatus(extra){
+  const el = document.getElementById('dbStatus');
+  if (!el) return;
+  const net = navigator.onLine ? '' : ' · offline';
+  el.textContent = '● local database ready' + net + (extra ? ' · ' + extra : '');
+}
+window.addEventListener('online', ()=>{ updateDbStatus(); if (syncConfig.auto && syncConfig.url) syncNow(true); });
+window.addEventListener('offline', ()=>updateDbStatus());
+
+function syncLog(msg, isError){
+  const box = document.getElementById('syncLog');
+  if (!box) return;
+  if (box.textContent.startsWith('No sync activity')) box.textContent = '';
+  const line = document.createElement('div');
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  if (isError) line.style.color = 'var(--alert)';
+  box.prepend(line);
+  while (box.children.length > 60) box.removeChild(box.lastChild);
+}
+
+function scheduleAutoSync(){
+  if (!syncConfig.auto || !syncConfig.url) { renderSyncStatus(); return; }
+  clearTimeout(autoSyncTimer);
+  autoSyncTimer = setTimeout(()=>{ if (navigator.onLine) syncNow(true); }, 4000);
+  renderSyncStatus();
+}
+
+async function collectLocalRecords(sinceWatermark){
+  const out = [];
+  for (const store of SYNC_STORES){
+    const all = await dbGetAll(store);
+    for (const rec of all){
+      if (!rec.updatedAt) continue;
+      if (!sinceWatermark || rec.updatedAt > sinceWatermark){
+        out.push({ store, id: rec.id, updatedAt: rec.updatedAt, deleted: !!rec.deleted, data: rec.deleted ? null : rec });
+      }
+    }
+  }
+  if (state.setup.updatedAt && (!sinceWatermark || state.setup.updatedAt > sinceWatermark)){
+    out.push({ store:'meta', id:'setup', updatedAt: state.setup.updatedAt, deleted:false, data: state.setup });
+  }
+  return out;
+}
+
+async function countPendingChanges(){
+  try { return (await collectLocalRecords(syncMeta.pushWatermark)).length; }
+  catch(e){ return 0; }
+}
+
+async function renderSyncStatus(){
+  const strip = document.getElementById('syncStatusStrip');
+  if (!strip) return;
+  const pending = await countPendingChanges();
+  const last = syncMeta.lastSyncAt ? new Date(syncMeta.lastSyncAt).toLocaleString() : 'never';
+  strip.innerHTML = `
+    <div class="stat"><div class="num">${navigator.onLine ? 'ONLINE' : 'OFFLINE'}</div><div class="lbl">Network</div></div>
+    <div class="stat"><div class="num">${pending}</div><div class="lbl">Changes waiting to upload</div></div>
+    <div class="stat"><div class="num">${last}</div><div class="lbl">Last successful sync</div></div>`;
+}
+
+async function saveSyncState(){
+  await dbPut('meta', {key:'syncConfig', value:{...syncConfig}}, {touch:false});
+  await dbPut('meta', {key:'syncMeta', value:{...syncMeta}}, {touch:false});
+}
+
+function syncEndpoint(path){
+  let base = (syncConfig.url||'').trim().replace(/\/+$/,'');
+  return base + path;
+}
+
+async function syncFetch(path, payload){
+  const headers = {'Content-Type':'application/json'};
+  if (syncConfig.token) headers['Authorization'] = 'Bearer ' + syncConfig.token;
+  const resp = await fetch(syncEndpoint(path), {
+    method:'POST', headers, body: JSON.stringify(payload)
+  });
+  if (!resp.ok){
+    const text = await resp.text().catch(()=> '');
+    throw new Error(`server responded ${resp.status} ${text.slice(0,120)}`);
+  }
+  return resp.json();
+}
+
+async function applyRemoteRecords(records){
+  let applied = 0;
+  const localMaps = {};
+  for (const store of SYNC_STORES){
+    localMaps[store] = new Map((await dbGetAll(store)).map(r=>[r.id, r]));
+  }
+  for (const rec of records){
+    if (rec.store === 'meta' && rec.id === 'setup'){
+      if (!state.setup.updatedAt || rec.updatedAt > state.setup.updatedAt){
+        state.setup = migrateSetup(rec.data);
+        state.setup.updatedAt = rec.updatedAt;
+        await saveSetup({touch:false});
+        applied++;
+      }
+      continue;
+    }
+    if (!SYNC_STORES.includes(rec.store)) continue;
+    const local = localMaps[rec.store].get(rec.id);
+    if (local && local.updatedAt && local.updatedAt >= rec.updatedAt) continue;
+    const obj = rec.deleted ? {id: rec.id, deleted:true, updatedAt: rec.updatedAt} : {...rec.data, updatedAt: rec.updatedAt};
+    await dbPut(rec.store, obj, {touch:false});
+    applied++;
+  }
+  if (applied){
+    state.entries = liveRecords(await dbGetAll('entries')).map(normalizeEntry);
+    state.receipts = liveRecords(await dbGetAll('receipts'));
+    state.documents = liveRecords(await dbGetAll('documents'));
+    state.abstracts = liveRecords(await dbGetAll('abstracts'));
+    state.printHistory = liveRecords(await dbGetAll('printHistory'));
+    render();
+    applyEntryDefaults();
+  }
+  return applied;
+}
+
+async function syncNow(quiet){
+  if (syncInFlight) return;
+  if (!syncConfig.url){ if (!quiet) alert('Set the Server URL in Sync settings first.'); return; }
+  if (!navigator.onLine){ syncLog('Offline — sync skipped.', true); renderSyncStatus(); return; }
+  syncInFlight = true;
+  updateDbStatus('syncing…');
+  try{
+    const changes = await collectLocalRecords(syncMeta.pushWatermark);
+    const payload = {
+      shipId: syncConfig.shipId || 'default',
+      sinceRev: syncMeta.sinceRev || 0,
+      records: changes
+    };
+    const resp = await syncFetch('/api/sync', payload);
+    const applied = await applyRemoteRecords(resp.records || []);
+    syncMeta.sinceRev = resp.rev ?? syncMeta.sinceRev;
+    let maxLocal = syncMeta.pushWatermark || '';
+    for (const c of changes) if (c.updatedAt > maxLocal) maxLocal = c.updatedAt;
+    syncMeta.pushWatermark = maxLocal;
+    syncMeta.lastSyncAt = new Date().toISOString();
+    await saveSyncState();
+    syncLog(`Sync OK — sent ${changes.length} change(s), received ${(resp.records||[]).length}, applied ${applied}.`);
+    updateDbStatus('synced');
+  }catch(e){
+    console.error('Sync error:', e);
+    syncLog('Sync failed: ' + e.message, true);
+    updateDbStatus('sync failed');
+  }finally{
+    syncInFlight = false;
+    renderSyncStatus();
+  }
+}
+
+function initSyncUI(){
+  const setVal = (id,v)=>{ const el=document.getElementById(id); if (el) el.value=v; };
+  // When the app is served from the sync server itself, default the URL to this origin.
+  if (!syncConfig.url && location.protocol.startsWith('http')) syncConfig.url = location.origin;
+  if (!syncConfig.shipId && state.setup.vesselName) syncConfig.shipId = state.setup.vesselName.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  setVal('sync_url', syncConfig.url||'');
+  setVal('sync_token', syncConfig.token||'');
+  setVal('sync_shipId', syncConfig.shipId||'');
+  setVal('sync_auto', syncConfig.auto ? 'on':'off');
+  renderSyncStatus();
+
+  document.getElementById('btnSaveSyncConfig').addEventListener('click', async ()=>{
+    syncConfig.url = document.getElementById('sync_url').value.trim();
+    syncConfig.token = document.getElementById('sync_token').value.trim();
+    syncConfig.shipId = document.getElementById('sync_shipId').value.trim();
+    syncConfig.auto = document.getElementById('sync_auto').value === 'on';
+    await saveSyncState();
+    syncLog('Sync settings saved.');
+    renderSyncStatus();
+  });
+  document.getElementById('btnTestSync').addEventListener('click', async ()=>{
+    syncConfig.url = document.getElementById('sync_url').value.trim();
+    syncConfig.token = document.getElementById('sync_token').value.trim();
+    try{
+      const resp = await syncFetch('/api/health', {});
+      syncLog(`Connection OK — server "${resp.name||'noon-report-sync'}" v${resp.version||'?'} reachable.`);
+    }catch(e){
+      syncLog('Connection test failed: ' + e.message, true);
+    }
+  });
+  document.getElementById('btnSyncNow').addEventListener('click', ()=> syncNow(false));
+}
+
+/* ---------------- PWA: offline app shell ---------------- */
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  navigator.serviceWorker.register('sw.js').catch(err=>console.warn('Service worker registration failed (offline install unavailable):', err));
+}
 </script>
 </body>
 </html>
