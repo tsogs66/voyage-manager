@@ -13,6 +13,45 @@ Works on **Android phones** and **PC browsers** as a Progressive Web App (PWA), 
 - **Server sync**: push/pull JSON snapshots per vessel + voyage when online
 - **Export/import**: JSON backup and CSV exports
 
+## Proxmox install (one-liner)
+
+On a fresh **Debian/Ubuntu LXC** (or VM) with network access:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-install.sh | sudo bash
+```
+
+### Step-by-step on Proxmox
+
+1. **Create LXC** on the Proxmox host (example CT ID 120):
+   ```bash
+   pct create 120 local:vztmpl/debian-12-standard_12.0-1_amd64.tar.zst \
+     --hostname voyage-manager --memory 1024 --cores 1 --rootfs local-lvm:8 \
+     --net0 name=eth0,bridge=vmbr0,ip=dhcp --unprivileged 1
+   pct start 120
+   ```
+
+2. **Enter the container** and run the installer:
+   ```bash
+   pct enter 120
+   curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-install.sh | bash
+   ```
+
+3. **Open the app** at `http://<container-ip>:8080/voyage_manager.html`
+
+4. **Optional — Cloudflare Tunnel** (expose sync + app securely):
+   ```bash
+   cloudflared tunnel --url http://127.0.0.1:8080
+   ```
+
+5. **Configure sync** in the app Data tab using the API token printed by the installer.
+
+Custom install directory or token:
+```bash
+sudo VOYAGE_INSTALL_DIR=/opt/voyage-manager VOYAGE_SYNC_TOKEN='your-token' \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-install.sh)"
+```
+
 ## Quick Start (Local / Ship PC)
 
 Serve the folder over HTTP (required for PWA and service worker — `file://` URLs will not register a service worker):
