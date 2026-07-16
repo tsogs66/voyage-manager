@@ -1,0 +1,17 @@
+{
+  "name": "Noon Report — Engine Log",
+  "short_name": "Noon Report",
+  "description": "Offline-first engine-department voyage log: fuel consumption, RPM, speed, slip, %MCR/KW and ROB, with optional sync to your own server.",
+  "start_url": "./voyage_manager.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a1420",
+  "theme_color": "#0a1420",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

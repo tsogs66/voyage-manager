@@ -3,7 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <title>Noon Report — Engine Log</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a1420">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Noon Report">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -170,7 +178,10 @@
         <div class="subtitle">Engine Department — Voyage Log &amp; Performance</div>
       </div>
     </div>
-    <div id="dbStatus">● local database ready</div>
+    <div style="text-align:right;">
+      <div id="dbStatus">● local database ready</div>
+      <div id="syncStatus" style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--paper-dim); margin-top:2px;">○ sync off</div>
+    </div>
   </div>
 
   <div class="tabs" id="tabs">
@@ -635,6 +646,7 @@
     <div class="panel">
       <h2>Performance Averages</h2>
       <div class="stat-strip cols5" id="perfTotalsStrip"></div>
+      <div class="hint" id="sfocSummary" style="margin-top:12px;"></div>
     </div>
     <div class="panel">
       <h2>Average Consumption Per Day</h2>
@@ -773,6 +785,27 @@
       <div class="hint">"Export Setup Only" saves just the Setup tab's configuration (vessel details, engine data, flowmeter arrangement, fuel/lube defaults, opening ROB, tank capacities) without any voyage log entries or receipts — handy as a reusable template for a new voyage. "Import Setup Only" loads just that configuration back in and leaves your current log entries and receipts untouched (unlike "Import Backup", which replaces everything).</div>
       <div class="hint" id="entryCount"></div>
     </div>
+
+    <div class="panel">
+      <h2>Cloud Sync (optional)</h2>
+      <p class="hint">Keep this device in step with your other devices (phone ⇄ PC) through your own self-hosted server — typically a small Linux box exposed with a Cloudflare Tunnel. Everything is stored locally first, so the app keeps working with no internet; changes are reconciled automatically whenever the server is reachable. Leave these blank to run purely offline/local.</p>
+      <div class="form-grid cols2" style="margin-top:12px;">
+        <div class="field span2"><label>Server URL (e.g. https://noon.yourdomain.com)</label><input id="sync_serverUrl" placeholder="https://noon.example.com"></div>
+        <div class="field"><label>Vessel ID (shared across your devices)</label><input id="sync_vesselId" placeholder="e.g. captain-veniamis"></div>
+        <div class="field"><label>Access Token (must match server SYNC_TOKEN)</label><input id="sync_token" type="password" placeholder="shared secret"></div>
+      </div>
+      <div class="btn-row" style="align-items:center;">
+        <label class="hint" style="display:flex; align-items:center; gap:6px; margin:0;"><input type="checkbox" id="sync_auto" style="width:auto;"> Auto-sync when online</label>
+      </div>
+      <div class="btn-row">
+        <button class="primary small" id="btnSaveSync">Save Sync Settings</button>
+        <button class="ghost small" id="btnSyncNow">Sync Now</button>
+        <button class="ghost small" id="btnTestSync">Test Connection</button>
+        <button class="ghost small" id="btnInstallApp" style="display:none;">Install App</button>
+      </div>
+      <div class="hint" id="syncPanelInfo" style="margin-top:10px;"></div>
+      <div class="hint">Conflict handling is last-write-wins per record (newest edit across all devices wins), and deletions propagate. The same Vessel ID must be used on every device that should share one voyage database. See <b>README.md</b> for the one-command server setup and Cloudflare Tunnel steps.</div>
+    </div>
   </div>
 
   <div class="footer-note">Standalone recreation of the Voyage Log / Noon Report — Setup, Consumption, Performance, ROB, Receipts &amp; Summary — runs entirely in your browser with its own local database.</div>
@@ -803,7 +836,7 @@ let dbOpenPromise = null;
 function openDB(){
   if (dbOpenPromise) return dbOpenPromise;
   dbOpenPromise = new Promise((resolve,reject)=>{
-    const req = indexedDB.open('noonReportDB', 4);
+    const req = indexedDB.open('noonReportDB', 5);
     req.onupgradeneeded = (e)=>{
       const d = e.target.result;
       if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta', {keyPath:'key'});
@@ -812,6 +845,8 @@ function openDB(){
       if (!d.objectStoreNames.contains('documents')) d.createObjectStore('documents', {keyPath:'id'});
       if (!d.objectStoreNames.contains('abstracts')) d.createObjectStore('abstracts', {keyPath:'id'});
       if (!d.objectStoreNames.contains('printHistory')) d.createObjectStore('printHistory', {keyPath:'id'});
+      // tombstones let record deletions propagate to other devices during sync
+      if (!d.objectStoreNames.contains('tombstones')) d.createObjectStore('tombstones', {keyPath:'id'});
     };
     req.onsuccess = (e)=>{ db = e.target.result; db.onversionchange = ()=>{ db.close(); db = null; dbOpenPromise = null; }; resolve(db); };
     req.onerror = (e)=>{ dbOpenPromise = null; reject(req.error || new Error('IndexedDB failed to open')); };
@@ -825,10 +860,48 @@ async function ensureDB(){
   return db;
 }
 async function txStore(name, mode){ const d = await ensureDB(); return d.transaction(name, mode).objectStore(name); }
-async function dbPut(store, obj){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.put(obj); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
-async function dbDelete(store, key){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.delete(key); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+
+/* Stores whose records participate in multi-device sync (each gets an
+   updatedAt stamp on write, and a tombstone on delete). */
+const SYNC_STORES = ['entries','receipts','documents','abstracts','printHistory'];
+
+/* Low-level put/delete that do NOT touch sync metadata — used when applying
+   changes pulled from the server so we don't restamp/loop. */
+async function dbPutRaw(store, obj){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.put(obj); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+async function dbDeleteRaw(store, key){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.delete(key); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+
+async function recordTombstone(store, key){
+  await dbPutRaw('tombstones', { id: store+':'+key, store, recordId: key, updatedAt: Date.now() });
+}
+
+/* App-facing put: stamps updatedAt for synced stores and clears any stale
+   tombstone for the record (an update supersedes a prior delete). */
+async function dbPut(store, obj){
+  if (SYNC_STORES.includes(store) && obj && typeof obj === 'object'){
+    obj.updatedAt = Date.now();
+    await dbDeleteRaw('tombstones', store+':'+obj.id).catch(()=>{});
+  }
+  await dbPutRaw(store, obj);
+  if (SYNC_STORES.includes(store)) scheduleAutoSync();
+}
+/* App-facing delete: leaves a tombstone so the deletion syncs to other devices. */
+async function dbDelete(store, key){
+  await dbDeleteRaw(store, key);
+  if (SYNC_STORES.includes(store)){ await recordTombstone(store, key); scheduleAutoSync(); }
+}
 async function dbGetAll(store){ const s = await txStore(store,'readonly'); return new Promise((res,rej)=>{ const r = s.getAll(); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
-async function dbClear(store){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+async function dbGet(store, key){ const s = await txStore(store,'readonly'); return new Promise((res,rej)=>{ const r = s.get(key); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+/* App-facing clear: records a tombstone for every existing record so mass
+   deletions (Create New Voyage, Import) also propagate through sync. */
+async function dbClear(store){
+  if (SYNC_STORES.includes(store)){
+    const all = await dbGetAll(store);
+    for (const rec of all){ if (rec && rec.id!=null) await recordTombstone(store, rec.id); }
+  }
+  const s = await txStore(store,'readwrite');
+  await new Promise((res,rej)=>{ const r = s.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
+  if (SYNC_STORES.includes(store)) scheduleAutoSync();
+}
 
 /* ---------------- state ---------------- */
 const state = {
@@ -963,12 +1036,13 @@ function computeDerived(){
   const consByLube = {"CYL HIGH":0,"CYL LOW":0,"ME SYS OIL":0,"GE SYS OIL":0,"FRESH WATER":0};
   let totalDistShip=0, totalDistEngine=0, totalHrs=0;
   let sumRpm=0, cntRpm=0, sumMcr=0, cntMcr=0, sumKw=0, cntKw=0, sumSpeedShip=0, cntSpeedShip=0, sumSlip=0, cntSlip=0;
+  let sumSfoc=0, cntSfoc=0, sumMeCons=0, sumMeKwh=0;
 
   let prev = effectiveCarryover();
   const rows = list.map(e=>{
     let hrs=null, meCons=null, geCons=null, blrCons=null, total=null;
     let cylCons=null, meLoCons=null, geLoCons=null, dailyRevs=null, fwProdD=null, fwConsD=null;
-    let distEngine=null, speedEngine=null, speedShip=null, slip=null, mcrPct=null, kwEst=null;
+    let distEngine=null, speedEngine=null, speedShip=null, slip=null, mcrPct=null, kwEst=null, meSfoc=null;
     let consByType = {"HFO":null,"LSFO":null,"MDO/MGO":null,"LSMGO":null};
     let lubeByType = {"CYL HIGH":null,"CYL LOW":null,"ME SYS OIL":null,"GE SYS OIL":null,"FRESH WATER":null};
     const override = e.consOverride || {};
@@ -996,6 +1070,13 @@ function computeDerived(){
       if (unitOv.GE!=null) geCons = unitOv.GE;
       if (unitOv.BLR!=null) blrCons = unitOv.BLR;
       total = (meCons||0)+(geCons||0)+(blrCons||0);
+
+      // Actual M/E specific fuel oil consumption: g of fuel / (kW · h)
+      if (meCons!=null && meCons>0 && kwEst!=null && kwEst>0 && hrs>0){
+        meSfoc = (meCons*1e6)/(kwEst*hrs);
+        sumSfoc += meSfoc; cntSfoc++;
+        sumMeCons += meCons; sumMeKwh += kwEst*hrs;
+      }
 
       const rawFuel = {"HFO":0,"LSFO":0,"MDO/MGO":0,"LSMGO":0};
       if (meCons) rawFuel[e.me.type] += meCons;
@@ -1052,7 +1133,7 @@ function computeDerived(){
     prev = e;
     return {...e, hrs, meCons, geCons, blrCons, total, cylCons, meLoCons, geLoCons, fwProdD, fwConsD,
              consByType, lubeByType,
-             distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, dailyRevs,
+             distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, meSfoc, dailyRevs,
              cumFuel: {...consByFuel}, cumLube: {...consByLube}, cumDistShip: totalDistShip};
   });
 
@@ -1062,6 +1143,8 @@ function computeDerived(){
     avgKw: cntKw? sumKw/cntKw : null,
     avgSpeedShip: cntSpeedShip? sumSpeedShip/cntSpeedShip : null,
     avgSlip: cntSlip? sumSlip/cntSlip : null,
+    avgSfoc: cntSfoc? sumSfoc/cntSfoc : null,
+    weightedSfoc: sumMeKwh>0 ? (sumMeCons*1e6)/sumMeKwh : null,
     totalDistShip, totalDistEngine, totalHrs
   };
 
@@ -1502,6 +1585,26 @@ function render(){
     <div class="stat"><div class="num">${seaAvgDistStr}</div><div class="lbl">Distance (nm/day)</div></div>
   `;
 
+  // M/E specific fuel oil consumption (actual vs manufacturer reference)
+  const sfocEl = document.getElementById('sfocSummary');
+  if (sfocEl){
+    const actual = perf.weightedSfoc;
+    const s100 = state.setup.sfoc100, s85 = state.setup.sfoc85;
+    let refTxt = '';
+    if (s100!=null || s85!=null){
+      refTxt = ` Reference: ${s100!=null?fmt(s100,1)+' @100%':''}${(s100!=null&&s85!=null)?' · ':''}${s85!=null?fmt(s85,1)+' @85%':''} g/kWh.`;
+      // interpolate a reference at the voyage average load for a like-for-like delta
+      if (actual!=null && s100!=null && s85!=null && perf.avgMcr!=null){
+        const ref = s85 + (s100 - s85) * (perf.avgMcr - 85) / (100 - 85);
+        const delta = actual - ref;
+        const pctDelta = ref>0 ? (delta/ref*100) : null;
+        const color = delta>ref*0.05 ? 'var(--alert)' : (delta<-ref*0.02 ? 'var(--good)' : 'var(--teal)');
+        refTxt += ` At the voyage's ${fmt(perf.avgMcr,0)}% load the reference is ≈${fmt(ref,1)} g/kWh — <span style="color:${color}">actual is ${delta>=0?'+':''}${fmt(delta,1)} g/kWh${pctDelta!=null?` (${pctDelta>=0?'+':''}${fmt(pctDelta,1)}%)`:''}</span>.`;
+      }
+    }
+    sfocEl.innerHTML = `<b>M/E Specific Fuel Oil Consumption (actual):</b> ${actual==null?'—':fmt(actual,1)+' g/kWh'} (energy-weighted)${perf.avgSfoc!=null?` · ${fmt(perf.avgSfoc,1)} g/kWh (simple avg)`:''}.${refTxt}`;
+  }
+
   document.getElementById('entryCount').textContent = `${state.entries.length} log entries · ${state.receipts.length} receipts stored locally.`;
   renderVoyageProgress();
   renderDocList();
@@ -1510,7 +1613,7 @@ function render(){
 }
 
 /* ---------------- persistence helpers ---------------- */
-async function saveSetup(){ await dbPut('meta', {key:'setup', value: state.setup}); }
+async function saveSetup(){ state.setup.updatedAt = Date.now(); await dbPutRaw('meta', {key:'setup', value: state.setup}); scheduleAutoSync(); }
 
 /* ---------------- tabs ---------------- */
 function switchTab(pageName){
@@ -2557,7 +2660,7 @@ function updateLivePreview(){
   const pitch = state.setup.pitch||0, mcrRpm = state.setup.mcrRpm||1, mcrKw = state.setup.mcrKw||0;
   const propConstant = pitch*60/1852;
 
-  let hrs=null, meCons=null, geCons=null, blrCons=null, total=null, distEngine=null, slip=null, kwEst=null, mcrPct=null, dailyRevs=null, speedEngine=null;
+  let hrs=null, meCons=null, geCons=null, blrCons=null, total=null, distEngine=null, slip=null, kwEst=null, mcrPct=null, dailyRevs=null, speedEngine=null, meSfoc=null;
 
   if (curEntry.rpm!=null){
     mcrPct = Math.pow(curEntry.rpm/mcrRpm, 3) * 100;
@@ -2589,6 +2692,9 @@ function updateLivePreview(){
           slip = ((distEngine - curEntry.distanceShip)/distEngine)*100;
         }
       }
+      if (meCons!=null && meCons>0 && kwEst!=null && kwEst>0 && hrs>0){
+        meSfoc = (meCons*1e6)/(kwEst*hrs);
+      }
     }
   }
 
@@ -2602,6 +2708,7 @@ function updateLivePreview(){
     stat('Total Cons (MT)', total==null?'—':fmt(total,3)) +
     stat('M/E Load (KW)', kwEst==null?'—':fmt(kwEst,0)) +
     stat('M/E Load (%)', mcrPct==null?'—':fmt(mcrPct,1)) +
+    stat('M/E SFOC (g/kWh)', meSfoc==null?'—':fmt(meSfoc,1)) +
     stat('Engine Speed (kn)', speedEngine==null?'—':fmt(speedEngine,2)) +
     stat('Engine Distance (nm)', distEngine==null?'—':fmt(distEngine,2)) +
     stat('Slip (%)', slip==null?'—':fmt(slip,2));
@@ -3331,6 +3438,224 @@ function migrateSetup(setup){
   return setup;
 }
 
+/* ================================================================
+   OFFLINE-FIRST SYNC  (optional — app works fully without it)
+   Syncs entries/receipts/documents/abstracts/printHistory + setup to a
+   self-hosted server via a single POST /api/sync round trip. Records use
+   last-write-wins by updatedAt; deletions carry tombstones. All local data
+   lives in IndexedDB, so the app keeps working offline and reconciles when
+   a connection (e.g. through Cloudflare) is available again.
+   ================================================================ */
+let syncConfig = { serverUrl:'', vesselId:'', token:'', autoSync:true };
+let syncCursor = { lastRev:0, lastSyncAt:0 };
+let syncing = false;
+let autoSyncTimer = null;
+let pendingAutoSync = false;
+
+async function loadSyncSettings(){
+  const cfg = await dbGet('meta','syncConfig');
+  if (cfg && cfg.value) syncConfig = Object.assign(syncConfig, cfg.value);
+  const cur = await dbGet('meta','syncState');
+  if (cur && cur.value) syncCursor = Object.assign(syncCursor, cur.value);
+}
+async function saveSyncSettings(){ await dbPutRaw('meta', {key:'syncConfig', value: syncConfig}); }
+async function saveSyncCursor(){ await dbPutRaw('meta', {key:'syncState', value: syncCursor}); }
+
+function syncConfigured(){ return !!(syncConfig.serverUrl && syncConfig.vesselId); }
+function apiUrl(){ return syncConfig.serverUrl.replace(/\/+$/,'') + '/api/sync'; }
+
+async function countPending(){
+  let n = 0;
+  for (const store of SYNC_STORES){
+    const all = await dbGetAll(store);
+    n += all.filter(r=> (r.updatedAt||0) > syncCursor.lastSyncAt).length;
+  }
+  const tombs = await dbGetAll('tombstones');
+  n += tombs.filter(t=> (t.updatedAt||0) > syncCursor.lastSyncAt).length;
+  if ((state.setup.updatedAt||0) > syncCursor.lastSyncAt) n += 1;
+  return n;
+}
+
+async function buildPush(sinceMs){
+  const collections = {};
+  for (const store of SYNC_STORES){
+    const all = await dbGetAll(store);
+    collections[store] = all
+      .filter(r=> (r.updatedAt||0) > sinceMs)
+      .map(r=> ({ id:r.id, updatedAt:r.updatedAt, deleted:false, record:r }));
+  }
+  const tombs = await dbGetAll('tombstones');
+  tombs.filter(t=> (t.updatedAt||0) > sinceMs).forEach(t=>{
+    if (!collections[t.store]) collections[t.store] = [];
+    collections[t.store].push({ id:t.recordId, updatedAt:t.updatedAt, deleted:true });
+  });
+  const push = { collections };
+  if ((state.setup.updatedAt||0) > sinceMs){
+    push.setup = { value: state.setup, updatedAt: state.setup.updatedAt };
+  }
+  return push;
+}
+
+async function applyRemote(resp){
+  // setup (last-write-wins vs local)
+  if (resp.setup && resp.setup.value !== undefined){
+    if ((resp.setup.updatedAt||0) > (state.setup.updatedAt||0)){
+      state.setup = migrateSetup(resp.setup.value);
+      state.setup.updatedAt = resp.setup.updatedAt;
+      await dbPutRaw('meta', {key:'setup', value: state.setup});
+    }
+  }
+  const cols = resp.collections || {};
+  for (const store of SYNC_STORES){
+    const arr = Array.isArray(cols[store]) ? cols[store] : [];
+    for (const rec of arr){
+      const localTomb = await dbGet('tombstones', store+':'+rec.id);
+      const local = await dbGet(store, rec.id);
+      const localTs = Math.max(local?local.updatedAt||0:0, localTomb?localTomb.updatedAt||0:0);
+      if ((rec.updatedAt||0) <= localTs) continue; // local is newer or equal — keep it
+      if (rec.deleted){
+        await dbDeleteRaw(store, rec.id);
+        await dbPutRaw('tombstones', {id:store+':'+rec.id, store, recordId:rec.id, updatedAt:rec.updatedAt});
+      } else if (rec.record){
+        const obj = rec.record; obj.id = rec.id; obj.updatedAt = rec.updatedAt;
+        await dbPutRaw(store, obj);
+        await dbDeleteRaw('tombstones', store+':'+rec.id).catch(()=>{});
+      }
+    }
+  }
+}
+
+async function reloadStateFromDB(){
+  state.entries = await dbGetAll('entries');
+  state.receipts = await dbGetAll('receipts');
+  state.documents = await dbGetAll('documents');
+  state.abstracts = await dbGetAll('abstracts');
+  state.printHistory = await dbGetAll('printHistory');
+}
+
+async function syncNow(opts){
+  opts = opts || {};
+  if (syncing) return {ok:false, reason:'busy'};
+  if (!syncConfigured()){ if (!opts.silent) alert('Set the server URL and Vessel ID in the Sync panel first.'); return {ok:false, reason:'unconfigured'}; }
+  if (!navigator.onLine){ renderSyncStatus('offline'); return {ok:false, reason:'offline'}; }
+  syncing = true; renderSyncStatus('syncing');
+  const startedAt = Date.now();
+  try {
+    const push = await buildPush(syncCursor.lastSyncAt);
+    const res = await fetch(apiUrl(), {
+      method:'POST',
+      headers: Object.assign({'Content-Type':'application/json'}, syncConfig.token ? {'Authorization':'Bearer '+syncConfig.token} : {}),
+      body: JSON.stringify({ vesselId: syncConfig.vesselId, since: syncCursor.lastRev||0, push })
+    });
+    if (res.status===401){ syncing=false; renderSyncStatus('auth'); if (!opts.silent) alert('Sync rejected: wrong or missing token.'); return {ok:false, reason:'auth'}; }
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const resp = await res.json();
+    await applyRemote(resp);
+    // prune tombstones the server now has
+    const tombs = await dbGetAll('tombstones');
+    for (const t of tombs){ if ((t.updatedAt||0) <= startedAt) await dbDeleteRaw('tombstones', t.id); }
+    syncCursor.lastRev = resp.serverRev || syncCursor.lastRev;
+    syncCursor.lastSyncAt = startedAt;
+    await saveSyncCursor();
+    await reloadStateFromDB();
+    render();
+    renderSyncStatus('ok');
+    return {ok:true};
+  } catch(e){
+    console.error('Sync error:', e);
+    renderSyncStatus('error', e.message);
+    if (!opts.silent) alert('Sync failed: ' + e.message + '\n\nYour data is safe locally and will sync once the server is reachable.');
+    return {ok:false, reason:'error', error:e};
+  } finally {
+    syncing = false;
+    renderSyncPanel();
+  }
+}
+
+function scheduleAutoSync(){
+  if (!syncConfig.autoSync || !syncConfigured()) return;
+  pendingAutoSync = true;
+  clearTimeout(autoSyncTimer);
+  autoSyncTimer = setTimeout(()=>{ pendingAutoSync=false; syncNow({silent:true}); }, 2500);
+}
+
+function renderSyncStatus(kind, detail){
+  const el = document.getElementById('syncStatus');
+  if (!el) return;
+  const online = navigator.onLine;
+  if (!syncConfigured()){ el.textContent = '○ sync off'; el.style.color = 'var(--paper-dim)'; return; }
+  const map = {
+    syncing: ['◍ syncing…','var(--brass)'],
+    ok: ['● synced','var(--good)'],
+    offline: ['○ offline (queued)','var(--paper-dim)'],
+    error: ['● sync error','var(--alert)'],
+    auth: ['● sync auth error','var(--alert)'],
+  };
+  const [txt,color] = map[kind] || (online ? ['● sync ready','var(--teal)'] : ['○ offline (queued)','var(--paper-dim)']);
+  el.textContent = txt; el.style.color = color;
+  el.title = detail || '';
+}
+
+async function renderSyncPanel(){
+  const cfgEls = {
+    url: document.getElementById('sync_serverUrl'),
+    vessel: document.getElementById('sync_vesselId'),
+    token: document.getElementById('sync_token'),
+    auto: document.getElementById('sync_auto'),
+  };
+  if (cfgEls.url && document.activeElement!==cfgEls.url) cfgEls.url.value = syncConfig.serverUrl||'';
+  if (cfgEls.vessel && document.activeElement!==cfgEls.vessel) cfgEls.vessel.value = syncConfig.vesselId||'';
+  if (cfgEls.token && document.activeElement!==cfgEls.token) cfgEls.token.value = syncConfig.token||'';
+  if (cfgEls.auto) cfgEls.auto.checked = !!syncConfig.autoSync;
+  const info = document.getElementById('syncPanelInfo');
+  if (info){
+    const pending = syncConfigured() ? await countPending() : 0;
+    const last = syncCursor.lastSyncAt ? new Date(syncCursor.lastSyncAt).toLocaleString() : 'never';
+    info.innerHTML = `Connection: <b>${navigator.onLine?'online':'offline'}</b> · Last sync: <b>${last}</b> · Pending local changes: <b>${pending}</b>`;
+  }
+  renderSyncStatus(navigator.onLine ? 'ready' : 'offline');
+}
+
+function wireSyncPanel(){
+  const save = async ()=>{
+    syncConfig.serverUrl = document.getElementById('sync_serverUrl').value.trim();
+    syncConfig.vesselId = document.getElementById('sync_vesselId').value.trim();
+    syncConfig.token = document.getElementById('sync_token').value;
+    syncConfig.autoSync = document.getElementById('sync_auto').checked;
+    await saveSyncSettings();
+    renderSyncPanel();
+  };
+  document.getElementById('btnSaveSync').addEventListener('click', async ()=>{ await save(); alert('Sync settings saved.'); if (syncConfigured() && navigator.onLine) syncNow({silent:true}); });
+  document.getElementById('sync_auto').addEventListener('change', save);
+  document.getElementById('btnSyncNow').addEventListener('click', async ()=>{ await save(); syncNow(); });
+  document.getElementById('btnTestSync').addEventListener('click', async ()=>{
+    await save();
+    if (!syncConfigured()){ alert('Enter server URL and Vessel ID first.'); return; }
+    try {
+      const base = syncConfig.serverUrl.replace(/\/+$/,'');
+      const r = await fetch(base + '/api/health', { headers: syncConfig.token?{'Authorization':'Bearer '+syncConfig.token}:{} });
+      const j = await r.json();
+      alert('Server reachable ✓\nTime: '+new Date(j.time).toLocaleString()+'\nAuth required: '+(j.auth?'yes':'no'));
+    } catch(e){ alert('Could not reach server: '+e.message); }
+  });
+  const btnInstall = document.getElementById('btnInstallApp');
+  if (btnInstall) btnInstall.addEventListener('click', async ()=>{
+    if (!deferredInstallPrompt){ alert('To install: use your browser menu → "Install app" / "Add to Home screen". (Available when this page is served over http/https, not opened as a local file.)'); return; }
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null; btnInstall.style.display='none';
+  });
+}
+
+/* ---------------- PWA (installable / offline) ---------------- */
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredInstallPrompt = e; const b=document.getElementById('btnInstallApp'); if (b) b.style.display=''; });
+function registerServiceWorker(){
+  if (!('serviceWorker' in navigator)) return;
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') return; // not available on file://
+  navigator.serviceWorker.register('sw.js').catch(err=> console.warn('SW registration failed:', err));
+}
+
 /* ---------------- init ---------------- */
 (async function init(){
   try {
@@ -3343,6 +3668,7 @@ function migrateSetup(setup){
     state.documents = await dbGetAll('documents');
     state.abstracts = await dbGetAll('abstracts');
     state.printHistory = await dbGetAll('printHistory');
+    await loadSyncSettings();
 
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -3353,6 +3679,14 @@ function migrateSetup(setup){
 
     render();
     applyEntryDefaults();
+    wireSyncPanel();
+    renderSyncPanel();
+    registerServiceWorker();
+    window.addEventListener('online', ()=>{ renderSyncPanel(); if (syncConfig.autoSync) syncNow({silent:true}); });
+    window.addEventListener('offline', ()=>{ renderSyncStatus('offline'); renderSyncPanel(); });
+    // periodic background sync + an initial reconcile on startup
+    setInterval(()=>{ if (syncConfig.autoSync && navigator.onLine && !syncing) syncNow({silent:true}); }, 60000);
+    if (syncConfigured() && navigator.onLine) syncNow({silent:true});
     document.getElementById('dbStatus').textContent = '● local database ready';
   } catch(e){
     console.error('Startup error:', e);

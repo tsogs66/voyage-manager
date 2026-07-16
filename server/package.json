@@ -1,0 +1,14 @@
+{
+  "name": "noon-report-sync-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zero-dependency self-hosted sync server + static host for the Noon Report offline PWA.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
