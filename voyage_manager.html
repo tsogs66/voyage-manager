@@ -3661,6 +3661,7 @@ document.getElementById('fileImport').addEventListener('change', (ev)=>{
       for (const r of state.receipts) await dbPut('receipts', r);
       for (const doc of state.documents) await dbPut('documents', doc);
       await saveSetup();
+      markPendingSync();
       render();
       applyEntryDefaults();
       alert('Backup imported and saved to local database.');
@@ -3681,6 +3682,7 @@ document.getElementById('fileImportSetup').addEventListener('change', (ev)=>{
       state.setup = migrateSetup(payload.setup);
       // entries and receipts are left untouched
       await saveSetup();
+      markPendingSync();
       render();
       applyEntryDefaults();
       alert('Setup imported — your log entries and receipts were not changed.');
