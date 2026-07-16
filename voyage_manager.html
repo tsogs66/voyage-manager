@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <title>Noon Report — Engine Log</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a1420">
+<meta name="application-name" content="Noon Report">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -127,6 +129,28 @@
   .badge{display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:10px; padding:2px 7px; border-radius:10px; border:1px solid var(--line-strong); color:var(--paper-dim); margin-left:8px;}
   .pf-input{width:64px; background:var(--ink); border:1px solid var(--line-strong); color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:12px; padding:4px; border-radius:2px;}
   .pf-computed{color:var(--teal); font-family:'IBM Plex Mono',monospace; font-size:12px;}
+
+  .sync-status{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--paper-dim); margin-top:10px; white-space:pre-wrap;}
+  .status-good{color:var(--good);}
+  .status-warn{color:var(--brass);}
+  .status-bad{color:var(--alert);}
+  @media (max-width:720px){
+    body{padding:14px 10px 60px;}
+    .masthead{align-items:flex-start;}
+    .tabs{overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px;}
+    .tab{white-space:nowrap; padding:10px 12px;}
+    .panel{padding:16px 14px;}
+    .form-grid, .form-grid.cols2, .form-grid.cols3, .unit-group, .unit-group.cols2, .unit-group.cols5,
+    .gauge-grid, .gauge-grid.cols2, .gauge-grid.cols4, .gauge-grid.cols5, .stat-strip, .stat-strip.cols2, .stat-strip.cols3, .stat-strip.cols5{
+      grid-template-columns:1fr;
+    }
+    .field.span2{grid-column:span 1;}
+    .ref-grid{grid-template-columns:1fr 1fr;}
+    table.freeze-cols th:nth-child(1), table.freeze-cols td:nth-child(1),
+    table.freeze-cols th:nth-child(2), table.freeze-cols td:nth-child(2){position:static; width:auto; min-width:0;}
+    tbody td, thead th{white-space:normal;}
+    button{width:100%;}
+  }
 
   /* ---- print layout ---- */
   #printArea{ display:none; }
@@ -635,6 +659,12 @@
     <div class="panel">
       <h2>Performance Averages</h2>
       <div class="stat-strip cols5" id="perfTotalsStrip"></div>
+      <div class="hint">RPM, engine distance and slip prefer shaft revolution counter data when available; this avoids tachometer rounding errors during changing sea conditions.</div>
+    </div>
+    <div class="panel">
+      <h2>Efficiency &amp; Emissions</h2>
+      <div class="stat-strip cols5" id="efficiencyStrip"></div>
+      <div class="hint">M/E SFOC = M/E fuel grams per hour ÷ estimated shaft kW. Baseline SFOC is interpolated from the 85% and 100% setup points when available. CO₂ uses standard fuel factors (3.114 t/t for residual fuel, 3.206 t/t for distillate fuel).</div>
     </div>
     <div class="panel">
       <h2>Average Consumption Per Day</h2>
@@ -773,6 +803,23 @@
       <div class="hint">"Export Setup Only" saves just the Setup tab's configuration (vessel details, engine data, flowmeter arrangement, fuel/lube defaults, opening ROB, tank capacities) without any voyage log entries or receipts — handy as a reusable template for a new voyage. "Import Setup Only" loads just that configuration back in and leaves your current log entries and receipts untouched (unlike "Import Backup", which replaces everything).</div>
       <div class="hint" id="entryCount"></div>
     </div>
+    <div class="panel">
+      <h2>Offline / Server Sync</h2>
+      <p class="hint">Use this when the app is opened offline on Android or PC and later reaches your self-hosted Linux server through Cloudflare. The server must expose an HTTPS endpoint that accepts this app's JSON backup by POST and, optionally, returns the same JSON format by GET for pull/import.</p>
+      <div class="form-grid cols3">
+        <div class="field span2"><label>Sync Endpoint URL</label><input id="sync_url" placeholder="https://reports.example.com/api/noon-report"></div>
+        <div class="field"><label>Bearer Token / API Key</label><input id="sync_token" type="password" autocomplete="off" placeholder="optional"></div>
+        <div class="field"><label>Device Name</label><input id="sync_device" placeholder="engine-room-tablet"></div>
+        <div class="field"><label>Auto Sync When Online</label><select id="sync_auto"><option value="false">No</option><option value="true">Yes</option></select></div>
+        <div class="field"><label>Last Sync</label><input id="sync_last" readonly></div>
+      </div>
+      <div class="btn-row">
+        <button class="primary small" id="btnSaveSync">Save Sync Settings</button>
+        <button class="ghost small" id="btnSyncNow">Push Backup to Server</button>
+        <button class="ghost small" id="btnPullServer">Pull Backup from Server</button>
+      </div>
+      <div class="sync-status" id="syncStatus">Offline-first: local database is the source of truth until you push or pull.</div>
+    </div>
   </div>
 
   <div class="footer-note">Standalone recreation of the Voyage Log / Noon Report — Setup, Consumption, Performance, ROB, Receipts &amp; Summary — runs entirely in your browser with its own local database.</div>
@@ -790,6 +837,7 @@ const PERF_ROWS = [
   ['avgPower','Average Power (KW)'], ['avgLoad','Average Load (%)'],
   ['minLoad','Minimum Load (%)'], ['maxLoad','Maximum Load (%)'], ['runTime','Run Time (hrs)']
 ];
+const CO2_FACTORS = { HFO:3.114, LSFO:3.114, "MDO/MGO":3.206, LSMGO:3.206 };
 const GAUGE_COLORS = {
   'HFO': '#7a1f2b', 'LSFO': '#7a1f2b',
   'MDO/MGO': '#e0679a', 'LSMGO': '#e0679a',
@@ -850,6 +898,7 @@ const state = {
     robLube:{ "CYL HIGH":8000,"CYL LOW":0,"ME SYS OIL":5000,"GE SYS OIL":2000,"FRESH WATER":50000 },
     capacity:{ "HFO":1200,"LSFO":400,"MDO/MGO":300,"LSMGO":150 },
     capacityLube:{ "CYL HIGH":15000,"CYL LOW":15000,"ME SYS OIL":8000,"GE SYS OIL":4000,"FRESH WATER":150000 },
+    sync:{ url:'', token:'', deviceName:'', auto:false, lastSync:null },
     carryover: null
   },
   entries: [],
@@ -895,6 +944,19 @@ function effectiveCarryover(){
 function uid(){ return Math.random().toString(36).slice(2,10); }
 let editingId = null;
 function fmt(n,d=2){ if (n===null||n===undefined||isNaN(n)) return "—"; return Number(n).toFixed(d); }
+function calcCo2ByFuel(consByFuel){
+  const out = {};
+  FUEL_TYPES.forEach(t=> out[t] = (consByFuel[t]||0) * (CO2_FACTORS[t]||0));
+  return out;
+}
+function sfocBaseline(loadPct){
+  const s85 = state.setup.sfoc85, s100 = state.setup.sfoc100;
+  if (!(loadPct>0)) return null;
+  if (s85!=null && s100!=null){
+    return s85 + ((loadPct - 85) / 15) * (s100 - s85);
+  }
+  return s100 ?? s85 ?? null;
+}
 function meterCellText(unit){
   if (unit.meterIn!==undefined && unit.meterOut!==undefined && unit.meterIn!==null && unit.meterOut!==null){
     return `In ${fmt(unit.meterIn,0)} / Out ${fmt(unit.meterOut,0)}`;
@@ -961,27 +1023,20 @@ function computeDerived(){
 
   const consByFuel = {"HFO":0,"LSFO":0,"MDO/MGO":0,"LSMGO":0};
   const consByLube = {"CYL HIGH":0,"CYL LOW":0,"ME SYS OIL":0,"GE SYS OIL":0,"FRESH WATER":0};
-  let totalDistShip=0, totalDistEngine=0, totalHrs=0;
-  let sumRpm=0, cntRpm=0, sumMcr=0, cntMcr=0, sumKw=0, cntKw=0, sumSpeedShip=0, cntSpeedShip=0, sumSlip=0, cntSlip=0;
+  let totalDistShip=0, totalDistEngine=0, totalHrs=0, totalMeCons=0, totalMeKwh=0;
+  let sumRpmWeighted=0, rpmWeightedHrs=0, sumMcr=0, cntMcr=0, sumKw=0, cntKw=0, sumSpeedShip=0, cntSpeedShip=0, sumSlip=0, cntSlip=0, sumSfoc=0, cntSfoc=0, sumSfocDev=0, cntSfocDev=0;
 
   let prev = effectiveCarryover();
   const rows = list.map(e=>{
     let hrs=null, meCons=null, geCons=null, blrCons=null, total=null;
     let cylCons=null, meLoCons=null, geLoCons=null, dailyRevs=null, fwProdD=null, fwConsD=null;
-    let distEngine=null, speedEngine=null, speedShip=null, slip=null, mcrPct=null, kwEst=null;
+    let distEngine=null, speedEngine=null, speedShip=null, slip=null, mcrPct=null, kwEst=null, rpmCalc=null, sfocActual=null, sfocRef=null, sfocDev=null, meConsPerDay=null;
     let consByType = {"HFO":null,"LSFO":null,"MDO/MGO":null,"LSMGO":null};
     let lubeByType = {"CYL HIGH":null,"CYL LOW":null,"ME SYS OIL":null,"GE SYS OIL":null,"FRESH WATER":null};
     const override = e.consOverride || {};
     const misc = e.miscCons || {"MDO/MGO":0,"LSMGO":0};
 
-    if (e.rpm!==null && e.rpm!==undefined && !isNaN(e.rpm)){
-      speedEngine = e.rpm * propConstant;
-      mcrPct = Math.pow(e.rpm/mcrRpm, 3) * 100;
-      kwEst = Math.pow(e.rpm/mcrRpm, 3) * mcrKw;
-      sumRpm += e.rpm; cntRpm++;
-      sumMcr += mcrPct; cntMcr++;
-      sumKw += kwEst; cntKw++;
-    }
+    if (e.rpm!==null && e.rpm!==undefined && !isNaN(e.rpm)) rpmCalc = e.rpm;
 
     if (prev){
       hrs = (new Date(e.datetime) - new Date(prev.datetime)) / 3600000;
@@ -1034,13 +1089,36 @@ function computeDerived(){
 
       // performance
       dailyRevs = meterDelta(e.revCounter, prev.revCounter, rolls.rc);
-      if (e.rpm!==null && e.rpm!==undefined && !isNaN(e.rpm) && hrs>0){
-        distEngine = e.rpm * propConstant * hrs;
+      if (dailyRevs!=null && hrs>0){
+        rpmCalc = dailyRevs / (hrs * 60);
+      }
+      if (rpmCalc!==null && rpmCalc!==undefined && !isNaN(rpmCalc)){
+        speedEngine = rpmCalc * propConstant;
+        mcrPct = Math.pow(rpmCalc/mcrRpm, 3) * 100;
+        kwEst = Math.pow(rpmCalc/mcrRpm, 3) * mcrKw;
+        if (hrs>0){ sumRpmWeighted += rpmCalc*hrs; rpmWeightedHrs += hrs; }
+        sumMcr += mcrPct; cntMcr++;
+        sumKw += kwEst; cntKw++;
+      }
+      if (rpmCalc!==null && rpmCalc!==undefined && !isNaN(rpmCalc) && hrs>0){
+        distEngine = rpmCalc * propConstant * hrs;
       }
       if (hrs>0) speedShip = e.distanceShip / hrs;
       if (distEngine && distEngine>0 && e.distanceShip!==null){
         slip = ((distEngine - e.distanceShip)/distEngine)*100;
         sumSlip += slip; cntSlip++;
+      }
+      if (hrs>0 && meCons!=null && kwEst>0){
+        meConsPerDay = meCons / (hrs/24);
+        sfocActual = (meCons * 1000000) / (hrs * kwEst);
+        sfocRef = sfocBaseline(mcrPct);
+        if (sfocRef>0){
+          sfocDev = ((sfocActual - sfocRef) / sfocRef) * 100;
+          sumSfocDev += sfocDev; cntSfocDev++;
+        }
+        sumSfoc += sfocActual; cntSfoc++;
+        totalMeCons += meCons;
+        totalMeKwh += hrs * kwEst;
       }
       if (speedShip!==null && !isNaN(speedShip)){ sumSpeedShip+=speedShip; cntSpeedShip++; }
 
@@ -1052,16 +1130,24 @@ function computeDerived(){
     prev = e;
     return {...e, hrs, meCons, geCons, blrCons, total, cylCons, meLoCons, geLoCons, fwProdD, fwConsD,
              consByType, lubeByType,
-             distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, dailyRevs,
+             distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, dailyRevs, rpmCalc, sfocActual, sfocRef, sfocDev, meConsPerDay,
              cumFuel: {...consByFuel}, cumLube: {...consByLube}, cumDistShip: totalDistShip};
   });
 
+  const co2ByFuel = calcCo2ByFuel(consByFuel);
+  const totalCo2 = Object.values(co2ByFuel).reduce((a,b)=>a+b,0);
+
   const perf = {
-    avgRpm: cntRpm? sumRpm/cntRpm : null,
+    avgRpm: rpmWeightedHrs? sumRpmWeighted/rpmWeightedHrs : null,
     avgMcr: cntMcr? sumMcr/cntMcr : null,
     avgKw: cntKw? sumKw/cntKw : null,
     avgSpeedShip: cntSpeedShip? sumSpeedShip/cntSpeedShip : null,
     avgSlip: cntSlip? sumSlip/cntSlip : null,
+    avgSfoc: cntSfoc? sumSfoc/cntSfoc : null,
+    voyageSfoc: totalMeKwh>0 ? (totalMeCons*1000000)/totalMeKwh : null,
+    avgSfocDev: cntSfocDev? sumSfocDev/cntSfocDev : null,
+    totalCo2,
+    co2ByFuel,
     totalDistShip, totalDistEngine, totalHrs
   };
 
@@ -1258,12 +1344,12 @@ function abstractRowCells(r){
   const condClass = r.condition==='BALLAST' ? 'cond-B':'cond-L';
   const cylText = r.cylCons===null||r.cylCons===undefined ? '—' : `${fmt(r.cylCons,1)} (${r.tbn})`;
   return `<td>${dtStr}</td><td>${r.operation}</td>
-    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,1)}</td><td>${r.rpm??'—'}</td>
+    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,1)}</td><td>${r.rpmCalc==null?(r.rpm??'—'):fmt(r.rpmCalc,2)}</td>
     <td>${r.distEngine===null||r.distEngine===undefined?'—':fmt(r.distEngine,1)}</td><td>${r.speedEngine===null||r.speedEngine===undefined?'—':fmt(r.speedEngine,2)}</td>
     <td>${fmt(r.distanceShip,1)}</td><td>${r.speedShip===null||r.speedShip===undefined?'—':fmt(r.speedShip,2)}</td>
     <td>${r.slip===null||r.slip===undefined?'—':fmt(r.slip,1)}</td><td>${r.mcrPct===null||r.mcrPct===undefined?'—':fmt(r.mcrPct,1)}</td><td>${r.kwEst===null||r.kwEst===undefined?'—':fmt(r.kwEst,0)}</td>
     <td><span class="cond-tag ${condClass}">${r.condition[0]}</span></td>
-    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,1)}</td><td>${fmt(r.distanceShip,1)}</td><td>${r.rpm??'—'}</td>
+    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,1)}</td><td>${fmt(r.distanceShip,1)}</td><td>${r.rpmCalc==null?(r.rpm??'—'):fmt(r.rpmCalc,2)}</td>
     <td>${r.revCounter??'—'}</td><td>${r.dailyRevs===null||r.dailyRevs===undefined?'—':fmt(r.dailyRevs,0)}</td>
     <td>${meterCellText(r.me)}</td><td>${meterCellText(r.ge)}</td><td>${fmt(r.blr.meter,0)}</td>
     <td>${r.meCons===null||r.meCons===undefined?'—':fmt(r.meCons,3)}</td><td>${r.geCons===null||r.geCons===undefined?'—':fmt(r.geCons,3)}</td>
@@ -1277,12 +1363,12 @@ function abstractRowCells(r){
     <td>${r.fwConsD===null||r.fwConsD===undefined?'—':fmt(r.fwConsD,0)}</td>`;
 }
 
-const ABSTRACT_CSV_HEADER = ["DateTime","Operation","RunHrs","RPM","DistEngine","SpeedEngine","DistShip","SpeedShip","Slip%","%MCR","EstKW",
+const ABSTRACT_CSV_HEADER = ["DateTime","Operation","RunHrs","RPM","DistEngine","SpeedEngine","DistShip","SpeedShip","Slip%","%MCR","EstKW","ME_SFOC_g_kWh","ME_SFOC_Ref","ME_SFOC_Dev%","ME_MT_Day",
   "Cond","Hrs","DistShip2","RPM2","RevCounter","DailyRevs","MERun","GERun","BlrRun","MECons","GECons","BlrCons","TotalCons",
   "CylOilCons","CylGrade","MELO","GELO","FWMeter","FWProduced","FWRob","FWCons"];
 function abstractRowToCsv(r){
-  return [r.datetime, r.operation, r.hrs??'', r.rpm??'', r.distEngine??'', r.speedEngine??'', r.distanceShip, r.speedShip??'',
-    r.slip??'', r.mcrPct??'', r.kwEst??'', r.condition, r.hrs??'', r.distanceShip, r.rpm??'', r.revCounter??'', r.dailyRevs??'',
+  return [r.datetime, r.operation, r.hrs??'', r.rpmCalc??r.rpm??'', r.distEngine??'', r.speedEngine??'', r.distanceShip, r.speedShip??'',
+    r.slip??'', r.mcrPct??'', r.kwEst??'', r.sfocActual??'', r.sfocRef??'', r.sfocDev??'', r.meConsPerDay??'', r.condition, r.hrs??'', r.distanceShip, r.rpmCalc??r.rpm??'', r.revCounter??'', r.dailyRevs??'',
     meterCellText(r.me), meterCellText(r.ge), r.blr.meter, r.meCons??'', r.geCons??'', r.blrCons??'', r.total??'',
     r.cylCons??'', r.tbn, r.meLoCons??'', r.geLoCons??'', r.fwProd??'', r.fwProdD??'', r.fwRob??'', r.fwConsD??''];
 }
@@ -1501,8 +1587,22 @@ function render(){
     <div class="stat"><div class="num">${perf.avgKw===null?'—':fmt(perf.avgKw,0)}</div><div class="lbl">KW</div></div>
     <div class="stat"><div class="num">${seaAvgDistStr}</div><div class="lbl">Distance (nm/day)</div></div>
   `;
+  document.getElementById('efficiencyStrip').innerHTML = `
+    <div class="stat"><div class="num">${perf.voyageSfoc===null?'—':fmt(perf.voyageSfoc,1)}</div><div class="lbl">M/E SFOC g/kWh</div></div>
+    <div class="stat"><div class="num">${perf.avgSfocDev===null?'—':fmt(perf.avgSfocDev,1)}</div><div class="lbl">SFOC Dev %</div></div>
+    <div class="stat"><div class="num">${fmt(totalCons,2)}</div><div class="lbl">Fuel MT</div></div>
+    <div class="stat"><div class="num">${fmt(perf.totalCo2,1)}</div><div class="lbl">CO2 MT</div></div>
+    <div class="stat"><div class="num">${perf.totalDistShip>0 ? fmt(perf.totalCo2/perf.totalDistShip,3) : '—'}</div><div class="lbl">CO2 MT/nm</div></div>
+  `;
 
   document.getElementById('entryCount').textContent = `${state.entries.length} log entries · ${state.receipts.length} receipts stored locally.`;
+  const sync = state.setup.sync || {};
+  document.getElementById('sync_url').value = sync.url || '';
+  document.getElementById('sync_token').value = sync.token || '';
+  document.getElementById('sync_device').value = sync.deviceName || '';
+  document.getElementById('sync_auto').value = sync.auto ? 'true' : 'false';
+  document.getElementById('sync_last').value = sync.lastSync ? new Date(sync.lastSync).toLocaleString() : 'Never';
+  renderSyncStatus();
   renderVoyageProgress();
   renderDocList();
   renderAbstractList();
@@ -1511,6 +1611,136 @@ function render(){
 
 /* ---------------- persistence helpers ---------------- */
 async function saveSetup(){ await dbPut('meta', {key:'setup', value: state.setup}); }
+
+function setupForExport(includeToken=false){
+  const setup = JSON.parse(JSON.stringify(state.setup));
+  if (setup.sync && !includeToken) setup.sync.token = '';
+  return setup;
+}
+
+function buildBackupPayload(extra={}){
+  return {
+    setup: setupForExport(false),
+    entries: state.entries,
+    receipts: state.receipts,
+    documents: state.documents,
+    abstracts: state.abstracts,
+    printHistory: state.printHistory,
+    exportedAt: new Date().toISOString(),
+    app: { name:'Noon Report', formatVersion:2 },
+    ...extra
+  };
+}
+
+function downloadJSON(payload, filename){
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+async function replaceLocalDataFromPayload(payload){
+  if (payload.setup) state.setup = migrateSetup(payload.setup);
+  state.entries = (payload.entries || []).map(normalizeEntry);
+  state.receipts = payload.receipts || [];
+  state.documents = payload.documents || [];
+  state.abstracts = payload.abstracts || [];
+  state.printHistory = payload.printHistory || [];
+  await dbClear('entries'); await dbClear('receipts'); await dbClear('documents'); await dbClear('abstracts'); await dbClear('printHistory');
+  for (const en of state.entries) await dbPut('entries', en);
+  for (const r of state.receipts) await dbPut('receipts', r);
+  for (const doc of state.documents) await dbPut('documents', doc);
+  for (const a of state.abstracts) await dbPut('abstracts', a);
+  for (const p of state.printHistory) await dbPut('printHistory', p);
+  await saveSetup();
+}
+
+function setSyncStatus(message, cls=''){
+  const el = document.getElementById('syncStatus');
+  if (!el) return;
+  el.className = `sync-status ${cls}`.trim();
+  el.textContent = message;
+}
+
+function renderSyncStatus(){
+  const sync = state.setup.sync || {};
+  const online = navigator.onLine ? 'online' : 'offline';
+  const last = sync.lastSync ? `Last pushed: ${new Date(sync.lastSync).toLocaleString()}.` : 'No successful server push yet.';
+  const target = sync.url ? `Endpoint: ${sync.url}` : 'No endpoint configured.';
+  setSyncStatus(`${online.toUpperCase()} - ${target}\n${last}`, navigator.onLine ? 'status-good' : 'status-warn');
+}
+
+function readSyncForm(){
+  state.setup.sync = {
+    url: document.getElementById('sync_url').value.trim(),
+    token: document.getElementById('sync_token').value,
+    deviceName: document.getElementById('sync_device').value.trim(),
+    auto: document.getElementById('sync_auto').value === 'true',
+    lastSync: (state.setup.sync && state.setup.sync.lastSync) || null
+  };
+}
+
+async function saveSyncSettings(){
+  readSyncForm();
+  await saveSetup();
+  renderSyncStatus();
+  alert('Sync settings saved locally.');
+}
+
+async function pushToServer(silent=false){
+  readSyncForm();
+  const sync = state.setup.sync || {};
+  if (!sync.url){ if (!silent) alert('Enter a Sync Endpoint URL first.'); return false; }
+  const headers = {'Content-Type':'application/json'};
+  if (sync.token) headers.Authorization = `Bearer ${sync.token}`;
+  const payload = buildBackupPayload({
+    syncMetadata: {
+      vesselName: state.setup.vesselName,
+      voyageNumber: state.setup.voyageNumber,
+      deviceName: sync.deviceName || navigator.userAgent,
+      pushedAt: new Date().toISOString()
+    }
+  });
+  setSyncStatus('Pushing backup to server...', 'status-warn');
+  try{
+    const res = await fetch(sync.url, {method:'POST', headers, body:JSON.stringify(payload)});
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    state.setup.sync.lastSync = new Date().toISOString();
+    await saveSetup();
+    render();
+    if (!silent) alert('Backup pushed to server.');
+    return true;
+  }catch(e){
+    setSyncStatus(`Sync failed: ${e.message}\nLocal database is unchanged and still usable offline.`, 'status-bad');
+    if (!silent) alert('Sync failed: ' + e.message + '\n\nCheck URL, token, CORS, Cloudflare tunnel, and server logs.');
+    return false;
+  }
+}
+
+async function pullFromServer(){
+  readSyncForm();
+  const sync = state.setup.sync || {};
+  if (!sync.url){ alert('Enter a Sync Endpoint URL first.'); return; }
+  if (!confirm('Pull backup from server and replace this browser\'s local database? Export a local backup first if you are unsure.')) return;
+  const headers = {};
+  if (sync.token) headers.Authorization = `Bearer ${sync.token}`;
+  setSyncStatus('Pulling backup from server...', 'status-warn');
+  try{
+    const res = await fetch(sync.url, {headers});
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    const payload = await res.json();
+    await replaceLocalDataFromPayload(payload);
+    state.setup.sync = {...(state.setup.sync||{}), ...sync};
+    await saveSetup();
+    render();
+    applyEntryDefaults();
+    alert('Server backup imported into local database.');
+  }catch(e){
+    setSyncStatus(`Pull failed: ${e.message}`, 'status-bad');
+    alert('Pull failed: ' + e.message);
+  }
+}
 
 /* ---------------- tabs ---------------- */
 function switchTab(pageName){
@@ -1757,7 +1987,7 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
         <div class="pr-row"><span>ETA:</span><b>${report.eta ? new Date(report.eta).toLocaleString() : '—'}</b></div>
         <div class="pr-row"><span>Rev. Counter:</span><b>${fmtP(entry.revCounter,0)}</b></div>
         <div class="pr-row"><span>Daily Revs.:</span><b>${fmtP(row.dailyRevs,0)}</b></div>
-        <div class="pr-row"><span>Average RPM:</span><b>${fmtP(entry.rpm,2)}</b></div>
+        <div class="pr-row"><span>Average RPM:</span><b>${fmtP(row.rpmCalc ?? entry.rpm,2)}</b></div>
         <div class="pr-row"><span>Power (KW):</span><b>${fmtP(row.kwEst,0)}</b></div>
         <div class="pr-row"><span>Power (%):</span><b>${fmtP(row.mcrPct,2)}</b></div>
         <div class="pr-row"><span>Ship's Dist.:</span><b>${fmtP(entry.distanceShip,2)} nm</b></div>
@@ -2077,7 +2307,7 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
   // Auto-export a full backup of everything before this voyage is cleared, named with
   // voyage no. + condition + execution timestamp (browsers can only save via a download
   // prompt — there's no way for a web page to write directly into a folder on disk).
-  const backupPayload = { setup: state.setup, entries: state.entries, receipts: state.receipts, documents: state.documents, exportedAt: new Date().toISOString() };
+  const backupPayload = buildBackupPayload();
   const now = new Date();
   const stamp = now.getFullYear().toString() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0')
     + '-' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0');
@@ -2237,7 +2467,7 @@ function openVoyageSummary(entryId){
     ${stat('Run Time (hrs)', fmt(row.hrs,1))}
     ${stat('Date &amp; Time', dtStr)}
     ${stat("Ship's Distance", fmt(entry.distanceShip,1))}
-    ${stat('RPM', fmt(entry.rpm,2))}
+    ${stat('RPM', fmt(row.rpmCalc ?? entry.rpm,2))}
     ${stat('ETA', eta ? eta.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—')}
     ${stat('Engine Distance', fmt(row.distEngine,2))}
     ${stat('Load (KW)', fmt(row.kwEst,0))}
@@ -2417,7 +2647,7 @@ function printVoyageSummary(entryId){
     <div class="pr-box"><h4>Voyage Data</h4>
       <div class="pr-row"><span>Run Time (hrs)</span><b>${fmt(row.hrs,1)}</b></div>
       <div class="pr-row"><span>Ship's Distance</span><b>${fmt(entry.distanceShip,1)}</b></div>
-      <div class="pr-row"><span>RPM</span><b>${fmt(entry.rpm,2)}</b></div>
+      <div class="pr-row"><span>RPM</span><b>${fmt(row.rpmCalc ?? entry.rpm,2)}</b></div>
       <div class="pr-row"><span>ETA</span><b>${eta ? eta.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}</b></div>
       <div class="pr-row"><span>Engine Distance</span><b>${fmt(row.distEngine,2)}</b></div>
       <div class="pr-row"><span>Distance To Go</span><b>${distanceToGo!=null?fmt(distanceToGo,1):'—'}</b></div>
@@ -2557,19 +2787,23 @@ function updateLivePreview(){
   const pitch = state.setup.pitch||0, mcrRpm = state.setup.mcrRpm||1, mcrKw = state.setup.mcrKw||0;
   const propConstant = pitch*60/1852;
 
-  let hrs=null, meCons=null, geCons=null, blrCons=null, total=null, distEngine=null, slip=null, kwEst=null, mcrPct=null, dailyRevs=null, speedEngine=null;
-
-  if (curEntry.rpm!=null){
-    mcrPct = Math.pow(curEntry.rpm/mcrRpm, 3) * 100;
-    kwEst = Math.pow(curEntry.rpm/mcrRpm, 3) * mcrKw;
-    speedEngine = curEntry.rpm * propConstant;
-  }
+  let hrs=null, meCons=null, geCons=null, blrCons=null, total=null, distEngine=null, slip=null, kwEst=null, mcrPct=null, dailyRevs=null, speedEngine=null, sfocActual=null, sfocDev=null, rpmForPerf=curEntry.rpm;
 
   if (prevRef && curEntry.datetime){
     hrs = (new Date(curEntry.datetime) - new Date(prevRef.datetime)) / 3600000;
     if (curEntry.revCounter!=null && prevRef.revCounter!=null){
       dailyRevs = meterDelta(curEntry.revCounter, prevRef.revCounter, rolls.rc);
+      if ((rpmForPerf==null || isNaN(rpmForPerf)) && dailyRevs!=null && hrs>0) rpmForPerf = dailyRevs / (hrs * 60);
     }
+  }
+
+  if (rpmForPerf!=null){
+    mcrPct = Math.pow(rpmForPerf/mcrRpm, 3) * 100;
+    kwEst = Math.pow(rpmForPerf/mcrRpm, 3) * mcrKw;
+    speedEngine = rpmForPerf * propConstant;
+  }
+
+  if (prevRef && curEntry.datetime){
     if (hrs>0){
       const {meRaw, geRaw} = meGeRawLitres(curEntry, prevRef, rolls);
       const blrD = meterDelta(curEntry.blr.meter, prevRef.blr.meter, rolls.boiler);
@@ -2583,11 +2817,16 @@ function updateLivePreview(){
       if (unitGe && unitGe.value!=='') geCons = parseFloat(unitGe.value);
       if (unitBlr && unitBlr.value!=='') blrCons = parseFloat(unitBlr.value);
       total = (meCons||0)+(geCons||0)+(blrCons||0);
-      if (curEntry.rpm!=null){
-        distEngine = curEntry.rpm * propConstant * hrs;
+      if (rpmForPerf!=null){
+        distEngine = rpmForPerf * propConstant * hrs;
         if (distEngine>0 && curEntry.distanceShip!=null){
           slip = ((distEngine - curEntry.distanceShip)/distEngine)*100;
         }
+      }
+      if (meCons!=null && kwEst>0){
+        sfocActual = (meCons * 1000000) / (hrs * kwEst);
+        const sfocRef = sfocBaseline(mcrPct);
+        if (sfocRef>0) sfocDev = ((sfocActual - sfocRef) / sfocRef) * 100;
       }
     }
   }
@@ -2602,6 +2841,8 @@ function updateLivePreview(){
     stat('Total Cons (MT)', total==null?'—':fmt(total,3)) +
     stat('M/E Load (KW)', kwEst==null?'—':fmt(kwEst,0)) +
     stat('M/E Load (%)', mcrPct==null?'—':fmt(mcrPct,1)) +
+    stat('M/E SFOC', sfocActual==null?'—':fmt(sfocActual,1)) +
+    stat('SFOC Dev %', sfocDev==null?'—':fmt(sfocDev,1)) +
     stat('Engine Speed (kn)', speedEngine==null?'—':fmt(speedEngine,2)) +
     stat('Engine Distance (nm)', distEngine==null?'—':fmt(distEngine,2)) +
     stat('Slip (%)', slip==null?'—':fmt(slip,2));
@@ -2679,7 +2920,7 @@ function renderVoyageProgress(){
     <path d="M ${shipX-44} ${y+18} q -14 6 -30 4" fill="none" stroke="var(--paper-dim)" stroke-width="1.5" opacity="0.25"/>`;
 
   const currentSpeed = lastRow && lastRow.speedShip!=null ? lastRow.speedShip : null;
-  const currentRpm = lastRow && lastRow.rpm!=null ? lastRow.rpm : null;
+  const currentRpm = lastRow && (lastRow.rpmCalc!=null || lastRow.rpm!=null) ? (lastRow.rpmCalc ?? lastRow.rpm) : null;
   const currentSlip = lastRow && lastRow.slip!=null ? lastRow.slip : null;
   const currentKw = lastRow && lastRow.kwEst!=null ? lastRow.kwEst : null;
   const currentMcr = lastRow && lastRow.mcrPct!=null ? lastRow.mcrPct : null;
@@ -3195,21 +3436,12 @@ document.getElementById('btnAddReceipt').addEventListener('click', async ()=>{
 
 /* ---------------- export / import ---------------- */
 document.getElementById('btnExportJSON').addEventListener('click', ()=>{
-  const payload = { setup: state.setup, entries: state.entries, receipts: state.receipts, documents: state.documents, exportedAt: new Date().toISOString() };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `noon-report-${(state.setup.voyageNumber||'voyage')}.json`;
-  a.click();
+  downloadJSON(buildBackupPayload(), `noon-report-${(state.setup.voyageNumber||'voyage')}.json`);
 });
 
 document.getElementById('btnExportSetupJSON').addEventListener('click', ()=>{
-  const payload = { setup: state.setup, entries: [], receipts: [], exportedAt: new Date().toISOString(), setupOnly: true };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `noon-report-setup-${(state.setup.voyageNumber||'template')}.json`;
-  a.click();
+  const payload = { setup: setupForExport(false), entries: [], receipts: [], exportedAt: new Date().toISOString(), setupOnly: true };
+  downloadJSON(payload, `noon-report-setup-${(state.setup.voyageNumber||'template')}.json`);
 });
 
 document.getElementById('btnImportJSON').addEventListener('click', ()=> document.getElementById('fileImport').click());
@@ -3220,15 +3452,7 @@ document.getElementById('fileImport').addEventListener('change', (ev)=>{
   reader.onload = async () => {
     try{
       const payload = JSON.parse(reader.result);
-      if (payload.setup) state.setup = migrateSetup(payload.setup);
-      state.entries = (payload.entries || []).map(normalizeEntry);
-      state.receipts = payload.receipts || [];
-      state.documents = payload.documents || [];
-      await dbClear('entries'); await dbClear('receipts'); await dbClear('documents');
-      for (const en of state.entries) await dbPut('entries', en);
-      for (const r of state.receipts) await dbPut('receipts', r);
-      for (const doc of state.documents) await dbPut('documents', doc);
-      await saveSetup();
+      await replaceLocalDataFromPayload(payload);
       render();
       applyEntryDefaults();
       alert('Backup imported and saved to local database.');
@@ -3258,6 +3482,15 @@ document.getElementById('fileImportSetup').addEventListener('change', (ev)=>{
   ev.target.value = '';
 });
 
+document.getElementById('btnSaveSync').addEventListener('click', saveSyncSettings);
+document.getElementById('btnSyncNow').addEventListener('click', ()=>pushToServer(false));
+document.getElementById('btnPullServer').addEventListener('click', pullFromServer);
+window.addEventListener('online', ()=>{
+  renderSyncStatus();
+  if (state.setup.sync && state.setup.sync.auto && state.setup.sync.url) pushToServer(true);
+});
+window.addEventListener('offline', renderSyncStatus);
+
 function downloadCSV(filename, header, lines){
   const csv = [header.join(","), ...lines.map(l=>l.join(","))].join("\n");
   const blob = new Blob([csv], {type:'text/csv'});
@@ -3268,8 +3501,8 @@ function downloadCSV(filename, header, lines){
 }
 document.getElementById('btnExportCSVLog').addEventListener('click', ()=>{
   const {rows} = computeDerived();
-  const header = ["DateTime","Operation","Condition","Hours","DistShip","RPM","RevCounter","DailyRevs","MECons","GECons","BlrCons","Total","CylCons","CylGrade","MELo","GELo","FWMeter","FWProduced","FWRob","FWCons"];
-  const lines = rows.map(r=>[r.datetime,r.operation,r.condition,r.hrs??'',r.distanceShip,r.rpm??'',r.revCounter??'',r.dailyRevs??'',r.meCons??'',r.geCons??'',r.blrCons??'',r.total??'',r.cylCons??'',r.tbn,r.meLoCons??'',r.geLoCons??'',r.fwProd??'',r.fwProdD??'',r.fwRob??'',r.fwConsD??'']);
+  const header = ["DateTime","Operation","Condition","Hours","DistShip","RPM","RevCounter","DailyRevs","MECons","GECons","BlrCons","Total","CylCons","CylGrade","MELo","GELo","FWMeter","FWProduced","FWRob","FWCons","ME_SFOC_g_kWh","ME_SFOC_Ref","ME_SFOC_Dev%","CO2_MT"];
+  const lines = rows.map(r=>[r.datetime,r.operation,r.condition,r.hrs??'',r.distanceShip,r.rpmCalc??r.rpm??'',r.revCounter??'',r.dailyRevs??'',r.meCons??'',r.geCons??'',r.blrCons??'',r.total??'',r.cylCons??'',r.tbn,r.meLoCons??'',r.geLoCons??'',r.fwProd??'',r.fwProdD??'',r.fwRob??'',r.fwConsD??'',r.sfocActual??'',r.sfocRef??'',r.sfocDev??'',FUEL_TYPES.reduce((s,t)=>s+((r.consByType[t]||0)*(CO2_FACTORS[t]||0)),0)]);
   downloadCSV('voyage-log.csv', header, lines);
 });
 document.getElementById('btnExportCSVCons').addEventListener('click', ()=>{
@@ -3314,6 +3547,9 @@ function migrateSetup(setup){
   FUEL_TYPES.forEach(t=>{ if (!setup.capacity[t]) setup.capacity[t] = 1000; });
   if (!setup.capacityLube) setup.capacityLube = {};
   LUBE_TYPES.forEach(t=>{ if (!setup.capacityLube[t]) setup.capacityLube[t] = (t==='FRESH WATER'?150000:15000); });
+  if (!setup.sync) setup.sync = {};
+  const syncDefaults = { url:'', token:'', deviceName:'', auto:false, lastSync:null };
+  Object.keys(syncDefaults).forEach(k=>{ if (setup.sync[k]===undefined) setup.sync[k] = syncDefaults[k]; });
 
   if (setup.vesselName===undefined) setup.vesselName = '';
   if (setup.chEng===undefined) setup.chEng = '';
