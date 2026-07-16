@@ -95,7 +95,16 @@
   .gauge-label{font-family:'Oswald',sans-serif; font-size:10px; letter-spacing:0.06em; text-transform:uppercase; color:var(--paper-dim); margin-top:2px;}
   .gauge-value{font-family:'IBM Plex Mono',monospace; font-size:16px; color:var(--brass); font-weight:600;}
   .gauge-cap{font-size:9px; color:var(--paper-dim); font-family:'IBM Plex Mono',monospace;}
-  .needle{transition:transform .6s cubic-bezier(.3,1.4,.4,1);}
+  .needle{transition:transform .8s cubic-bezier(.3,1.4,.4,1); transform-origin:center;}
+  .gauge-box .analog-gauge{filter:drop-shadow(0 8px 14px rgba(0,0,0,0.45));}
+  @keyframes voyage-wave{0%{transform:translateX(0)}100%{transform:translateX(-48px)}}
+  @keyframes voyage-ship-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+  @keyframes voyage-wake{0%{opacity:.35;stroke-dashoffset:0}100%{opacity:.05;stroke-dashoffset:-40}}
+  @keyframes voyage-progress-fill{from{stroke-dasharray:0 2000}to{stroke-dasharray:var(--prog-len,800) 2000}}
+  .voyage-wave{animation:voyage-wave 6s linear infinite;}
+  .voyage-ship{animation:voyage-ship-bob 3.5s ease-in-out infinite; transform-box:fill-box; transform-origin:center;}
+  .voyage-wake{animation:voyage-wake 2.2s ease-out infinite;}
+  .voyage-progress-line{animation:voyage-progress-fill 1.4s ease-out forwards;}
 
   .stat-strip{display:grid; grid-template-columns:repeat(4,1fr); gap:14px;}
   .stat-strip.cols3{grid-template-columns:repeat(3,1fr);}
@@ -268,8 +277,17 @@
           <div class="field"><label>SFOC - 100% (g/kW.hr)</label><input type="number" step="0.1" id="s_sfoc100"></div>
           <div class="field"><label>SFOC - 85% (g/kW.hr)</label><input type="number" step="0.1" id="s_sfoc85"></div>
           <div class="field"><label>Alternator Max. Power (KW)</label><input type="number" step="1" id="s_alternatorMaxKw"></div>
+          <div class="field"><label>Generator Arrangement</label>
+            <select id="s_geArrangement">
+              <option value="SINGLE">Single Generator</option>
+              <option value="PARALLEL_2">2 Generators in Parallel</option>
+              <option value="PARALLEL_3">3 Generators in Parallel</option>
+            </select>
+          </div>
           <div class="field"><label>Propeller Pitch (m)</label><input type="number" step="0.01" id="s_pitch" value="5.85"></div>
         </div>
+        <div id="geMaxKwFields" class="form-grid cols3" style="margin-top:12px;"></div>
+        <div class="hint">Generator load % is calculated as (average kW ÷ max kW) × 100 for each alternator. Enter per-generator max kW from the nameplate.</div>
         <div class="hint">Speed by engine (kn) = RPM × Pitch × 60 ÷ 1852. %MCR = (RPM ÷ 100%-Load RPM)³ × 100. KW = (RPM ÷ 100%-Load RPM)³ × 100%-Load KW — this is the basis used throughout Performance and the Reports' M/E figures.</div>
       </div>
 
@@ -358,19 +376,34 @@
         <div class="field span2"><label>Date &amp; Time</label><input type="datetime-local" id="in_datetime"></div>
         <div class="field span2"><label>Operation</label>
           <select id="in_operation">
-            <option>LAST LINE - DEPARTURE</option>
-            <option>START - PASSAGE</option>
-            <option selected>AT SEA - NOON</option>
-            <option>END - PASSAGE</option>
-            <option>STAND BY - ARRIVAL</option>
-            <option>FIRST LINE - ARRIVAL</option>
-            <option>IN PORT - NOON</option>
-            <option>DRIFTING</option>
-            <option>SHIFTING</option>
-            <option>BUNKERING</option>
-            <option>ECA - ENTRY</option>
-            <option>ECA - EXIT</option>
-            <option>CHANGE OF SPEED</option>
+            <optgroup label="Departure">
+              <option>LAST LINE - DEPARTURE</option>
+              <option>PILOT ONBOARD - DEPARTURE</option>
+              <option>START - PASSAGE</option>
+            </optgroup>
+            <optgroup label="Sea Passage">
+              <option selected>AT SEA - NOON</option>
+              <option>END - PASSAGE</option>
+              <option>CHANGE OF SPEED</option>
+              <option>HEAVY WEATHER</option>
+              <option>DRIFTING</option>
+              <option>ECA - ENTRY</option>
+              <option>ECA - EXIT</option>
+            </optgroup>
+            <optgroup label="Arrival">
+              <option>STAND BY - ARRIVAL</option>
+              <option>EOSP - END OF SEA PASSAGE</option>
+              <option>FIRST LINE - ARRIVAL</option>
+            </optgroup>
+            <optgroup label="Port / Anchorage">
+              <option>IN PORT - NOON</option>
+              <option>AT ANCHOR - NOON</option>
+              <option>SHIFTING</option>
+              <option>BUNKERING</option>
+              <option>CARGO - LOADING</option>
+              <option>CARGO - DISCHARGING</option>
+              <option>IDLE IN PORT</option>
+            </optgroup>
           </select>
         </div>
         <div class="field"><label>Condition</label><select id="in_condition"><option>BALLAST</option><option>LADEN</option></select></div>
@@ -381,11 +414,12 @@
       <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous Rev. Counter) ÷ (Run Hours × 60), where Run Hours = this entry's time − the previous entry's time. Type either field and the other fills in automatically.</div>
 
       <h3 class="sub">Running Hour Meters (cumulative)</h3>
-      <div class="unit-group cols3">
+      <div class="unit-group cols3" id="meBlrRuntimeFields">
         <div class="unit-box"><h3>Main Engine</h3><div class="field"><label>Runtime (hrs)</label><input type="number" step="0.1" id="me_runtime"></div></div>
-        <div class="unit-box"><h3>Generator</h3><div class="field"><label>Runtime (hrs)</label><input type="number" step="0.1" id="ge1_runtime"></div></div>
         <div class="unit-box"><h3>Boiler</h3><div class="field"><label>Runtime (hrs)</label><input type="number" step="0.1" id="blr_runtime"></div></div>
       </div>
+      <h3 class="sub">Generators — Runtime &amp; Average Load</h3>
+      <div class="unit-group cols3" id="geRuntimeFields"></div>
 
       <h3 class="sub">Fuel Meters (litres, cumulative)</h3>
       <div class="unit-group">
@@ -460,6 +494,22 @@
     <div class="panel" id="voyageSummaryPanel" style="display:none;">
       <h2>Voyage Summary — Reference &amp; Consumption Review</h2>
       <div class="stat-strip" id="vsTopStrip" style="margin-bottom:14px;"></div>
+
+      <div class="panel" style="margin:0 0 16px; padding:16px;">
+        <h3 class="sub" style="margin-top:0;">Main Engine Performance</h3>
+        <div class="stat-strip cols5" id="vsMePerfStrip"></div>
+      </div>
+
+      <div class="panel" style="margin:0 0 16px; padding:16px;">
+        <h3 class="sub" style="margin-top:0;">Generator Report — <span id="vsGeArrLabel">—</span></h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Unit</th><th>Period Hrs</th><th>Avg kW</th><th>Load %</th><th>Voyage Hrs (total)</th><th>Voyage Avg kW (time-wtd)</th><th>Voyage Load %</th></tr></thead>
+            <tbody id="vsGeReportBody"></tbody>
+          </table>
+        </div>
+        <div class="stat-strip cols3" id="vsVoyageAvgStrip" style="margin-top:12px;"></div>
+      </div>
 
       <div class="grid">
         <div>
@@ -674,6 +724,11 @@
       <div class="hint">Reference SFOC is interpolated from your Setup values at 100% and 85% MCR using the standard marine load curve SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²). Actual SFOC = M/E fuel (g) ÷ shaft energy (kWh) for each steaming period. A sustained +3% deviation from reference often warrants investigation (fouling, injection wear, turbo issues).</div>
     </div>
     <div class="panel">
+      <h2>Voyage Time Averages</h2>
+      <div class="stat-strip cols5" id="voyageTimeAvgStrip"></div>
+      <div class="hint">All averages are weighted by elapsed hours between log entries (not simple entry counts). Generator load % uses each alternator's max kW from Setup.</div>
+    </div>
+    <div class="panel">
       <h2>Average Consumption Per Day</h2>
       <h3 class="sub">Fuel (MT/day)</h3>
       <div class="stat-strip" id="fuelPerDayStrip"></div>
@@ -852,6 +907,23 @@ const GAUGE_COLORS = {
   'CYL HIGH': '#d9b64e', 'CYL LOW': '#d9b64e', 'ME SYS OIL': '#d9b64e', 'GE SYS OIL': '#d9b64e',
   'FRESH WATER': '#3fc8dc'
 };
+const GE_ARR_LABELS = { SINGLE:'Single Generator', PARALLEL_2:'2 Generators in Parallel', PARALLEL_3:'3 Generators in Parallel' };
+const GE_ARR_COUNTS = { SINGLE:1, PARALLEL_2:2, PARALLEL_3:3 };
+
+function geUnitCount(){ return GE_ARR_COUNTS[state.setup.geArrangement || 'SINGLE'] || 1; }
+function setupGenerators(){
+  if (!state.setup.generators?.length){
+    const max = state.setup.alternatorMaxKw || 660;
+    state.setup.generators = [{maxKw:max},{maxKw:max},{maxKw:max}];
+  }
+  return state.setup.generators;
+}
+function geMaxKw(i){ return setupGenerators()[i]?.maxKw || state.setup.alternatorMaxKw || 660; }
+function runtimeDelta(curr, prev){
+  if (curr==null || prev==null || isNaN(curr) || isNaN(prev)) return null;
+  const d = curr - prev;
+  return d >= 0 ? d : null;
+}
 
 /* ---------------- local database (IndexedDB) ---------------- */
 let db;
@@ -894,6 +966,8 @@ const state = {
     initDateTime:'', initRuntime:null,
     pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
     sfoc100:null, sfoc85:null, alternatorMaxKw:null,
+    geArrangement:'SINGLE',
+    generators:[{maxKw:660},{maxKw:660},{maxKw:660}],
     flowmeters:{
       main:{ reading:null, digits:8 }, mainOut:{ reading:null, digits:8 },
       aux:{ reading:null, digits:8 }, auxOut:{ reading:null, digits:8 },
@@ -1048,6 +1122,7 @@ function computeDerived(){
   let totalDistShip=0, totalDistEngine=0, totalHrs=0;
   let sumRpm=0, cntRpm=0, sumMcr=0, cntMcr=0, sumKw=0, cntKw=0, sumSpeedShip=0, cntSpeedShip=0, sumSlip=0, cntSlip=0;
   let sumMcrHrs=0, sumSfocHrs=0, sumSfocWeighted=0, sumSfocDeltaWeighted=0, cntSfocDelta=0;
+  const sumGeHrs=[0,0,0], sumGeKwHrs=[0,0,0], sumGeMaxKwHrs=[0,0,0];
 
   let prev = effectiveCarryover();
   const rows = list.map(e=>{
@@ -1055,6 +1130,7 @@ function computeDerived(){
     let cylCons=null, meLoCons=null, geLoCons=null, dailyRevs=null, fwProdD=null, fwConsD=null;
     let distEngine=null, speedEngine=null, speedShip=null, slip=null, mcrPct=null, kwEst=null;
     let sfocRef=null, sfocActual=null, sfocDelta=null, meFuelMtDay=null;
+    const gePeriod = [{hrs:null,kw:null,loadPct:null},{hrs:null,kw:null,loadPct:null},{hrs:null,kw:null,loadPct:null}];
     let consByType = {"HFO":null,"LSFO":null,"MDO/MGO":null,"LSMGO":null};
     let lubeByType = {"CYL HIGH":null,"CYL LOW":null,"ME SYS OIL":null,"GE SYS OIL":null,"FRESH WATER":null};
     const override = e.consOverride || {};
@@ -1144,6 +1220,25 @@ function computeDerived(){
         }
       }
 
+      const geN = geUnitCount();
+      for (let i=0; i<geN; i++){
+        const n = i+1;
+        const gh = runtimeDelta(e[`ge${n}Runtime`], prev[`ge${n}Runtime`]);
+        gePeriod[i].hrs = gh;
+        gePeriod[i].kw = e[`ge${n}Kw`] ?? null;
+        if (gh!=null && gh>0){
+          sumGeHrs[i] += gh;
+          if (e[`ge${n}Kw`]!=null){
+            const max = geMaxKw(i);
+            gePeriod[i].loadPct = max>0 ? (e[`ge${n}Kw`]/max)*100 : null;
+            sumGeKwHrs[i] += e[`ge${n}Kw`] * gh;
+            sumGeMaxKwHrs[i] += max * gh;
+          }
+        } else if (e[`ge${n}Kw`]!=null && geMaxKw(i)>0){
+          gePeriod[i].loadPct = (e[`ge${n}Kw`]/geMaxKw(i))*100;
+        }
+      }
+
       totalDistShip += (e.distanceShip||0);
       totalDistEngine += (distEngine||0);
       totalHrs += hrs;
@@ -1153,9 +1248,16 @@ function computeDerived(){
     return {...e, hrs, meCons, geCons, blrCons, total, cylCons, meLoCons, geLoCons, fwProdD, fwConsD,
              consByType, lubeByType,
              distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, dailyRevs,
-             sfocRef, sfocActual, sfocDelta, meFuelMtDay,
+             sfocRef, sfocActual, sfocDelta, meFuelMtDay, gePeriod,
              cumFuel: {...consByFuel}, cumLube: {...consByLube}, cumDistShip: totalDistShip};
   });
+
+  let voyageGeKwHrs=0, voyageGeMaxKwHrs=0, voyageGeHrs=0;
+  for (let i=0; i<3; i++){
+    voyageGeKwHrs += sumGeKwHrs[i];
+    voyageGeMaxKwHrs += sumGeMaxKwHrs[i];
+    voyageGeHrs += sumGeHrs[i];
+  }
 
   const perf = {
     avgRpm: cntRpm? sumRpm/cntRpm : null,
@@ -1166,6 +1268,10 @@ function computeDerived(){
     avgSlip: cntSlip? sumSlip/cntSlip : null,
     avgSfocActual: sumSfocHrs>0 ? sumSfocWeighted/sumSfocHrs : null,
     avgSfocDelta: cntSfocDelta>0 ? sumSfocDeltaWeighted/cntSfocDelta : null,
+    totalGeHrs: voyageGeHrs,
+    avgGeKwTimeWeighted: voyageGeHrs>0 ? voyageGeKwHrs/voyageGeHrs : null,
+    avgGeLoadPct: voyageGeMaxKwHrs>0 ? (voyageGeKwHrs/voyageGeMaxKwHrs)*100 : null,
+    geTotals: { hrs: sumGeHrs, kwHrs: sumGeKwHrs, maxKwHrs: sumGeMaxKwHrs },
     totalDistShip, totalDistEngine, totalHrs
   };
 
@@ -1222,40 +1328,69 @@ function robAsOfEntry(entryId){
 }
 
 /* ---------------- gauge rendering ---------------- */
+function gaugeTicks(cx, cy, r, majorEvery){
+  let ticks='';
+  for (let i=0; i<=10; i++){
+    const pct=i/10, ang=(-135+pct*270)*Math.PI/180;
+    const x1=cx+Math.cos(ang)*(r-4), y1=cy+Math.sin(ang)*(r-4);
+    const x2=cx+Math.cos(ang)*(r-(i%majorEvery===0?12:7)), y2=cy+Math.sin(ang)*(r-(i%majorEvery===0?12:7));
+    ticks+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(233,228,214,${i%majorEvery===0?0.55:0.28})" stroke-width="${i%majorEvery===0?1.6:1}"/>`;
+  }
+  return ticks;
+}
+
 function gaugeSVG(pct, colorOverride){
   pct = Math.max(0, Math.min(1, pct||0));
   const angle = -135 + pct*270;
-  const arcColor = colorOverride || (pct < 0.15 ? 'var(--alert)' : (pct < 0.35 ? 'var(--brass)' : 'var(--teal)'));
-  // Arc endpoints (30,108)-(130,108), radius 62 => true center is (80, 71.34), not (80,108).
-  const cx = 80, cy = 71.34, r = 62;
-  return `<svg viewBox="0 0 160 140">
-    <path d="M 30 108 A ${r} ${r} 0 1 1 130 108" fill="none" stroke="rgba(233,228,214,0.15)" stroke-width="10" stroke-linecap="round"/>
-    <path d="M 30 108 A ${r} ${r} 0 1 1 130 108" fill="none" stroke="${arcColor}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${pct*292} 292"/>
+  const arcColor = colorOverride || (pct < 0.15 ? '#c1573a' : (pct < 0.35 ? '#c99a53' : '#57b3ab'));
+  const cx = 80, cy = 78, r = 58;
+  const zonePath = `M ${cx+Math.cos(-135*Math.PI/180)*r} ${cy+Math.sin(-135*Math.PI/180)*r} A ${r} ${r} 0 1 1 ${cx+Math.cos(135*Math.PI/180)*r} ${cy+Math.sin(135*Math.PI/180)*r}`;
+  return `<svg class="analog-gauge" viewBox="0 0 160 150">
+    <defs>
+      <radialGradient id="bezel-${arcColor.replace('#','')}" cx="35%" cy="30%"><stop offset="0%" stop-color="#4a5568"/><stop offset="55%" stop-color="#1a2433"/><stop offset="100%" stop-color="#0a1018"/></radialGradient>
+      <linearGradient id="face-${arcColor.replace('#','')}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#16283f"/><stop offset="100%" stop-color="#0a1420"/></linearGradient>
+    </defs>
+    <ellipse cx="${cx}" cy="${cy+18}" rx="46" ry="8" fill="rgba(0,0,0,0.35)"/>
+    <circle cx="${cx}" cy="${cy}" r="${r+10}" fill="url(#bezel-${arcColor.replace('#','')})" stroke="#2a3545" stroke-width="2"/>
+    <circle cx="${cx}" cy="${cy}" r="${r+2}" fill="url(#face-${arcColor.replace('#','')})" stroke="rgba(233,228,214,0.08)"/>
+    <path d="${zonePath}" fill="none" stroke="rgba(193,87,58,0.35)" stroke-width="8" stroke-dasharray="55 240" stroke-linecap="round"/>
+    <path d="${zonePath}" fill="none" stroke="rgba(201,154,83,0.28)" stroke-width="8" stroke-dasharray="55 55" stroke-dashoffset="-60" stroke-linecap="round"/>
+    ${gaugeTicks(cx,cy,r,2)}
+    <path d="M ${cx+Math.cos(-135*Math.PI/180)*r} ${cy+Math.sin(-135*Math.PI/180)*r} A ${r} ${r} 0 1 1 ${cx+Math.cos(135*Math.PI/180)*r} ${cy+Math.sin(135*Math.PI/180)*r}" fill="none" stroke="rgba(233,228,214,0.1)" stroke-width="9" stroke-linecap="round"/>
+    <path d="M ${cx+Math.cos(-135*Math.PI/180)*r} ${cy+Math.sin(-135*Math.PI/180)*r} A ${r} ${r} 0 ${pct>0.5?1:0} 1 ${cx+Math.cos(angle*Math.PI/180)*r} ${cy+Math.sin(angle*Math.PI/180)*r}" fill="none" stroke="${arcColor}" stroke-width="7" stroke-linecap="round" filter="drop-shadow(0 0 4px ${arcColor})"/>
     <g class="needle" transform="rotate(${angle} ${cx} ${cy})">
-      <line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy-53}" stroke="var(--paper)" stroke-width="2.5"/>
-      <circle cx="${cx}" cy="${cy}" r="5" fill="var(--brass)"/>
+      <polygon points="${cx-2},${cy+6} ${cx+2},${cy+6} ${cx},${cy-48}" fill="#e9e4d6" stroke="#8a6b3c" stroke-width="0.6"/>
+      <circle cx="${cx}" cy="${cy}" r="7" fill="#c99a53" stroke="#8a6b3c" stroke-width="1.5"/>
+      <circle cx="${cx}" cy="${cy}" r="2.5" fill="#1a2433"/>
     </g>
+    <path d="M ${cx-30} ${cy-38} Q ${cx} ${cy-52} ${cx+34} ${cy-30}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4" stroke-linecap="round"/>
   </svg>`;
 }
 
-/* Gauge with a fixed tick marking the starting ROB position, plus a needle for current ROB.
-   Same arc geometry as gaugeSVG so the two read consistently side by side. */
 function dualGaugeSVG(startPct, currentPct, colorOverride){
   startPct = Math.max(0, Math.min(1, startPct||0));
   currentPct = Math.max(0, Math.min(1, currentPct||0));
   const curAngle = -135 + currentPct*270;
   const startAngle = -135 + startPct*270;
-  const arcColor = colorOverride || (currentPct < 0.15 ? 'var(--alert)' : (currentPct < 0.35 ? 'var(--brass)' : 'var(--teal)'));
-  const cx = 80, cy = 71.34, r = 62;
-  return `<svg viewBox="0 0 160 140">
-    <path d="M 30 108 A ${r} ${r} 0 1 1 130 108" fill="none" stroke="rgba(233,228,214,0.15)" stroke-width="10" stroke-linecap="round"/>
-    <path d="M 30 108 A ${r} ${r} 0 1 1 130 108" fill="none" stroke="${arcColor}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${currentPct*292} 292"/>
+  const arcColor = colorOverride || (currentPct < 0.15 ? '#c1573a' : (currentPct < 0.35 ? '#c99a53' : '#57b3ab'));
+  const cx = 80, cy = 78, r = 58;
+  const zonePath = `M ${cx+Math.cos(-135*Math.PI/180)*r} ${cy+Math.sin(-135*Math.PI/180)*r} A ${r} ${r} 0 1 1 ${cx+Math.cos(135*Math.PI/180)*r} ${cy+Math.sin(135*Math.PI/180)*r}`;
+  const curRad = curAngle*Math.PI/180;
+  return `<svg class="analog-gauge" viewBox="0 0 160 150">
+    <defs><radialGradient id="dbezel" cx="35%" cy="30%"><stop offset="0%" stop-color="#4a5568"/><stop offset="100%" stop-color="#0a1018"/></radialGradient></defs>
+    <ellipse cx="${cx}" cy="${cy+18}" rx="46" ry="8" fill="rgba(0,0,0,0.35)"/>
+    <circle cx="${cx}" cy="${cy}" r="${r+10}" fill="url(#dbezel)" stroke="#2a3545" stroke-width="2"/>
+    <circle cx="${cx}" cy="${cy}" r="${r+2}" fill="#0e1c30" stroke="rgba(233,228,214,0.08)"/>
+    ${gaugeTicks(cx,cy,r,2)}
+    <path d="${zonePath}" fill="none" stroke="rgba(233,228,214,0.1)" stroke-width="9" stroke-linecap="round"/>
+    <path d="M ${cx+Math.cos(-135*Math.PI/180)*r} ${cy+Math.sin(-135*Math.PI/180)*r} A ${r} ${r} 0 ${currentPct>0.5?1:0} 1 ${cx+Math.cos(curRad)*r} ${cy+Math.sin(curRad)*r}" fill="none" stroke="${arcColor}" stroke-width="7" stroke-linecap="round" filter="drop-shadow(0 0 4px ${arcColor})"/>
     <g transform="rotate(${startAngle} ${cx} ${cy})">
-      <line x1="${cx}" y1="${cy-50}" x2="${cx}" y2="${cy-67}" stroke="var(--paper)" stroke-width="3" stroke-linecap="round"/>
+      <line x1="${cx}" y1="${cy-46}" x2="${cx}" y2="${cy-64}" stroke="#e9e4d6" stroke-width="3" stroke-linecap="round"/>
+      <polygon points="${cx-3},${cy-64} ${cx+3},${cy-64} ${cx},${cy-70}" fill="#e9e4d6"/>
     </g>
     <g class="needle" transform="rotate(${curAngle} ${cx} ${cy})">
-      <line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy-53}" stroke="var(--paper)" stroke-width="2.5"/>
-      <circle cx="${cx}" cy="${cy}" r="5" fill="var(--brass)"/>
+      <polygon points="${cx-2},${cy+6} ${cx+2},${cy+6} ${cx},${cy-48}" fill="#e9e4d6" stroke="#8a6b3c" stroke-width="0.6"/>
+      <circle cx="${cx}" cy="${cy}" r="7" fill="#c99a53" stroke="#8a6b3c" stroke-width="1.5"/>
     </g>
   </svg>`;
 }
@@ -1323,6 +1458,43 @@ function renderFuelMeterFields(){
          <div class="field"><label>Outlet Flowmeter</label><input type="number" id="ge_meter_out"></div>`
       : `<div class="field"><label>Fuel Meter</label><input type="number" id="ge_meter"></div>`;
   }
+}
+
+function renderGeMaxKwFields(){
+  const box = document.getElementById('geMaxKwFields');
+  if (!box) return;
+  const n = geUnitCount();
+  const gens = setupGenerators();
+  box.innerHTML = Array.from({length:n}, (_,i)=>`
+    <div class="field"><label>A/E #${i+1} Max kW</label><input type="number" step="1" id="s_geMaxKw_${i}" value="${gens[i]?.maxKw ?? ''}"></div>
+  `).join('');
+}
+
+function renderGeRuntimeFields(){
+  const box = document.getElementById('geRuntimeFields');
+  if (!box) return;
+  const n = geUnitCount();
+  box.innerHTML = Array.from({length:n}, (_,i)=>{
+    const num = i+1;
+    return `<div class="unit-box"><h3>A/E #${num}</h3>
+      <div class="field"><label>Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="ge${num}_runtime"></div>
+      <div class="field"><label>Avg Load (kW)</label><input type="number" step="1" id="ge${num}_kw" placeholder="for this period"></div>
+      <div class="field"><label>Load % (calc)</label><input type="text" id="ge${num}_loadpct" readonly></div>
+    </div>`;
+  }).join('');
+  for (let i=1; i<=n; i++){
+    const kwEl = document.getElementById(`ge${i}_kw`);
+    if (kwEl) kwEl.addEventListener('input', ()=>updateGeLoadPctPreview(i));
+  }
+}
+
+function updateGeLoadPctPreview(i){
+  const kw = parseFloat(document.getElementById(`ge${i}_kw`)?.value);
+  const out = document.getElementById(`ge${i}_loadpct`);
+  if (!out) return;
+  if (isNaN(kw)){ out.value=''; return; }
+  const max = geMaxKw(i-1);
+  out.value = max>0 ? fmt((kw/max)*100, 1)+' %' : '—';
 }
 
 function renderFlowmeterCounterRows(){
@@ -1419,6 +1591,8 @@ function render(){
   document.getElementById('s_sfoc100').value = state.setup.sfoc100 ?? '';
   document.getElementById('s_sfoc85').value = state.setup.sfoc85 ?? '';
   document.getElementById('s_alternatorMaxKw').value = state.setup.alternatorMaxKw ?? '';
+  document.getElementById('s_geArrangement').value = state.setup.geArrangement || 'SINGLE';
+  renderGeMaxKwFields();
 
   const fm = state.setup.flowmeters;
   renderFlowmeterCounterRows();
@@ -1450,6 +1624,7 @@ function render(){
   document.querySelectorAll('[data-cap-lube]').forEach(inp=> inp.addEventListener('change', ()=>{ state.setup.capacityLube[inp.dataset.capLube]=parseFloat(inp.value)||1; saveSetup(); render(); }));
 
   renderFuelMeterFields();
+  renderGeRuntimeFields();
 
   // fuel gauges
   document.getElementById('fuelGauges').innerHTML = FUEL_TYPES.map(t=>{
@@ -1615,6 +1790,14 @@ function render(){
     <div class="stat"><div class="num">${perf.avgSfocDelta===null?'—':((perf.avgSfocDelta>0?'+':'')+fmt(perf.avgSfocDelta,1))}</div><div class="lbl">Δ vs reference %</div></div>
     <div class="stat"><div class="num">${daysAtSea>0?fmt(totalCons/daysAtSea,2):'—'}</div><div class="lbl">Total fuel MT/day</div></div>
     <div class="stat"><div class="num">${perf.avgSpeedShip===null?'—':fmt(perf.avgSpeedShip,2)}</div><div class="lbl">Avg speed (kn)</div></div>
+  `;
+
+  document.getElementById('voyageTimeAvgStrip').innerHTML = `
+    <div class="stat"><div class="num">${fmt(perf.totalHrs/24,2)}</div><div class="lbl">Days at sea</div></div>
+    <div class="stat"><div class="num">${perf.avgMcrTimeWeighted===null?'—':fmt(perf.avgMcrTimeWeighted,1)}</div><div class="lbl">%MCR (hrs-wtd)</div></div>
+    <div class="stat"><div class="num">${perf.avgGeLoadPct===null?'—':fmt(perf.avgGeLoadPct,1)}</div><div class="lbl">Gen load % (hrs-wtd)</div></div>
+    <div class="stat"><div class="num">${perf.avgGeKwTimeWeighted===null?'—':fmt(perf.avgGeKwTimeWeighted,0)}</div><div class="lbl">Gen kW (hrs-wtd)</div></div>
+    <div class="stat"><div class="num">${fmt(perf.totalGeHrs,1)}</div><div class="lbl">Total gen hours</div></div>
   `;
 
   document.getElementById('entryCount').textContent = `${state.entries.length} log entries · ${state.receipts.length} receipts stored locally.`;
@@ -1986,6 +2169,7 @@ function loadEntryIntoForm(id){
   const e = state.entries.find(x=>x.id===id);
   if (!e) return;
   editingId = id;
+  renderGeRuntimeFields();
   const sel = document.getElementById('in_selectEntry');
   if (sel) sel.value = id;
   document.getElementById('in_datetime').value = e.datetime;
@@ -1996,8 +2180,14 @@ function loadEntryIntoForm(id){
   document.getElementById('in_revCounter').value = e.revCounter ?? '';
   document.getElementById('in_tbn').value = e.tbn;
   document.getElementById('me_runtime').value = e.meRuntime ?? '';
-  document.getElementById('ge1_runtime').value = e.ge1Runtime ?? '';
   document.getElementById('blr_runtime').value = e.blrRuntime ?? '';
+  for (let i=1; i<=3; i++){
+    const rt = document.getElementById(`ge${i}_runtime`);
+    if (rt) rt.value = e[`ge${i}Runtime`] ?? (i===1 ? e.ge1Runtime : null) ?? '';
+    const kw = document.getElementById(`ge${i}_kw`);
+    if (kw) kw.value = e[`ge${i}Kw`] ?? '';
+    updateGeLoadPctPreview(i);
+  }
 
   const meIn = document.getElementById('me_meter_in'), meOut = document.getElementById('me_meter_out'), meSingle = document.getElementById('me_meter');
   if (meIn && meOut){ meIn.value = e.me.meterIn ?? ''; meOut.value = e.me.meterOut ?? ''; }
@@ -2057,6 +2247,11 @@ document.getElementById('s_flowArr').addEventListener('change', (e)=>{
   state.setup.flowArr = e.target.value;
   renderFlowmeterCounterRows();
 });
+document.getElementById('s_geArrangement').addEventListener('change', ()=>{
+  state.setup.geArrangement = document.getElementById('s_geArrangement').value;
+  renderGeMaxKwFields();
+  renderGeRuntimeFields();
+});
 async function saveVoyageDetails(){
   state.setup.vesselName = document.getElementById('s_vesselName').value;
   state.setup.chEng = document.getElementById('s_chEng').value;
@@ -2112,6 +2307,14 @@ async function saveSetupFromForm(){
   state.setup.sfoc100 = parseFloat(document.getElementById('s_sfoc100').value)||null;
   state.setup.sfoc85 = parseFloat(document.getElementById('s_sfoc85').value)||null;
   state.setup.alternatorMaxKw = parseFloat(document.getElementById('s_alternatorMaxKw').value)||null;
+  state.setup.geArrangement = document.getElementById('s_geArrangement').value || 'SINGLE';
+  const gens = setupGenerators();
+  for (let i=0; i<geUnitCount(); i++){
+    const v = parseFloat(document.getElementById(`s_geMaxKw_${i}`)?.value);
+    gens[i].maxKw = isNaN(v) ? (state.setup.alternatorMaxKw || 660) : v;
+  }
+  if (state.setup.alternatorMaxKw && gens[0]) gens[0].maxKw = state.setup.alternatorMaxKw;
+  state.setup.generators = gens;
 
   const meDualNow = state.setup.flowArr==='DUAL_ME' || state.setup.flowArr==='DUAL_BOTH';
   const geDualNow = state.setup.flowArr==='DUAL_GE' || state.setup.flowArr==='DUAL_BOTH';
@@ -2364,6 +2567,45 @@ function openVoyageSummary(entryId){
     ${stat('Total Rev.', fmt(row.dailyRevs,0))}
     ${stat('Ave. KW (voyage)', fmt(perf.avgKw,0))}
     ${stat('Days To Go', daysToGoVal!=null? fmt(daysToGoVal,2):'—')}
+  `;
+
+  document.getElementById('vsGeArrLabel').textContent = GE_ARR_LABELS[state.setup.geArrangement || 'SINGLE'] || 'Single Generator';
+  document.getElementById('vsMePerfStrip').innerHTML = `
+    ${stat('RPM', fmt(entry.rpm,1))}
+    ${stat('% MCR', fmt(row.mcrPct,1))}
+    ${stat('Est. kW', fmt(row.kwEst,0))}
+    ${stat('Engine Speed', row.speedEngine==null?'—':fmt(row.speedEngine,2)+' kn')}
+    ${stat('Ship Speed', row.speedShip==null?'—':fmt(row.speedShip,2)+' kn')}
+    ${stat('Slip %', fmt(row.slip,2))}
+    ${stat('Ref. SFOC', fmt(row.sfocRef,1))}
+    ${stat('Actual SFOC', fmt(row.sfocActual,1))}
+    ${stat('SFOC Δ %', row.sfocDelta==null?'—':fmt(row.sfocDelta,1))}
+  `;
+
+  const geN = geUnitCount();
+  document.getElementById('vsGeReportBody').innerHTML = Array.from({length:geN}, (_,i)=>{
+    const p = row.gePeriod?.[i] || {};
+    const totH = perf.geTotals.hrs[i];
+    const totKw = totH>0 ? perf.geTotals.kwHrs[i]/totH : null;
+    const totLoad = perf.geTotals.maxKwHrs[i]>0 ? (perf.geTotals.kwHrs[i]/perf.geTotals.maxKwHrs[i])*100 : null;
+    return `<tr>
+      <td>A/E #${i+1} <span class="badge">${fmt(geMaxKw(i),0)} kW max</span></td>
+      <td>${p.hrs==null?'—':fmt(p.hrs,1)}</td>
+      <td>${p.kw==null?'—':fmt(p.kw,0)}</td>
+      <td>${p.loadPct==null?'—':fmt(p.loadPct,1)}</td>
+      <td>${fmt(totH,1)}</td>
+      <td>${totKw==null?'—':fmt(totKw,0)}</td>
+      <td>${totLoad==null?'—':fmt(totLoad,1)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('vsVoyageAvgStrip').innerHTML = `
+    ${stat('Voyage Hours', fmt(perf.totalHrs,1))}
+    ${stat('Generator Hours', fmt(perf.totalGeHrs,1))}
+    ${stat('Avg Gen Load %', perf.avgGeLoadPct==null?'—':fmt(perf.avgGeLoadPct,1))}
+    ${stat('Avg Gen kW (hrs-wtd)', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted,0))}
+    ${stat('Avg %MCR (hrs-wtd)', perf.avgMcrTimeWeighted==null?'—':fmt(perf.avgMcrTimeWeighted,1))}
+    ${stat('Avg Ship Speed', perf.avgSpeedShip==null?'—':fmt(perf.avgSpeedShip,2)+' kn')}
   `;
 
   document.getElementById('vsFuelConsBox').innerHTML = `
@@ -2811,8 +3053,8 @@ function renderVoyageProgress(){
 
   // Determine ship status: underway, at port, or at anchorage — based on operation,
   // falling back to "no distance / no engine power" when the operation itself is ambiguous.
-  const PORT_OPS = new Set(['LAST LINE - DEPARTURE','IN PORT - NOON','STAND BY - ARRIVAL','FIRST LINE - ARRIVAL','SHIFTING','BUNKERING']);
-  const ANCHOR_OPS = new Set(['DRIFTING']);
+  const PORT_OPS = new Set(['LAST LINE - DEPARTURE','PILOT ONBOARD - DEPARTURE','IN PORT - NOON','STAND BY - ARRIVAL','FIRST LINE - ARRIVAL','EOSP - END OF SEA PASSAGE','SHIFTING','BUNKERING','CARGO - LOADING','CARGO - DISCHARGING','IDLE IN PORT','AT ANCHOR - NOON']);
+  const ANCHOR_OPS = new Set(['DRIFTING','AT ANCHOR - NOON']);
   let shipStatus = 'UNDERWAY';
   if (lastRow){
     if (ANCHOR_OPS.has(lastRow.operation)) shipStatus = 'ANCHORED';
@@ -2839,13 +3081,15 @@ function renderVoyageProgress(){
        <path d="${anchorGlyph}" fill="none" stroke="var(--paper-dim)" stroke-width="2" stroke-linecap="round"/>`
     : '';
 
+  const progLen = Math.max(1, pct * (x1-x0));
+
   box.innerHTML = `
-    <svg viewBox="0 0 900 270" style="width:100%; height:auto; max-height:290px;">
-      <path d="${wave1}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.25"/>
-      <path d="${wave2}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.15"/>
+    <svg viewBox="0 0 900 270" style="width:100%; height:auto; max-height:290px; --prog-len:${progLen};">
+      <g class="voyage-wave"><path d="${wave1}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.25"/></g>
+      <g class="voyage-wave" style="animation-delay:-3s"><path d="${wave2}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.15"/></g>
 
       <line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="var(--line-strong)" stroke-width="3" stroke-dasharray="2 6" stroke-linecap="round"/>
-      <line x1="${x0}" y1="${y}" x2="${shipX}" y2="${y}" stroke="var(--brass)" stroke-width="3" stroke-linecap="round"/>
+      <line x1="${x0}" y1="${y}" x2="${shipX}" y2="${y}" class="voyage-progress-line" stroke="var(--brass)" stroke-width="3" stroke-linecap="round"/>
 
       <circle cx="${x0}" cy="${y}" r="7" fill="var(--teal)"/>
       <circle cx="${x1}" cy="${y}" r="7" fill="none" stroke="var(--paper-dim)" stroke-width="2"/>
@@ -2855,8 +3099,8 @@ function renderVoyageProgress(){
       <text x="${x1}" y="${y-46}" text-anchor="end" fill="var(--paper)" font-family="Oswald, sans-serif" font-size="15" font-weight="600">${arrPort}</text>
       <text x="${x1}" y="${y-28}" text-anchor="end" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(totalDistance,0)} nm</text>
 
-      <g>
-        ${isUnderway ? wakeLines : ''}
+      <g class="voyage-ship">
+        ${isUnderway ? `<path class="voyage-wake" d="M ${shipX-44} ${y+14} q -10 4 -22 2" fill="none" stroke="var(--paper-dim)" stroke-width="1.5"/>` : ''}
         <path d="${upperHull}" fill="#7a1f2b" stroke="var(--ink)" stroke-width="1"/>
         <path d="${lowerHull}" fill="#0d0d0d" stroke="var(--ink)" stroke-width="1"/>
         <line x1="${shipX-44}" y1="${waterlineY}" x2="${shipX+46}" y2="${waterlineY}" stroke="var(--brass)" stroke-width="2"/>
@@ -3050,8 +3294,13 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     revCounter: document.getElementById('in_revCounter').value===''? null : parseFloat(document.getElementById('in_revCounter').value),
     tbn: document.getElementById('in_tbn').value,
     meRuntime: parseFloat(document.getElementById('me_runtime').value)||null,
-    ge1Runtime: parseFloat(document.getElementById('ge1_runtime').value)||null,
     blrRuntime: parseFloat(document.getElementById('blr_runtime').value)||null,
+    ge1Runtime: parseFloat(document.getElementById('ge1_runtime')?.value)||null,
+    ge2Runtime: parseFloat(document.getElementById('ge2_runtime')?.value)||null,
+    ge3Runtime: parseFloat(document.getElementById('ge3_runtime')?.value)||null,
+    ge1Kw: document.getElementById('ge1_kw')?.value==='' ? null : parseFloat(document.getElementById('ge1_kw')?.value)||null,
+    ge2Kw: document.getElementById('ge2_kw')?.value==='' ? null : parseFloat(document.getElementById('ge2_kw')?.value)||null,
+    ge3Kw: document.getElementById('ge3_kw')?.value==='' ? null : parseFloat(document.getElementById('ge3_kw')?.value)||null,
     me: meField,
     ge: geField,
     blr:{ meter: blrMeter, type: document.getElementById('blr_type').value, sg: parseFloat(document.getElementById('blr_sg').value)||0 },
@@ -3760,6 +4009,11 @@ function migrateSetup(setup){
   if (setup.pitch==null) setup.pitch = 5.85;
   if (setup.mcrRpm==null) setup.mcrRpm = 91;
   if (setup.mcrKw==null) setup.mcrKw = 18630;
+  if (!setup.geArrangement) setup.geArrangement = 'SINGLE';
+  if (!setup.generators){
+    const max = setup.alternatorMaxKw || 660;
+    setup.generators = [{maxKw:max},{maxKw:max},{maxKw:max}];
+  }
 
   delete setup.rollover;
   if (!setup.sync){
