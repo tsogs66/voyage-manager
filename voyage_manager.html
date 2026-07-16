@@ -3,7 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <title>Noon Report — Engine Log</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a1420">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Noon Report">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -120,10 +127,32 @@
   .hint{font-size:11px; color:var(--paper-dim); margin-top:4px; line-height:1.5;}
   .ref-grid{display:grid; grid-template-columns:repeat(6,1fr); gap:10px 14px;}
   @media (max-width:900px){ .ref-grid{grid-template-columns:repeat(3,1fr);} }
+  @media (max-width:720px){
+    body{padding:16px 12px 72px; padding-bottom:calc(72px + env(safe-area-inset-bottom));}
+    h1{font-size:20px;}
+    .tabs{overflow-x:auto; flex-wrap:nowrap; -webkit-overflow-scrolling:touch; scrollbar-width:none;}
+    .tabs::-webkit-scrollbar{display:none;}
+    .tab{flex:0 0 auto; padding:10px 12px;}
+    .form-grid,.form-grid.cols2,.form-grid.cols3{grid-template-columns:1fr 1fr;}
+    .stat-strip,.stat-strip.cols3,.stat-strip.cols5{grid-template-columns:repeat(2,1fr);}
+    .gauge-grid,.gauge-grid.cols4,.gauge-grid.cols5{grid-template-columns:repeat(2,1fr);}
+    button,.tab{touch-action:manipulation;}
+    .masthead{align-items:flex-start;}
+    .status-row{align-items:flex-start;}
+  }
   .ref-item{border-left:2px solid var(--line-strong); padding-left:8px;}
   .ref-item .rv{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--brass); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .ref-item .rl{font-size:9px; letter-spacing:0.05em; text-transform:uppercase; color:var(--paper-dim); margin-top:1px;}
   .footer-note{text-align:center; color:var(--paper-dim); font-size:11px; margin-top:30px; letter-spacing:0.03em;}
+  .status-row{display:flex; flex-direction:column; align-items:flex-end; gap:4px;}
+  #syncStatus{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--paper-dim);}
+  #syncStatus.online{color:var(--good);}
+  #syncStatus.pending{color:var(--brass);}
+  #syncStatus.error{color:var(--alert);}
+  .sync-banner{border:1px solid var(--line-strong); border-radius:4px; padding:10px 12px; margin-bottom:12px; font-size:12px; line-height:1.5;}
+  .sync-banner.ok{border-color:rgba(95,158,110,0.45); color:var(--good);}
+  .sync-banner.warn{border-color:rgba(201,154,83,0.45); color:var(--brass);}
+  .sync-banner.err{border-color:rgba(193,87,58,0.45); color:var(--alert);}
   .badge{display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:10px; padding:2px 7px; border-radius:10px; border:1px solid var(--line-strong); color:var(--paper-dim); margin-left:8px;}
   .pf-input{width:64px; background:var(--ink); border:1px solid var(--line-strong); color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:12px; padding:4px; border-radius:2px;}
   .pf-computed{color:var(--teal); font-family:'IBM Plex Mono',monospace; font-size:12px;}
@@ -170,7 +199,10 @@
         <div class="subtitle">Engine Department — Voyage Log &amp; Performance</div>
       </div>
     </div>
-    <div id="dbStatus">● local database ready</div>
+    <div class="status-row">
+      <div id="dbStatus">● local database ready</div>
+      <div id="syncStatus">○ sync not configured</div>
+    </div>
   </div>
 
   <div class="tabs" id="tabs">
@@ -637,6 +669,11 @@
       <div class="stat-strip cols5" id="perfTotalsStrip"></div>
     </div>
     <div class="panel">
+      <h2>Fuel Efficiency (SFOC)</h2>
+      <div class="stat-strip cols5" id="sfocStrip"></div>
+      <div class="hint">Reference SFOC is interpolated from your Setup values at 100% and 85% MCR using the standard marine load curve SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²). Actual SFOC = M/E fuel (g) ÷ shaft energy (kWh) for each steaming period. A sustained +3% deviation from reference often warrants investigation (fouling, injection wear, turbo issues).</div>
+    </div>
+    <div class="panel">
       <h2>Average Consumption Per Day</h2>
       <h3 class="sub">Fuel (MT/day)</h3>
       <div class="stat-strip" id="fuelPerDayStrip"></div>
@@ -758,6 +795,25 @@
   <!-- DATA -->
   <div class="page" id="page-data">
     <div class="panel">
+      <h2>Server Sync</h2>
+      <div id="syncBanner" class="sync-banner warn">Configure your self-hosted sync server to back up and merge data when internet is available. Works offline — changes queue locally and upload on reconnect.</div>
+      <div class="form-grid cols2">
+        <div class="field span2"><label>Sync Server URL</label><input id="sync_serverUrl" placeholder="https://sync.yourdomain.com"></div>
+        <div class="field"><label>API Token</label><input id="sync_apiToken" type="password" placeholder="Bearer token"></div>
+        <div class="field"><label>Vessel ID (slug)</label><input id="sync_vesselId" placeholder="e.g. captain-veniamis"></div>
+        <div class="field"><label>Auto-sync</label><select id="sync_auto"><option value="true">On save &amp; when online</option><option value="false">Manual only</option></select></div>
+        <div class="field"><label>Conflict policy</label><select id="sync_conflict"><option value="merge">Merge by record (recommended)</option><option value="local">Prefer this device</option><option value="remote">Prefer server</option></select></div>
+      </div>
+      <div class="btn-row">
+        <button class="primary small" id="btnSaveSyncSettings">Save Sync Settings</button>
+        <button class="ghost small" id="btnSyncNow">Sync Now</button>
+        <button class="ghost small" id="btnPullRemote">Pull from Server</button>
+        <button class="ghost small" id="btnInstallApp" style="display:none;">Install App</button>
+      </div>
+      <div class="hint" id="syncMetaLine">Last sync: never</div>
+      <div class="hint">Point the URL at your Linux server exposed via Cloudflare Tunnel (or nginx). Run <code>sync-server/server.py</code> on the server — see README. The app stores everything locally in IndexedDB and syncs JSON snapshots per vessel + voyage.</div>
+    </div>
+    <div class="panel">
       <h2>Local Database</h2>
       <p class="hint">All data (setup, every log entry, receipts) is stored automatically in this browser's local database (IndexedDB) — nothing is lost when you close the tab, reload, or reopen this file later <em>in the same browser</em>. Use Export as a portable backup or to move data to another browser/computer.</p>
       <div class="btn-row">
@@ -775,7 +831,7 @@
     </div>
   </div>
 
-  <div class="footer-note">Standalone recreation of the Voyage Log / Noon Report — Setup, Consumption, Performance, ROB, Receipts &amp; Summary — runs entirely in your browser with its own local database.</div>
+  <div class="footer-note">Noon Report — offline-capable PWA with local IndexedDB storage and optional self-hosted sync. Install on Android or PC from the Data tab when served over HTTPS.</div>
 </div>
 
 <div id="printArea"></div>
@@ -850,7 +906,11 @@ const state = {
     robLube:{ "CYL HIGH":8000,"CYL LOW":0,"ME SYS OIL":5000,"GE SYS OIL":2000,"FRESH WATER":50000 },
     capacity:{ "HFO":1200,"LSFO":400,"MDO/MGO":300,"LSMGO":150 },
     capacityLube:{ "CYL HIGH":15000,"CYL LOW":15000,"ME SYS OIL":8000,"GE SYS OIL":4000,"FRESH WATER":150000 },
-    carryover: null
+    carryover: null,
+    sync: {
+      serverUrl:'', apiToken:'', vesselId:'', autoSync:true, conflictPolicy:'merge',
+      deviceId:null, lastSyncedAt:null, lastSyncError:null, pendingChanges:false
+    }
   },
   entries: [],
   receipts: [],
@@ -950,6 +1010,30 @@ function meterRollovers(){
   };
 }
 
+/* Reference SFOC curve calibrated to pass through 85% and 100% MCR shop-trial points.
+   SFOC(L) = SFOC100 × (a + b × (L/100)²), with a + b = 1. */
+function referenceSfocAtLoad(mcrPct){
+  const sfoc100 = state.setup.sfoc100;
+  const sfoc85 = state.setup.sfoc85;
+  if (sfoc100==null || isNaN(sfoc100) || mcrPct==null || isNaN(mcrPct)) return null;
+  if (sfoc85==null || isNaN(sfoc85)) return sfoc100;
+  const ratio = sfoc85 / sfoc100;
+  const b = (1 - ratio) / 0.2775;
+  const a = 1 - b;
+  const load = Math.max(10, Math.min(110, mcrPct)) / 100;
+  return sfoc100 * (a + b * load * load);
+}
+
+function actualMeSfoc(meConsMt, kwEst, hrs){
+  if (meConsMt==null || kwEst==null || hrs==null || !(hrs>0) || !(kwEst>0) || !(meConsMt>0)) return null;
+  return (meConsMt * 1e6) / (kwEst * hrs);
+}
+
+function sfocDeltaPct(actual, reference){
+  if (actual==null || reference==null || !(reference>0)) return null;
+  return ((actual - reference) / reference) * 100;
+}
+
 /* ---------------- derived calculations ---------------- */
 function computeDerived(){
   const list = sortedEntries();
@@ -963,12 +1047,14 @@ function computeDerived(){
   const consByLube = {"CYL HIGH":0,"CYL LOW":0,"ME SYS OIL":0,"GE SYS OIL":0,"FRESH WATER":0};
   let totalDistShip=0, totalDistEngine=0, totalHrs=0;
   let sumRpm=0, cntRpm=0, sumMcr=0, cntMcr=0, sumKw=0, cntKw=0, sumSpeedShip=0, cntSpeedShip=0, sumSlip=0, cntSlip=0;
+  let sumMcrHrs=0, sumSfocHrs=0, sumSfocWeighted=0, sumSfocDeltaWeighted=0, cntSfocDelta=0;
 
   let prev = effectiveCarryover();
   const rows = list.map(e=>{
     let hrs=null, meCons=null, geCons=null, blrCons=null, total=null;
     let cylCons=null, meLoCons=null, geLoCons=null, dailyRevs=null, fwProdD=null, fwConsD=null;
     let distEngine=null, speedEngine=null, speedShip=null, slip=null, mcrPct=null, kwEst=null;
+    let sfocRef=null, sfocActual=null, sfocDelta=null, meFuelMtDay=null;
     let consByType = {"HFO":null,"LSFO":null,"MDO/MGO":null,"LSMGO":null};
     let lubeByType = {"CYL HIGH":null,"CYL LOW":null,"ME SYS OIL":null,"GE SYS OIL":null,"FRESH WATER":null};
     const override = e.consOverride || {};
@@ -1044,6 +1130,20 @@ function computeDerived(){
       }
       if (speedShip!==null && !isNaN(speedShip)){ sumSpeedShip+=speedShip; cntSpeedShip++; }
 
+      sfocRef = mcrPct!=null ? referenceSfocAtLoad(mcrPct) : null;
+      sfocActual = actualMeSfoc(meCons, kwEst, hrs);
+      sfocDelta = sfocDeltaPct(sfocActual, sfocRef);
+      if (hrs>0 && meCons!=null) meFuelMtDay = (meCons / hrs) * 24;
+      if (mcrPct!=null && hrs>0) sumMcrHrs += mcrPct * hrs;
+      if (sfocActual!=null && hrs>0){
+        sumSfocWeighted += sfocActual * hrs;
+        sumSfocHrs += hrs;
+        if (sfocDelta!=null){
+          sumSfocDeltaWeighted += sfocDelta * hrs;
+          cntSfocDelta += hrs;
+        }
+      }
+
       totalDistShip += (e.distanceShip||0);
       totalDistEngine += (distEngine||0);
       totalHrs += hrs;
@@ -1053,15 +1153,19 @@ function computeDerived(){
     return {...e, hrs, meCons, geCons, blrCons, total, cylCons, meLoCons, geLoCons, fwProdD, fwConsD,
              consByType, lubeByType,
              distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, dailyRevs,
+             sfocRef, sfocActual, sfocDelta, meFuelMtDay,
              cumFuel: {...consByFuel}, cumLube: {...consByLube}, cumDistShip: totalDistShip};
   });
 
   const perf = {
     avgRpm: cntRpm? sumRpm/cntRpm : null,
     avgMcr: cntMcr? sumMcr/cntMcr : null,
+    avgMcrTimeWeighted: totalHrs>0 ? sumMcrHrs/totalHrs : null,
     avgKw: cntKw? sumKw/cntKw : null,
     avgSpeedShip: cntSpeedShip? sumSpeedShip/cntSpeedShip : null,
     avgSlip: cntSlip? sumSlip/cntSlip : null,
+    avgSfocActual: sumSfocHrs>0 ? sumSfocWeighted/sumSfocHrs : null,
+    avgSfocDelta: cntSfocDelta>0 ? sumSfocDeltaWeighted/cntSfocDelta : null,
     totalDistShip, totalDistEngine, totalHrs
   };
 
@@ -1378,6 +1482,7 @@ function render(){
     rl.querySelectorAll('[data-del-receipt]').forEach(b=> b.addEventListener('click', async ()=>{
       state.receipts = state.receipts.filter(r=>r.id!==b.dataset.delReceipt);
       await dbDelete('receipts', b.dataset.delReceipt);
+      markPendingSync();
       render();
     }));
   }
@@ -1397,6 +1502,7 @@ function render(){
       if (!confirm('Delete this log entry permanently?')) return;
       state.entries = state.entries.filter(e=>e.id!==b.dataset.del);
       await dbDelete('entries', b.dataset.del);
+      markPendingSync();
       render();
     }));
     vlBody.querySelectorAll('[data-view]').forEach(b=> b.addEventListener('click', ()=>{
@@ -1497,12 +1603,22 @@ function render(){
   document.getElementById('perfTotalsStrip').innerHTML = `
     <div class="stat"><div class="num">${perf.avgRpm===null?'—':fmt(perf.avgRpm,1)}</div><div class="lbl">RPM</div></div>
     <div class="stat"><div class="num">${perf.avgSlip===null?'—':fmt(perf.avgSlip,1)}</div><div class="lbl">Slip %</div></div>
-    <div class="stat"><div class="num">${perf.avgMcr===null?'—':fmt(perf.avgMcr,1)}</div><div class="lbl">%MCR</div></div>
+    <div class="stat"><div class="num">${perf.avgMcrTimeWeighted===null?(perf.avgMcr===null?'—':fmt(perf.avgMcr,1)):fmt(perf.avgMcrTimeWeighted,1)}</div><div class="lbl">%MCR (hrs-wtd)</div></div>
     <div class="stat"><div class="num">${perf.avgKw===null?'—':fmt(perf.avgKw,0)}</div><div class="lbl">KW</div></div>
     <div class="stat"><div class="num">${seaAvgDistStr}</div><div class="lbl">Distance (nm/day)</div></div>
   `;
 
+  const refAtAvgLoad = perf.avgMcrTimeWeighted!=null ? referenceSfocAtLoad(perf.avgMcrTimeWeighted) : null;
+  document.getElementById('sfocStrip').innerHTML = `
+    <div class="stat"><div class="num">${perf.avgSfocActual===null?'—':fmt(perf.avgSfocActual,1)}</div><div class="lbl">Actual SFOC (g/kWh)</div></div>
+    <div class="stat"><div class="num">${refAtAvgLoad===null?'—':fmt(refAtAvgLoad,1)}</div><div class="lbl">Ref. at avg load</div></div>
+    <div class="stat"><div class="num">${perf.avgSfocDelta===null?'—':((perf.avgSfocDelta>0?'+':'')+fmt(perf.avgSfocDelta,1))}</div><div class="lbl">Δ vs reference %</div></div>
+    <div class="stat"><div class="num">${daysAtSea>0?fmt(totalCons/daysAtSea,2):'—'}</div><div class="lbl">Total fuel MT/day</div></div>
+    <div class="stat"><div class="num">${perf.avgSpeedShip===null?'—':fmt(perf.avgSpeedShip,2)}</div><div class="lbl">Avg speed (kn)</div></div>
+  `;
+
   document.getElementById('entryCount').textContent = `${state.entries.length} log entries · ${state.receipts.length} receipts stored locally.`;
+  renderSyncUi();
   renderVoyageProgress();
   renderDocList();
   renderAbstractList();
@@ -2604,7 +2720,15 @@ function updateLivePreview(){
     stat('M/E Load (%)', mcrPct==null?'—':fmt(mcrPct,1)) +
     stat('Engine Speed (kn)', speedEngine==null?'—':fmt(speedEngine,2)) +
     stat('Engine Distance (nm)', distEngine==null?'—':fmt(distEngine,2)) +
-    stat('Slip (%)', slip==null?'—':fmt(slip,2));
+    stat('Slip (%)', slip==null?'—':fmt(slip,2)) +
+    (function(){
+      const ref = mcrPct!=null ? referenceSfocAtLoad(mcrPct) : null;
+      const act = actualMeSfoc(meCons, kwEst, hrs);
+      const delta = sfocDeltaPct(act, ref);
+      return stat('Ref. SFOC', ref==null?'—':fmt(ref,1)) +
+        stat('Actual SFOC', act==null?'—':fmt(act,1)) +
+        stat('SFOC Δ %', delta==null?'—':((delta>0?'+':'')+fmt(delta,1)));
+    })();
 }
 document.getElementById('logEntryFormPanel').addEventListener('input', updateLivePreview);
 document.getElementById('logEntryFormPanel').addEventListener('change', updateLivePreview);
@@ -2952,7 +3076,8 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
       ME: document.getElementById('entry_unit_me').value==='' ? null : parseFloat(document.getElementById('entry_unit_me').value),
       GE: document.getElementById('entry_unit_ge').value==='' ? null : parseFloat(document.getElementById('entry_unit_ge').value),
       BLR: document.getElementById('entry_unit_blr').value==='' ? null : parseFloat(document.getElementById('entry_unit_blr').value)
-    }
+    },
+    updatedAt: new Date().toISOString()
   };
   if (editingId){
     const idx = state.entries.findIndex(e=>e.id===editingId);
@@ -2961,6 +3086,7 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     state.entries.push(entry);
   }
   await dbPut('entries', entry);
+  markPendingSync();
   exitEditMode();
   render();
   openVoyageSummary(entry.id);
@@ -3186,11 +3312,317 @@ document.getElementById('btnAddReceipt').addEventListener('click', async ()=>{
   };
   state.receipts.push(receipt);
   await dbPut('receipts', receipt);
+  markPendingSync();
   document.getElementById('rcpt_qty').value = '';
   document.getElementById('rcpt_bdn').value = '';
   document.getElementById('rcpt_company').value = '';
   document.getElementById('rcpt_location').value = '';
   render();
+});
+
+/* ---------------- server sync ---------------- */
+function ensureSyncConfig(){
+  if (!state.setup.sync) state.setup.sync = {};
+  const s = state.setup.sync;
+  if (!s.deviceId){
+    s.deviceId = localStorage.getItem('noonReportDeviceId');
+    if (!s.deviceId){
+      s.deviceId = 'dev-' + uid();
+      localStorage.setItem('noonReportDeviceId', s.deviceId);
+    }
+  }
+  if (s.autoSync==null) s.autoSync = true;
+  if (!s.conflictPolicy) s.conflictPolicy = 'merge';
+  return s;
+}
+
+function voyageSyncKey(){
+  const vn = (state.setup.voyageNumber || 'voyage').trim();
+  const cond = (state.setup.shipCondition || 'UNKNOWN').trim();
+  return `${vn}-${cond}`.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64);
+}
+
+function vesselSyncSlug(){
+  const sync = ensureSyncConfig();
+  const fromField = (sync.vesselId || '').trim();
+  if (fromField) return fromField.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64);
+  return (state.setup.vesselName || 'vessel').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64) || 'vessel';
+}
+
+function syncApiBase(){
+  const url = (ensureSyncConfig().serverUrl || '').trim().replace(/\/+$/, '');
+  return url;
+}
+
+function markPendingSync(){
+  const sync = ensureSyncConfig();
+  sync.pendingChanges = true;
+  sync.lastModifiedAt = new Date().toISOString();
+  renderSyncUi();
+  if (sync.autoSync && navigator.onLine) queueBackgroundSync();
+}
+
+function renderSyncUi(){
+  const sync = ensureSyncConfig();
+  const status = document.getElementById('syncStatus');
+  const banner = document.getElementById('syncBanner');
+  const meta = document.getElementById('syncMetaLine');
+  if (!status) return;
+
+  document.getElementById('sync_serverUrl').value = sync.serverUrl || '';
+  document.getElementById('sync_apiToken').value = sync.apiToken || '';
+  document.getElementById('sync_vesselId').value = sync.vesselId || '';
+  document.getElementById('sync_auto').value = sync.autoSync ? 'true' : 'false';
+  document.getElementById('sync_conflict').value = sync.conflictPolicy || 'merge';
+
+  const configured = !!syncApiBase();
+  let statusText = '○ sync not configured';
+  let statusClass = '';
+  if (configured){
+    if (sync.lastSyncError){
+      statusText = '● sync error';
+      statusClass = 'error';
+    } else if (sync.pendingChanges){
+      statusText = navigator.onLine ? '● changes pending' : '● offline — queued';
+      statusClass = 'pending';
+    } else if (sync.lastSyncedAt){
+      statusText = '● synced';
+      statusClass = 'online';
+    } else {
+      statusText = navigator.onLine ? '● ready to sync' : '● offline';
+      statusClass = navigator.onLine ? 'online' : '';
+    }
+  }
+  status.textContent = statusText;
+  status.className = statusClass;
+
+  if (banner){
+    if (!configured){
+      banner.className = 'sync-banner warn';
+      banner.textContent = 'Configure your self-hosted sync server to back up and merge data when internet is available. Works offline — changes queue locally and upload on reconnect.';
+    } else if (sync.lastSyncError){
+      banner.className = 'sync-banner err';
+      banner.textContent = 'Last sync failed: ' + sync.lastSyncError;
+    } else if (sync.pendingChanges && !navigator.onLine){
+      banner.className = 'sync-banner warn';
+      banner.textContent = 'You are offline. Local changes are saved and will sync automatically when connectivity returns.';
+    } else {
+      banner.className = 'sync-banner ok';
+      banner.textContent = 'Sync configured for ' + vesselSyncSlug() + ' / ' + voyageSyncKey() + (navigator.onLine ? ' — online' : ' — offline');
+    }
+  }
+  if (meta){
+    const parts = [];
+    parts.push('Last sync: ' + (sync.lastSyncedAt ? new Date(sync.lastSyncedAt).toLocaleString() : 'never'));
+    if (sync.pendingChanges) parts.push('unsynced local changes');
+    if (sync.lastSyncError) parts.push('error: ' + sync.lastSyncError);
+    meta.textContent = parts.join(' · ');
+  }
+}
+
+function buildSyncPayload(){
+  const sync = ensureSyncConfig();
+  return {
+    vesselId: vesselSyncSlug(),
+    voyageKey: voyageSyncKey(),
+    updatedAt: new Date().toISOString(),
+    deviceId: sync.deviceId,
+    data: {
+      setup: state.setup,
+      entries: state.entries,
+      receipts: state.receipts,
+      documents: state.documents,
+      abstracts: state.abstracts,
+      printHistory: state.printHistory
+    }
+  };
+}
+
+function recordTs(item){
+  return item?.updatedAt || item?.savedAt || item?.uploadedAt || item?.printedAt || '';
+}
+
+function mergeListsById(serverItems, clientItems){
+  const byId = new Map();
+  (serverItems || []).forEach(item => { if (item?.id) byId.set(item.id, item); });
+  (clientItems || []).forEach(item => {
+    if (!item?.id) return;
+    const prev = byId.get(item.id);
+    if (!prev || recordTs(item) >= recordTs(prev)) byId.set(item.id, item);
+  });
+  return [...byId.values()];
+}
+
+function applyRemoteSnapshot(remote, policy){
+  const sync = ensureSyncConfig();
+  const remoteData = remote.data || remote;
+  if (policy === 'remote'){
+    state.setup = migrateSetup(remoteData.setup || {});
+    state.entries = (remoteData.entries || []).map(normalizeEntry);
+    state.receipts = remoteData.receipts || [];
+    state.documents = remoteData.documents || [];
+    state.abstracts = remoteData.abstracts || [];
+    state.printHistory = remoteData.printHistory || [];
+    return;
+  }
+  if (policy === 'local'){
+    return;
+  }
+  const localSetup = state.setup;
+  const remoteSetup = migrateSetup(remoteData.setup || {});
+  const localTs = (localSetup.sync || {}).lastModifiedAt || '';
+  const remoteTs = (remoteSetup.sync || {}).lastModifiedAt || '';
+  state.setup = remoteTs > localTs ? remoteSetup : localSetup;
+  state.entries = mergeListsById(remoteData.entries, state.entries).map(normalizeEntry);
+  state.receipts = mergeListsById(remoteData.receipts, state.receipts);
+  state.documents = mergeListsById(remoteData.documents, state.documents);
+  state.abstracts = mergeListsById(remoteData.abstracts, state.abstracts);
+  state.printHistory = mergeListsById(remoteData.printHistory, state.printHistory);
+  sync.pendingChanges = true;
+}
+
+async function persistAllToDb(){
+  await saveSetup();
+  for (const e of state.entries) await dbPut('entries', e);
+  for (const r of state.receipts) await dbPut('receipts', r);
+  for (const d of state.documents) await dbPut('documents', d);
+  for (const a of state.abstracts) await dbPut('abstracts', a);
+  for (const p of state.printHistory) await dbPut('printHistory', p);
+}
+
+let syncInFlight = null;
+async function syncNow(options = {}){
+  const pullOnly = !!options.pullOnly;
+  const forcePolicy = options.policy;
+  const sync = ensureSyncConfig();
+  const base = syncApiBase();
+  if (!base) throw new Error('Sync server URL is not configured');
+  if (syncInFlight) return syncInFlight;
+
+  syncInFlight = (async ()=>{
+    const vessel = vesselSyncSlug();
+    const voyage = voyageSyncKey();
+    const headers = { 'Content-Type': 'application/json' };
+    if (sync.apiToken) headers.Authorization = 'Bearer ' + sync.apiToken;
+
+    let remote = null;
+    try {
+      const res = await fetch(`${base}/api/voyage/${encodeURIComponent(vessel)}/${encodeURIComponent(voyage)}`, { headers, cache: 'no-store' });
+      if (res.status === 404) remote = null;
+      else if (!res.ok) throw new Error('Server responded ' + res.status);
+      else remote = await res.json();
+    } catch (e){
+      if (!navigator.onLine) throw new Error('No network connection');
+      throw e;
+    }
+
+    const policy = forcePolicy || sync.conflictPolicy || 'merge';
+    if (pullOnly && !remote) throw new Error('No remote voyage snapshot found on server');
+
+    if (remote){
+      const shouldApplyRemote = pullOnly || policy === 'remote' ||
+        (policy === 'merge' && remote.updatedAt > (sync.lastSyncedAt || '') && !sync.pendingChanges);
+      if (shouldApplyRemote){
+        applyRemoteSnapshot(remote, pullOnly || policy === 'remote' ? 'remote' : 'merge');
+        await persistAllToDb();
+      }
+    }
+
+    if (!pullOnly){
+      const payload = buildSyncPayload();
+      const putRes = await fetch(`${base}/api/voyage/${encodeURIComponent(vessel)}/${encodeURIComponent(voyage)}`, {
+        method: 'PUT', headers, body: JSON.stringify(payload)
+      });
+      if (!putRes.ok) throw new Error('Upload failed with status ' + putRes.status);
+      const merged = await putRes.json();
+      if (policy !== 'local') applyRemoteSnapshot(merged, 'merge');
+      await persistAllToDb();
+    }
+
+    sync.lastSyncedAt = new Date().toISOString();
+    sync.pendingChanges = false;
+    sync.lastSyncError = null;
+    await saveSetup();
+    renderSyncUi();
+    render();
+  })().catch(err=>{
+    sync.lastSyncError = err.message || String(err);
+    renderSyncUi();
+    throw err;
+  }).finally(()=>{ syncInFlight = null; });
+
+  return syncInFlight;
+}
+
+let syncTimer = null;
+function queueBackgroundSync(){
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(()=>{
+    syncNow().catch(()=>{});
+  }, 1200);
+}
+
+document.getElementById('btnSaveSyncSettings').addEventListener('click', async ()=>{
+  const sync = ensureSyncConfig();
+  sync.serverUrl = document.getElementById('sync_serverUrl').value.trim();
+  sync.apiToken = document.getElementById('sync_apiToken').value.trim();
+  sync.vesselId = document.getElementById('sync_vesselId').value.trim();
+  sync.autoSync = document.getElementById('sync_auto').value === 'true';
+  sync.conflictPolicy = document.getElementById('sync_conflict').value;
+  sync.lastModifiedAt = new Date().toISOString();
+  await saveSetup();
+  renderSyncUi();
+  alert('Sync settings saved.');
+});
+
+document.getElementById('btnSyncNow').addEventListener('click', async ()=>{
+  try {
+    await syncNow();
+    alert('Sync completed successfully.');
+  } catch (e){
+    alert('Sync failed: ' + e.message);
+  }
+});
+
+document.getElementById('btnPullRemote').addEventListener('click', async ()=>{
+  if (!confirm('Pull the latest data from the server and replace local voyage data?')) return;
+  try {
+    await syncNow({ pullOnly: true, policy: 'remote' });
+    alert('Pulled and applied server data.');
+  } catch (e){
+    alert('Pull failed: ' + e.message);
+  }
+});
+
+window.addEventListener('online', ()=>{
+  renderSyncUi();
+  if (ensureSyncConfig().autoSync && ensureSyncConfig().pendingChanges) queueBackgroundSync();
+});
+
+window.addEventListener('offline', renderSyncUi);
+
+function registerServiceWorker(){
+  if (!('serviceWorker' in navigator)) return;
+  if (location.protocol === 'file:'){
+    console.warn('Service worker requires http(s). Serve this folder with a local web server for offline install.');
+    return;
+  }
+  navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('SW registration failed', err));
+}
+
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const btn = document.getElementById('btnInstallApp');
+  if (btn) btn.style.display = '';
+});
+document.getElementById('btnInstallApp').addEventListener('click', async ()=>{
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  document.getElementById('btnInstallApp').style.display = 'none';
 });
 
 /* ---------------- export / import ---------------- */
@@ -3328,6 +3760,9 @@ function migrateSetup(setup){
   if (setup.mcrKw==null) setup.mcrKw = 18630;
 
   delete setup.rollover;
+  if (!setup.sync){
+    setup.sync = { serverUrl:'', apiToken:'', vesselId:'', autoSync:true, conflictPolicy:'merge', pendingChanges:false };
+  }
   return setup;
 }
 
@@ -3353,6 +3788,9 @@ function migrateSetup(setup){
 
     render();
     applyEntryDefaults();
+    ensureSyncConfig();
+    registerServiceWorker();
+    renderSyncUi();
     document.getElementById('dbStatus').textContent = '● local database ready';
   } catch(e){
     console.error('Startup error:', e);
