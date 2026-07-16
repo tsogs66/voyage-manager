@@ -1593,13 +1593,20 @@ function render(){
     let refTxt = '';
     if (s100!=null || s85!=null){
       refTxt = ` Reference: ${s100!=null?fmt(s100,1)+' @100%':''}${(s100!=null&&s85!=null)?' · ':''}${s85!=null?fmt(s85,1)+' @85%':''} g/kWh.`;
-      // interpolate a reference at the voyage average load for a like-for-like delta
+      // Compare against the reference at the voyage's average load. The two
+      // reference points only bracket 85–100% load, so we interpolate within
+      // that band and clamp outside it (SFOC is U-shaped — a straight-line
+      // extrapolation below 85% would understate the reference).
       if (actual!=null && s100!=null && s85!=null && perf.avgMcr!=null){
-        const ref = s85 + (s100 - s85) * (perf.avgMcr - 85) / (100 - 85);
+        const clampLoad = Math.max(85, Math.min(100, perf.avgMcr));
+        const ref = s85 + (s100 - s85) * (clampLoad - 85) / (100 - 85);
+        const outside = perf.avgMcr < 85 - 0.5 || perf.avgMcr > 100 + 0.5;
         const delta = actual - ref;
         const pctDelta = ref>0 ? (delta/ref*100) : null;
         const color = delta>ref*0.05 ? 'var(--alert)' : (delta<-ref*0.02 ? 'var(--good)' : 'var(--teal)');
-        refTxt += ` At the voyage's ${fmt(perf.avgMcr,0)}% load the reference is ≈${fmt(ref,1)} g/kWh — <span style="color:${color}">actual is ${delta>=0?'+':''}${fmt(delta,1)} g/kWh${pctDelta!=null?` (${pctDelta>=0?'+':''}${fmt(pctDelta,1)}%)`:''}</span>.`;
+        const refLabel = outside ? `reference @${fmt(clampLoad,0)}% (nearest available) ≈${fmt(ref,1)} g/kWh` : `the reference is ≈${fmt(ref,1)} g/kWh`;
+        const note = outside ? ` The voyage's ${fmt(perf.avgMcr,0)}% load is outside the 85–100% reference range, so this comparison is indicative only (part-load SFOC is normally higher).` : '';
+        refTxt += ` At the voyage's ${fmt(perf.avgMcr,0)}% load ${refLabel} — <span style="color:${color}">actual is ${delta>=0?'+':''}${fmt(delta,1)} g/kWh${pctDelta!=null?` (${pctDelta>=0?'+':''}${fmt(pctDelta,1)}%)`:''}</span>.${note}`;
       }
     }
     sfocEl.innerHTML = `<b>M/E Specific Fuel Oil Consumption (actual):</b> ${actual==null?'—':fmt(actual,1)+' g/kWh'} (energy-weighted)${perf.avgSfoc!=null?` · ${fmt(perf.avgSfoc,1)} g/kWh (simple avg)`:''}.${refTxt}`;
