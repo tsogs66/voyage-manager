@@ -129,6 +129,7 @@ install_in_container(){
 
   log "Cloning repository to $INSTALL_DIR..."
   if [[ -d "$INSTALL_DIR/.git" ]]; then
+    ensure_git_safe_directory "$INSTALL_DIR"
     git -C "$INSTALL_DIR" fetch origin "$BRANCH"
     git -C "$INSTALL_DIR" checkout "$BRANCH"
     git -C "$INSTALL_DIR" pull --ff-only origin "$BRANCH"
