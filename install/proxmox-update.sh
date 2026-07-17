@@ -52,12 +52,21 @@ find_ctid_from_creds(){
   return 1
 }
 
+ensure_git_safe_directory(){
+  local dir="$1"
+  if ! git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$dir"; then
+    git config --global --add safe.directory "$dir"
+  fi
+}
+
 update_in_container(){
   ensure_root
 
   command -v git >/dev/null 2>&1 || die "git not installed — run the full install script first"
 
   [[ -d "$INSTALL_DIR/.git" ]] || die "No git repo at $INSTALL_DIR — run the full install script first"
+
+  ensure_git_safe_directory "$INSTALL_DIR"
 
   log "Pulling latest from $BRANCH..."
   git -C "$INSTALL_DIR" fetch origin "$BRANCH"

@@ -32,6 +32,13 @@ SCRIPT_URL="${VOYAGE_SCRIPT_URL:-https://raw.githubusercontent.com/tsogs66/voyag
 log(){ printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"; }
 die(){ echo "ERROR: $*" >&2; exit 1; }
 
+ensure_git_safe_directory(){
+  local dir="$1"
+  if ! git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$dir"; then
+    git config --global --add safe.directory "$dir"
+  fi
+}
+
 is_proxmox_host(){
   [[ -d /etc/pve ]] && command -v pct >/dev/null 2>&1
 }
@@ -185,6 +192,7 @@ UNIT
   systemctl restart voyage-sync
 
   chown -R "$WEB_USER:$WEB_USER" "$INSTALL_DIR" 2>/dev/null || true
+  ensure_git_safe_directory "$INSTALL_DIR"
   mkdir -p "${INSTALL_DIR}/sync-server/sync-data"
   chmod 750 "${INSTALL_DIR}/sync-server/sync-data"
 
