@@ -1492,9 +1492,9 @@ function gaugePolar(cx, cy, radius, deg){
 }
 
 function gaugeNeedle(cx, cy, r, deg){
-  const tip = gaugePolar(cx, cy, r - 4, deg);
+  const tip = gaugePolar(cx, cy, r, deg);
   return `<g class="gauge-needle">
-    <line x1="${cx}" y1="${cy}" x2="${tip.x}" y2="${tip.y}" stroke="#e9e4d6" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="${cx}" y1="${cy}" x2="${tip.x}" y2="${tip.y}" stroke="#e9e4d6" stroke-width="2" stroke-linecap="round"/>
     <circle cx="${cx}" cy="${cy}" r="7" fill="#c99a53" stroke="#8a6b3c" stroke-width="1.5"/>
     <circle cx="${cx}" cy="${cy}" r="2.5" fill="#1a2433"/>
   </g>`;
@@ -1515,6 +1515,10 @@ function gaugeTicks(cx, cy, r, majorEvery){
     ticks+=`<line x1="${outer.x}" y1="${outer.y}" x2="${inner.x}" y2="${inner.y}" stroke="rgba(233,228,214,${i%majorEvery===0?0.55:0.28})" stroke-width="${i%majorEvery===0?1.6:1}"/>`;
   }
   return ticks;
+}
+
+function gaugeArcLargeFlag(endDeg){
+  return (endDeg - GAUGE_GEOM.startDeg) > 180;
 }
 
 function gaugeArcPath(cx, cy, r, endDeg, largeArc){
@@ -1540,7 +1544,7 @@ function gaugeSVG(pct, colorOverride){
     <circle cx="${cx}" cy="${cy}" r="${r+2}" fill="url(#face-${gid})" stroke="rgba(233,228,214,0.08)"/>
     ${gaugeTicks(cx,cy,r,2)}
     <path d="${gaugeArcPath(cx,cy,r,endPt,1)}" fill="none" stroke="rgba(233,228,214,0.1)" stroke-width="9" stroke-linecap="round"/>
-    <path d="${gaugeArcPath(cx,cy,r,deg,pct>0.5)}" fill="none" stroke="${arcColor}" stroke-width="7" stroke-linecap="round" filter="drop-shadow(0 0 4px ${arcColor})"/>
+    <path d="${gaugeArcPath(cx,cy,r,deg,gaugeArcLargeFlag(deg))}" fill="none" stroke="${arcColor}" stroke-width="7" stroke-linecap="round" filter="drop-shadow(0 0 4px ${arcColor})"/>
     ${gaugeNeedle(cx, cy, r, deg)}
     <path d="M ${cx-30} ${cy-38} Q ${cx} ${cy-52} ${cx+34} ${cy-30}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4" stroke-linecap="round"/>
   </svg>`;
@@ -1562,7 +1566,7 @@ function dualGaugeSVG(startPct, currentPct, colorOverride){
     <circle cx="${cx}" cy="${cy}" r="${r+2}" fill="#0e1c30" stroke="rgba(233,228,214,0.08)"/>
     ${gaugeTicks(cx,cy,r,2)}
     <path d="${gaugeArcPath(cx,cy,r,endPt,1)}" fill="none" stroke="rgba(233,228,214,0.1)" stroke-width="9" stroke-linecap="round"/>
-    <path d="${gaugeArcPath(cx,cy,r,curDeg,currentPct>0.5)}" fill="none" stroke="${arcColor}" stroke-width="7" stroke-linecap="round" filter="drop-shadow(0 0 4px ${arcColor})"/>
+    <path d="${gaugeArcPath(cx,cy,r,curDeg,gaugeArcLargeFlag(curDeg))}" fill="none" stroke="${arcColor}" stroke-width="7" stroke-linecap="round" filter="drop-shadow(0 0 4px ${arcColor})"/>
     ${gaugeStartMarker(cx, cy, r, startDeg)}
     ${gaugeNeedle(cx, cy, r, curDeg)}
   </svg>`;
