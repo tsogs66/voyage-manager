@@ -100,10 +100,13 @@
   @keyframes voyage-ship-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
   @keyframes voyage-wake{0%{opacity:.35;stroke-dashoffset:0}100%{opacity:.05;stroke-dashoffset:-40}}
   @keyframes voyage-progress-fill{from{stroke-dasharray:0 2000}to{stroke-dasharray:var(--prog-len,800) 2000}}
+  @keyframes voyage-ship-move{from{transform:translateX(var(--ship-from,0px))}to{transform:translateX(0)}}
   .voyage-wave{animation:voyage-wave 6s linear infinite;}
-  .voyage-ship{animation:voyage-ship-bob 3.5s ease-in-out infinite; transform-box:fill-box; transform-origin:center;}
+  .voyage-ship{animation:voyage-ship-bob 3.5s ease-in-out infinite, voyage-ship-move 1.4s ease-out forwards; transform-box:fill-box; transform-origin:center;}
+  .voyage-ship.voyage-ship-static{animation:voyage-ship-bob 3.5s ease-in-out infinite;}
   .voyage-wake{animation:voyage-wake 2.2s ease-out infinite;}
   .voyage-progress-line{animation:voyage-progress-fill 1.4s ease-out forwards;}
+  .gauge-arc-anim,.gauge-needle-anim{transition:opacity 0.05s;}
 
   .stat-strip{display:grid; grid-template-columns:repeat(4,1fr); gap:14px;}
   .stat-strip.cols3{grid-template-columns:repeat(3,1fr);}
@@ -394,18 +397,39 @@
           <div class="field"><label>SFOC - 85% (g/kW.hr)</label><input type="number" step="0.1" id="s_sfoc85"></div>
           <div class="field full-width" style="grid-column:1/-1;"><div class="hint" id="sfocSetupHint">Reference SFOC at any load: SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²). Enter SFOC @ 100% MCR (shop trial). Optional SFOC @ 85% calibrates the curve; otherwise a = 0.25, b = 0.75 (standard slow/medium-speed diesel).</div></div>
           <div class="field"><label>Alternator Max. Power (KW)</label><input type="number" step="1" id="s_alternatorMaxKw"></div>
-          <div class="field"><label>Generator Arrangement</label>
-            <select id="s_geArrangement">
-              <option value="SINGLE">Single Generator</option>
-              <option value="PARALLEL_2">2 Generators in Parallel</option>
-              <option value="PARALLEL_3">3 Generators in Parallel</option>
+          <div class="field"><label>Number of Generators</label>
+            <select id="s_generatorCount">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
             </select>
           </div>
+          <div class="field"><label>M/E Cylinders (reports)</label><input type="number" min="1" max="14" step="1" id="s_meCylinderCount" value="6"></div>
+          <div class="field"><label>Turbochargers (reports)</label><input type="number" min="1" max="4" step="1" id="s_turboCount" value="2"></div>
+          <div class="field"><label>Boiler Max. Power (KW)</label><input type="number" step="1" id="s_boilerMaxKw"></div>
+          <div class="field"><label>Incinerator Max. Power (KW)</label><input type="number" step="1" id="s_incineratorMaxKw"></div>
           <div class="field"><label>Propeller Pitch (m)</label><input type="number" step="0.01" id="s_pitch" value="5.85"></div>
         </div>
         <div id="geMaxKwFields" class="form-grid cols3" style="margin-top:12px;"></div>
         <div class="hint">Generator load % is calculated as (average kW ÷ max kW) × 100 for each alternator. Enter per-generator max kW from the nameplate.</div>
+        <div class="hint">Boiler and incinerator load % in supplementary reports uses the max kW values above.</div>
         <div class="hint">Speed by engine (kn) = RPM × Pitch × 60 ÷ 1852. %MCR = (RPM ÷ 100%-Load RPM)³ × 100. KW = (RPM ÷ 100%-Load RPM)³ × 100%-Load KW — this is the basis used throughout Performance and the Reports' M/E figures.</div>
+      </div>
+
+      <div class="panel">
+        <h2>Tank Configuration</h2>
+        <div class="form-grid cols3" style="margin-bottom:12px;">
+          <div class="field"><label>Number of Fuel Tanks</label><input type="number" min="1" max="12" step="1" id="s_fuelTankCount"></div>
+          <div class="field"><label>Number of Lube Oil Tanks</label><input type="number" min="1" max="12" step="1" id="s_lubeTankCount"></div>
+          <div class="field"><label>Number of Fresh Water Tanks</label><input type="number" min="1" max="8" step="1" id="s_fwTankCount"></div>
+        </div>
+        <h3 class="sub">Fuel Tanks</h3>
+        <div class="unit-group cols4" id="setupFuelTankNames"></div>
+        <h3 class="sub">Lube Oil Tanks</h3>
+        <div class="unit-group cols4" id="setupLubeTankNames"></div>
+        <h3 class="sub">Fresh Water Tanks</h3>
+        <div class="unit-group cols4" id="setupFwTankNames"></div>
+        <div class="hint">Edit tank names and fuel/lube grades used for consumption accounting. ROB gauges and capacities follow these tanks.</div>
       </div>
 
       <div class="panel">
@@ -759,10 +783,11 @@
     <div class="panel">
       <h2>Lube Oil — Remaining On Board</h2>
       <div class="gauge-grid cols4 large" id="lubeGauges"></div>
+      <div class="stat-strip cols3" id="lubeTotalStrip" style="margin-top:14px;"></div>
     </div>
     <div class="panel">
       <h2>Fresh Water — Remaining On Board</h2>
-      <div class="gauge-grid single large" id="fwGauge"></div>
+      <div class="gauge-grid cols4 large" id="fwGauge"></div>
     </div>
   </div>
 
@@ -859,6 +884,7 @@
       <div class="gauge-grid cols4" id="fuelDualGauges"></div>
       <h3 class="sub">Lube Oil &amp; Fresh Water</h3>
       <div class="gauge-grid cols5" id="lubeDualGauges"></div>
+      <div class="stat-strip cols3" id="lubeTotalSummaryStrip" style="margin-top:14px;"></div>
       <div class="hint">The brass arc shows the current R.O.B. level; the white tick mark shows where R.O.B. started this voyage. The gap between them is what's been consumed.</div>
     </div>
   </div>
@@ -931,13 +957,8 @@
         <div class="unit-group cols5" id="reportCylFields"></div>
 
         <h3 class="sub">Turbochargers &amp; Scavenge</h3>
-        <div class="form-grid cols3">
-          <div class="field"><label>T/C #1 In Temp (°C)</label><input type="number" step="0.1" id="rep_t1in"></div>
-          <div class="field"><label>T/C #1 Out Temp (°C)</label><input type="number" step="0.1" id="rep_t1out"></div>
-          <div class="field"><label>T/C #1 RPM</label><input type="number" step="1" id="rep_t1rpm"></div>
-          <div class="field"><label>T/C #2 In Temp (°C)</label><input type="number" step="0.1" id="rep_t2in"></div>
-          <div class="field"><label>T/C #2 Out Temp (°C)</label><input type="number" step="0.1" id="rep_t2out"></div>
-          <div class="field"><label>T/C #2 RPM</label><input type="number" step="1" id="rep_t2rpm"></div>
+        <div class="unit-group cols3" id="reportTurboFields"></div>
+        <div class="form-grid cols3" style="margin-top:10px;">
           <div class="field"><label>Scavenge Temp (°C)</label><input type="number" step="0.1" id="rep_scavTemp"></div>
           <div class="field"><label>Scavenge Pressure (bar)</label><input type="number" step="0.01" id="rep_scavPress"></div>
           <div class="field"><label>Fuel Temp (°C)</label><input type="number" step="0.1" id="rep_fuelTemp"></div>
@@ -947,7 +968,7 @@
       </div>
 
       <h3 class="sub">Performance — By Unit</h3>
-      <div class="hint">M/E column is calculated from this entry (RPM → %MCR/kW). For each A/E, enter average kW — load % is calculated as (kW ÷ max kW from Setup) × 100. Boiler and incinerator rows are entered manually.</div>
+      <div class="hint">M/E column is calculated from this entry (RPM → %MCR/kW). For each A/E, boiler, and incinerator, enter average kW — load % is calculated as (kW ÷ max kW from Setup) × 100.</div>
       <div class="table-scroll">
         <table id="reportPerfTable">
           <thead><tr><th></th><th>M/E (auto)</th><th>A/E #1</th><th>A/E #2</th><th>A/E #3</th><th>Boiler</th><th>Incinerator</th></tr></thead>
@@ -1014,6 +1035,21 @@
 /* ---------------- constants ---------------- */
 const FUEL_TYPES = ["HFO","LSFO","MDO/MGO","LSMGO"];
 const LUBE_TYPES = ["CYL HIGH","CYL LOW","ME SYS OIL","GE SYS OIL","FRESH WATER"];
+const LUBE_KINDS = ['cylHigh','cylLow','meSys','geSys'];
+const LUBE_KIND_LABELS = { cylHigh:'CYL HIGH', cylLow:'CYL LOW', meSys:'ME SYS OIL', geSys:'GE SYS OIL' };
+const DEFAULT_FUEL_TANKS = [
+  {id:'hfo', name:'HFO', grade:'HFO'},
+  {id:'lsfo', name:'LSFO', grade:'LSFO'},
+  {id:'mdomgo', name:'MDO/MGO', grade:'MDO/MGO'},
+  {id:'lsmgo', name:'LSMGO', grade:'LSMGO'}
+];
+const DEFAULT_LUBE_TANKS = [
+  {id:'cylhigh', name:'CYL HIGH', kind:'cylHigh'},
+  {id:'cyllow', name:'CYL LOW', kind:'cylLow'},
+  {id:'mesysoil', name:'ME SYS OIL', kind:'meSys'},
+  {id:'gesysoil', name:'GE SYS OIL', kind:'geSys'}
+];
+const DEFAULT_FW_TANKS = [{id:'freshwater', name:'FRESH WATER'}];
 const PERF_UNITS = ['ME','AE1','AE2','AE3','BOILER','INCINERATOR'];
 const PERF_UNIT_LABELS = {ME:'M/E', AE1:'A/E #1', AE2:'A/E #2', AE3:'A/E #3', BOILER:'Boiler', INCINERATOR:'Incinerator'};
 const PERF_ROWS = [
@@ -1028,8 +1064,60 @@ const GAUGE_COLORS = {
 };
 const GE_ARR_LABELS = { SINGLE:'Single Generator', PARALLEL_2:'2 Generators in Parallel', PARALLEL_3:'3 Generators in Parallel' };
 const GE_ARR_COUNTS = { SINGLE:1, PARALLEL_2:2, PARALLEL_3:3 };
+const GE_COUNT_TO_ARR = { 1:'SINGLE', 2:'PARALLEL_2', 3:'PARALLEL_3' };
 
-function geUnitCount(){ return GE_ARR_COUNTS[state.setup.geArrangement || 'SINGLE'] || 1; }
+function fuelTankList(){ return state.setup.fuelTanks?.length ? state.setup.fuelTanks : DEFAULT_FUEL_TANKS; }
+function lubeTankList(){ return state.setup.lubeTanks?.length ? state.setup.lubeTanks : DEFAULT_LUBE_TANKS; }
+function fwTankList(){ return state.setup.fwTanks?.length ? state.setup.fwTanks : DEFAULT_FW_TANKS; }
+function tankRobValue(store, tank){ return store?.[tank.id] ?? store?.[tank.name] ?? 0; }
+function tankCapValue(store, tank){ return store?.[tank.id] ?? store?.[tank.name] ?? 1; }
+function tankGaugeColor(tank, fallback){
+  if (tank.grade && GAUGE_COLORS[tank.grade]) return GAUGE_COLORS[tank.grade];
+  if (tank.kind && LUBE_KIND_LABELS[tank.kind] && GAUGE_COLORS[LUBE_KIND_LABELS[tank.kind]]) return GAUGE_COLORS[LUBE_KIND_LABELS[tank.kind]];
+  return fallback || GAUGE_COLORS['FRESH WATER'];
+}
+function lubeKindToLabel(kind){ return LUBE_KIND_LABELS[kind] || kind; }
+function totalLubeRob(robLube){
+  return lubeTankList().reduce((s,t)=> s + (robLube[t.id] ?? robLube[t.name] ?? 0), 0);
+}
+function geUnitCount(){
+  if (state.setup.generatorCount!=null) return Math.max(1, Math.min(3, state.setup.generatorCount));
+  return GE_ARR_COUNTS[state.setup.geArrangement || 'SINGLE'] || 1;
+}
+function meCylinderCount(){ return Math.max(1, Math.min(14, state.setup.meCylinderCount || 6)); }
+function turboCount(){ return Math.max(1, Math.min(4, state.setup.turboCount || 2)); }
+function boilerMaxKw(){ return state.setup.boilerMaxKw || null; }
+function incineratorMaxKw(){ return state.setup.incineratorMaxKw || null; }
+function syncGeneratorArrangement(){
+  const n = geUnitCount();
+  state.setup.generatorCount = n;
+  state.setup.geArrangement = GE_COUNT_TO_ARR[n] || 'SINGLE';
+}
+function resizeTankList(list, count, defaults, makeTank){
+  const out = (list || []).slice();
+  while (out.length < count){
+    const d = defaults[out.length] || defaults[defaults.length-1];
+    const base = d ? {...d} : makeTank(out.length);
+    base.id = base.id || ('tank' + uid().slice(0,6));
+    out.push(base);
+  }
+  return out.slice(0, count);
+}
+function ensureTankStores(){
+  state.setup.fuelTanks = resizeTankList(state.setup.fuelTanks, state.setup.fuelTankCount || fuelTankList().length, DEFAULT_FUEL_TANKS, i=>({id:'fuel'+i, name:'Fuel Tank '+(i+1), grade:'MDO/MGO'}));
+  state.setup.lubeTanks = resizeTankList(state.setup.lubeTanks, state.setup.lubeTankCount || lubeTankList().length, DEFAULT_LUBE_TANKS, i=>({id:'lube'+i, name:'Lube Tank '+(i+1), kind:'meSys'}));
+  state.setup.fwTanks = resizeTankList(state.setup.fwTanks, state.setup.fwTankCount || fwTankList().length, DEFAULT_FW_TANKS, i=>({id:'fw'+i, name:'FW Tank '+(i+1)}));
+  state.setup.fuelTankCount = state.setup.fuelTanks.length;
+  state.setup.lubeTankCount = state.setup.lubeTanks.length;
+  state.setup.fwTankCount = state.setup.fwTanks.length;
+  if (!state.setup.rob) state.setup.rob = {};
+  if (!state.setup.capacity) state.setup.capacity = {};
+  if (!state.setup.robLube) state.setup.robLube = {};
+  if (!state.setup.capacityLube) state.setup.capacityLube = {};
+  fuelTankList().forEach(t=>{ if (state.setup.rob[t.id]==null) state.setup.rob[t.id]=0; if (!state.setup.capacity[t.id]) state.setup.capacity[t.id]=1000; });
+  lubeTankList().forEach(t=>{ if (state.setup.robLube[t.id]==null) state.setup.robLube[t.id]=0; if (!state.setup.capacityLube[t.id]) state.setup.capacityLube[t.id]=15000; });
+  fwTankList().forEach(t=>{ if (state.setup.robLube[t.id]==null) state.setup.robLube[t.id]=0; if (!state.setup.capacityLube[t.id]) state.setup.capacityLube[t.id]=150000; });
+}
 function setupGenerators(){
   if (!state.setup.generators?.length){
     const max = state.setup.alternatorMaxKw || 660;
@@ -1097,6 +1185,17 @@ const state = {
     pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
     sfoc100:null, sfoc85:null, alternatorMaxKw:null,
     geArrangement:'SINGLE',
+    generatorCount:1,
+    meCylinderCount:6,
+    turboCount:2,
+    boilerMaxKw:null,
+    incineratorMaxKw:null,
+    fuelTankCount:4,
+    lubeTankCount:4,
+    fwTankCount:1,
+    fuelTanks: DEFAULT_FUEL_TANKS.map(t=>({...t})),
+    lubeTanks: DEFAULT_LUBE_TANKS.map(t=>({...t})),
+    fwTanks: DEFAULT_FW_TANKS.map(t=>({...t})),
     generators:[{maxKw:660},{maxKw:660},{maxKw:660}],
     flowmeters:{
       main:{ reading:null, digits:8 }, mainOut:{ reading:null, digits:8 },
@@ -1106,10 +1205,10 @@ const state = {
     },
     defaults:{ cylTbn:'HIGH', meType:'HFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.980, geSg:0.870, blrSg:0.870 },
     voyageDistance: null,
-    rob:{ "HFO":500,"LSFO":150,"MDO/MGO":120,"LSMGO":60 },
-    robLube:{ "CYL HIGH":8000,"CYL LOW":0,"ME SYS OIL":5000,"GE SYS OIL":2000,"FRESH WATER":50000 },
-    capacity:{ "HFO":1200,"LSFO":400,"MDO/MGO":300,"LSMGO":150 },
-    capacityLube:{ "CYL HIGH":15000,"CYL LOW":15000,"ME SYS OIL":8000,"GE SYS OIL":4000,"FRESH WATER":150000 },
+    rob:{ hfo:500, lsfo:150, mdomgo:120, lsmgo:60 },
+    robLube:{ cylhigh:8000, cyllow:0, mesysoil:5000, gesysoil:2000, freshwater:50000 },
+    capacity:{ hfo:1200, lsfo:400, mdomgo:300, lsmgo:150 },
+    capacityLube:{ cylhigh:15000, cyllow:15000, mesysoil:8000, gesysoil:4000, freshwater:150000 },
     carryover: null,
     sync: {
       serverUrl:'', apiToken:'', vesselId:'', autoSync:true, conflictPolicy:'merge',
@@ -1151,7 +1250,7 @@ function effectiveCarryover(){
     blr:{ meter: fm.boiler?.reading ?? null, type: d.blrType, sg: d.blrSg },
     cylMeter: fm.cyl?.reading ?? null,
     revCounter: fm.rc?.reading ?? null,
-    meLo: null, geLo: null, fwProd: null, fwRob: state.setup.robLube ? state.setup.robLube['FRESH WATER'] : null,
+    meLo: null, geLo: null, fwProd: null, fwRob: state.setup.robLube ? tankRobValue(state.setup.robLube, fwTankList()[0]) : null,
     meRuntime: state.setup.initRuntime, tbn: d.cylTbn
   };
 }
@@ -1312,7 +1411,7 @@ function computeDerived(){
       rawFuel['MDO/MGO'] += (misc['MDO/MGO']||0);
       rawFuel['LSMGO'] += (misc['LSMGO']||0);
       FUEL_TYPES.forEach(t=>{
-        consByType[t] = (override[t]!=null) ? override[t] : rawFuel[t];
+        consByType[t] = (overrideForGrade(override, t, fuelTankList())!=null) ? overrideForGrade(override, t, fuelTankList()) : rawFuel[t];
         consByFuel[t] += consByType[t];
       });
 
@@ -1325,7 +1424,8 @@ function computeDerived(){
       if (meLoCons) rawLube["ME SYS OIL"] += meLoCons;
       if (geLoCons) rawLube["GE SYS OIL"] += geLoCons;
       ['CYL HIGH','CYL LOW','ME SYS OIL','GE SYS OIL'].forEach(t=>{
-        lubeByType[t] = (override[t]!=null) ? override[t] : rawLube[t];
+        const ov = overrideForLubeKind(override, t, lubeTankList());
+        lubeByType[t] = (ov!=null) ? ov : rawLube[t];
         consByLube[t] += lubeByType[t];
       });
 
@@ -1336,7 +1436,9 @@ function computeDerived(){
       if (prevFwRob!=null && e.fwRob!=null){
         rawFwCons = prevFwRob + fwProdD - e.fwRob;
       }
-      fwConsD = (override['FRESH WATER']!=null) ? override['FRESH WATER'] : rawFwCons;
+      fwConsD = (override['FRESH WATER']!=null || override[fwTankList()[0]?.id]!=null)
+        ? (override['FRESH WATER'] ?? override[fwTankList()[0]?.id])
+        : rawFwCons;
       lubeByType['FRESH WATER'] = fwConsD;
       if (fwConsD!=null) consByLube["FRESH WATER"] += fwConsD;
 
@@ -1437,20 +1539,64 @@ function latestFwRob(cutoffDate){
   }
   const co = effectiveCarryover();
   if (co && co.fwRob!=null) return co.fwRob;
-  return state.setup.robLube['FRESH WATER'];
+  return tankRobValue(state.setup.robLube, fwTankList()[0]);
+}
+
+function deductGradeConsumption(robMap, tanks, gradeKey, gradeField, consumed){
+  if (!consumed) return;
+  const group = tanks.filter(t => t[gradeField] === gradeKey);
+  if (!group.length) return;
+  const total = group.reduce((s,t)=> s + (robMap[t.id] ?? 0), 0);
+  if (total <= 0){
+    robMap[group[0].id] = (robMap[group[0].id] ?? 0) - consumed;
+    return;
+  }
+  group.forEach(t=>{
+    const share = (robMap[t.id] ?? 0) / total;
+    robMap[t.id] = (robMap[t.id] ?? 0) - consumed * share;
+  });
+}
+
+function deductLubeConsumption(robMap, kind, consumed){
+  if (!consumed) return;
+  const label = lubeKindToLabel(kind);
+  const group = lubeTankList().filter(t => t.kind === kind || lubeKindToLabel(t.kind) === label);
+  if (!group.length) return;
+  const total = group.reduce((s,t)=> s + (robMap[t.id] ?? 0), 0);
+  if (total <= 0){
+    robMap[group[0].id] = (robMap[group[0].id] ?? 0) - consumed;
+    return;
+  }
+  group.forEach(t=>{
+    const share = (robMap[t.id] ?? 0) / total;
+    robMap[t.id] = (robMap[t.id] ?? 0) - consumed * share;
+  });
 }
 
 function currentROB(consByFuel, consByLube){
   const rob = {};
-  FUEL_TYPES.forEach(t=>{
-    const received = state.receipts.filter(r=>r.category==='fuel' && r.type===t).reduce((s,r)=>s+r.qty,0);
-    rob[t] = state.setup.rob[t] + received - (consByFuel[t]||0);
+  fuelTankList().forEach(t=>{
+    const received = state.receipts.filter(r=>r.category==='fuel' && (r.tankId===t.id || r.type===t.name || r.type===t.grade)).reduce((s,r)=>s+r.qty,0);
+    rob[t.id] = tankRobValue(state.setup.rob, t) + received;
   });
+  FUEL_TYPES.forEach(g=> deductGradeConsumption(rob, fuelTankList(), g, 'grade', consByFuel[g]||0));
+
   const robLube = {};
-  LUBE_TYPES.forEach(t=>{
-    if (t==='FRESH WATER'){ robLube[t] = latestFwRob(null); return; }
-    const received = state.receipts.filter(r=>r.category==='lube' && r.type===t).reduce((s,r)=>s+r.qty,0);
-    robLube[t] = state.setup.robLube[t] + received - (consByLube[t]||0);
+  lubeTankList().forEach(t=>{
+    const received = state.receipts.filter(r=>r.category==='lube' && (r.tankId===t.id || r.type===t.name || r.type===lubeKindToLabel(t.kind))).reduce((s,r)=>s+r.qty,0);
+    robLube[t.id] = tankRobValue(state.setup.robLube, t) + received;
+  });
+  deductLubeConsumption(robLube, 'cylHigh', consByLube['CYL HIGH']||0);
+  deductLubeConsumption(robLube, 'cylLow', consByLube['CYL LOW']||0);
+  deductLubeConsumption(robLube, 'meSys', consByLube['ME SYS OIL']||0);
+  deductLubeConsumption(robLube, 'geSys', consByLube['GE SYS OIL']||0);
+
+  const fwTanks = fwTankList();
+  const primaryFw = fwTanks[0];
+  if (primaryFw) robLube[primaryFw.id] = latestFwRob(null);
+  fwTanks.slice(1).forEach(t=>{
+    const received = state.receipts.filter(r=>(r.category==='fw' || r.category==='lube') && (r.tankId===t.id || r.type===t.name)).reduce((s,r)=>s+r.qty,0);
+    robLube[t.id] = tankRobValue(state.setup.robLube, t) + received;
   });
   return {rob, robLube};
 }
@@ -1466,16 +1612,23 @@ function robAsOfEntry(entryId){
   if (!row) return null;
   const cutoff = new Date(row.datetime);
   const rob = {};
-  FUEL_TYPES.forEach(t=>{
-    const received = state.receipts.filter(r=>r.category==='fuel' && r.type===t && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
-    rob[t] = state.setup.rob[t] + received - (row.cumFuel[t]||0);
+  fuelTankList().forEach(t=>{
+    const received = state.receipts.filter(r=>r.category==='fuel' && (r.tankId===t.id || r.type===t.name || r.type===t.grade) && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
+    rob[t.id] = tankRobValue(state.setup.rob, t) + received;
   });
+  FUEL_TYPES.forEach(g=> deductGradeConsumption(rob, fuelTankList(), g, 'grade', row.cumFuel?.[g]||0));
+
   const robLube = {};
-  LUBE_TYPES.forEach(t=>{
-    if (t==='FRESH WATER'){ robLube[t] = row.fwRob!=null ? row.fwRob : latestFwRob(cutoff); return; }
-    const received = state.receipts.filter(r=>r.category==='lube' && r.type===t && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
-    robLube[t] = state.setup.robLube[t] + received - (row.cumLube[t]||0);
+  lubeTankList().forEach(t=>{
+    const received = state.receipts.filter(r=>r.category==='lube' && (r.tankId===t.id || r.type===t.name || r.type===lubeKindToLabel(t.kind)) && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
+    robLube[t.id] = tankRobValue(state.setup.robLube, t) + received;
   });
+  deductLubeConsumption(robLube, 'cylHigh', row.cumLube?.['CYL HIGH']||0);
+  deductLubeConsumption(robLube, 'cylLow', row.cumLube?.['CYL LOW']||0);
+  deductLubeConsumption(robLube, 'meSys', row.cumLube?.['ME SYS OIL']||0);
+  deductLubeConsumption(robLube, 'geSys', row.cumLube?.['GE SYS OIL']||0);
+  const primaryFw = fwTankList()[0];
+  if (primaryFw) robLube[primaryFw.id] = row.fwRob!=null ? row.fwRob : latestFwRob(cutoff);
   return {rob, robLube};
 }
 
@@ -1527,14 +1680,15 @@ function gaugeArcPath(cx, cy, r, endDeg, largeArc){
   return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc ? 1 : 0} 1 ${end.x} ${end.y}`;
 }
 
-function gaugeSVG(pct, colorOverride){
+function gaugeSVG(pct, colorOverride, displayPct){
   pct = Math.max(0, Math.min(1, pct||0));
-  const deg = gaugePctToDeg(pct);
+  const showPct = displayPct!=null ? Math.max(0, Math.min(1, displayPct)) : pct;
+  const deg = gaugePctToDeg(showPct);
   const arcColor = colorOverride || (pct < 0.15 ? '#c1573a' : (pct < 0.35 ? '#c99a53' : '#57b3ab'));
   const gid = nextGaugeUid();
   const {cx, cy, r} = GAUGE_GEOM;
   const endPt = GAUGE_GEOM.startDeg + GAUGE_GEOM.sweepDeg;
-  return `<svg class="analog-gauge" viewBox="0 0 160 150">
+  return `<svg class="analog-gauge" viewBox="0 0 160 150" data-gauge-target="${pct}">
     <defs>
       <radialGradient id="bezel-${gid}" cx="35%" cy="30%"><stop offset="0%" stop-color="#4a5568"/><stop offset="55%" stop-color="#1a2433"/><stop offset="100%" stop-color="#0a1018"/></radialGradient>
       <linearGradient id="face-${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#16283f"/><stop offset="100%" stop-color="#0a1420"/></linearGradient>
@@ -1544,10 +1698,34 @@ function gaugeSVG(pct, colorOverride){
     <circle cx="${cx}" cy="${cy}" r="${r+2}" fill="url(#face-${gid})" stroke="rgba(233,228,214,0.08)"/>
     ${gaugeTicks(cx,cy,r,2)}
     <path d="${gaugeArcPath(cx,cy,r,endPt,1)}" fill="none" stroke="rgba(233,228,214,0.1)" stroke-width="9" stroke-linecap="round"/>
-    <path d="${gaugeArcPath(cx,cy,r,deg,gaugeArcLargeFlag(deg))}" fill="none" stroke="${arcColor}" stroke-width="7" stroke-linecap="round" filter="drop-shadow(0 0 4px ${arcColor})"/>
-    ${gaugeNeedle(cx, cy, r, deg)}
+    <path class="gauge-arc-anim" d="${gaugeArcPath(cx,cy,r,deg,gaugeArcLargeFlag(deg))}" fill="none" stroke="${arcColor}" stroke-width="7" stroke-linecap="round" filter="drop-shadow(0 0 4px ${arcColor})"/>
+    <g class="gauge-needle-anim">${gaugeNeedle(cx, cy, r, deg)}</g>
     <path d="M ${cx-30} ${cy-38} Q ${cx} ${cy-52} ${cx+34} ${cy-30}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4" stroke-linecap="round"/>
   </svg>`;
+}
+
+let _lastVoyageShipPct = 0;
+let _activeTab = 'summary';
+
+function animateRobGauges(){
+  document.querySelectorAll('#page-rob .analog-gauge').forEach(svg=>{
+    const target = parseFloat(svg.dataset.gaugeTarget) || 0;
+    const start = performance.now();
+    const duration = 1200;
+    const step = (now)=>{
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const pct = target * eased;
+      const deg = gaugePctToDeg(pct);
+      const {cx, cy, r} = GAUGE_GEOM;
+      const arc = svg.querySelector('.gauge-arc-anim');
+      let needle = svg.querySelector('.gauge-needle-anim, .gauge-needle');
+      if (arc) arc.setAttribute('d', gaugeArcPath(cx,cy,r,deg,gaugeArcLargeFlag(deg)));
+      if (needle) needle.outerHTML = gaugeNeedle(cx, cy, r, deg).replace('class="gauge-needle"', 'class="gauge-needle gauge-needle-anim"');
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
 }
 
 function dualGaugeSVG(startPct, currentPct, colorOverride){
@@ -1635,6 +1813,48 @@ function renderFuelMeterFields(){
          <div class="field"><label>Outlet Flowmeter</label><input type="number" id="ge_meter_out"></div>`
       : `<div class="field"><label>Fuel Meter</label><input type="number" id="ge_meter"></div>`;
   }
+}
+
+function renderTankConfigFields(){
+  ensureTankStores();
+  const setCount = (id, val)=>{ const el = document.getElementById(id); if (el) el.value = val; };
+  setCount('s_fuelTankCount', state.setup.fuelTankCount);
+  setCount('s_lubeTankCount', state.setup.lubeTankCount);
+  setCount('s_fwTankCount', state.setup.fwTankCount);
+  const fuelBox = document.getElementById('setupFuelTankNames');
+  const lubeBox = document.getElementById('setupLubeTankNames');
+  const fwBox = document.getElementById('setupFwTankNames');
+  if (fuelBox){
+    fuelBox.innerHTML = fuelTankList().map((t,i)=>`
+      <div class="unit-box"><h3>Fuel #${i+1}</h3>
+        <div class="field"><label>Tank Name</label><input data-fuel-tank-name="${t.id}" value="${t.name}"></div>
+        <div class="field"><label>Grade</label><select data-fuel-tank-grade="${t.id}">${FUEL_TYPES.map(g=>`<option value="${g}"${t.grade===g?' selected':''}>${g}</option>`).join('')}</select></div>
+      </div>`).join('');
+  }
+  if (lubeBox){
+    lubeBox.innerHTML = lubeTankList().map((t,i)=>`
+      <div class="unit-box"><h3>Lube #${i+1}</h3>
+        <div class="field"><label>Tank Name</label><input data-lube-tank-name="${t.id}" value="${t.name}"></div>
+        <div class="field"><label>Type</label><select data-lube-tank-kind="${t.id}">${LUBE_KINDS.map(k=>`<option value="${k}"${t.kind===k?' selected':''}>${lubeKindToLabel(k)}</option>`).join('')}</select></div>
+      </div>`).join('');
+  }
+  if (fwBox){
+    fwBox.innerHTML = fwTankList().map((t,i)=>`
+      <div class="unit-box"><h3>FW #${i+1}</h3>
+        <div class="field"><label>Tank Name</label><input data-fw-tank-name="${t.id}" value="${t.name}"></div>
+      </div>`).join('');
+  }
+}
+
+function resetRobGaugesToZero(){
+  document.querySelectorAll('#page-rob .analog-gauge').forEach(svg=>{
+    const deg = gaugePctToDeg(0);
+    const {cx, cy, r} = GAUGE_GEOM;
+    const arc = svg.querySelector('.gauge-arc-anim');
+    const needle = svg.querySelector('.gauge-needle-anim');
+    if (arc) arc.setAttribute('d', gaugeArcPath(cx,cy,r,deg,gaugeArcLargeFlag(deg)));
+    if (needle) needle.outerHTML = gaugeNeedle(cx, cy, r, deg);
+  });
 }
 
 function renderGeMaxKwFields(){
@@ -1769,8 +1989,13 @@ function render(){
   document.getElementById('s_sfoc100').value = state.setup.sfoc100 ?? '';
   document.getElementById('s_sfoc85').value = state.setup.sfoc85 ?? '';
   document.getElementById('s_alternatorMaxKw').value = state.setup.alternatorMaxKw ?? '';
-  document.getElementById('s_geArrangement').value = state.setup.geArrangement || 'SINGLE';
+  document.getElementById('s_generatorCount').value = geUnitCount();
+  document.getElementById('s_meCylinderCount').value = meCylinderCount();
+  document.getElementById('s_turboCount').value = turboCount();
+  document.getElementById('s_boilerMaxKw').value = state.setup.boilerMaxKw ?? '';
+  document.getElementById('s_incineratorMaxKw').value = state.setup.incineratorMaxKw ?? '';
   renderGeMaxKwFields();
+  renderTankConfigFields();
 
   const fm = state.setup.flowmeters;
   renderFlowmeterCounterRows();
@@ -1790,34 +2015,44 @@ function render(){
   document.getElementById('s_def_geSg').value = d.geSg;
   document.getElementById('s_def_blrSg').value = d.blrSg;
 
-  document.getElementById('setupFuelRob').innerHTML = FUEL_TYPES.map(t=>`
-    <div class="unit-box"><h3>${t}</h3><div class="field"><label>Opening ROB (MT)</label><input type="number" step="0.1" data-setup-fuel-rob="${t}" value="${state.setup.rob[t]}"></div></div>`).join('');
-  document.getElementById('setupLubeRob').innerHTML = LUBE_TYPES.map(t=>`
-    <div class="unit-box"><h3>${t}</h3><div class="field"><label>Opening ROB (L)</label><input type="number" step="1" data-setup-lube-rob="${t}" value="${state.setup.robLube[t]}"></div></div>`).join('');
+  document.getElementById('setupFuelRob').innerHTML = fuelTankList().map(t=>`
+    <div class="unit-box"><h3>${t.name}</h3><div class="field"><label>Opening ROB (MT)</label><input type="number" step="0.1" data-setup-fuel-rob="${t.id}" value="${tankRobValue(state.setup.rob, t)}"></div></div>`).join('');
+  document.getElementById('setupLubeRob').innerHTML = lubeTankList().map(t=>`
+    <div class="unit-box"><h3>${t.name}</h3><div class="field"><label>Opening ROB (L)</label><input type="number" step="1" data-setup-lube-rob="${t.id}" value="${tankRobValue(state.setup.robLube, t)}"></div></div>`).join('') +
+    fwTankList().map(t=>`
+    <div class="unit-box"><h3>${t.name}</h3><div class="field"><label>Opening ROB (L)</label><input type="number" step="1" data-setup-lube-rob="${t.id}" value="${tankRobValue(state.setup.robLube, t)}"></div></div>`).join('');
 
   document.getElementById('capacitySettings').innerHTML =
-    FUEL_TYPES.map(t=>`<div class="unit-box"><h3>${t} (MT)</h3><div class="field"><input type="number" data-cap-fuel="${t}" value="${state.setup.capacity[t]}"></div></div>`).join('') +
-    LUBE_TYPES.map(t=>`<div class="unit-box"><h3>${t} (L)</h3><div class="field"><input type="number" data-cap-lube="${t}" value="${state.setup.capacityLube[t]}"></div></div>`).join('');
+    fuelTankList().map(t=>`<div class="unit-box"><h3>${t.name} (MT)</h3><div class="field"><input type="number" data-cap-fuel="${t.id}" value="${tankCapValue(state.setup.capacity, t)}"></div></div>`).join('') +
+    lubeTankList().map(t=>`<div class="unit-box"><h3>${t.name} (L)</h3><div class="field"><input type="number" data-cap-lube="${t.id}" value="${tankCapValue(state.setup.capacityLube, t)}"></div></div>`).join('') +
+    fwTankList().map(t=>`<div class="unit-box"><h3>${t.name} (L)</h3><div class="field"><input type="number" data-cap-lube="${t.id}" value="${tankCapValue(state.setup.capacityLube, t)}"></div></div>`).join('');
   document.querySelectorAll('[data-cap-fuel]').forEach(inp=> inp.addEventListener('change', ()=>{ state.setup.capacity[inp.dataset.capFuel]=parseFloat(inp.value)||1; saveSetup(); render(); }));
   document.querySelectorAll('[data-cap-lube]').forEach(inp=> inp.addEventListener('change', ()=>{ state.setup.capacityLube[inp.dataset.capLube]=parseFloat(inp.value)||1; saveSetup(); render(); }));
 
   renderFuelMeterFields();
   renderGeRuntimeFields();
 
-  // fuel gauges
-  document.getElementById('fuelGauges').innerHTML = FUEL_TYPES.map(t=>{
-    const cap = state.setup.capacity[t]||1;
-    return `<div class="gauge-box">${gaugeSVG(rob[t]/cap, GAUGE_COLORS[t])}<div class="gauge-value">${fmt(rob[t],1)}</div><div class="gauge-cap">of ${fmt(cap,0)} MT</div><div class="gauge-label">${t}</div></div>`;
+  document.getElementById('fuelGauges').innerHTML = fuelTankList().map(t=>{
+    const cap = tankCapValue(state.setup.capacity, t)||1;
+    const val = rob[t.id] ?? 0;
+    const pct = val/cap;
+    return `<div class="gauge-box">${gaugeSVG(pct, tankGaugeColor(t))}<div class="gauge-value">${fmt(val,1)}</div><div class="gauge-cap">of ${fmt(cap,0)} MT</div><div class="gauge-label">${t.name}</div></div>`;
   }).join('');
-  // lube/fw gauges
-  document.getElementById('lubeGauges').innerHTML = LUBE_TYPES.filter(t=>t!=='FRESH WATER').map(t=>{
-    const cap = state.setup.capacityLube[t]||1;
-    return `<div class="gauge-box">${gaugeSVG(robLube[t]/cap, GAUGE_COLORS[t])}<div class="gauge-value">${fmt(robLube[t],0)}</div><div class="gauge-cap">of ${fmt(cap,0)} L</div><div class="gauge-label">${t}</div></div>`;
+  document.getElementById('lubeGauges').innerHTML = lubeTankList().map(t=>{
+    const cap = tankCapValue(state.setup.capacityLube, t)||1;
+    const val = robLube[t.id] ?? 0;
+    const pct = val/cap;
+    return `<div class="gauge-box">${gaugeSVG(pct, tankGaugeColor(t))}<div class="gauge-value">${fmt(val,0)}</div><div class="gauge-cap">of ${fmt(cap,0)} L</div><div class="gauge-label">${t.name}</div></div>`;
   }).join('');
-  document.getElementById('fwGauge').innerHTML = (()=>{
-    const cap = state.setup.capacityLube['FRESH WATER']||1;
-    return `<div class="gauge-box">${gaugeSVG(robLube['FRESH WATER']/cap, GAUGE_COLORS['FRESH WATER'])}<div class="gauge-value">${fmt(robLube['FRESH WATER'],0)}</div><div class="gauge-cap">of ${fmt(cap,0)} L</div><div class="gauge-label">FRESH WATER</div></div>`;
-  })();
+  const totalLube = totalLubeRob(robLube);
+  document.getElementById('lubeTotalStrip').innerHTML = `
+    <div class="stat"><div class="num">${fmt(totalLube,0)}</div><div class="lbl">Total Lube Oil (L)</div></div>`;
+  document.getElementById('fwGauge').innerHTML = fwTankList().map(t=>{
+    const cap = tankCapValue(state.setup.capacityLube, t)||1;
+    const val = robLube[t.id] ?? 0;
+    const pct = val/cap;
+    return `<div class="gauge-box">${gaugeSVG(pct, GAUGE_COLORS['FRESH WATER'])}<div class="gauge-value">${fmt(val,0)}</div><div class="gauge-cap">of ${fmt(cap,0)} L</div><div class="gauge-label">${t.name}</div></div>`;
+  }).join('');
 
   // receipts
   const rl = document.getElementById('receiptsList');
@@ -1918,25 +2153,31 @@ function render(){
   `;
 
   // Consumption dual gauges: starting ROB vs current ROB
-  document.getElementById('fuelDualGauges').innerHTML = FUEL_TYPES.map(t=>{
-    const cap = state.setup.capacity[t] || 1;
-    const startVal = state.setup.rob[t] || 0;
-    const curVal = rob[t];
-    return `<div class="gauge-box">${dualGaugeSVG(startVal/cap, curVal/cap, GAUGE_COLORS[t])}
+  document.getElementById('fuelDualGauges').innerHTML = fuelTankList().map(t=>{
+    const cap = tankCapValue(state.setup.capacity, t) || 1;
+    const startVal = tankRobValue(state.setup.rob, t) || 0;
+    const curVal = rob[t.id] ?? 0;
+    const grade = t.grade || t.name;
+    return `<div class="gauge-box">${dualGaugeSVG(startVal/cap, curVal/cap, tankGaugeColor(t))}
       <div class="gauge-value">${fmt(curVal,1)}</div>
-      <div class="gauge-cap">start ${fmt(startVal,1)} · used ${fmt(consByFuel[t],2)} MT</div>
-      <div class="gauge-label">${t}</div></div>`;
+      <div class="gauge-cap">start ${fmt(startVal,1)} · used ${fmt(consByFuel[grade]||0,2)} MT</div>
+      <div class="gauge-label">${t.name}</div></div>`;
   }).join('');
-  const lubeGaugeOrder = ["CYL HIGH","CYL LOW","ME SYS OIL","GE SYS OIL","FRESH WATER"];
-  document.getElementById('lubeDualGauges').innerHTML = lubeGaugeOrder.map(t=>{
-    const cap = state.setup.capacityLube[t] || 1;
-    const startVal = state.setup.robLube[t] || 0;
-    const curVal = robLube[t];
-    return `<div class="gauge-box">${dualGaugeSVG(startVal/cap, curVal/cap, GAUGE_COLORS[t])}
+  document.getElementById('lubeDualGauges').innerHTML = [
+    ...lubeTankList().map(t=>({...t, isFw:false})),
+    ...fwTankList().map(t=>({...t, isFw:true}))
+  ].map(t=>{
+    const cap = tankCapValue(state.setup.capacityLube, t) || 1;
+    const startVal = tankRobValue(state.setup.robLube, t) || 0;
+    const curVal = robLube[t.id] ?? 0;
+    const kindLabel = t.isFw ? 'FRESH WATER' : lubeKindToLabel(t.kind);
+    return `<div class="gauge-box">${dualGaugeSVG(startVal/cap, curVal/cap, tankGaugeColor(t))}
       <div class="gauge-value">${fmt(curVal,0)}</div>
-      <div class="gauge-cap">start ${fmt(startVal,0)} · used ${fmt(consByLube[t],1)} L</div>
-      <div class="gauge-label">${t}</div></div>`;
+      <div class="gauge-cap">start ${fmt(startVal,0)} · used ${fmt(consByLube[kindLabel]||0,1)} L</div>
+      <div class="gauge-label">${t.name}</div></div>`;
   }).join('');
+  document.getElementById('lubeTotalSummaryStrip').innerHTML = `
+    <div class="stat"><div class="num">${fmt(totalLubeRob(robLube),0)}</div><div class="lbl">Total Lube Oil (L)</div></div>`;
 
   // Average distance during sea passage: from START - PASSAGE to END - PASSAGE (or latest entry if no end yet)
   let seaAvgDistStr = '—';
@@ -1998,7 +2239,7 @@ function render(){
 
   document.getElementById('entryCount').textContent = `${state.entries.length} log entries · ${state.receipts.length} receipts stored locally.`;
   renderSyncUi();
-  renderVoyageProgress();
+  renderVoyageProgress(_activeTab === 'summary');
   renderDocList();
   renderAbstractList();
   renderPrintHistoryList();
@@ -2009,8 +2250,17 @@ async function saveSetup(){ await dbPut('meta', {key:'setup', value: state.setup
 
 /* ---------------- tabs ---------------- */
 function switchTab(pageName){
+  const prev = _activeTab;
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.page===pageName));
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+pageName));
+  _activeTab = pageName;
+  if (pageName === 'rob' && prev !== 'rob'){
+    resetRobGaugesToZero();
+    requestAnimationFrame(()=> animateRobGauges());
+  }
+  if (pageName === 'summary' && prev !== 'summary'){
+    renderVoyageProgress(true);
+  }
 }
 document.getElementById('tabs').addEventListener('click', (e)=>{
   const tab = e.target.closest('.tab');
@@ -2140,6 +2390,33 @@ function computeAePerf(entryId, geIndex, saved){
   };
 }
 
+function computeKwPerf(saved, maxKw){
+  const kw = saved?.avgPower ?? null;
+  const avgLoad = (kw!=null && !isNaN(kw) && maxKw>0) ? (kw/maxKw)*100 : null;
+  return {
+    avgPower: kw,
+    avgLoad,
+    minLoad: avgLoad!=null ? avgLoad*0.90 : null,
+    maxLoad: avgLoad!=null ? avgLoad*1.15 : null,
+    runTime: saved?.runTime ?? null
+  };
+}
+
+function updateKwPerfDisplays(unit, maxKw){
+  const kwEl = document.getElementById(`rep_pf_avgPower_${unit}`);
+  const kw = kwEl ? parseFloat(kwEl.value) : NaN;
+  const avgLoad = (!isNaN(kw) && maxKw>0) ? (kw/maxKw)*100 : null;
+  const fields = {
+    avgLoad,
+    minLoad: avgLoad!=null ? avgLoad*0.90 : null,
+    maxLoad: avgLoad!=null ? avgLoad*1.15 : null
+  };
+  Object.entries(fields).forEach(([key,val])=>{
+    const el = document.getElementById(`rep_pf_${key}_${unit}_disp`);
+    if (el) el.textContent = fmtP(val, 1);
+  });
+}
+
 function updateAePerfDisplays(unit){
   const aeIdx = parseInt(unit.slice(2),10)-1;
   const kwEl = document.getElementById(`rep_pf_avgPower_${unit}`);
@@ -2162,24 +2439,36 @@ function wireReportAeInputs(){
     inp.addEventListener('input', ()=> updateAePerfDisplays(inp.dataset.aeUnit));
     updateAePerfDisplays(inp.dataset.aeUnit);
   });
+  document.querySelectorAll('.kw-perf-input').forEach(inp=>{
+    inp.addEventListener('input', ()=> updateKwPerfDisplays(inp.dataset.kwUnit, parseFloat(inp.dataset.kwMax)));
+    updateKwPerfDisplays(inp.dataset.kwUnit, parseFloat(inp.dataset.kwMax));
+  });
 }
 
 function renderReportPerfCell(unit, key, entryId, perfTable){
   const aeIdx = unit.startsWith('AE') ? parseInt(unit.slice(2),10)-1 : -1;
   const isAe = aeIdx >= 0;
+  const isBoiler = unit === 'BOILER';
+  const isInc = unit === 'INCINERATOR';
+  const isKwUnit = isAe || isBoiler || isInc;
   const aePerf = isAe ? computeAePerf(entryId, aeIdx, perfTable[unit]) : null;
+  const blrPerf = isBoiler ? computeKwPerf(perfTable[unit], boilerMaxKw()) : null;
+  const incPerf = isInc ? computeKwPerf(perfTable[unit], incineratorMaxKw()) : null;
+  const kwPerf = aePerf || blrPerf || incPerf;
   const dec = (key==='avgPower'||key==='runTime') ? 0 : 1;
 
-  if (isAe){
+  if (isKwUnit){
     if (key === 'avgPower'){
-      const v = aePerf.avgPower;
-      return `<td><input class="pf-input ae-kw-input" type="number" step="1" id="rep_pf_avgPower_${unit}" data-ae-unit="${unit}" value="${v===null||v===undefined?'':v}"></td>`;
+      const v = kwPerf.avgPower;
+      const cls = isAe ? 'ae-kw-input' : 'kw-perf-input';
+      const extra = isAe ? ` data-ae-unit="${unit}"` : ` data-kw-unit="${unit}" data-kw-max="${isBoiler ? (boilerMaxKw()||'') : (incineratorMaxKw()||'')}"`;
+      return `<td><input class="pf-input ${cls}" type="number" step="1" id="rep_pf_avgPower_${unit}"${extra} value="${v===null||v===undefined?'':v}"></td>`;
     }
     if (key === 'runTime'){
-      const v = aePerf.runTime;
+      const v = kwPerf.runTime;
       return `<td><input class="pf-input" type="number" step="0.1" id="rep_pf_runTime_${unit}" value="${v===null||v===undefined?'':v}"></td>`;
     }
-    return `<td class="pf-computed" id="rep_pf_${key}_${unit}_disp">${fmtP(aePerf[key], dec)}</td>`;
+    return `<td class="pf-computed" id="rep_pf_${key}_${unit}_disp">${fmtP(kwPerf[key], dec)}</td>`;
   }
 
   const v = perfTable[unit]?.[key];
@@ -2209,15 +2498,27 @@ function openReportEditor(entryId){
   document.getElementById('reportPortFields').style.display = isSea ? 'none' : '';
 
   const cylBox = document.getElementById('reportCylFields');
+  const cylN = meCylinderCount();
   if (isSea){
-    cylBox.innerHTML = [1,2,3,4,5,6].map(n=>`
+    cylBox.innerHTML = Array.from({length:cylN}, (_,i)=>{ const n=i+1; return `
       <div class="unit-box">
         <h3>Cyl ${n}</h3>
         <div class="field"><label>Pump Rack</label><input type="number" step="0.1" id="rep_pumpRack${n}"></div>
         <div class="field"><label>Exhaust Temp (°C)</label><input type="number" step="0.1" id="rep_exhaust${n}"></div>
-      </div>`).join('');
+      </div>`; }).join('');
+    const turboBox = document.getElementById('reportTurboFields');
+    const turboN = turboCount();
+    turboBox.innerHTML = Array.from({length:turboN}, (_,i)=>{ const n=i+1; return `
+      <div class="unit-box">
+        <h3>T/C #${n}</h3>
+        <div class="field"><label>In Temp (°C)</label><input type="number" step="0.1" id="rep_t${n}in"></div>
+        <div class="field"><label>Out Temp (°C)</label><input type="number" step="0.1" id="rep_t${n}out"></div>
+        <div class="field"><label>RPM</label><input type="number" step="1" id="rep_t${n}rpm"></div>
+      </div>`; }).join('');
   } else {
     cylBox.innerHTML = '';
+    const turboBox = document.getElementById('reportTurboFields');
+    if (turboBox) turboBox.innerHTML = '';
   }
 
   const r = e.report || {};
@@ -2246,16 +2547,20 @@ function openReportEditor(entryId){
   document.getElementById('rep_remarks').value = r.remarks ?? '';
   if (isSea){
     document.getElementById('rep_eta').value = r.eta || computeEntryEta(entryId) || '';
-    [1,2,3,4,5,6].forEach(n=>{
+    Array.from({length:cylN}, (_,i)=>i+1).forEach(n=>{
       document.getElementById(`rep_pumpRack${n}`).value = (r.pumpRack && r.pumpRack[n-1]!=null) ? r.pumpRack[n-1] : '';
       document.getElementById(`rep_exhaust${n}`).value = (r.exhaustTemp && r.exhaustTemp[n-1]!=null) ? r.exhaustTemp[n-1] : '';
     });
-    document.getElementById('rep_t1in').value = r.turbo1?.in ?? '';
-    document.getElementById('rep_t1out').value = r.turbo1?.out ?? '';
-    document.getElementById('rep_t1rpm').value = r.turbo1?.rpm ?? '';
-    document.getElementById('rep_t2in').value = r.turbo2?.in ?? '';
-    document.getElementById('rep_t2out').value = r.turbo2?.out ?? '';
-    document.getElementById('rep_t2rpm').value = r.turbo2?.rpm ?? '';
+    const turbos = r.turbos || (r.turbo1 ? [r.turbo1, r.turbo2].filter(Boolean) : []);
+    Array.from({length:turboCount()}, (_,i)=>i+1).forEach(n=>{
+      const t = turbos[n-1] || (n===1 ? r.turbo1 : n===2 ? r.turbo2 : {}) || {};
+      const inEl = document.getElementById(`rep_t${n}in`);
+      const outEl = document.getElementById(`rep_t${n}out`);
+      const rpmEl = document.getElementById(`rep_t${n}rpm`);
+      if (inEl) inEl.value = t.in ?? '';
+      if (outEl) outEl.value = t.out ?? '';
+      if (rpmEl) rpmEl.value = t.rpm ?? '';
+    });
     document.getElementById('rep_scavTemp').value = r.scavTemp ?? '';
     document.getElementById('rep_scavPress').value = r.scavPress ?? '';
     document.getElementById('rep_fuelTemp').value = r.fuelTemp ?? '';
@@ -2288,6 +2593,17 @@ function openReportEditor(entryId){
           maxLoad: avgLoad!=null ? avgLoad*1.15 : null,
           runTime: num(`rep_pf_runTime_${u}`)
         };
+      } else if (u === 'BOILER' || u === 'INCINERATOR'){
+        const maxKw = u === 'BOILER' ? boilerMaxKw() : incineratorMaxKw();
+        const kw = num(`rep_pf_avgPower_${u}`);
+        const avgLoad = (kw!=null && maxKw>0) ? (kw/maxKw)*100 : null;
+        perfTable[u] = {
+          avgPower: kw,
+          avgLoad,
+          minLoad: avgLoad!=null ? avgLoad*0.90 : null,
+          maxLoad: avgLoad!=null ? avgLoad*1.15 : null,
+          runTime: num(`rep_pf_runTime_${u}`)
+        };
       } else {
         perfTable[u] = {};
         PERF_ROWS.forEach(([key])=>{ perfTable[u][key] = num(`rep_pf_${key}_${u}`); });
@@ -2296,10 +2612,13 @@ function openReportEditor(entryId){
     report.perfTable = perfTable;
     if (isSea){
       report.eta = document.getElementById('rep_eta').value;
-      report.pumpRack = [1,2,3,4,5,6].map(n=>num(`rep_pumpRack${n}`));
-      report.exhaustTemp = [1,2,3,4,5,6].map(n=>num(`rep_exhaust${n}`));
-      report.turbo1 = { in: num('rep_t1in'), out: num('rep_t1out'), rpm: num('rep_t1rpm') };
-      report.turbo2 = { in: num('rep_t2in'), out: num('rep_t2out'), rpm: num('rep_t2rpm') };
+      report.pumpRack = Array.from({length:cylN}, (_,i)=>num(`rep_pumpRack${i+1}`));
+      report.exhaustTemp = Array.from({length:cylN}, (_,i)=>num(`rep_exhaust${i+1}`));
+      report.turbos = Array.from({length:turboCount()}, (_,i)=>({
+        in: num(`rep_t${i+1}in`), out: num(`rep_t${i+1}out`), rpm: num(`rep_t${i+1}rpm`)
+      }));
+      report.turbo1 = report.turbos[0] || null;
+      report.turbo2 = report.turbos[1] || null;
       report.scavTemp = num('rep_scavTemp'); report.scavPress = num('rep_scavPress');
       report.fuelTemp = num('rep_fuelTemp'); report.pumpMark = num('rep_pumpMark'); report.pressDiff = num('rep_pressDiff');
     }
@@ -2402,17 +2721,15 @@ function sfocDeltaClass(delta){
 }
 
 function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
-  const fuelInner = FUEL_TYPES.map(t=>printRow(t, `${fmtP(asOf.rob[t],2)} MT`)).join('');
-  const totalLube = LUBE_TYPES.filter(t=>t!=='FRESH WATER').reduce((s,t)=> s+(asOf.robLube[t]||0),0);
+  const fuelInner = fuelTankList().map(t=>printRow(t.name, `${fmtP(asOf.rob[t.id],2)} MT`)).join('');
+  const totalLube = totalLubeRob(asOf.robLube);
   const lubeInner = [
-    printRow('M/E Cyl. Oil (High)', `${fmtP(asOf.robLube['CYL HIGH'],0)} L`),
-    printRow('M/E Cyl. Oil (Low)', `${fmtP(asOf.robLube['CYL LOW'],0)} L`),
-    printRow('M/E System Oil', `${fmtP(asOf.robLube['ME SYS OIL'],0)} L`),
-    printRow('A/E System Oil', `${fmtP(asOf.robLube['GE SYS OIL'],0)} L`),
+    ...lubeTankList().map(t=>printRow(t.name, `${fmtP(asOf.robLube[t.id],0)} L`)),
     printRow('Total Lube Oil', `${fmtP(totalLube,0)} L`)
   ].join('');
 
-  const fwRob = asOf.robLube['FRESH WATER'];
+  const primaryFw = fwTankList()[0];
+  const fwRob = primaryFw ? asOf.robLube[primaryFw.id] : null;
   const fwSection = printSection('Fresh Water', [
     printRow('FW Produced', `${row.fwProdD===null||row.fwProdD===undefined?'—':fmtP(row.fwProdD,0)} L`),
     printRow('FW Consumed', `${row.fwConsD===null||row.fwConsD===undefined?'—':fmtP(row.fwConsD,0)} L`),
@@ -2448,16 +2765,20 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
       printRow('Engine Speed', row.speedEngine==null?'—':`${fmtP(row.speedEngine,2)} kn`)
     ].join(''));
     const pr = report.pumpRack||[], ex = report.exhaustTemp||[];
+    const cylN = meCylinderCount();
     cylSection = printSection('Pump Rack &amp; M/E Exhaust', `
       <table class="pr-table">
-        <tr><th></th>${[1,2,3,4,5,6].map(n=>`<th>Cyl ${n}</th>`).join('')}</tr>
-        <tr><td class="row-lbl">Pump Rack</td>${[0,1,2,3,4,5].map(i=>`<td>${fmtP(pr[i],1)}</td>`).join('')}</tr>
-        <tr><td class="row-lbl">Exhaust °C</td>${[0,1,2,3,4,5].map(i=>`<td>${fmtP(ex[i],0)}</td>`).join('')}</tr>
+        <tr><th></th>${Array.from({length:cylN},(_,i)=>`<th>Cyl ${i+1}</th>`).join('')}</tr>
+        <tr><td class="row-lbl">Pump Rack</td>${Array.from({length:cylN},(_,i)=>`<td>${fmtP(pr[i],1)}</td>`).join('')}</tr>
+        <tr><td class="row-lbl">Exhaust °C</td>${Array.from({length:cylN},(_,i)=>`<td>${fmtP(ex[i],0)}</td>`).join('')}</tr>
       </table>`);
-    const t1 = report.turbo1||{}, t2 = report.turbo2||{};
+    const turbos = report.turbos || [report.turbo1, report.turbo2].filter(Boolean);
+    const turboRows = Array.from({length:turboCount()}, (_,i)=>{
+      const t = turbos[i] || {};
+      return printRow(`T/C #${i+1} In / Out / RPM`, `${fmtP(t.in,0)} / ${fmtP(t.out,0)} / ${fmtP(t.rpm,0)}`);
+    }).join('');
     turboSection = printSection('Turbochargers &amp; Scavenge', [
-      printRow('T/C #1 In / Out / RPM', `${fmtP(t1.in,0)} / ${fmtP(t1.out,0)} / ${fmtP(t1.rpm,0)}`),
-      printRow('T/C #2 In / Out / RPM', `${fmtP(t2.in,0)} / ${fmtP(t2.out,0)} / ${fmtP(t2.rpm,0)}`),
+      turboRows,
       printRow('Scav. Temperature', `${fmtP(report.scavTemp,1)} °C`),
       printRow('Scav. Pressure', `${fmtP(report.scavPress,2)} bar`),
       printRow('Fuel Temperature', `${fmtP(report.fuelTemp,1)} °C`),
@@ -2620,10 +2941,10 @@ function loadEntryIntoForm(id){
   renderEntryConsTable();
   const row = getComputedRow(id);
   if (row){
-    ROB_ROWS.forEach(r=>{
+    getRobRows().forEach(r=>{
       const el = document.getElementById('entry_cons_'+slugKey(r.key));
       if (!el) return;
-      const val = r.cat==='fuel' ? row.consByType[r.key] : row.lubeByType[r.key];
+      const val = robRowCons(row, r);
       el.value = (val===null||val===undefined) ? '' : val;
     });
   }
@@ -2635,10 +2956,27 @@ document.getElementById('s_flowArr').addEventListener('change', (e)=>{
   state.setup.flowArr = e.target.value;
   renderFlowmeterCounterRows();
 });
-document.getElementById('s_geArrangement').addEventListener('change', ()=>{
+document.getElementById('s_geArrangement')?.addEventListener('change', ()=>{
   state.setup.geArrangement = document.getElementById('s_geArrangement').value;
+  syncGeneratorArrangement();
   renderGeMaxKwFields();
   renderGeRuntimeFields();
+});
+document.getElementById('s_generatorCount')?.addEventListener('change', ()=>{
+  state.setup.generatorCount = parseInt(document.getElementById('s_generatorCount').value) || 1;
+  syncGeneratorArrangement();
+  renderGeMaxKwFields();
+  renderGeRuntimeFields();
+});
+['s_fuelTankCount','s_lubeTankCount','s_fwTankCount'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('change', ()=>{
+    state.setup.fuelTankCount = parseInt(document.getElementById('s_fuelTankCount').value) || 1;
+    state.setup.lubeTankCount = parseInt(document.getElementById('s_lubeTankCount').value) || 1;
+    state.setup.fwTankCount = parseInt(document.getElementById('s_fwTankCount').value) || 1;
+    ensureTankStores();
+    renderTankConfigFields();
+    render();
+  });
 });
 async function saveVoyageDetails(){
   state.setup.vesselName = document.getElementById('s_vesselName').value;
@@ -2695,7 +3033,12 @@ async function saveSetupFromForm(){
   state.setup.sfoc100 = parseFloat(document.getElementById('s_sfoc100').value)||null;
   state.setup.sfoc85 = parseFloat(document.getElementById('s_sfoc85').value)||null;
   state.setup.alternatorMaxKw = parseFloat(document.getElementById('s_alternatorMaxKw').value)||null;
-  state.setup.geArrangement = document.getElementById('s_geArrangement').value || 'SINGLE';
+  state.setup.generatorCount = parseInt(document.getElementById('s_generatorCount').value) || 1;
+  state.setup.meCylinderCount = parseInt(document.getElementById('s_meCylinderCount').value) || 6;
+  state.setup.turboCount = parseInt(document.getElementById('s_turboCount').value) || 2;
+  state.setup.boilerMaxKw = parseFloat(document.getElementById('s_boilerMaxKw').value)||null;
+  state.setup.incineratorMaxKw = parseFloat(document.getElementById('s_incineratorMaxKw').value)||null;
+  syncGeneratorArrangement();
   const gens = setupGenerators();
   for (let i=0; i<geUnitCount(); i++){
     const v = parseFloat(document.getElementById(`s_geMaxKw_${i}`)?.value);
@@ -2727,6 +3070,30 @@ async function saveSetupFromForm(){
     geSg: parseFloat(document.getElementById('s_def_geSg').value)||0,
     blrSg: parseFloat(document.getElementById('s_def_blrSg').value)||0
   };
+
+  state.setup.fuelTankCount = parseInt(document.getElementById('s_fuelTankCount')?.value) || fuelTankList().length;
+  state.setup.lubeTankCount = parseInt(document.getElementById('s_lubeTankCount')?.value) || lubeTankList().length;
+  state.setup.fwTankCount = parseInt(document.getElementById('s_fwTankCount')?.value) || fwTankList().length;
+  ensureTankStores();
+  fuelTankList().forEach(t=>{
+    const nameEl = document.querySelector(`[data-fuel-tank-name="${t.id}"]`);
+    const gradeEl = document.querySelector(`[data-fuel-tank-grade="${t.id}"]`);
+    if (nameEl) t.name = nameEl.value.trim() || t.name;
+    if (gradeEl) t.grade = gradeEl.value;
+  });
+  lubeTankList().forEach(t=>{
+    const nameEl = document.querySelector(`[data-lube-tank-name="${t.id}"]`);
+    const kindEl = document.querySelector(`[data-lube-tank-kind="${t.id}"]`);
+    if (nameEl) t.name = nameEl.value.trim() || t.name;
+    if (kindEl) t.kind = kindEl.value;
+  });
+  fwTankList().forEach(t=>{
+    const nameEl = document.querySelector(`[data-fw-tank-name="${t.id}"]`);
+    if (nameEl) t.name = nameEl.value.trim() || t.name;
+  });
+  state.setup.fuelTanks = fuelTankList();
+  state.setup.lubeTanks = lubeTankList();
+  state.setup.fwTanks = fwTankList();
 
   await saveSetup();
   applyEntryDefaults();
@@ -2828,17 +3195,34 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
   alert(`New voyage started. Downloaded "${backupName}" and "${abstractName}". Opening ROB and reference meter readings carried over — set the new Port of Arrival when known.`);
 });
 
-const ROB_ROWS = [
-  {key:'HFO', label:'HFO', cat:'fuel'},
-  {key:'LSFO', label:'LS HFO', cat:'fuel'},
-  {key:'MDO/MGO', label:'MDO/MGO', cat:'fuel'},
-  {key:'LSMGO', label:'LS MGO', cat:'fuel'},
-  {key:'CYL HIGH', label:'Cyl. Oil High', cat:'lube'},
-  {key:'CYL LOW', label:'Cyl Oil Low', cat:'lube'},
-  {key:'ME SYS OIL', label:'M/E Sys. Oil', cat:'lube'},
-  {key:'GE SYS OIL', label:'D/G Sys. Oil', cat:'lube'},
-  {key:'FRESH WATER', label:'Fresh Water', cat:'lube'}
-];
+function getRobRows(){
+  return [
+    ...fuelTankList().map(t=>({key:t.id, label:t.name, cat:'fuel', grade:t.grade})),
+    ...lubeTankList().map(t=>({key:t.id, label:t.name, cat:'lube', kind:t.kind})),
+    ...fwTankList().map(t=>({key:t.id, label:t.name, cat:'fw'}))
+  ];
+}
+function robRowCons(row, r){
+  if (r.cat==='fuel') return row.consByType?.[r.grade] ?? row.consByType?.[r.key];
+  if (r.cat==='fw') return row.lubeByType?.['FRESH WATER'];
+  return row.lubeByType?.[lubeKindToLabel(r.kind)] ?? row.lubeByType?.[r.key];
+}
+function overrideForGrade(override, grade, tanks){
+  if (!override) return null;
+  if (override[grade]!=null) return override[grade];
+  for (const t of tanks){
+    if (t.grade===grade && override[t.id]!=null) return override[t.id];
+  }
+  return null;
+}
+function overrideForLubeKind(override, label, tanks){
+  if (!override) return null;
+  if (override[label]!=null) return override[label];
+  for (const t of tanks){
+    if (lubeKindToLabel(t.kind)===label && override[t.id]!=null) return override[t.id];
+  }
+  return null;
+}
 function slugKey(k){ return k.replace(/[^a-zA-Z]/g,'').toLowerCase(); }
 
 let currentVsEntryId = null;
@@ -2861,9 +3245,9 @@ function openRobSnapshot(entryId){
   document.getElementById('robSnapshotTime').value = dt.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
   document.getElementById('robSnapshotOperation').value = entry.operation;
 
-  const rowsForPrint = ROB_ROWS.filter(r=>r.key!=='FRESH WATER').map(r=>{
+  const rowsForPrint = getRobRows().filter(r=>r.cat!=='fw').map(r=>{
     const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
-    const consVal = r.cat==='fuel' ? row.consByType[r.key] : row.lubeByType[r.key];
+    const consVal = robRowCons(row, r);
     const nowVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
     const dec = r.cat==='fuel' ? 2 : 0;
     return { label:r.label, prevVal, consVal, nowVal, dec, consDec: r.cat==='fuel'?3:1 };
@@ -3008,9 +3392,9 @@ function openVoyageSummary(entryId){
   document.getElementById('vs_misc_lsmgo').value = misc['LSMGO'] ?? 0;
 
   const robBody = document.getElementById('vsRobBody');
-  robBody.innerHTML = ROB_ROWS.map(r=>{
+  robBody.innerHTML = getRobRows().map(r=>{
     const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
-    const consVal = r.cat==='fuel' ? row.consByType[r.key] : row.lubeByType[r.key];
+    const consVal = robRowCons(row, r);
     const robVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
     return `<tr>
       <td>${r.label}</td>
@@ -3040,7 +3424,7 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   const num = id => { const v = document.getElementById(id).value; return isNaN(parseFloat(v)) ? 0 : parseFloat(v); };
   entry.miscCons = { 'MDO/MGO': num('vs_misc_mdomgo'), 'LSMGO': num('vs_misc_lsmgo') };
   entry.consOverride = {};
-  ROB_ROWS.forEach(r=>{
+  getRobRows().forEach(r=>{
     const el = document.getElementById('vs_cons_'+slugKey(r.key));
     entry.consOverride[r.key] = el ? (parseFloat(el.value)||0) : null;
   });
@@ -3223,9 +3607,9 @@ function printVoyageSummary(entryId){
   const robTable = printSection('Remaining On Board', `
     <table class="pr-table">
       <tr><th>Item</th><th>Previous</th><th>Consumption</th><th>Present R.O.B.</th></tr>
-      ${ROB_ROWS.map(r=>{
+      ${getRobRows().map(r=>{
         const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
-        const consVal = r.cat==='fuel' ? row.consByType[r.key] : row.lubeByType[r.key];
+        const consVal = robRowCons(row, r);
         const nowVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
         const dec = r.cat==='fuel' ? 2 : 0;
         return `<tr><td class="row-lbl">${r.label}</td><td>${fmt(prevVal,dec)}</td><td>${consVal===null||consVal===undefined?'—':fmt(consVal,r.cat==='fuel'?3:1)}</td><td>${fmt(nowVal,dec)}</td></tr>`;
@@ -3434,7 +3818,7 @@ function renderEntryUnitFields(){
   set('entry_unit_blr', blrCons);
 }
 
-function renderVoyageProgress(){
+function renderVoyageProgress(animateShip){
   const box = document.getElementById('voyageProgressViz');
   if (!box) return;
   const {rows, perf} = computeDerived();
@@ -3452,6 +3836,8 @@ function renderVoyageProgress(){
   const togo = Math.max(0, totalDistance - traveled);
   const x0 = 70, x1 = 830;
   const shipX = x0 + pct*(x1-x0);
+  const shipFromPx = animateShip ? (x0 - shipX) : 0;
+  const shipAnimClass = animateShip ? 'voyage-ship' : 'voyage-ship voyage-ship-static';
   const depPort = state.setup.departPort || 'Departure';
   const arrPort = state.setup.arrivePort || 'Arrival';
 
@@ -3516,7 +3902,7 @@ function renderVoyageProgress(){
   const progLen = Math.max(1, pct * (x1-x0));
 
   box.innerHTML = `
-    <svg viewBox="0 0 900 270" style="width:100%; height:auto; max-height:290px; --prog-len:${progLen};">
+    <svg viewBox="0 0 900 270" style="width:100%; height:auto; max-height:290px; --prog-len:${progLen}; --ship-from:${shipFromPx}px;">
       <g class="voyage-wave"><path d="${wave1}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.25"/></g>
       <g class="voyage-wave" style="animation-delay:-3s"><path d="${wave2}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.15"/></g>
 
@@ -3531,7 +3917,7 @@ function renderVoyageProgress(){
       <text x="${x1}" y="${y-46}" text-anchor="end" fill="var(--paper)" font-family="Oswald, sans-serif" font-size="15" font-weight="600">${arrPort}</text>
       <text x="${x1}" y="${y-28}" text-anchor="end" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(totalDistance,0)} nm</text>
 
-      <g class="voyage-ship">
+      <g class="${shipAnimClass}">
         ${isUnderway ? `<path class="voyage-wake" d="M ${shipX-44} ${y+14} q -10 4 -22 2" fill="none" stroke="var(--paper-dim)" stroke-width="1.5"/>` : ''}
         <path d="${upperHull}" fill="#7a1f2b" stroke="var(--ink)" stroke-width="1"/>
         <path d="${lowerHull}" fill="#0d0d0d" stroke="var(--ink)" stroke-width="1"/>
@@ -3564,6 +3950,7 @@ function renderVoyageProgress(){
       <text x="${(x0+x1)/2}" y="${y+106}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">Average Speed: ${avgSpeed!=null ? fmt(avgSpeed,2)+' kn' : '—'}</text>
     </svg>
   `;
+  _lastVoyageShipPct = pct;
 }
 
 function renderFwLivePreview(){
@@ -3640,18 +4027,18 @@ function renderEntryConsTable(){
   const body = document.getElementById('entryConsBody');
   if (!body) return;
   if (!body.children.length){
-    body.innerHTML = ROB_ROWS.map(r=>{
+    body.innerHTML = getRobRows().map(r=>{
       const id = 'entry_cons_' + slugKey(r.key);
       return `<tr><td>${r.label}</td><td><input class="pf-input" style="width:120px;" type="number" step="0.001" id="${id}" data-key="${r.key}" data-cat="${r.cat}"></td></tr>`;
     }).join('');
   }
   const {consByType, lubeByType} = computeLiveConsByType();
   const focusedId = document.activeElement ? document.activeElement.id : null;
-  ROB_ROWS.forEach(r=>{
+  getRobRows().forEach(r=>{
     const id = 'entry_cons_' + slugKey(r.key);
     const inp = document.getElementById(id);
     if (!inp || focusedId===id) return;
-    const val = r.cat==='fuel' ? consByType[r.key] : lubeByType[r.key];
+    const val = robRowCons({consByType, lubeByType}, r);
     inp.value = (val===null||val===undefined) ? '' : val;
   });
 }
@@ -3660,7 +4047,7 @@ document.getElementById('btnResetConsOverride').addEventListener('click', ()=>{
   ['entry_unit_me','entry_unit_ge','entry_unit_blr'].forEach(id=>{ document.getElementById(id).value=''; });
   renderEntryUnitFields();
   renderEntryConsTable();
-  ROB_ROWS.forEach(r=>{
+  getRobRows().forEach(r=>{
     const id = 'entry_cons_' + slugKey(r.key);
     const inp = document.getElementById(id);
     if (inp) inp.removeAttribute('data-touched');
@@ -3743,7 +4130,7 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     fwRob: document.getElementById('fw_rob_reading').value===''? null : parseFloat(document.getElementById('fw_rob_reading').value),
     consOverride: (function(){
       const o = {};
-      ROB_ROWS.forEach(r=>{
+      getRobRows().forEach(r=>{
         const el = document.getElementById('entry_cons_'+slugKey(r.key));
         o[r.key] = (el && el.value!=='') ? parseFloat(el.value) : null;
       });
@@ -3970,13 +4357,13 @@ document.getElementById('rcpt_category').addEventListener('change', (e)=>{
   const sel = document.getElementById('rcpt_type');
   const unit = document.getElementById('rcpt_unit');
   if (e.target.value === 'fuel'){
-    sel.innerHTML = FUEL_TYPES.map(t=>`<option>${t}</option>`).join('');
+    sel.innerHTML = fuelTankList().map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
     unit.value = 'MT';
   } else if (e.target.value === 'lube'){
-    sel.innerHTML = ['CYL HIGH','CYL LOW','ME SYS OIL','GE SYS OIL'].map(t=>`<option>${t}</option>`).join('');
+    sel.innerHTML = lubeTankList().map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
     unit.value = 'L';
   } else {
-    sel.innerHTML = `<option>FRESH WATER</option>`;
+    sel.innerHTML = fwTankList().map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
     unit.value = 'L';
   }
 });
@@ -3986,7 +4373,10 @@ document.getElementById('btnAddReceipt').addEventListener('click', async ()=>{
   const qty = parseFloat(document.getElementById('rcpt_qty').value);
   if (!date || isNaN(qty) || qty<=0){ alert('Enter a date and a positive quantity.'); return; }
   const receipt = {
-    id: uid(), date, category: document.getElementById('rcpt_category').value, type: document.getElementById('rcpt_type').value, qty,
+    id: uid(), date, category: document.getElementById('rcpt_category').value,
+    type: document.getElementById('rcpt_type').selectedOptions[0]?.textContent || document.getElementById('rcpt_type').value,
+    tankId: document.getElementById('rcpt_type').value,
+    qty,
     bdnNo: document.getElementById('rcpt_bdn').value,
     company: document.getElementById('rcpt_company').value,
     location: document.getElementById('rcpt_location').value
@@ -4422,13 +4812,40 @@ function migrateSetup(setup){
   Object.keys(defDefaults).forEach(k=>{ if (setup.defaults[k]===undefined) setup.defaults[k] = defDefaults[k]; });
 
   if (!setup.rob) setup.rob = {};
-  FUEL_TYPES.forEach(t=>{ if (setup.rob[t]==null) setup.rob[t] = 0; });
   if (!setup.robLube) setup.robLube = {};
-  LUBE_TYPES.forEach(t=>{ if (setup.robLube[t]==null) setup.robLube[t] = 0; });
   if (!setup.capacity) setup.capacity = {};
-  FUEL_TYPES.forEach(t=>{ if (!setup.capacity[t]) setup.capacity[t] = 1000; });
   if (!setup.capacityLube) setup.capacityLube = {};
-  LUBE_TYPES.forEach(t=>{ if (!setup.capacityLube[t]) setup.capacityLube[t] = (t==='FRESH WATER'?150000:15000); });
+
+  if (!setup.fuelTanks){
+    setup.fuelTanks = DEFAULT_FUEL_TANKS.map(t=>({...t}));
+    FUEL_TYPES.forEach(name=>{
+      const id = slugKey(name);
+      const tank = setup.fuelTanks.find(t=>t.grade===name || t.name===name);
+      if (tank && setup.rob[name]!=null && setup.rob[tank.id]==null) setup.rob[tank.id] = setup.rob[name];
+      if (tank && setup.capacity[name] && !setup.capacity[tank.id]) setup.capacity[tank.id] = setup.capacity[name];
+    });
+  }
+  if (!setup.lubeTanks){
+    setup.lubeTanks = DEFAULT_LUBE_TANKS.map(t=>({...t}));
+    ['CYL HIGH','CYL LOW','ME SYS OIL','GE SYS OIL'].forEach(name=>{
+      const tank = setup.lubeTanks.find(t=>lubeKindToLabel(t.kind)===name || t.name===name);
+      if (tank && setup.robLube[name]!=null && setup.robLube[tank.id]==null) setup.robLube[tank.id] = setup.robLube[name];
+      if (tank && setup.capacityLube[name] && !setup.capacityLube[tank.id]) setup.capacityLube[tank.id] = setup.capacityLube[name];
+    });
+  }
+  if (!setup.fwTanks){
+    setup.fwTanks = DEFAULT_FW_TANKS.map(t=>({...t}));
+    if (setup.robLube['FRESH WATER']!=null && setup.robLube.freshwater==null) setup.robLube.freshwater = setup.robLube['FRESH WATER'];
+    if (setup.capacityLube['FRESH WATER'] && !setup.capacityLube.freshwater) setup.capacityLube.freshwater = setup.capacityLube['FRESH WATER'];
+  }
+  if (setup.fuelTankCount==null) setup.fuelTankCount = setup.fuelTanks.length;
+  if (setup.lubeTankCount==null) setup.lubeTankCount = setup.lubeTanks.length;
+  if (setup.fwTankCount==null) setup.fwTankCount = setup.fwTanks.length;
+  if (setup.generatorCount==null) setup.generatorCount = GE_ARR_COUNTS[setup.geArrangement || 'SINGLE'] || 1;
+  if (setup.meCylinderCount==null) setup.meCylinderCount = 6;
+  if (setup.turboCount==null) setup.turboCount = 2;
+  if (setup.boilerMaxKw===undefined) setup.boilerMaxKw = null;
+  if (setup.incineratorMaxKw===undefined) setup.incineratorMaxKw = null;
 
   if (setup.vesselName===undefined) setup.vesselName = '';
   if (setup.chEng===undefined) setup.chEng = '';
@@ -4441,7 +4858,7 @@ function migrateSetup(setup){
   if (setup.pitch==null) setup.pitch = 5.85;
   if (setup.mcrRpm==null) setup.mcrRpm = 91;
   if (setup.mcrKw==null) setup.mcrKw = 18630;
-  if (!setup.geArrangement) setup.geArrangement = 'SINGLE';
+  if (!setup.geArrangement) setup.geArrangement = GE_COUNT_TO_ARR[setup.generatorCount] || 'SINGLE';
   if (!setup.generators){
     const max = setup.alternatorMaxKw || 660;
     setup.generators = [{maxKw:max},{maxKw:max},{maxKw:max}];
@@ -4461,6 +4878,7 @@ function migrateSetup(setup){
     const metaAll = await dbGetAll('meta');
     const setupRow = metaAll.find(m=>m.key==='setup');
     if (setupRow) state.setup = migrateSetup(Object.assign(state.setup, setupRow.value));
+    ensureTankStores();
     state.entries = await dbGetAll('entries');
     state.receipts = await dbGetAll('receipts');
     state.documents = await dbGetAll('documents');
