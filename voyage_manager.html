@@ -276,6 +276,7 @@
           <div class="field"><label>M/E KW (85% Load)</label><input type="number" step="1" id="s_csrKw"></div>
           <div class="field"><label>SFOC - 100% (g/kW.hr)</label><input type="number" step="0.1" id="s_sfoc100"></div>
           <div class="field"><label>SFOC - 85% (g/kW.hr)</label><input type="number" step="0.1" id="s_sfoc85"></div>
+          <div class="field full-width" style="grid-column:1/-1;"><div class="hint" id="sfocSetupHint">Reference SFOC at any load: SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²). Enter SFOC @ 100% MCR (shop trial). Optional SFOC @ 85% calibrates the curve; otherwise a = 0.25, b = 0.75 (standard slow/medium-speed diesel).</div></div>
           <div class="field"><label>Alternator Max. Power (KW)</label><input type="number" step="1" id="s_alternatorMaxKw"></div>
           <div class="field"><label>Generator Arrangement</label>
             <select id="s_geArrangement">
@@ -721,7 +722,7 @@
     <div class="panel">
       <h2>Fuel Efficiency (SFOC)</h2>
       <div class="stat-strip cols5" id="sfocStrip"></div>
-      <div class="hint">Reference SFOC is interpolated from your Setup values at 100% and 85% MCR using the standard marine load curve SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²). Actual SFOC = M/E fuel (g) ÷ shaft energy (kWh) for each steaming period. A sustained +3% deviation from reference often warrants investigation (fouling, injection wear, turbo issues).</div>
+      <div class="hint">Reference SFOC uses SFOC₁₀₀ from Setup and the standard load curve SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²) with a + b = 1 (default a = 0.25, b = 0.75; calibrated through 85% when that shop-trial point is entered). Actual SFOC = M/E fuel (g) ÷ shaft energy (kWh) for each steaming period. A sustained +3% deviation from reference often warrants investigation (fouling, injection wear, turbo issues).</div>
     </div>
     <div class="panel">
       <h2>Voyage Time Averages</h2>
@@ -1096,18 +1097,34 @@ function meterRollovers(){
   };
 }
 
-/* Reference SFOC curve calibrated to pass through 85% and 100% MCR shop-trial points.
-   SFOC(L) = SFOC100 × (a + b × (L/100)²), with a + b = 1. */
-function referenceSfocAtLoad(mcrPct){
+/* Standard marine SFOC load curve (Nautical Solver / MAN / Wärtsilä references):
+   SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²), with a + b = 1.
+   Default a = 0.25, b = 0.75 for slow/medium-speed diesels when only the 100% shop-trial point is known.
+   If SFOC @ 85% is entered in Setup, a and b are calibrated to pass through both points. */
+function sfocCurveCoefficients(){
   const sfoc100 = state.setup.sfoc100;
   const sfoc85 = state.setup.sfoc85;
-  if (sfoc100==null || isNaN(sfoc100) || mcrPct==null || isNaN(mcrPct)) return null;
-  if (sfoc85==null || isNaN(sfoc85)) return sfoc100;
-  const ratio = sfoc85 / sfoc100;
-  const b = (1 - ratio) / 0.2775;
-  const a = 1 - b;
+  if (sfoc100==null || isNaN(sfoc100)) return null;
+  if (sfoc85!=null && !isNaN(sfoc85) && sfoc85>0){
+    const ratio = sfoc85 / sfoc100;
+    const b = (1 - ratio) / 0.2775;
+    const a = 1 - b;
+    return {a, b, calibrated: true};
+  }
+  return {a: 0.25, b: 0.75, calibrated: false};
+}
+
+function referenceSfocAtLoad(mcrPct){
+  const sfoc100 = state.setup.sfoc100;
+  const coeffs = sfocCurveCoefficients();
+  if (sfoc100==null || isNaN(sfoc100) || mcrPct==null || isNaN(mcrPct) || !coeffs) return null;
   const load = Math.max(10, Math.min(110, mcrPct)) / 100;
-  return sfoc100 * (a + b * load * load);
+  return sfoc100 * (coeffs.a + coeffs.b * load * load);
+}
+
+function expectedMeFuelMtFromSfoc(sfocRef, kwEst, hrs){
+  if (sfocRef==null || kwEst==null || hrs==null || !(hrs>0) || !(kwEst>0) || !(sfocRef>0)) return null;
+  return (sfocRef * kwEst * hrs) / 1e6;
 }
 
 function actualMeSfoc(meConsMt, kwEst, hrs){
@@ -1133,7 +1150,7 @@ function computeDerived(){
   const consByLube = {"CYL HIGH":0,"CYL LOW":0,"ME SYS OIL":0,"GE SYS OIL":0,"FRESH WATER":0};
   let totalDistShip=0, totalDistEngine=0, totalHrs=0;
   let sumRpm=0, cntRpm=0, sumMcr=0, cntMcr=0, sumKw=0, cntKw=0, sumSpeedShip=0, cntSpeedShip=0, sumSlip=0, cntSlip=0;
-  let sumMcrHrs=0, sumSfocHrs=0, sumSfocWeighted=0, sumSfocDeltaWeighted=0, cntSfocDelta=0;
+  let sumMcrHrs=0, sumSfocHrs=0, sumSfocWeighted=0, sumSfocRefWeighted=0, sumSfocRefHrs=0, sumSfocDeltaWeighted=0, cntSfocDelta=0;
   const sumGeHrs=[0,0,0], sumGeKwHrs=[0,0,0], sumGeMaxKwHrs=[0,0,0];
 
   let prev = effectiveCarryover();
@@ -1141,7 +1158,7 @@ function computeDerived(){
     let hrs=null, meCons=null, geCons=null, blrCons=null, total=null;
     let cylCons=null, meLoCons=null, geLoCons=null, dailyRevs=null, fwProdD=null, fwConsD=null;
     let distEngine=null, speedEngine=null, speedShip=null, slip=null, mcrPct=null, kwEst=null;
-    let sfocRef=null, sfocActual=null, sfocDelta=null, meFuelMtDay=null;
+    let sfocRef=null, sfocActual=null, sfocDelta=null, meFuelMtDay=null, meFuelExpected=null;
     const gePeriod = [{hrs:null,kw:null,loadPct:null},{hrs:null,kw:null,loadPct:null},{hrs:null,kw:null,loadPct:null}];
     let consByType = {"HFO":null,"LSFO":null,"MDO/MGO":null,"LSMGO":null};
     let lubeByType = {"CYL HIGH":null,"CYL LOW":null,"ME SYS OIL":null,"GE SYS OIL":null,"FRESH WATER":null};
@@ -1221,8 +1238,13 @@ function computeDerived(){
       sfocRef = mcrPct!=null ? referenceSfocAtLoad(mcrPct) : null;
       sfocActual = actualMeSfoc(meCons, kwEst, hrs);
       sfocDelta = sfocDeltaPct(sfocActual, sfocRef);
+      meFuelExpected = expectedMeFuelMtFromSfoc(sfocRef, kwEst, hrs);
       if (hrs>0 && meCons!=null) meFuelMtDay = (meCons / hrs) * 24;
       if (mcrPct!=null && hrs>0) sumMcrHrs += mcrPct * hrs;
+      if (sfocRef!=null && hrs>0){
+        sumSfocRefWeighted += sfocRef * hrs;
+        sumSfocRefHrs += hrs;
+      }
       if (sfocActual!=null && hrs>0){
         sumSfocWeighted += sfocActual * hrs;
         sumSfocHrs += hrs;
@@ -1260,7 +1282,7 @@ function computeDerived(){
     return {...e, hrs, meCons, geCons, blrCons, total, cylCons, meLoCons, geLoCons, fwProdD, fwConsD,
              consByType, lubeByType,
              distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, dailyRevs,
-             sfocRef, sfocActual, sfocDelta, meFuelMtDay, gePeriod,
+             sfocRef, sfocActual, sfocDelta, meFuelMtDay, meFuelExpected, gePeriod,
              cumFuel: {...consByFuel}, cumLube: {...consByLube}, cumDistShip: totalDistShip};
   });
 
@@ -1279,6 +1301,7 @@ function computeDerived(){
     avgSpeedShip: cntSpeedShip? sumSpeedShip/cntSpeedShip : null,
     avgSlip: cntSlip? sumSlip/cntSlip : null,
     avgSfocActual: sumSfocHrs>0 ? sumSfocWeighted/sumSfocHrs : null,
+    avgSfocRef: sumSfocRefHrs>0 ? sumSfocRefWeighted/sumSfocRefHrs : null,
     avgSfocDelta: cntSfocDelta>0 ? sumSfocDeltaWeighted/cntSfocDelta : null,
     totalGeHrs: voyageGeHrs,
     avgGeKwTimeWeighted: voyageGeHrs>0 ? voyageGeKwHrs/voyageGeHrs : null,
@@ -1794,14 +1817,27 @@ function render(){
     <div class="stat"><div class="num">${seaAvgDistStr}</div><div class="lbl">Distance (nm/day)</div></div>
   `;
 
+  const sfoc100 = state.setup.sfoc100;
+  const coeffs = sfocCurveCoefficients();
   const refAtAvgLoad = perf.avgMcrTimeWeighted!=null ? referenceSfocAtLoad(perf.avgMcrTimeWeighted) : null;
+  const avgLoadLbl = perf.avgMcrTimeWeighted!=null ? `Ref. @ ${fmt(perf.avgMcrTimeWeighted,0)}% MCR` : 'Ref. @ avg load';
   document.getElementById('sfocStrip').innerHTML = `
+    <div class="stat"><div class="num">${sfoc100==null?'—':fmt(sfoc100,1)}</div><div class="lbl">SFOC @ 100% MCR (setup)</div></div>
+    <div class="stat"><div class="num">${refAtAvgLoad===null?'—':fmt(refAtAvgLoad,1)}</div><div class="lbl">${avgLoadLbl}</div></div>
     <div class="stat"><div class="num">${perf.avgSfocActual===null?'—':fmt(perf.avgSfocActual,1)}</div><div class="lbl">Actual SFOC (g/kWh)</div></div>
-    <div class="stat"><div class="num">${refAtAvgLoad===null?'—':fmt(refAtAvgLoad,1)}</div><div class="lbl">Ref. at avg load</div></div>
     <div class="stat"><div class="num">${perf.avgSfocDelta===null?'—':((perf.avgSfocDelta>0?'+':'')+fmt(perf.avgSfocDelta,1))}</div><div class="lbl">Δ vs reference %</div></div>
-    <div class="stat"><div class="num">${daysAtSea>0?fmt(totalCons/daysAtSea,2):'—'}</div><div class="lbl">Total fuel MT/day</div></div>
-    <div class="stat"><div class="num">${perf.avgSpeedShip===null?'—':fmt(perf.avgSpeedShip,2)}</div><div class="lbl">Avg speed (kn)</div></div>
+    <div class="stat"><div class="num">${perf.avgMcrTimeWeighted===null?'—':fmt(perf.avgMcrTimeWeighted,1)}</div><div class="lbl">Avg %MCR (hrs-wtd)</div></div>
   `;
+  const sfocHint = document.getElementById('sfocSetupHint');
+  if (sfocHint){
+    if (sfoc100==null || isNaN(sfoc100)){
+      sfocHint.textContent = 'Reference SFOC at any load: SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²). Enter SFOC @ 100% MCR (shop trial). Optional SFOC @ 85% calibrates the curve; otherwise a = 0.25, b = 0.75 (standard slow/medium-speed diesel).';
+    } else if (coeffs?.calibrated){
+      sfocHint.textContent = `Curve calibrated through shop trial: SFOC(100%) = ${fmt(sfoc100,1)}, SFOC(85%) = ${fmt(state.setup.sfoc85,1)} g/kWh → a = ${fmt(coeffs.a,3)}, b = ${fmt(coeffs.b,3)}. At 50% MCR reference = ${fmt(referenceSfocAtLoad(50),1)} g/kWh.`;
+    } else {
+      sfocHint.textContent = `Using standard curve a = 0.25, b = 0.75 with SFOC₁₀₀ = ${fmt(sfoc100,1)} g/kWh from setup. At 85% MCR → ${fmt(referenceSfocAtLoad(85),1)} g/kWh; at 50% MCR → ${fmt(referenceSfocAtLoad(50),1)} g/kWh.`;
+    }
+  }
 
   document.getElementById('voyageTimeAvgStrip').innerHTML = `
     <div class="stat"><div class="num">${fmt(perf.totalHrs/24,2)}</div><div class="lbl">Days at sea</div></div>
@@ -2593,9 +2629,10 @@ function openVoyageSummary(entryId){
     ${stat('Engine Speed', row.speedEngine==null?'—':fmt(row.speedEngine,2)+' kn')}
     ${stat('Ship Speed', row.speedShip==null?'—':fmt(row.speedShip,2)+' kn')}
     ${stat('Slip %', fmt(row.slip,2))}
+    ${stat('SFOC @ 100%', state.setup.sfoc100==null?'—':fmt(state.setup.sfoc100,1))}
     ${stat('Ref. SFOC', fmt(row.sfocRef,1))}
     ${stat('Actual SFOC', fmt(row.sfocActual,1))}
-    ${stat('SFOC Δ %', row.sfocDelta==null?'—':fmt(row.sfocDelta,1))}
+    ${stat('SFOC Δ %', row.sfocDelta==null?'—':((row.sfocDelta>0?'+':'')+fmt(row.sfocDelta,1)))}
   `;
 
   const geN = geUnitCount();
@@ -2980,10 +3017,13 @@ function updateLivePreview(){
     stat('Engine Distance (nm)', distEngine==null?'—':fmt(distEngine,2)) +
     stat('Slip (%)', slip==null?'—':fmt(slip,2)) +
     (function(){
+      const sfoc100 = state.setup.sfoc100;
       const ref = mcrPct!=null ? referenceSfocAtLoad(mcrPct) : null;
       const act = actualMeSfoc(meCons, kwEst, hrs);
       const delta = sfocDeltaPct(act, ref);
-      return stat('Ref. SFOC', ref==null?'—':fmt(ref,1)) +
+      const refLbl = mcrPct!=null ? `Ref. SFOC @ ${fmt(mcrPct,0)}%` : 'Ref. SFOC';
+      return stat('SFOC @ 100%', sfoc100==null?'—':fmt(sfoc100,1)) +
+        stat(refLbl, ref==null?'—':fmt(ref,1)) +
         stat('Actual SFOC', act==null?'—':fmt(act,1)) +
         stat('SFOC Δ %', delta==null?'—':((delta>0?'+':'')+fmt(delta,1)));
     })();
