@@ -15,42 +15,51 @@ Works on **Android phones** and **PC browsers** as a Progressive Web App (PWA), 
 
 ## Proxmox install (one-liner)
 
-On a fresh **Debian/Ubuntu LXC** (or VM) with network access:
+Run **on the Proxmox VE host** as root. The script **creates a new LXC container**, starts it, and installs the app inside automatically:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-install.sh | bash
 ```
 
-### Step-by-step on Proxmox
+When finished, it prints the container IP, web URL, and API token. Credentials are also saved to `/root/voyage-manager-ct<ID>.env` on the Proxmox host.
 
-1. **Create LXC** on the Proxmox host (example CT ID 120):
-   ```bash
-   pct create 120 local:vztmpl/debian-12-standard_12.0-1_amd64.tar.zst \
-     --hostname voyage-manager --memory 1024 --cores 1 --rootfs local-lvm:8 \
-     --net0 name=eth0,bridge=vmbr0,ip=dhcp --unprivileged 1
-   pct start 120
-   ```
+### Optional environment variables
 
-2. **Enter the container** and run the installer:
-   ```bash
-   pct enter 120
-   curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-install.sh | bash
-   ```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VOYAGE_CTID` | next free ID | Container ID (e.g. `120`) |
+| `VOYAGE_HOSTNAME` | `voyage-manager` | LXC hostname |
+| `VOYAGE_MEMORY` | `1024` | RAM in MB |
+| `VOYAGE_CORES` | `1` | CPU cores |
+| `VOYAGE_DISK_GB` | `8` | Root disk size (GB) |
+| `VOYAGE_STORAGE` | `local-lvm` | Proxmox storage for rootfs |
+| `VOYAGE_BRIDGE` | `vmbr0` | Network bridge |
+| `VOYAGE_SYNC_TOKEN` | auto-generated | Sync API bearer token |
+| `VOYAGE_TEMPLATE_MATCH` | `debian-12-standard` | OS template name filter |
 
-3. **Open the app** at `http://<container-ip>:8080/voyage_manager.html`
+Example — custom CT ID and token:
 
-4. **Optional — Cloudflare Tunnel** (expose sync + app securely):
-   ```bash
-   cloudflared tunnel --url http://127.0.0.1:8080
-   ```
-
-5. **Configure sync** in the app Data tab using the API token printed by the installer.
-
-Custom install directory or token:
 ```bash
-sudo VOYAGE_INSTALL_DIR=/opt/voyage-manager VOYAGE_SYNC_TOKEN='your-token' \
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-install.sh)"
+curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-install.sh | \
+  VOYAGE_CTID=120 VOYAGE_SYNC_TOKEN='my-secret-token' bash
 ```
+
+### Reinstall app inside an existing container
+
+```bash
+pct exec 120 -- env VOYAGE_IN_CONTAINER=1 bash -c \
+  "curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-install.sh | bash"
+```
+
+### Cloudflare Tunnel (optional)
+
+After install, expose the container through Cloudflare:
+
+```bash
+pct exec <CTID> -- cloudflared tunnel --url http://127.0.0.1:8080
+```
+
+Use the tunnel URL in the app **Data → Server Sync** settings.
 
 ## Quick Start (Local / Ship PC)
 
