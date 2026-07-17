@@ -291,6 +291,12 @@ CREDS
  Reinstall app only (inside running CT):
    pct exec ${ctid} -- env VOYAGE_IN_CONTAINER=1 VOYAGE_SYNC_TOKEN='${SYNC_TOKEN}' bash -c "curl -fsSL '${SCRIPT_URL}' | bash"
 
+ Update to latest main (from Proxmox host):
+   curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-update.sh | bash
+
+ Update inside CT only:
+   pct exec ${ctid} -- bash -c "curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-update.sh | VOYAGE_IN_CONTAINER=1 bash"
+
 ================================================================================
 EOF
 }

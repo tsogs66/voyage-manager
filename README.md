@@ -51,6 +51,34 @@ pct exec 120 -- env VOYAGE_IN_CONTAINER=1 bash -c \
   "curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-install.sh | bash"
 ```
 
+### Update to latest `main` (pull from GitHub)
+
+Run **on the Proxmox host** — finds the container automatically from `/root/voyage-manager-ct*.env`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-update.sh | bash
+```
+
+With an explicit container ID:
+
+```bash
+VOYAGE_CTID=120 curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-update.sh | bash
+```
+
+Or **inside the LXC** (after `pct enter <CTID>`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-update.sh | VOYAGE_IN_CONTAINER=1 bash
+```
+
+The update script `git pull`s `main`, reloads nginx, and restarts the sync service. Your sync data and API token are left unchanged.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VOYAGE_CTID` | from creds file | Container to update (Proxmox host only) |
+| `VOYAGE_BRANCH` | `main` | Git branch to pull |
+| `VOYAGE_INSTALL_DIR` | `/opt/voyage-manager` | App install path |
+
 ### Cloudflare Tunnel (optional)
 
 After install, expose the container through Cloudflare:
