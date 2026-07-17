@@ -166,35 +166,152 @@
   .pf-input{width:64px; background:var(--ink); border:1px solid var(--line-strong); color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:12px; padding:4px; border-radius:2px;}
   .pf-computed{color:var(--teal); font-family:'IBM Plex Mono',monospace; font-size:12px;}
 
-  /* ---- print layout ---- */
+  /* ---- print layout (professional report) ---- */
   #printArea{ display:none; }
   @media print{
-    @page{ size: A4 landscape; margin: 6mm; }
+    @page{ size: A4 landscape; margin: 5mm; }
     body *{ visibility: hidden; }
     #printArea, #printArea *{ visibility: visible; }
     #printArea{
       display:block; position:absolute; top:0; left:0; width:100%;
-      background:#fff; color:#111;
+      background:#fff; color:#0a1420;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
   }
-  .pr-sheet{ font-family:'IBM Plex Mono',monospace; font-size:7.5px; color:#111; line-height:1.25; }
-  .pr-page{ display:flex; gap:5mm; }
-  .pr-copy{ flex:1; min-width:0; border-right:1px dashed #999; padding-right:5mm; }
-  .pr-copy:last-child{ border-right:none; padding-right:0; }
-  .pr-title{ font-family:'Oswald',sans-serif; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.02em; border-bottom:2px solid #111; padding-bottom:2px; margin-bottom:4px; display:flex; justify-content:space-between; align-items:baseline; }
-  .pr-title span{ font-size:8px; font-family:'IBM Plex Mono',monospace; font-weight:400; }
-  .pr-header{ display:grid; grid-template-columns:repeat(3,1fr); gap:2px; border:1px solid #111; padding:3px 5px; margin-bottom:4px; }
-  .pr-header div b{ display:block; font-size:6.5px; text-transform:uppercase; color:#555; letter-spacing:0.03em; }
-  .pr-cols{ column-count:3; column-gap:5px; }
-  .pr-box{ border:1px solid #111; padding:3px 5px; margin-bottom:4px; break-inside:avoid; -webkit-column-break-inside:avoid; display:inline-block; width:100%; }
-  .pr-box h4{ margin:0 0 2px; font-family:'Oswald',sans-serif; font-size:7.5px; text-transform:uppercase; letter-spacing:0.03em; border-bottom:1px solid #999; padding-bottom:1px; }
-  .pr-row{ display:flex; justify-content:space-between; padding:0.5px 0; border-bottom:1px dotted #ccc; gap:5px; }
-  .pr-row b{ font-weight:600; text-align:right; }
+  .pr-page{ display:flex; gap:4mm; align-items:stretch; }
+  .pr-copy{
+    flex:1; min-width:0; position:relative;
+    border:1px solid #c5cdd8; border-radius:2px;
+    padding:4mm; background:#fff;
+  }
+  .pr-copy-label{
+    position:absolute; top:2mm; right:3mm;
+    font-family:'Oswald',sans-serif; font-size:6px; font-weight:600;
+    letter-spacing:0.18em; color:#c5cdd8; text-transform:uppercase;
+  }
+  .pr-sheet{
+    font-family:'Inter',sans-serif; font-size:8px; color:#0a1420; line-height:1.35;
+  }
+  .pr-doc-header{
+    display:grid; grid-template-columns:1fr auto 1fr; align-items:end; gap:3mm;
+    padding-bottom:2mm; margin-bottom:2mm; border-bottom:2px solid #122238;
+  }
+  .pr-doc-vessel{
+    font-family:'Oswald',sans-serif; font-size:11px; font-weight:600;
+    text-transform:uppercase; letter-spacing:0.04em; color:#122238;
+  }
+  .pr-doc-dept{ font-size:7px; color:#5a6578; margin-top:1px; letter-spacing:0.02em; }
+  .pr-doc-title-wrap{ text-align:center; }
+  .pr-doc-badge{
+    display:inline-block; font-family:'Oswald',sans-serif; font-size:6.5px; font-weight:600;
+    text-transform:uppercase; letter-spacing:0.1em; color:#fff; background:#2a6b7a;
+    padding:1px 6px; border-radius:2px; margin-bottom:2px;
+  }
+  .pr-doc-title{
+    margin:0; font-family:'Oswald',sans-serif; font-size:12px; font-weight:700;
+    text-transform:uppercase; letter-spacing:0.05em; color:#122238; line-height:1.15;
+  }
+  .pr-doc-subtitle{ font-size:7px; color:#5a6578; margin-top:1px; }
+  .pr-doc-voyage{ text-align:right; }
+  .pr-doc-voy-label{
+    display:block; font-size:6px; text-transform:uppercase; letter-spacing:0.1em; color:#5a6578;
+  }
+  .pr-doc-voy-num{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; color:#122238;
+  }
+  .pr-meta{
+    display:grid; grid-template-columns:repeat(6,1fr); gap:1px;
+    background:#c5cdd8; border:1px solid #c5cdd8; margin-bottom:2.5mm;
+  }
+  .pr-meta.cols3{ grid-template-columns:repeat(3,1fr); }
+  .pr-meta.cols4{ grid-template-columns:repeat(4,1fr); }
+  .pr-meta-cell{ background:#f7f9fc; padding:1.5mm 2mm; }
+  .pr-meta-lbl{
+    display:block; font-size:6px; text-transform:uppercase; letter-spacing:0.08em;
+    color:#5a6578; margin-bottom:1px;
+  }
+  .pr-meta-val{
+    font-family:'IBM Plex Mono',monospace; font-size:7.5px; font-weight:600; color:#0a1420;
+  }
+  .pr-kpi{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(16mm,1fr)); gap:1.5mm;
+    margin-bottom:2.5mm;
+  }
+  .pr-kpi-item{
+    background:#f7f9fc; border:1px solid #d4dce8; border-left:2px solid #2a6b7a;
+    padding:1.5mm 1mm; text-align:center;
+  }
+  .pr-kpi-val{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:600; color:#122238; line-height:1.2;
+  }
+  .pr-kpi-lbl{
+    font-size:6px; text-transform:uppercase; letter-spacing:0.06em; color:#5a6578; margin-top:1px;
+  }
+  .pr-grid{ display:grid; grid-template-columns:1fr 1fr; gap:2mm; margin-bottom:2mm; }
+  .pr-grid.cols3{ grid-template-columns:1fr 1fr 1fr; }
+  .pr-span2{ grid-column:1 / -1; }
+  .pr-section{
+    border:1px solid #d4dce8; border-radius:1px; overflow:hidden;
+    break-inside:avoid; -webkit-column-break-inside:avoid; margin-bottom:0;
+  }
+  .pr-section-title{
+    margin:0; padding:1mm 2mm; background:#122238; color:#fff;
+    font-family:'Oswald',sans-serif; font-size:7px; font-weight:600;
+    text-transform:uppercase; letter-spacing:0.06em;
+  }
+  .pr-section-body{ padding:1.5mm 2mm; background:#fff; }
+  .pr-row{
+    display:flex; justify-content:space-between; align-items:baseline; gap:2mm;
+    padding:0.5mm 0; border-bottom:1px solid #eef1f5;
+  }
+  .pr-row:last-child{ border-bottom:none; }
+  .pr-row-lbl{ color:#5a6578; font-size:7.5px; flex:1; }
+  .pr-row-val{
+    font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:7.5px;
+    text-align:right; white-space:nowrap;
+  }
+  .pr-row-val.warn{ color:#a0452a; }
+  .pr-row-val.good{ color:#3d7a52; }
   .pr-table{ width:100%; border-collapse:collapse; font-size:7px; }
-  .pr-table th, .pr-table td{ border:1px solid #999; padding:1px 2px; text-align:center; }
-  .pr-table th{ background:#eee; }
-  .pr-remarks{ border:1px solid #111; padding:3px 5px; min-height:16px; margin-bottom:3px; }
-  .pr-foot{ text-align:right; font-size:6.5px; color:#666; margin-top:3px; }
+  .pr-table th{
+    background:#122238; color:#fff; font-family:'Oswald',sans-serif; font-weight:500;
+    text-transform:uppercase; letter-spacing:0.04em; padding:1mm 1.5mm;
+    border:1px solid #122238;
+  }
+  .pr-table td{
+    padding:0.8mm 1.5mm; border:1px solid #d4dce8; text-align:center;
+    font-family:'IBM Plex Mono',monospace; font-size:7px;
+  }
+  .pr-table tr:nth-child(even) td{ background:#f7f9fc; }
+  .pr-table td:first-child, .pr-table th:first-child{ text-align:left; }
+  .pr-table td.row-lbl{ font-family:'Inter',sans-serif; font-weight:500; text-align:left; }
+  .pr-remarks{
+    border:1px solid #d4dce8; border-left:2px solid #8a6b3c;
+    padding:2mm; margin:2mm 0; min-height:10mm; background:#fffdf8;
+  }
+  .pr-remarks-title{
+    font-family:'Oswald',sans-serif; font-size:7px; text-transform:uppercase;
+    letter-spacing:0.06em; color:#8a6b3c; margin-bottom:1mm;
+  }
+  .pr-remarks-body{ font-size:7.5px; color:#0a1420; white-space:pre-wrap; }
+  .pr-sign{
+    margin-top:3mm; padding-top:2mm; border-top:1px solid #d4dce8; text-align:right;
+  }
+  .pr-sign-line{ width:40mm; height:1px; background:#122238; margin-left:auto; margin-bottom:2mm; }
+  .pr-sign-name{ font-family:'IBM Plex Mono',monospace; font-size:8px; font-weight:600; }
+  .pr-sign-role{ font-size:6.5px; text-transform:uppercase; letter-spacing:0.08em; color:#5a6578; margin-top:1px; }
+  .pr-foot{ font-size:6px; color:#8a95a8; margin-top:2mm; text-align:center; letter-spacing:0.02em; }
+  /* legacy aliases */
+  .pr-box{ border:1px solid #d4dce8; overflow:hidden; break-inside:avoid; margin-bottom:2mm; }
+  .pr-box h4{
+    margin:0; padding:1mm 2mm; background:#122238; color:#fff;
+    font-family:'Oswald',sans-serif; font-size:7px; text-transform:uppercase; letter-spacing:0.06em;
+  }
+  .pr-box > :not(h4){ padding:0 2mm; }
+  .pr-box .pr-row{ padding:0.5mm 2mm; }
+  .pr-cols{ display:grid; grid-template-columns:1fr 1fr; gap:2mm; margin-bottom:2mm; }
+  .pr-title{ display:none; }
+  .pr-header{ display:none; }
 </style>
 </head>
 <body>
@@ -2070,135 +2187,223 @@ function openReportEditor(entryId){
 
 function fmtP(n, d=1){ return (n===null||n===undefined||isNaN(n)) ? '—' : Number(n).toFixed(d); }
 
+function escPrint(s){
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function printDocumentCss(){
+  const text = document.querySelector('style')?.textContent || '';
+  const start = text.indexOf('.pr-page{');
+  const endMarker = '.pr-header{ display:none; }';
+  const end = text.indexOf(endMarker);
+  if (start < 0 || end < 0) return '';
+  return text.slice(start, end + endMarker.length);
+}
+
+function printTwoUp(sheetHtml){
+  return `<div class="pr-page">
+    <div class="pr-copy"><span class="pr-copy-label">Office Copy</span>${sheetHtml}</div>
+    <div class="pr-copy"><span class="pr-copy-label">Ship Copy</span>${sheetHtml}</div>
+  </div>`;
+}
+
+function printDocHeader(opts){
+  const { title, subtitle, badge } = opts;
+  return `<header class="pr-doc-header">
+    <div>
+      <div class="pr-doc-vessel">${escPrint(state.setup.vesselName || 'Vessel')}</div>
+      <div class="pr-doc-dept">Engine Department — Noon Report</div>
+    </div>
+    <div class="pr-doc-title-wrap">
+      ${badge ? `<div class="pr-doc-badge">${escPrint(badge)}</div>` : ''}
+      <h1 class="pr-doc-title">${escPrint(title)}</h1>
+      ${subtitle ? `<div class="pr-doc-subtitle">${escPrint(subtitle)}</div>` : ''}
+    </div>
+    <div class="pr-doc-voyage">
+      <span class="pr-doc-voy-label">Voyage No.</span>
+      <span class="pr-doc-voy-num">${escPrint(state.setup.voyageNumber || '—')}</span>
+    </div>
+  </header>`;
+}
+
+function printMetaGrid(cells, cols){
+  const cls = cols ? ` cols${cols}` : '';
+  return `<div class="pr-meta${cls}">${cells.map(c=>`
+    <div class="pr-meta-cell"><span class="pr-meta-lbl">${c.label}</span><span class="pr-meta-val">${c.value}</span></div>
+  `).join('')}</div>`;
+}
+
+function printKpiRow(items){
+  if (!items.length) return '';
+  return `<div class="pr-kpi">${items.map(it=>`
+    <div class="pr-kpi-item"><div class="pr-kpi-val">${it.value}</div><div class="pr-kpi-lbl">${it.label}</div></div>
+  `).join('')}</div>`;
+}
+
+function printSection(title, inner){
+  return `<section class="pr-section"><h3 class="pr-section-title">${title}</h3><div class="pr-section-body">${inner}</div></section>`;
+}
+
+function printRow(label, value, cls){
+  return `<div class="pr-row"><span class="pr-row-lbl">${label}</span><span class="pr-row-val${cls?' '+cls:''}">${value}</span></div>`;
+}
+
+function printSignatory(){
+  const now = new Date().toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  return `<footer class="pr-sign">
+    <div class="pr-sign-line"></div>
+    <div class="pr-sign-name">${escPrint(state.setup.chEng || '—')}</div>
+    <div class="pr-sign-role">Chief Engineer</div>
+    <div class="pr-foot">Printed ${now} · ${escPrint(state.setup.vesselName||'')} · ${escPrint(state.setup.voyageNumber||'')}</div>
+  </footer>`;
+}
+
+function sfocDeltaClass(delta){
+  if (delta==null || isNaN(delta)) return '';
+  if (delta > 3) return 'warn';
+  if (delta < -3) return 'good';
+  return '';
+}
+
 function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
-  const fuelRows = FUEL_TYPES.map(t=>`<div class="pr-row"><span>${t}:</span><b>${fmtP(asOf.rob[t],2)} MT</b></div>`).join('');
+  const fuelInner = FUEL_TYPES.map(t=>printRow(t, `${fmtP(asOf.rob[t],2)} MT`)).join('');
   const totalLube = LUBE_TYPES.filter(t=>t!=='FRESH WATER').reduce((s,t)=> s+(asOf.robLube[t]||0),0);
-  const lubeRows = `
-    <div class="pr-row"><span>M/E Cyl. Oil (High):</span><b>${fmtP(asOf.robLube['CYL HIGH'],0)} L</b></div>
-    <div class="pr-row"><span>M/E Cyl. Oil (Low):</span><b>${fmtP(asOf.robLube['CYL LOW'],0)} L</b></div>
-    <div class="pr-row"><span>M/E System Oil:</span><b>${fmtP(asOf.robLube['ME SYS OIL'],0)} L</b></div>
-    <div class="pr-row"><span>A/E System Oil:</span><b>${fmtP(asOf.robLube['GE SYS OIL'],0)} L</b></div>
-    <div class="pr-row"><span>Total Lube Oil:</span><b>${fmtP(totalLube,0)} L</b></div>`;
+  const lubeInner = [
+    printRow('M/E Cyl. Oil (High)', `${fmtP(asOf.robLube['CYL HIGH'],0)} L`),
+    printRow('M/E Cyl. Oil (Low)', `${fmtP(asOf.robLube['CYL LOW'],0)} L`),
+    printRow('M/E System Oil', `${fmtP(asOf.robLube['ME SYS OIL'],0)} L`),
+    printRow('A/E System Oil', `${fmtP(asOf.robLube['GE SYS OIL'],0)} L`),
+    printRow('Total Lube Oil', `${fmtP(totalLube,0)} L`)
+  ].join('');
 
   const fwRob = asOf.robLube['FRESH WATER'];
-  const fwBox = `
-    <div class="pr-box">
-      <h4>Fresh Water</h4>
-      <div class="pr-row"><span>FW Prod.:</span><b>${row.fwProdD===null||row.fwProdD===undefined?'—':fmtP(row.fwProdD,0)} L</b></div>
-      <div class="pr-row"><span>FW Cons.:</span><b>${row.fwConsD===null||row.fwConsD===undefined?'—':fmtP(row.fwConsD,0)} L</b></div>
-      <div class="pr-row"><span>FW R.O.B.:</span><b>${fmtP(fwRob,0)} L</b></div>
-    </div>`;
+  const fwSection = printSection('Fresh Water', [
+    printRow('FW Produced', `${row.fwProdD===null||row.fwProdD===undefined?'—':fmtP(row.fwProdD,0)} L`),
+    printRow('FW Consumed', `${row.fwConsD===null||row.fwConsD===undefined?'—':fmtP(row.fwConsD,0)} L`),
+    printRow('FW R.O.B.', `${fmtP(fwRob,0)} L`)
+  ].join(''));
 
-  const engineRoomBox = `
-    <div class="pr-box">
-      <h4>Engine Room &amp; Tank Readings</h4>
-      <div class="pr-row"><span>E.R. Temp.:</span><b>${fmtP(report.erTemp,1)} °C</b></div>
-      <div class="pr-row"><span>Bilge ROB:</span><b>${fmtP(report.bilgeRob,2)} m³</b></div>
-      <div class="pr-row"><span>Sludge ROB:</span><b>${fmtP(report.sludgeRob,2)} m³</b></div>
-      <div class="pr-row"><span>S/T Temp.:</span><b>${fmtP(report.stTemp,1)} °C</b></div>
-      <div class="pr-row"><span>S/W Temp.:</span><b>${fmtP(report.swTemp,1)} °C</b></div>
-    </div>`;
+  const engineRoomSection = printSection('Engine Room &amp; Tank Readings', [
+    printRow('E.R. Temperature', `${fmtP(report.erTemp,1)} °C`),
+    printRow('Bilge R.O.B.', `${fmtP(report.bilgeRob,2)} m³`),
+    printRow('Sludge R.O.B.', `${fmtP(report.sludgeRob,2)} m³`),
+    printRow('S/T Temperature', `${fmtP(report.stTemp,1)} °C`),
+    printRow('S/W Temperature', `${fmtP(report.swTemp,1)} °C`)
+  ].join(''));
 
-  let voyageBox = '', cylTable = '', turboBox = '', scavBox = '';
+  let kpiItems = [];
+  let voyageSection = '', cylSection = '', turboSection = '', sfocSection = '';
   if (isSea){
-    voyageBox = `
-      <div class="pr-box">
-        <h4>Voyage / Steaming</h4>
-        <div class="pr-row"><span>Steam Time:</span><b>${fmtP(row.hrs,1)} hrs</b></div>
-        <div class="pr-row"><span>ETA:</span><b>${report.eta ? new Date(report.eta).toLocaleString() : '—'}</b></div>
-        <div class="pr-row"><span>Rev. Counter:</span><b>${fmtP(entry.revCounter,0)}</b></div>
-        <div class="pr-row"><span>Daily Revs.:</span><b>${fmtP(row.dailyRevs,0)}</b></div>
-        <div class="pr-row"><span>Average RPM:</span><b>${fmtP(entry.rpm,2)}</b></div>
-        <div class="pr-row"><span>Power (KW):</span><b>${fmtP(row.kwEst,0)}</b></div>
-        <div class="pr-row"><span>Power (%):</span><b>${fmtP(row.mcrPct,2)}</b></div>
-        <div class="pr-row"><span>Ship's Dist.:</span><b>${fmtP(entry.distanceShip,2)} nm</b></div>
-        <div class="pr-row"><span>Engine Dist.:</span><b>${fmtP(row.distEngine,2)} nm</b></div>
-        <div class="pr-row"><span>Ship's Slip:</span><b>${fmtP(row.slip,2)} %</b></div>
-      </div>`;
+    kpiItems = [
+      {label:'RPM', value:fmtP(entry.rpm,1)},
+      {label:'% MCR', value:fmtP(row.mcrPct,1)},
+      {label:'Est. kW', value:fmtP(row.kwEst,0)},
+      {label:'Ship Speed', value:row.speedShip==null?'—':fmtP(row.speedShip,2)+' kn'},
+      {label:'Slip %', value:fmtP(row.slip,1)},
+      {label:'Steam Hrs', value:fmtP(row.hrs,1)}
+    ];
+    voyageSection = printSection('Voyage / Steaming', [
+      printRow('Steam Time', `${fmtP(row.hrs,1)} hrs`),
+      printRow('ETA', report.eta ? escPrint(new Date(report.eta).toLocaleString()) : '—'),
+      printRow('Rev. Counter', fmtP(entry.revCounter,0)),
+      printRow('Daily Revs.', fmtP(row.dailyRevs,0)),
+      printRow('Ship\'s Distance', `${fmtP(entry.distanceShip,2)} nm`),
+      printRow('Engine Distance', `${fmtP(row.distEngine,2)} nm`),
+      printRow('Engine Speed', row.speedEngine==null?'—':`${fmtP(row.speedEngine,2)} kn`)
+    ].join(''));
     const pr = report.pumpRack||[], ex = report.exhaustTemp||[];
-    cylTable = `
-      <div class="pr-box">
-        <h4>Pump Rack &amp; M/E Exhaust</h4>
-        <table class="pr-table">
-          <tr><th></th>${[1,2,3,4,5,6].map(n=>`<th>Cyl ${n}</th>`).join('')}</tr>
-          <tr><td>Pump Rack</td>${[0,1,2,3,4,5].map(i=>`<td>${fmtP(pr[i],1)}</td>`).join('')}</tr>
-          <tr><td>Exhaust (°C)</td>${[0,1,2,3,4,5].map(i=>`<td>${fmtP(ex[i],0)}</td>`).join('')}</tr>
-        </table>
-      </div>`;
+    cylSection = printSection('Pump Rack &amp; M/E Exhaust', `
+      <table class="pr-table">
+        <tr><th></th>${[1,2,3,4,5,6].map(n=>`<th>Cyl ${n}</th>`).join('')}</tr>
+        <tr><td class="row-lbl">Pump Rack</td>${[0,1,2,3,4,5].map(i=>`<td>${fmtP(pr[i],1)}</td>`).join('')}</tr>
+        <tr><td class="row-lbl">Exhaust °C</td>${[0,1,2,3,4,5].map(i=>`<td>${fmtP(ex[i],0)}</td>`).join('')}</tr>
+      </table>`);
     const t1 = report.turbo1||{}, t2 = report.turbo2||{};
-    turboBox = `
-      <div class="pr-box">
-        <h4>Turbochargers &amp; Scavenge</h4>
-        <div class="pr-row"><span>T/C #1 In/Out/RPM:</span><b>${fmtP(t1.in,0)} / ${fmtP(t1.out,0)} / ${fmtP(t1.rpm,0)}</b></div>
-        <div class="pr-row"><span>T/C #2 In/Out/RPM:</span><b>${fmtP(t2.in,0)} / ${fmtP(t2.out,0)} / ${fmtP(t2.rpm,0)}</b></div>
-        <div class="pr-row"><span>Scav. Temp.:</span><b>${fmtP(report.scavTemp,1)} °C</b></div>
-        <div class="pr-row"><span>Scav. Pressure:</span><b>${fmtP(report.scavPress,2)} bar</b></div>
-        <div class="pr-row"><span>Fuel Temp.:</span><b>${fmtP(report.fuelTemp,1)} °C</b></div>
-        <div class="pr-row"><span>Pump Mark:</span><b>${fmtP(report.pumpMark,1)}</b></div>
-        <div class="pr-row"><span>Press. Diff.:</span><b>${fmtP(report.pressDiff,2)} bar</b></div>
-      </div>`;
+    turboSection = printSection('Turbochargers &amp; Scavenge', [
+      printRow('T/C #1 In / Out / RPM', `${fmtP(t1.in,0)} / ${fmtP(t1.out,0)} / ${fmtP(t1.rpm,0)}`),
+      printRow('T/C #2 In / Out / RPM', `${fmtP(t2.in,0)} / ${fmtP(t2.out,0)} / ${fmtP(t2.rpm,0)}`),
+      printRow('Scav. Temperature', `${fmtP(report.scavTemp,1)} °C`),
+      printRow('Scav. Pressure', `${fmtP(report.scavPress,2)} bar`),
+      printRow('Fuel Temperature', `${fmtP(report.fuelTemp,1)} °C`),
+      printRow('Pump Mark', fmtP(report.pumpMark,1)),
+      printRow('Press. Differential', `${fmtP(report.pressDiff,2)} bar`)
+    ].join(''));
+    const deltaCls = sfocDeltaClass(row.sfocDelta);
+    const deltaStr = row.sfocDelta==null ? '—' : `${row.sfocDelta>0?'+':''}${fmtP(row.sfocDelta,1)}%`;
+    sfocSection = printSection('Fuel Efficiency (SFOC)', [
+      printRow('SFOC @ 100% MCR (setup)', state.setup.sfoc100==null?'—':`${fmtP(state.setup.sfoc100,1)} g/kWh`),
+      printRow(`Ref. SFOC @ ${fmtP(row.mcrPct,0)}% MCR`, `${fmtP(row.sfocRef,1)} g/kWh`),
+      printRow('Actual SFOC', `${fmtP(row.sfocActual,1)} g/kWh`),
+      printRow('Deviation vs Reference', deltaStr, deltaCls)
+    ].join(''));
+  } else {
+    kpiItems = [
+      {label:'Operation', value:escPrint(entry.operation).slice(0,18)},
+      {label:'Condition', value:entry.condition},
+      {label:'Period Hrs', value:fmtP(row.hrs,1)},
+      {label:'Total Fuel', value:row.total==null?'—':`${fmtP(row.total,3)} MT`}
+    ];
   }
 
-  const portBox = !isSea ? `
-    <div class="pr-box">
-      <h4>Port Details</h4>
-      <div class="pr-row"><span>Port:</span><b>${report.port || '—'}</b></div>
-      <div class="pr-row"><span>Operation:</span><b>${report.cargoOp || '—'}</b></div>
-    </div>` : '';
+  const portSection = !isSea ? printSection('Port Details', [
+    printRow('Port', escPrint(report.port || '—')),
+    printRow('Cargo Operation', escPrint(report.cargoOp || '—'))
+  ].join('')) : '';
 
   const perfTable = report.perfTable || {};
-  const perfTableHTML = `
-    <div class="pr-box">
-      <h4>Performance</h4>
-      <table class="pr-table">
-        <tr><th></th>${PERF_UNITS.map(u=>`<th>${PERF_UNIT_LABELS[u]}</th>`).join('')}</tr>
-        ${PERF_ROWS.map(([key,label])=>
-          `<tr><td>${label}</td>${PERF_UNITS.map(u=>`<td>${fmtP(perfTable[u]?perfTable[u][key]:null,1)}</td>`).join('')}</tr>`
-        ).join('')}
-      </table>
-    </div>`;
+  const perfSection = printSection('Performance Readings', `
+    <table class="pr-table">
+      <tr><th></th>${PERF_UNITS.map(u=>`<th>${PERF_UNIT_LABELS[u]}</th>`).join('')}</tr>
+      ${PERF_ROWS.map(([key,label])=>
+        `<tr><td class="row-lbl">${label}</td>${PERF_UNITS.map(u=>`<td>${fmtP(perfTable[u]?perfTable[u][key]:null,1)}</td>`).join('')}</tr>`
+      ).join('')}
+    </table>`);
 
-  const consTableHTML = `
-    <div class="pr-box">
-      <h4>Consumption</h4>
-      <table class="pr-table">
-        <tr><th></th><th>M/E</th><th>Generator</th><th>Boiler</th><th>Total</th></tr>
-        <tr><td>HFO</td><td>${entry.me.type==='HFO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='HFO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='HFO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='HFO'?row.meCons:0)+(entry.ge.type==='HFO'?row.geCons:0)+(entry.blr.type==='HFO'?row.blrCons:0),3)}</td></tr>
-        <tr><td>LSFO</td><td>${entry.me.type==='LSFO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='LSFO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='LSFO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='LSFO'?row.meCons:0)+(entry.ge.type==='LSFO'?row.geCons:0)+(entry.blr.type==='LSFO'?row.blrCons:0),3)}</td></tr>
-        <tr><td>MDO/MGO</td><td>${entry.me.type==='MDO/MGO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='MDO/MGO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='MDO/MGO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='MDO/MGO'?row.meCons:0)+(entry.ge.type==='MDO/MGO'?row.geCons:0)+(entry.blr.type==='MDO/MGO'?row.blrCons:0),3)}</td></tr>
-        <tr><td>LSMGO</td><td>${entry.me.type==='LSMGO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='LSMGO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='LSMGO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='LSMGO'?row.meCons:0)+(entry.ge.type==='LSMGO'?row.geCons:0)+(entry.blr.type==='LSMGO'?row.blrCons:0),3)}</td></tr>
-      </table>
-      <div class="pr-row" style="margin-top:4px;"><span>Total Fuel Consumption:</span><b>${fmtP(row.total,3)} MT</b></div>
-      <div class="pr-row"><span>Cyl. Oil (${entry.tbn}) Consumption:</span><b>${fmtP(row.cylCons,1)} L</b></div>
-      <div class="pr-row"><span>M/E Sys. Oil Consumption:</span><b>${fmtP(row.meLoCons,1)} L</b></div>
-      <div class="pr-row"><span>A/E Sys. Oil Consumption:</span><b>${fmtP(row.geLoCons,1)} L</b></div>
-    </div>`;
+  const consSection = printSection('Consumption', `
+    <table class="pr-table">
+      <tr><th></th><th>M/E</th><th>Generator</th><th>Boiler</th><th>Total</th></tr>
+      <tr><td class="row-lbl">HFO</td><td>${entry.me.type==='HFO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='HFO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='HFO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='HFO'?row.meCons:0)+(entry.ge.type==='HFO'?row.geCons:0)+(entry.blr.type==='HFO'?row.blrCons:0),3)}</td></tr>
+      <tr><td class="row-lbl">LSFO</td><td>${entry.me.type==='LSFO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='LSFO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='LSFO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='LSFO'?row.meCons:0)+(entry.ge.type==='LSFO'?row.geCons:0)+(entry.blr.type==='LSFO'?row.blrCons:0),3)}</td></tr>
+      <tr><td class="row-lbl">MDO/MGO</td><td>${entry.me.type==='MDO/MGO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='MDO/MGO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='MDO/MGO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='MDO/MGO'?row.meCons:0)+(entry.ge.type==='MDO/MGO'?row.geCons:0)+(entry.blr.type==='MDO/MGO'?row.blrCons:0),3)}</td></tr>
+      <tr><td class="row-lbl">LSMGO</td><td>${entry.me.type==='LSMGO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='LSMGO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='LSMGO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='LSMGO'?row.meCons:0)+(entry.ge.type==='LSMGO'?row.geCons:0)+(entry.blr.type==='LSMGO'?row.blrCons:0),3)}</td></tr>
+    </table>
+    ${printRow('Total Fuel Consumption', `${fmtP(row.total,3)} MT`)}
+    ${printRow(`Cyl. Oil (${entry.tbn})`, `${fmtP(row.cylCons,1)} L`)}
+    ${printRow('M/E Sys. Oil', `${fmtP(row.meLoCons,1)} L`)}
+    ${printRow('A/E Sys. Oil', `${fmtP(row.geLoCons,1)} L`)}`);
 
-  return `
-    <div class="pr-sheet">
-      <div class="pr-title">${entry.operation}<span>Voyage ${state.setup.voyageNumber||''}</span></div>
-      <div class="pr-header">
-        <div><b>Vessel</b>${state.setup.vesselName||'—'}</div>
-        <div><b>Voyage No.</b>${state.setup.voyageNumber||'—'}</div>
-        <div><b>Date &amp; Time</b>${dtStr}</div>
-        <div><b>Condition</b>${entry.condition}</div>
-        <div><b>Route</b>${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}</div>
-      </div>
-      <div class="pr-cols">
-        <div class="pr-box"><h4>Fuel ROB (as of this entry)</h4>${fuelRows}</div>
-        <div class="pr-box"><h4>Lube Oil ROB (as of this entry)</h4>${lubeRows}</div>
-        ${fwBox}
-        ${engineRoomBox}
-        ${portBox}
-        ${voyageBox}
-        ${cylTable}
-        ${turboBox}
-        ${perfTableHTML}
-        ${consTableHTML}
-      </div>
-      <div class="pr-remarks"><b style="font-size:8.5px; text-transform:uppercase; color:#555;">Remarks</b><div style="margin-top:4px;">${(report.remarks||'').replace(/</g,'&lt;')||'—'}</div></div>
-      <div class="pr-row" style="border:none; margin-top:8px;"><span></span><b>${state.setup.chEng || '—'}<br><span style="font-weight:400; font-size:8.5px; text-transform:uppercase;">Chief Engineer</span></b></div>
-    </div>`;
+  const routeStr = `${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}`;
+
+  return `<div class="pr-sheet">
+    ${printDocHeader({ title: entry.operation, subtitle: isSea ? 'At Sea Report' : 'Port / Anchorage Report', badge: entry.condition })}
+    ${printMetaGrid([
+      {label:'Date & Time', value:dtStr},
+      {label:'Condition', value:entry.condition},
+      {label:'Route', value:routeStr},
+      {label:'Chief Engineer', value:state.setup.chEng||'—'},
+      {label:'Depart', value:state.setup.departPort||'—'},
+      {label:'Arrive', value:state.setup.arrivePort||'—'}
+    ])}
+    ${printKpiRow(kpiItems)}
+    <div class="pr-grid">
+      ${printSection('Fuel R.O.B.', fuelInner)}
+      ${printSection('Lube Oil R.O.B.', lubeInner)}
+      ${fwSection}
+      ${engineRoomSection}
+      ${portSection}
+      ${voyageSection}
+      ${sfocSection}
+      ${cylSection}
+      ${turboSection}
+      ${consSection}
+      <div class="pr-span2">${perfSection}</div>
+    </div>
+    <div class="pr-remarks">
+      <div class="pr-remarks-title">Remarks</div>
+      <div class="pr-remarks-body">${escPrint(report.remarks||'') || '—'}</div>
+    </div>
+    ${printSignatory()}
+  </div>`;
 }
 
 function printSupplementaryReport(entry, isSea, report){
@@ -2208,12 +2413,7 @@ function printSupplementaryReport(entry, isSea, report){
   const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 
   const sheetHTML = buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr);
-  // Duplicated side-by-side (2-up), same as the original workbook's report sheets
-  document.getElementById('printArea').innerHTML = `
-    <div class="pr-page">
-      <div class="pr-copy">${sheetHTML}</div>
-      <div class="pr-copy">${sheetHTML}</div>
-    </div>`;
+  document.getElementById('printArea').innerHTML = printTwoUp(sheetHTML);
   window.print();
 }
 
@@ -2554,29 +2754,22 @@ function printRobSnapshot(entry, dt, rowsForPrint){
   const dateStr = dt.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'2-digit'});
   const timeStr = dt.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
   const tableRows = rowsForPrint.map(r=>`
-    <tr><td>${r.label}</td><td>${fmt(r.prevVal,r.dec)}</td><td>${r.consVal===null||r.consVal===undefined?'—':fmt(r.consVal,r.consDec)}</td><td>${fmt(r.nowVal,r.dec)}</td></tr>`).join('');
-  const sheetHtml = `
-    <div class="pr-sheet" style="font-size:11px;">
-      <div class="pr-title">
-        <span>${state.setup.vesselName||''}</span>
-        <span style="font-size:11px; font-family:'Oswald',sans-serif; font-weight:700; text-transform:uppercase; letter-spacing:0.02em;">REMAINING ONBOARD</span>
-      </div>
-      <div class="pr-header" style="grid-template-columns:repeat(3,1fr);">
-        <div><b>Date</b>${dateStr}</div>
-        <div><b>Time</b>${timeStr}</div>
-        <div><b>Operation</b>${entry.operation}</div>
-      </div>
-      <table class="pr-table" style="font-size:10.5px;">
-        <tr><th></th><th>Previous</th><th>Consumption</th><th>Present</th></tr>
+    <tr><td class="row-lbl">${r.label}</td><td>${fmt(r.prevVal,r.dec)}</td><td>${r.consVal===null||r.consVal===undefined?'—':fmt(r.consVal,r.consDec)}</td><td>${fmt(r.nowVal,r.dec)}</td></tr>`).join('');
+  const sheetHtml = `<div class="pr-sheet">
+    ${printDocHeader({ title: 'Remaining On Board', subtitle: 'Fuel & Lube Inventory Snapshot', badge: entry.operation })}
+    ${printMetaGrid([
+      {label:'Date', value:dateStr},
+      {label:'Time', value:timeStr},
+      {label:'Operation', value:entry.operation}
+    ], 3)}
+    ${printSection('Stock Balance', `
+      <table class="pr-table">
+        <tr><th>Item</th><th>Previous</th><th>Consumption</th><th>Present R.O.B.</th></tr>
         ${tableRows}
-      </table>
-    </div>`;
-  // Duplicated side-by-side (2-up) on one A4 landscape page, same as the other printed reports.
-  document.getElementById('printArea').innerHTML = `
-    <div class="pr-page">
-      <div class="pr-copy">${sheetHtml}</div>
-      <div class="pr-copy">${sheetHtml}</div>
-    </div>`;
+      </table>`)}
+    ${printSignatory()}
+  </div>`;
+  document.getElementById('printArea').innerHTML = printTwoUp(sheetHtml);
   window.print();
 }
 
@@ -2722,26 +2915,14 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
 });
 /* ---------------- print history (Log Entry) ---------------- */
 async function recordPrintHistory(label, entry, htmlContent){
-  const fullDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${label}</title>
+  const css = printDocumentCss();
+  const fullDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escPrint(label)}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-      body{ font-family:'IBM Plex Mono',monospace; background:#fff; color:#111; margin:0; padding:10mm; }
-      @page{ size: A4 landscape; margin:6mm; }
-      .pr-page{ display:flex; gap:5mm; }
-      .pr-copy{ flex:1; min-width:0; border-right:1px dashed #999; padding-right:5mm; }
-      .pr-copy:last-child{ border-right:none; padding-right:0; }
-      .pr-sheet{ font-size:8.5px; }
-      .pr-title{ font-family:Oswald,sans-serif; font-size:11px; font-weight:700; text-transform:uppercase; border-bottom:2px solid #111; padding-bottom:2px; margin-bottom:4px; display:flex; justify-content:space-between; }
-      .pr-header{ display:grid; grid-template-columns:repeat(3,1fr); gap:2px; border:1px solid #111; padding:3px 5px; margin-bottom:4px; }
-      .pr-header div b{ display:block; font-size:6.5px; text-transform:uppercase; color:#555; }
-      .pr-cols{ column-count:3; column-gap:5px; }
-      .pr-box{ border:1px solid #111; padding:3px 5px; margin-bottom:4px; break-inside:avoid; display:inline-block; width:100%; }
-      .pr-box h4{ margin:0 0 2px; font-family:Oswald,sans-serif; font-size:7.5px; text-transform:uppercase; border-bottom:1px solid #999; padding-bottom:1px; }
-      .pr-row{ display:flex; justify-content:space-between; padding:0.5px 0; border-bottom:1px dotted #ccc; gap:5px; }
-      .pr-row b{ font-weight:600; text-align:right; }
-      .pr-table{ width:100%; border-collapse:collapse; font-size:7px; }
-      .pr-table th, .pr-table td{ border:1px solid #999; padding:1px 2px; text-align:center; }
-      .pr-table th{ background:#eee; }
-      .pr-remarks{ border:1px solid #111; padding:3px 5px; min-height:16px; }
+      @page{ size: A4 landscape; margin: 5mm; }
+      body{ font-family:'Inter',sans-serif; background:#fff; color:#0a1420; margin:0; padding:5mm;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      ${css}
     </style>
   </head><body>${htmlContent}</body></html>`;
   const record = {
@@ -2823,61 +3004,120 @@ function printVoyageSummary(entryId){
   const refSpeed = row.speedShip || perf.avgSpeedShip;
   const daysToGoVal = (distanceToGo!=null && refSpeed>0) ? (distanceToGo/refSpeed)/24 : null;
   const eta = (daysToGoVal!=null) ? new Date(new Date(entry.datetime).getTime() + daysToGoVal*24*3600000) : null;
+  const etaStr = eta ? eta.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
 
-  const dataBox = `
-    <div class="pr-box"><h4>Voyage Data</h4>
-      <div class="pr-row"><span>Run Time (hrs)</span><b>${fmt(row.hrs,1)}</b></div>
-      <div class="pr-row"><span>Ship's Distance</span><b>${fmt(entry.distanceShip,1)}</b></div>
-      <div class="pr-row"><span>RPM</span><b>${fmt(entry.rpm,2)}</b></div>
-      <div class="pr-row"><span>ETA</span><b>${eta ? eta.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}</b></div>
-      <div class="pr-row"><span>Engine Distance</span><b>${fmt(row.distEngine,2)}</b></div>
-      <div class="pr-row"><span>Distance To Go</span><b>${distanceToGo!=null?fmt(distanceToGo,1):'—'}</b></div>
-      <div class="pr-row"><span>Slip %</span><b>${fmt(row.slip,2)}</b></div>
-      <div class="pr-row"><span>Load %</span><b>${fmt(row.mcrPct,2)}</b></div>
-      <div class="pr-row"><span>Load (KW)</span><b>${fmt(row.kwEst,0)}</b></div>
-      <div class="pr-row"><span>Speed</span><b>${fmt(row.speedShip,2)}</b></div>
-      <div class="pr-row"><span>Days To Go</span><b>${daysToGoVal!=null?fmt(daysToGoVal,2):'—'}</b></div>
-    </div>`;
+  const kpiItems = [
+    {label:'Run Hrs', value:fmt(row.hrs,1)},
+    {label:'Ship Dist (nm)', value:fmt(entry.distanceShip,1)},
+    {label:'RPM', value:fmt(entry.rpm,1)},
+    {label:'Speed (kn)', value:fmt(row.speedShip,2)},
+    {label:'% MCR', value:fmt(row.mcrPct,1)},
+    {label:'Est. kW', value:fmt(row.kwEst,0)}
+  ];
 
-  const fuelBox = `
-    <div class="pr-box"><h4>Fuel Consumption</h4>
-      <div class="pr-row"><span>M/E</span><b>${fmt(row.meCons,2)}</b></div>
-      <div class="pr-row"><span>D/G</span><b>${fmt(row.geCons,2)}</b></div>
-      <div class="pr-row"><span>Boiler</span><b>${fmt(row.blrCons,2)}</b></div>
-      <div class="pr-row"><span>Total</span><b>${fmt(row.total,2)}</b></div>
-    </div>`;
+  const voyageSection = printSection('Voyage Progress', [
+    printRow('Engine Distance', `${fmt(row.distEngine,2)} nm`),
+    printRow('Distance To Go', distanceToGo!=null?`${fmt(distanceToGo,1)} nm`:'—'),
+    printRow('Days To Go', daysToGoVal!=null?fmt(daysToGoVal,2):'—'),
+    printRow('ETA', etaStr),
+    printRow('Slip %', fmt(row.slip,2)),
+    printRow('Daily Revs.', fmt(row.dailyRevs,0))
+  ].join(''));
 
-  const fwBox = `
-    <div class="pr-box"><h4>Fresh Water</h4>
-      <div class="pr-row"><span>Produced (L)</span><b>${row.fwProdD==null?'—':fmt(row.fwProdD,0)}</b></div>
-      <div class="pr-row"><span>Consumed (L)</span><b>${row.fwConsD==null?'—':fmt(row.fwConsD,0)}</b></div>
-      <div class="pr-row"><span>R.O.B. (L)</span><b>${entry.fwRob==null?'—':fmt(entry.fwRob,0)}</b></div>
-    </div>`;
+  const fuelSection = printSection('Fuel Consumption (MT)', [
+    printRow('Main Engine', fmt(row.meCons,3)),
+    printRow('Diesel Generator', fmt(row.geCons,3)),
+    printRow('Boiler', fmt(row.blrCons,3)),
+    printRow('Total', fmt(row.total,3))
+  ].join(''));
 
-  const robTable = `
-    <table class="pr-table"><tr><th></th><th>Previous</th><th>Consumption</th><th>R.O.B.</th></tr>
+  const fwSection = printSection('Fresh Water', [
+    printRow('Produced', row.fwProdD==null?'—':`${fmt(row.fwProdD,0)} L`),
+    printRow('Consumed', row.fwConsD==null?'—':`${fmt(row.fwConsD,0)} L`),
+    printRow('R.O.B.', entry.fwRob==null?'—':`${fmt(entry.fwRob,0)} L`)
+  ].join(''));
+
+  const deltaCls = sfocDeltaClass(row.sfocDelta);
+  const deltaStr = row.sfocDelta==null ? '—' : `${row.sfocDelta>0?'+':''}${fmt(row.sfocDelta,1)}%`;
+  const meSection = printSection('M/E Performance', [
+    printRow('RPM', fmt(entry.rpm,1)),
+    printRow('% MCR', fmt(row.mcrPct,1)),
+    printRow('Est. kW', fmt(row.kwEst,0)),
+    printRow('Engine Speed', row.speedEngine==null?'—':`${fmt(row.speedEngine,2)} kn`),
+    printRow('Ship Speed', row.speedShip==null?'—':`${fmt(row.speedShip,2)} kn`),
+    printRow('Slip %', fmt(row.slip,2)),
+    printRow('SFOC @ 100% MCR', state.setup.sfoc100==null?'—':`${fmt(state.setup.sfoc100,1)} g/kWh`),
+    printRow('Ref. SFOC', `${fmt(row.sfocRef,1)} g/kWh`),
+    printRow('Actual SFOC', `${fmt(row.sfocActual,1)} g/kWh`),
+    printRow('SFOC Deviation', deltaStr, deltaCls)
+  ].join(''));
+
+  const geN = geUnitCount();
+  const geRows = Array.from({length:geN}, (_,i)=>{
+    const p = row.gePeriod?.[i] || {};
+    const totH = perf.geTotals.hrs[i];
+    const totKw = totH>0 ? perf.geTotals.kwHrs[i]/totH : null;
+    const totLoad = perf.geTotals.maxKwHrs[i]>0 ? (perf.geTotals.kwHrs[i]/perf.geTotals.maxKwHrs[i])*100 : null;
+    return `<tr>
+      <td class="row-lbl">A/E #${i+1}</td>
+      <td>${p.hrs==null?'—':fmt(p.hrs,1)}</td>
+      <td>${p.kw==null?'—':fmt(p.kw,0)}</td>
+      <td>${p.loadPct==null?'—':fmt(p.loadPct,1)}</td>
+      <td>${fmt(totH,1)}</td>
+      <td>${totKw==null?'—':fmt(totKw,0)}</td>
+      <td>${totLoad==null?'—':fmt(totLoad,1)}</td>
+    </tr>`;
+  }).join('');
+  const geSection = geN>0 ? printSection(`Generators — ${GE_ARR_LABELS[state.setup.geArrangement || 'SINGLE']}`, `
+    <table class="pr-table">
+      <tr><th>Unit</th><th>Period Hrs</th><th>kW</th><th>Load %</th><th>Voy Hrs</th><th>Voy Avg kW</th><th>Voy Load %</th></tr>
+      ${geRows}
+    </table>
+    ${printRow('Voyage Avg Gen Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct,1)}%`)}
+    ${printRow('Voyage Avg Gen kW', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted,0))}`) : '';
+
+  const voyageAvgSection = printSection('Voyage Time Averages', [
+    printRow('Total Voyage Hours', fmt(perf.totalHrs,1)),
+    printRow('Total Generator Hours', fmt(perf.totalGeHrs,1)),
+    printRow('Avg %MCR (hrs-wtd)', perf.avgMcrTimeWeighted==null?'—':fmt(perf.avgMcrTimeWeighted,1)),
+    printRow('Avg Ship Speed', perf.avgSpeedShip==null?'—':`${fmt(perf.avgSpeedShip,2)} kn`),
+    printRow('Avg Voyage kW', perf.avgKw==null?'—':fmt(perf.avgKw,0))
+  ].join(''));
+
+  const robTable = printSection('Remaining On Board', `
+    <table class="pr-table">
+      <tr><th>Item</th><th>Previous</th><th>Consumption</th><th>Present R.O.B.</th></tr>
       ${ROB_ROWS.map(r=>{
         const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
         const consVal = r.cat==='fuel' ? row.consByType[r.key] : row.lubeByType[r.key];
         const nowVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
         const dec = r.cat==='fuel' ? 2 : 0;
-        return `<tr><td>${r.label}</td><td>${fmt(prevVal,dec)}</td><td>${consVal===null||consVal===undefined?'—':fmt(consVal,r.cat==='fuel'?3:1)}</td><td>${fmt(nowVal,dec)}</td></tr>`;
+        return `<tr><td class="row-lbl">${r.label}</td><td>${fmt(prevVal,dec)}</td><td>${consVal===null||consVal===undefined?'—':fmt(consVal,r.cat==='fuel'?3:1)}</td><td>${fmt(nowVal,dec)}</td></tr>`;
       }).join('')}
-    </table>`;
+    </table>`);
 
-  const sheetHtml = `
-    <div class="pr-sheet">
-      <div class="pr-title"><span>${state.setup.vesselName||''}</span><span>Voyage Summary — ${entry.operation}</span></div>
-      <div class="pr-header"><div><b>Voyage No.</b>${state.setup.voyageNumber||'—'}</div><div><b>Date &amp; Time</b>${dtStr}</div><div><b>Condition</b>${entry.condition}</div></div>
-      <div class="pr-cols">${dataBox}${fuelBox}${fwBox}</div>
-      ${robTable}
-    </div>`;
+  const sheetHtml = `<div class="pr-sheet">
+    ${printDocHeader({ title: 'Voyage Summary', subtitle: entry.operation, badge: entry.condition })}
+    ${printMetaGrid([
+      {label:'Date & Time', value:dtStr},
+      {label:'Voyage No.', value:state.setup.voyageNumber||'—'},
+      {label:'Condition', value:entry.condition},
+      {label:'Route', value:`${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}`}
+    ], 4)}
+    ${printKpiRow(kpiItems)}
+    <div class="pr-grid">
+      ${voyageSection}
+      ${fuelSection}
+      ${fwSection}
+      ${meSection}
+      ${geSection}
+      ${voyageAvgSection}
+      <div class="pr-span2">${robTable}</div>
+    </div>
+    ${printSignatory()}
+  </div>`;
 
-  document.getElementById('printArea').innerHTML = `
-    <div class="pr-page">
-      <div class="pr-copy">${sheetHtml}</div>
-      <div class="pr-copy">${sheetHtml}</div>
-    </div>`;
+  document.getElementById('printArea').innerHTML = printTwoUp(sheetHtml);
   window.print();
   recordPrintHistory('voyage-summary', entry, document.getElementById('printArea').innerHTML);
 }
