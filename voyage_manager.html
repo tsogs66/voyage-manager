@@ -1480,38 +1480,56 @@ function robAsOfEntry(entryId){
 }
 
 /* ---------------- gauge rendering ---------------- */
-function gaugeNeedle(cx, cy, angle){
-  const len = 46, tail = 8;
-  return `<g class="gauge-needle" transform="rotate(${angle} ${cx} ${cy})">
-    <polygon points="${cx-tail},${cy-2} ${cx-tail},${cy+2} ${cx+len},${cy}" fill="#e9e4d6" stroke="#8a6b3c" stroke-width="0.6"/>
+const GAUGE_GEOM = { cx: 80, cy: 78, r: 58, startDeg: -135, sweepDeg: 270 };
+
+function gaugePctToDeg(pct){
+  return GAUGE_GEOM.startDeg + Math.max(0, Math.min(1, pct||0)) * GAUGE_GEOM.sweepDeg;
+}
+
+function gaugePolar(cx, cy, radius, deg){
+  const rad = deg * Math.PI / 180;
+  return { x: cx + Math.cos(rad) * radius, y: cy + Math.sin(rad) * radius };
+}
+
+function gaugeNeedle(cx, cy, r, deg){
+  const tip = gaugePolar(cx, cy, r - 4, deg);
+  return `<g class="gauge-needle">
+    <line x1="${cx}" y1="${cy}" x2="${tip.x}" y2="${tip.y}" stroke="#e9e4d6" stroke-width="2.5" stroke-linecap="round"/>
     <circle cx="${cx}" cy="${cy}" r="7" fill="#c99a53" stroke="#8a6b3c" stroke-width="1.5"/>
     <circle cx="${cx}" cy="${cy}" r="2.5" fill="#1a2433"/>
   </g>`;
 }
 
-function gaugeStartMarker(cx, cy, angle){
-  return `<g transform="rotate(${angle} ${cx} ${cy})">
-    <line x1="${cx+8}" y1="${cy}" x2="${cx+52}" y2="${cy}" stroke="#e9e4d6" stroke-width="3" stroke-linecap="round"/>
-    <polygon points="${cx+52},${cy-3} ${cx+52},${cy+3} ${cx+58},${cy}" fill="#e9e4d6"/>
-  </g>`;
+function gaugeStartMarker(cx, cy, r, deg){
+  const inner = gaugePolar(cx, cy, r - 14, deg);
+  const outer = gaugePolar(cx, cy, r + 2, deg);
+  return `<line x1="${inner.x}" y1="${inner.y}" x2="${outer.x}" y2="${outer.y}" stroke="#e9e4d6" stroke-width="3" stroke-linecap="round"/>`;
 }
+
 function gaugeTicks(cx, cy, r, majorEvery){
   let ticks='';
   for (let i=0; i<=10; i++){
-    const pct=i/10, ang=(-135+pct*270)*Math.PI/180;
-    const x1=cx+Math.cos(ang)*(r-4), y1=cy+Math.sin(ang)*(r-4);
-    const x2=cx+Math.cos(ang)*(r-(i%majorEvery===0?12:7)), y2=cy+Math.sin(ang)*(r-(i%majorEvery===0?12:7));
-    ticks+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(233,228,214,${i%majorEvery===0?0.55:0.28})" stroke-width="${i%majorEvery===0?1.6:1}"/>`;
+    const deg = gaugePctToDeg(i/10);
+    const outer = gaugePolar(cx, cy, r - 4, deg);
+    const inner = gaugePolar(cx, cy, r - (i%majorEvery===0 ? 12 : 7), deg);
+    ticks+=`<line x1="${outer.x}" y1="${outer.y}" x2="${inner.x}" y2="${inner.y}" stroke="rgba(233,228,214,${i%majorEvery===0?0.55:0.28})" stroke-width="${i%majorEvery===0?1.6:1}"/>`;
   }
   return ticks;
 }
 
+function gaugeArcPath(cx, cy, r, endDeg, largeArc){
+  const start = gaugePolar(cx, cy, r, GAUGE_GEOM.startDeg);
+  const end = gaugePolar(cx, cy, r, endDeg);
+  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc ? 1 : 0} 1 ${end.x} ${end.y}`;
+}
+
 function gaugeSVG(pct, colorOverride){
   pct = Math.max(0, Math.min(1, pct||0));
-  const angle = -135 + pct*270;
+  const deg = gaugePctToDeg(pct);
   const arcColor = colorOverride || (pct < 0.15 ? '#c1573a' : (pct < 0.35 ? '#c99a53' : '#57b3ab'));
   const gid = nextGaugeUid();
-  const cx = 80, cy = 78, r = 58;
+  const {cx, cy, r} = GAUGE_GEOM;
+  const endPt = GAUGE_GEOM.startDeg + GAUGE_GEOM.sweepDeg;
   return `<svg class="analog-gauge" viewBox="0 0 160 150">
     <defs>
       <radialGradient id="bezel-${gid}" cx="35%" cy="30%"><stop offset="0%" stop-color="#4a5568"/><stop offset="55%" stop-color="#1a2433"/><stop offset="100%" stop-color="#0a1018"/></radialGradient>
@@ -1521,9 +1539,9 @@ function gaugeSVG(pct, colorOverride){
     <circle cx="${cx}" cy="${cy}" r="${r+10}" fill="url(#bezel-${gid})" stroke="#2a3545" stroke-width="2"/>
     <circle cx="${cx}" cy="${cy}" r="${r+2}" fill="url(#face-${gid})" stroke="rgba(233,228,214,0.08)"/>
     ${gaugeTicks(cx,cy,r,2)}
-    <path d="M ${cx+Math.cos(-135*Math.PI/180)*r} ${cy+Math.sin(-135*Math.PI/180)*r} A ${r} ${r} 0 1 1 ${cx+Math.cos(135*Math.PI/180)*r} ${cy+Math.sin(135*Math.PI/180)*r}" fill="none" stroke="rgba(233,228,214,0.1)" stroke-width="9" stroke-linecap="round"/>
-    <path d="M ${cx+Math.cos(-135*Math.PI/180)*r} ${cy+Math.sin(-135*Math.PI/180)*r} A ${r} ${r} 0 ${pct>0.5?1:0} 1 ${cx+Math.cos(angle*Math.PI/180)*r} ${cy+Math.sin(angle*Math.PI/180)*r}" fill="none" stroke="${arcColor}" stroke-width="7" stroke-linecap="round" filter="drop-shadow(0 0 4px ${arcColor})"/>
-    ${gaugeNeedle(cx, cy, angle)}
+    <path d="${gaugeArcPath(cx,cy,r,endPt,1)}" fill="none" stroke="rgba(233,228,214,0.1)" stroke-width="9" stroke-linecap="round"/>
+    <path d="${gaugeArcPath(cx,cy,r,deg,pct>0.5)}" fill="none" stroke="${arcColor}" stroke-width="7" stroke-linecap="round" filter="drop-shadow(0 0 4px ${arcColor})"/>
+    ${gaugeNeedle(cx, cy, r, deg)}
     <path d="M ${cx-30} ${cy-38} Q ${cx} ${cy-52} ${cx+34} ${cy-30}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4" stroke-linecap="round"/>
   </svg>`;
 }
@@ -1531,22 +1549,22 @@ function gaugeSVG(pct, colorOverride){
 function dualGaugeSVG(startPct, currentPct, colorOverride){
   startPct = Math.max(0, Math.min(1, startPct||0));
   currentPct = Math.max(0, Math.min(1, currentPct||0));
-  const curAngle = -135 + currentPct*270;
-  const startAngle = -135 + startPct*270;
+  const curDeg = gaugePctToDeg(currentPct);
+  const startDeg = gaugePctToDeg(startPct);
   const arcColor = colorOverride || (currentPct < 0.15 ? '#c1573a' : (currentPct < 0.35 ? '#c99a53' : '#57b3ab'));
   const gid = nextGaugeUid();
-  const cx = 80, cy = 78, r = 58;
-  const curRad = curAngle*Math.PI/180;
+  const {cx, cy, r} = GAUGE_GEOM;
+  const endPt = GAUGE_GEOM.startDeg + GAUGE_GEOM.sweepDeg;
   return `<svg class="analog-gauge" viewBox="0 0 160 150">
     <defs><radialGradient id="bezel-${gid}" cx="35%" cy="30%"><stop offset="0%" stop-color="#4a5568"/><stop offset="100%" stop-color="#0a1018"/></radialGradient></defs>
     <ellipse cx="${cx}" cy="${cy+18}" rx="46" ry="8" fill="rgba(0,0,0,0.35)"/>
     <circle cx="${cx}" cy="${cy}" r="${r+10}" fill="url(#bezel-${gid})" stroke="#2a3545" stroke-width="2"/>
     <circle cx="${cx}" cy="${cy}" r="${r+2}" fill="#0e1c30" stroke="rgba(233,228,214,0.08)"/>
     ${gaugeTicks(cx,cy,r,2)}
-    <path d="M ${cx+Math.cos(-135*Math.PI/180)*r} ${cy+Math.sin(-135*Math.PI/180)*r} A ${r} ${r} 0 1 1 ${cx+Math.cos(135*Math.PI/180)*r} ${cy+Math.sin(135*Math.PI/180)*r}" fill="none" stroke="rgba(233,228,214,0.1)" stroke-width="9" stroke-linecap="round"/>
-    <path d="M ${cx+Math.cos(-135*Math.PI/180)*r} ${cy+Math.sin(-135*Math.PI/180)*r} A ${r} ${r} 0 ${currentPct>0.5?1:0} 1 ${cx+Math.cos(curRad)*r} ${cy+Math.sin(curRad)*r}" fill="none" stroke="${arcColor}" stroke-width="7" stroke-linecap="round" filter="drop-shadow(0 0 4px ${arcColor})"/>
-    ${gaugeStartMarker(cx, cy, startAngle)}
-    ${gaugeNeedle(cx, cy, curAngle)}
+    <path d="${gaugeArcPath(cx,cy,r,endPt,1)}" fill="none" stroke="rgba(233,228,214,0.1)" stroke-width="9" stroke-linecap="round"/>
+    <path d="${gaugeArcPath(cx,cy,r,curDeg,currentPct>0.5)}" fill="none" stroke="${arcColor}" stroke-width="7" stroke-linecap="round" filter="drop-shadow(0 0 4px ${arcColor})"/>
+    ${gaugeStartMarker(cx, cy, r, startDeg)}
+    ${gaugeNeedle(cx, cy, r, curDeg)}
   </svg>`;
 }
 
