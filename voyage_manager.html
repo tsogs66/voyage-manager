@@ -190,31 +190,152 @@
 
   .hint{font-size:11px; color:var(--paper-dim); margin-top:4px; line-height:1.5;}
   .ref-grid{display:grid; grid-template-columns:repeat(6,1fr); gap:10px 14px;}
-  @media (max-width:900px){ .ref-grid{grid-template-columns:repeat(3,1fr);} }
+  @media (max-width:900px){
+    .ref-grid{grid-template-columns:repeat(3,1fr);}
+    .unit-group,.unit-group.cols3{grid-template-columns:repeat(2,1fr);}
+    .unit-group.cols4,.unit-group.cols5{grid-template-columns:repeat(2,1fr);}
+    .form-grid{grid-template-columns:repeat(2,1fr);}
+    .form-grid.cols3,.form-grid.cols5,.form-grid.cols6{grid-template-columns:repeat(2,1fr);}
+    .stat-strip.cols5{grid-template-columns:repeat(3,1fr);}
+    #vsTurboScavRow.unit-group.cols3{grid-template-columns:repeat(2, minmax(0, 1fr));}
+    #vsCylFields.unit-group.cols6{grid-template-columns:repeat(3, minmax(0, 1fr)); overflow-x:visible;}
+    #voyageSummaryPanel .form-grid.cols5{grid-template-columns:repeat(2, minmax(0, 1fr)); overflow-x:visible;}
+  }
+  /* ---- Mobile / phone ---- */
   @media (max-width:720px){
-    body{padding:16px 12px 72px; padding-bottom:calc(72px + env(safe-area-inset-bottom));}
-    h1{font-size:20px;}
-    .tabs{overflow-x:auto; flex-wrap:nowrap; -webkit-overflow-scrolling:touch; scrollbar-width:none;}
+    html,body{overflow-x:clip;}
+    body{
+      padding:12px 10px 88px;
+      padding-top:calc(12px + env(safe-area-inset-top));
+      padding-left:calc(10px + env(safe-area-inset-left));
+      padding-right:calc(10px + env(safe-area-inset-right));
+      padding-bottom:calc(88px + env(safe-area-inset-bottom));
+    }
+    h1{font-size:18px; line-height:1.2;}
+    .subtitle{font-size:10px;}
+    .masthead{align-items:flex-start; gap:10px; padding-bottom:10px; margin-bottom:4px;}
+    .masthead-left{gap:10px;}
+    .status-row{align-items:flex-start; width:100%;}
+    #dbStatus,#syncStatus{font-size:10px; word-break:break-word;}
+
+    /* Sticky scrollable tab bar */
+    .tabs{
+      position:sticky; top:0; z-index:40;
+      margin:10px -10px 14px;
+      padding:0 10px;
+      background:rgba(10,20,32,0.94);
+      backdrop-filter:blur(8px);
+      -webkit-backdrop-filter:blur(8px);
+      overflow-x:auto; flex-wrap:nowrap;
+      -webkit-overflow-scrolling:touch;
+      scrollbar-width:none;
+      border-bottom:1px solid var(--line);
+    }
     .tabs::-webkit-scrollbar{display:none;}
-    .tab{flex:0 0 auto; padding:10px 12px;}
-    .form-grid,.form-grid.cols2,.form-grid.cols3,.form-grid.cols5,.form-grid.cols6{grid-template-columns:1fr 1fr;}
-    .stat-strip,.stat-strip.cols3,.stat-strip.cols5{grid-template-columns:repeat(2,1fr);}
-    .gauge-grid,.gauge-grid.cols4,.gauge-grid.cols5{grid-template-columns:repeat(2,1fr);}
-    .unit-group.cols6{grid-template-columns:repeat(2,1fr);}
-    #voyageSummaryPanel .form-grid.cols5{
-      grid-template-columns:repeat(5, minmax(96px, 1fr));
-      overflow-x:auto;
+    .tab{
+      flex:0 0 auto; padding:12px 14px; font-size:11px;
+      min-height:44px; display:inline-flex; align-items:center;
+    }
+
+    .panel{padding:14px 12px; margin-bottom:14px; border-radius:8px;}
+    .panel h2{font-size:13px; margin-bottom:12px;}
+    .panel h3.sub{font-size:10px; margin:14px 0 8px;}
+
+    /* Forms: 2-col default, full-width for long fields */
+    .form-grid,.form-grid.cols2,.form-grid.cols3,.form-grid.cols5,.form-grid.cols6{
+      grid-template-columns:1fr 1fr; gap:10px 8px;
+    }
+    .field.span2{grid-column:1 / -1;}
+    .field label{font-size:10px;}
+    .field input,.field select,.field textarea,
+    textarea{
+      font-size:16px !important; /* prevent iOS focus zoom */
+      min-height:44px;
+      padding:10px 10px;
+      border-radius:6px;
+    }
+    .field textarea, textarea{min-height:88px; line-height:1.35;}
+    .pf-input{width:100%; max-width:100%; min-height:40px; font-size:16px; padding:8px;}
+
+    .stat-strip,.stat-strip.cols2,.stat-strip.cols3,.stat-strip.cols5{
+      grid-template-columns:repeat(2,1fr); gap:10px;
+    }
+    .stat .num{font-size:16px;}
+    .stat .lbl{font-size:9px;}
+
+    .gauge-grid,.gauge-grid.cols2,.gauge-grid.cols4,.gauge-grid.cols5{
+      grid-template-columns:repeat(2,1fr); gap:8px;
+    }
+    .gauge-grid.large .gauge-box svg{max-width:160px;}
+    .gauge-grid.large .gauge-value{font-size:18px;}
+
+    /* Unit boxes / meters: stack denser layouts */
+    .unit-group,.unit-group.cols2,.unit-group.cols3,
+    .unit-group.cols4,.unit-group.cols5,.unit-group.cols6{
+      grid-template-columns:1fr; gap:10px;
+    }
+    #fuelLubeMeterRow.unit-group.cols4{grid-template-columns:1fr;}
+    #meBlrRuntimeFields.unit-group.cols2{grid-template-columns:1fr;}
+
+    /* Voyage Summary: readable stacks instead of tiny 5/6-col scroll rows */
+    #voyageSummaryPanel .form-grid.cols5,
+    #voyageSummaryPanel .form-grid.cols3,
+    #voyageSummaryPanel .form-grid.cols6{
+      grid-template-columns:1fr 1fr; overflow-x:visible;
     }
     #vsCylFields.unit-group.cols6{
-      grid-template-columns:repeat(6, minmax(96px, 1fr));
-      overflow-x:auto;
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      overflow-x:visible; gap:8px;
     }
-    #vsTurboScavRow.unit-group.cols3{
-      grid-template-columns:repeat(3, minmax(0, 1fr));
+    #vsTurboScavRow.unit-group.cols3,
+    #vsTurboScavRow.unit-group.cols3.no-turbos{
+      grid-template-columns:1fr; overflow-x:visible;
     }
-    button,.tab{touch-action:manipulation;}
-    .masthead{align-items:flex-start;}
-    .status-row{align-items:flex-start;}
+    #vsOthersFields.form-grid.cols2{grid-template-columns:1fr 1fr;}
+    #vsGeRuntimeFields.unit-group.cols3{grid-template-columns:1fr;}
+    #voyageSummaryPanel .unit-group.cols3{grid-template-columns:1fr;}
+
+    .ref-grid{grid-template-columns:repeat(2,1fr); gap:8px 10px;}
+    .ref-item .rv{font-size:12px;}
+
+    .table-scroll{
+      -webkit-overflow-scrolling:touch;
+      max-height:none;
+      margin:0 -4px;
+      padding-bottom:4px;
+    }
+    table{font-size:11px;}
+    thead th, tbody td{padding:8px 6px;}
+    table.freeze-cols th:nth-child(1), table.freeze-cols td:nth-child(1){width:120px; min-width:120px;}
+    table.freeze-cols th:nth-child(2), table.freeze-cols td:nth-child(2){left:120px; width:110px; min-width:110px;}
+
+    .btn-row{gap:8px; margin-top:12px;}
+    .btn-row > button{
+      flex:1 1 calc(50% - 8px);
+      min-height:44px;
+      padding:12px 14px;
+      font-size:12px;
+    }
+    .btn-row > button.primary,
+    .btn-row > button.danger{flex:1 1 100%;}
+    button.small{min-height:40px; padding:8px 12px; font-size:11px;}
+    button,.tab{touch-action:manipulation; -webkit-tap-highlight-color:transparent;}
+
+    .receipt-row{flex-wrap:wrap; font-size:12px; gap:6px;}
+    .hint{font-size:12px; line-height:1.45;}
+    .badge{margin-left:4px;}
+    .vs-photo-preview img{max-height:220px;}
+    .footer-note{font-size:10px; margin-top:20px; padding:0 4px;}
+    input[type="file"]{max-width:100%; font-size:14px;}
+  }
+  @media (max-width:420px){
+    .form-grid,.form-grid.cols2,.form-grid.cols3,.form-grid.cols5,.form-grid.cols6{
+      grid-template-columns:1fr;
+    }
+    #vsOthersFields.form-grid.cols2{grid-template-columns:1fr;}
+    #vsCylFields.unit-group.cols6{grid-template-columns:1fr;}
+    .stat-strip,.stat-strip.cols2,.stat-strip.cols3,.stat-strip.cols5{grid-template-columns:1fr 1fr;}
+    .btn-row > button{flex:1 1 100%;}
   }
   .ref-item{border-left:2px solid var(--line-strong); padding-left:8px;}
   .ref-item .rv{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--brass); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
