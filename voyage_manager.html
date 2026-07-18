@@ -625,10 +625,9 @@
           </select>
         </div>
         <div class="field"><label>Condition</label><select id="in_condition"><option>BALLAST</option><option>LADEN</option></select></div>
-        <div class="field"><label>Engine Distance (nm, calc)</label><input type="text" id="in_engineDist" readonly></div>
-        <div class="field"><label>Engine Speed (kn, calc)</label><input type="text" id="in_engineSpeed" readonly></div>
+        <div class="field"><label>Slip % (calc)</label><input type="text" id="in_slip" readonly></div>
       </div>
-      <div class="hint">Distance run and M/E avg RPM are entered on the Voyage Summary after you save. Engine distance / speed update here from RPM, rev. counter, and run hours. Consumption, freshwater, misc., boiler &amp; incinerator are also reviewed on Voyage Summary.</div>
+      <div class="hint">Distance run and M/E avg RPM are entered on the Voyage Summary after you save. Slip % updates here with RPM / distance: Slip = (Engine Dist − Ship Dist) ÷ Engine Dist × 100. Engine distance and speed stay on Voyage Summary.</div>
 
       <h3 class="sub">Main Engine — Runtime &amp; Revolutions</h3>
       <div class="unit-group cols2" id="meBlrRuntimeFields">
@@ -695,8 +694,9 @@
           <div class="field"><label>Engine Distance (nm, calc)</label><input type="text" id="vs_engineDist" readonly></div>
           <div class="field"><label>Engine Speed (kn, calc)</label><input type="text" id="vs_engineSpeed" readonly></div>
           <div class="field"><label>Ship Speed (kn, calc)</label><input type="text" id="vs_shipSpeed" readonly></div>
+          <div class="field"><label>Slip % (calc)</label><input type="text" id="vs_slip" readonly></div>
         </div>
-        <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous) ÷ (Run Hours × 60). Change either field and the other updates. These values save with this summary.</div>
+        <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous) ÷ (Run Hours × 60). Engine distance = RPM × pitch constant × period hrs. Slip % = (Engine Dist − Ship Dist) ÷ Engine Dist × 100 — recalculates when RPM or distance run changes.</div>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -5228,17 +5228,20 @@ function updateVsRunCalcDisplays(){
   }
   const prevRef = getPrevReferenceFor(ctx.datetime || curEntry.datetime, ctx.excludeId);
   const pitch = state.setup.pitch||0, propConstant = pitch*60/1852;
-  let distEngine=null, speedEngine=null, shipSpeed=null;
+  let distEngine=null, speedEngine=null, shipSpeed=null, slip=null;
   if (curEntry.rpm!=null) speedEngine = curEntry.rpm * propConstant;
   const hrs = periodRunHours(prevRef, ctx.datetime || curEntry.datetime, ctx.meRuntime);
   if (hrs>0 && curEntry.rpm!=null) distEngine = curEntry.rpm * propConstant * hrs;
   if (hrs>0 && curEntry.distanceShip!=null) shipSpeed = curEntry.distanceShip / hrs;
+  if (distEngine!=null && distEngine>0 && curEntry.distanceShip!=null){
+    slip = ((distEngine - curEntry.distanceShip) / distEngine) * 100;
+  }
   const set = (id, val)=>{ const el=document.getElementById(id); if (el) el.value = val==null?'—':fmt(val,2); };
-  set('in_engineDist', distEngine);
-  set('in_engineSpeed', speedEngine);
   set('vs_engineDist', distEngine);
   set('vs_engineSpeed', speedEngine);
   set('vs_shipSpeed', shipSpeed);
+  set('vs_slip', slip);
+  set('in_slip', slip);
   const rpmDisp = document.getElementById('in_rpm_display');
   if (rpmDisp && document.activeElement!==rpmDisp) rpmDisp.value = curEntry.rpm==null?'—':fmt(curEntry.rpm,2);
 }
@@ -5365,10 +5368,8 @@ function updateLivePreview(){
     }
   }
 
-  const engDistEl = document.getElementById('in_engineDist');
-  const engSpdEl = document.getElementById('in_engineSpeed');
-  if (engDistEl) engDistEl.value = distEngine==null?'—':fmt(distEngine,2);
-  if (engSpdEl) engSpdEl.value = speedEngine==null?'—':fmt(speedEngine,2);
+  const slipEl = document.getElementById('in_slip');
+  if (slipEl && document.activeElement!==slipEl) slipEl.value = slip==null?'—':fmt(slip,2);
   const rpmDisp = document.getElementById('in_rpm_display');
   if (rpmDisp) rpmDisp.value = curEntry.rpm==null?'—':fmt(curEntry.rpm,2);
 
@@ -5853,7 +5854,7 @@ document.getElementById('btnClearForm').addEventListener('click', ()=>{
   document.getElementById('in_datetime').value = now.toISOString().slice(0,16);
   document.getElementById('in_distanceShip').value = '0';
   ['in_rpm','in_revCounter','me_meter','ge_meter','me_meter_in','me_meter_out','ge_meter_in','ge_meter_out',
-   'blr_meter','me_runtime','cyl_meter','in_engineDist','in_engineSpeed','in_rpm_display'].forEach(id=>{
+   'blr_meter','me_runtime','cyl_meter','in_slip','in_rpm_display'].forEach(id=>{
     const el = document.getElementById(id); if (el) el.value='';
   });
   prefillFromLastEntry();
