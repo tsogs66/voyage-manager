@@ -72,10 +72,40 @@
   .unit-group.cols6{grid-template-columns:repeat(6,1fr);}
   .unit-group.contents > *{min-width:0;}
   #vsTurboFields{display:contents;}
+  /* Voyage Summary: keep ER readings and cylinder containers on one horizontal row */
+  #voyageSummaryPanel .form-grid.cols5{
+    grid-template-columns:repeat(5, minmax(0, 1fr));
+  }
+  #vsCylFields.unit-group.cols6{
+    display:grid;
+    grid-template-columns:repeat(6, minmax(0, 1fr));
+    gap:8px;
+  }
+  #vsCylFields .unit-box{min-width:0; padding:8px;}
+  #vsCylFields .unit-box h3{font-size:10px;}
+  #vsCylFields .field label{font-size:9px;}
+  #vsCylFields .field input{font-size:12px; padding:6px;}
+  #vsTurboScavRow.unit-group.cols3{
+    grid-template-columns:repeat(3, minmax(0, 1fr));
+    align-items:stretch;
+  }
+  #vsTurboScavRow .unit-box{min-width:0;}
   @media (max-width:1100px){
     .unit-group.cols4{grid-template-columns:repeat(2,1fr);}
     .unit-group.cols6{grid-template-columns:repeat(3,1fr);}
     .form-grid.cols5,.form-grid.cols6{grid-template-columns:repeat(3,1fr);}
+    /* Prefer one-row alignment on Voyage Summary even on mid-width screens */
+    #voyageSummaryPanel .form-grid.cols5{
+      grid-template-columns:repeat(5, minmax(110px, 1fr));
+      overflow-x:auto;
+    }
+    #vsCylFields.unit-group.cols6{
+      grid-template-columns:repeat(6, minmax(110px, 1fr));
+      overflow-x:auto;
+    }
+    #vsTurboScavRow.unit-group.cols3{
+      grid-template-columns:repeat(3, minmax(0, 1fr));
+    }
   }
   .vs-photo-preview{margin-top:10px; max-width:100%;}
   .vs-photo-preview img{max-width:100%; max-height:280px; border:1px solid var(--line-strong); border-radius:4px; display:block; object-fit:contain; background:rgba(0,0,0,0.2);}
@@ -725,7 +755,7 @@
           <div class="unit-group cols3" id="vsTurboScavRow">
             <div id="vsTurboFields"></div>
             <div class="unit-box" id="vsScavBox">
-              <h3>Scavenge / Fuel</h3>
+              <h3>Pressure Diff.</h3>
               <div class="field"><label>Scavenge Temp (°C)</label><input type="number" step="0.1" id="vs_scavTemp"></div>
               <div class="field"><label>Scavenge Pressure (bar)</label><input type="number" step="0.01" id="vs_scavPress"></div>
               <div class="field"><label>Pump Mark</label><input type="number" step="0.1" id="vs_pumpMark"></div>
