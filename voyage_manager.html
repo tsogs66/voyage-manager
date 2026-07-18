@@ -2157,8 +2157,8 @@ function renderLastEntryRef(){
     ${item('Rev. Counter', e.revCounter)}
     ${item('Cyl TBN', e.tbn)}
     ${item('M/E Runtime', e.meRuntime)}
-    ${item('Generator Runtime', e.ge1Runtime)}
-    ${item('Blr Runtime', e.blrRuntime)}
+    ${item('Generator Runtime', entryGeRuntime(e, 1))}
+    ${item('Blr Runtime', entryBlrRuntime(e))}
     ${meDual ? item('M/E Inlet Meter (L)', e.me.meterIn) : item('M/E Meter (L)', e.me.meter)}
     ${meDual ? item('M/E Outlet Meter (L)', e.me.meterOut) : ''}
     ${item('M/E Type / SG', e.me.type+' / '+e.me.sg)}
