@@ -5047,13 +5047,14 @@ function getActivePeriodContext(){
   };
 }
 function periodRunHours(prevRef, curDt, curMeRuntime){
-  if (prevRef?.meRuntime!=null && curMeRuntime!=null && !isNaN(curMeRuntime)){
-    const d = runtimeDelta(curMeRuntime, prevRef.meRuntime);
-    if (d!=null && d>0) return d;
-  }
+  /* Prefer wall-clock period (same as voyage hrs / engine distance), then M/E runtime delta. */
   if (prevRef && curDt){
     const wall = (new Date(curDt) - new Date(prevRef.datetime)) / 3600000;
     if (wall>0) return wall;
+  }
+  if (prevRef?.meRuntime!=null && curMeRuntime!=null && !isNaN(curMeRuntime)){
+    const d = runtimeDelta(curMeRuntime, prevRef.meRuntime);
+    if (d!=null && d>0) return d;
   }
   return null;
 }
