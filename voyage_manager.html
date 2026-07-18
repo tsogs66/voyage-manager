@@ -57,6 +57,8 @@
   .form-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:12px 14px;}
   .form-grid.cols3{grid-template-columns:repeat(3,1fr);}
   .form-grid.cols2{grid-template-columns:repeat(2,1fr);}
+  .form-grid.cols5{grid-template-columns:repeat(5,1fr);}
+  .form-grid.cols6{grid-template-columns:repeat(6,1fr);}
   .field{display:flex; flex-direction:column; gap:4px;}
   .field.span2{grid-column:span 2;}
   .field label{font-size:10px; letter-spacing:0.07em; text-transform:uppercase; color:var(--paper-dim);}
@@ -67,9 +69,16 @@
   .unit-group.cols2{grid-template-columns:1fr 1fr;}
   .unit-group.cols4{grid-template-columns:repeat(4,1fr);}
   .unit-group.cols5{grid-template-columns:repeat(5,1fr);}
+  .unit-group.cols6{grid-template-columns:repeat(6,1fr);}
+  .unit-group.contents > *{min-width:0;}
+  #vsTurboFields{display:contents;}
   @media (max-width:1100px){
     .unit-group.cols4{grid-template-columns:repeat(2,1fr);}
+    .unit-group.cols6{grid-template-columns:repeat(3,1fr);}
+    .form-grid.cols5,.form-grid.cols6{grid-template-columns:repeat(3,1fr);}
   }
+  .vs-photo-preview{margin-top:10px; max-width:100%;}
+  .vs-photo-preview img{max-width:100%; max-height:280px; border:1px solid var(--line-strong); border-radius:4px; display:block; object-fit:contain; background:rgba(0,0,0,0.2);}
   .unit-box{border:1px solid var(--line); border-radius:4px; padding:10px; background:rgba(0,0,0,0.15);}
   .unit-box h3{margin:0 0 8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:var(--teal);}
   .unit-box .field{margin-bottom:8px;}
@@ -148,9 +157,10 @@
     .tabs{overflow-x:auto; flex-wrap:nowrap; -webkit-overflow-scrolling:touch; scrollbar-width:none;}
     .tabs::-webkit-scrollbar{display:none;}
     .tab{flex:0 0 auto; padding:10px 12px;}
-    .form-grid,.form-grid.cols2,.form-grid.cols3{grid-template-columns:1fr 1fr;}
+    .form-grid,.form-grid.cols2,.form-grid.cols3,.form-grid.cols5,.form-grid.cols6{grid-template-columns:1fr 1fr;}
     .stat-strip,.stat-strip.cols3,.stat-strip.cols5{grid-template-columns:repeat(2,1fr);}
     .gauge-grid,.gauge-grid.cols4,.gauge-grid.cols5{grid-template-columns:repeat(2,1fr);}
+    .unit-group.cols6{grid-template-columns:repeat(2,1fr);}
     button,.tab{touch-action:manipulation;}
     .masthead{align-items:flex-start;}
     .status-row{align-items:flex-start;}
@@ -696,7 +706,7 @@
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
         <h3 class="sub" style="margin-top:0;">Common — Engine Room &amp; Tank Readings</h3>
-        <div class="form-grid cols3">
+        <div class="form-grid cols5">
           <div class="field"><label>E/R Temp (°C)</label><input type="number" step="0.1" id="vs_erTemp"></div>
           <div class="field"><label>Bilge ROB (m³)</label><input type="number" step="0.01" id="vs_bilgeRob"></div>
           <div class="field"><label>Sludge ROB (m³)</label><input type="number" step="0.01" id="vs_sludgeRob"></div>
@@ -708,17 +718,20 @@
       <div id="vsSeaReportBlock">
         <div class="panel" style="margin:0 0 16px; padding:16px;">
           <h3 class="sub" style="margin-top:0;">Main Engine — Cylinder Readings</h3>
-          <div class="unit-group cols5" id="vsCylFields"></div>
+          <div class="unit-group cols6" id="vsCylFields"></div>
         </div>
         <div class="panel" style="margin:0 0 16px; padding:16px;">
           <h3 class="sub" style="margin-top:0;">Turbochargers &amp; Scavenge</h3>
-          <div class="unit-group cols3" id="vsTurboFields"></div>
-          <div class="form-grid cols3" style="margin-top:10px;">
-            <div class="field"><label>Scavenge Temp (°C)</label><input type="number" step="0.1" id="vs_scavTemp"></div>
-            <div class="field"><label>Scavenge Pressure (bar)</label><input type="number" step="0.01" id="vs_scavPress"></div>
-            <div class="field"><label>Fuel Temp (°C)</label><input type="number" step="0.1" id="vs_fuelTemp"></div>
-            <div class="field"><label>Pump Mark</label><input type="number" step="0.1" id="vs_pumpMark"></div>
-            <div class="field"><label>Pressure Diff. (bar)</label><input type="number" step="0.01" id="vs_pressDiff"></div>
+          <div class="unit-group cols3" id="vsTurboScavRow">
+            <div id="vsTurboFields"></div>
+            <div class="unit-box" id="vsScavBox">
+              <h3>Scavenge / Fuel</h3>
+              <div class="field"><label>Scavenge Temp (°C)</label><input type="number" step="0.1" id="vs_scavTemp"></div>
+              <div class="field"><label>Scavenge Pressure (bar)</label><input type="number" step="0.01" id="vs_scavPress"></div>
+              <div class="field"><label>Pump Mark</label><input type="number" step="0.1" id="vs_pumpMark"></div>
+              <div class="field"><label>Fuel Temp (°C)</label><input type="number" step="0.1" id="vs_fuelTemp"></div>
+              <div class="field"><label>Pressure Diff. (bar)</label><input type="number" step="0.01" id="vs_pressDiff"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -730,13 +743,19 @@
             <select id="vs_geInUse"></select>
           </div>
           <div class="field"><label>Boiler Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="vs_blrRuntime"></div>
-          <div class="field"><label>Total G/E Fuel Cons (MT)</label><input type="text" id="vs_geTotalCons" readonly></div>
           <div class="field"><label>Incinerator Run Time (hrs)</label><input type="number" step="0.1" id="vs_incRuntime"></div>
+          <div class="field"><label>Total G/E Fuel Cons (MT)</label><input type="text" id="vs_geTotalCons" readonly></div>
+          <div class="field"><label>Boiler Avg Load (kW)</label><input type="number" step="1" id="vs_blrKw"></div>
           <div class="field"><label>Incinerator Avg Load (kW)</label><input type="number" step="1" id="vs_incKw"></div>
+          <div class="field"><label>Arrangement</label><input type="text" id="vsGeArrLabel" readonly></div>
+          <div class="field"><label>Boiler Load % (calc)</label><input type="text" id="vs_blrLoadPct" readonly></div>
           <div class="field"><label>Incinerator Load % (calc)</label><input type="text" id="vs_incLoadPct" readonly></div>
+          <div class="field"><label>Boiler Period Hrs (calc)</label><input type="text" id="vs_blrPeriod" readonly></div>
+          <div class="field"><label>Boiler Fuel Cons (MT)</label><input type="text" id="vs_blrCons" readonly></div>
+          <div class="field"></div>
         </div>
         <div class="unit-group cols3" id="vsGeRuntimeFields" style="margin-top:10px;"></div>
-        <div class="hint">Same fields as the Reports tab. Period hours and fuel share calculate from cumulative hour-meters. Incinerator load % = (kW ÷ max kW from Setup) × 100.</div>
+        <div class="hint">Period hours and fuel share calculate from cumulative hour-meters. Boiler / incinerator load % = (kW ÷ max kW from Setup) × 100.</div>
         <div class="table-scroll" style="margin-top:14px;">
           <table>
             <thead><tr><th>Unit</th><th>Period Hrs</th><th>Avg kW</th><th>Load %</th><th>Fuel Cons (MT)</th><th>Voyage Hrs (total)</th><th>Voyage Avg kW (time-wtd)</th><th>Voyage Load %</th></tr></thead>
@@ -744,11 +763,42 @@
           </table>
         </div>
         <div class="stat-strip cols3" id="vsVoyageAvgStrip" style="margin-top:12px;"></div>
-        <div class="form-grid cols3" style="margin-top:10px;">
-          <div class="field"><label>Boiler Period Hrs (calc)</label><input type="text" id="vs_blrPeriod" readonly></div>
-          <div class="field"><label>Boiler Fuel Cons (MT)</label><input type="text" id="vs_blrCons" readonly></div>
-          <div class="field"><label>Arrangement</label><input type="text" id="vsGeArrLabel" readonly></div>
+      </div>
+
+      <div class="panel" style="margin:0 0 16px; padding:16px;">
+        <h3 class="sub" style="margin-top:0;">Fuel Cons. / Fresh Water / Misc.</h3>
+        <div class="unit-group cols3">
+          <div class="unit-box">
+            <h3>Fuel Cons. (by unit — edit to override)</h3>
+            <div id="vsFuelConsBox"></div>
+            <button class="ghost small" id="btnVsResetUnitCons" type="button" style="margin-top:8px;">Reset Unit Cons. to Calculated</button>
+          </div>
+          <div class="unit-box">
+            <h3>Fresh Water</h3>
+            <div class="field"><label>Flowmeter (cumulative)</label><input type="number" id="vs_fwProdMeter"></div>
+            <div class="field"><label>R.O.B. (tank sounding, present)</label><input type="number" id="vs_fwRob"></div>
+            <div class="field"><label>Produced (calc, L)</label><input type="text" id="vs_fwProduced" readonly></div>
+            <div class="field"><label>Consumed (calc, L)</label><input type="text" id="vs_fwConsumed" readonly></div>
+          </div>
+          <div class="unit-box">
+            <h3>Misc. Cons. (manual, added to Consumption)</h3>
+            <div class="field"><label>MDO/MGO</label><input type="number" step="0.01" id="vs_misc_mdomgo" value="0"></div>
+            <div class="field"><label>LS MGO</label><input type="number" step="0.01" id="vs_misc_lsmgo" value="0"></div>
+          </div>
         </div>
+        <h3 class="sub">Fuel &amp; Lube ROB — Previous / Consumption / R.O.B.</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th></th><th>Previous</th><th>Consumption</th><th>R.O.B.</th></tr></thead>
+            <tbody id="vsRobBody"></tbody>
+          </table>
+        </div>
+        <button class="ghost small" id="btnVsResetConsOverride" type="button" style="margin-top:8px;">Reset ROB Cons. to Calculated</button>
+      </div>
+
+      <div class="panel" style="margin:0 0 16px; padding:16px;">
+        <h3 class="sub" style="margin-top:0;">Remarks</h3>
+        <div class="field"><textarea id="vs_remarks" rows="3" style="width:100%; background:var(--ink); border:1px solid var(--line-strong); border-radius:3px; color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:8px;"></textarea></div>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -762,38 +812,18 @@
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
-        <h3 class="sub" style="margin-top:0;">Remarks</h3>
-        <div class="field"><textarea id="vs_remarks" rows="3" style="width:100%; background:var(--ink); border:1px solid var(--line-strong); border-radius:3px; color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:8px;"></textarea></div>
-      </div>
-
-      <div class="grid">
-        <div>
-          <h3 class="sub">Fuel Cons. (by unit — edit to override)</h3>
-          <div class="unit-box" id="vsFuelConsBox"></div>
-          <button class="ghost small" id="btnVsResetUnitCons" type="button" style="margin-top:8px;">Reset Unit Cons. to Calculated</button>
-          <h3 class="sub">Fresh Water</h3>
-          <div class="unit-box">
-            <div class="field"><label>Flowmeter (cumulative)</label><input type="number" id="vs_fwProdMeter"></div>
-            <div class="field"><label>R.O.B. (tank sounding, present)</label><input type="number" id="vs_fwRob"></div>
-            <div class="field"><label>Produced (calc, L)</label><input type="text" id="vs_fwProduced" readonly></div>
-            <div class="field"><label>Consumed (calc, L)</label><input type="text" id="vs_fwConsumed" readonly></div>
+        <h3 class="sub" style="margin-top:0;">Attached Photo</h3>
+        <div class="form-grid cols3">
+          <div class="field span2">
+            <label>Photo (optional)</label>
+            <input type="file" id="vs_photoFile" accept="image/*">
           </div>
-          <h3 class="sub">Misc. Cons. (manual, added to Consumption)</h3>
-          <div class="unit-box">
-            <div class="field"><label>MDO/MGO</label><input type="number" step="0.01" id="vs_misc_mdomgo" value="0"></div>
-            <div class="field"><label>LS MGO</label><input type="number" step="0.01" id="vs_misc_lsmgo" value="0"></div>
+          <div class="field" style="justify-content:flex-end;">
+            <button class="ghost small" id="btnVsClearPhoto" type="button">Remove Photo</button>
           </div>
         </div>
-        <div>
-          <h3 class="sub">Fuel &amp; Lube ROB — Previous / Consumption / R.O.B.</h3>
-          <div class="table-scroll">
-            <table>
-              <thead><tr><th></th><th>Previous</th><th>Consumption</th><th>R.O.B.</th></tr></thead>
-              <tbody id="vsRobBody"></tbody>
-            </table>
-          </div>
-          <button class="ghost small" id="btnVsResetConsOverride" type="button" style="margin-top:8px;">Reset ROB Cons. to Calculated</button>
-        </div>
+        <div class="vs-photo-preview" id="vs_photoPreview"></div>
+        <div class="hint">Attach a photo to this voyage summary (stored with the entry). Shown here above Save.</div>
       </div>
 
       <div class="btn-row">
@@ -1315,13 +1345,19 @@ function entryGeneratorsInUse(e){
 function buildIncineratorPerf(runTime, avgKw){
   return computeKwPerf({ avgPower: avgKw, runTime }, incineratorMaxKw());
 }
-function syncIncineratorLoadPctDisplay(kwInputId, loadInputId){
+function syncKwLoadPctDisplay(kwInputId, loadInputId, maxKw){
   const kwEl = document.getElementById(kwInputId);
   const loadEl = document.getElementById(loadInputId);
   if (!loadEl) return;
   const kw = kwEl && kwEl.value!=='' ? parseFloat(kwEl.value) : NaN;
-  const pct = incineratorLoadPct(kw);
+  const pct = (!isNaN(kw) && maxKw>0) ? (kw/maxKw)*100 : null;
   loadEl.value = pct==null ? '—' : fmt(pct, 1) + ' %';
+}
+function syncIncineratorLoadPctDisplay(kwInputId, loadInputId){
+  syncKwLoadPctDisplay(kwInputId, loadInputId, incineratorMaxKw());
+}
+function syncBoilerLoadPctDisplay(kwInputId, loadInputId){
+  syncKwLoadPctDisplay(kwInputId, loadInputId, boilerMaxKw());
 }
 function previousEntryFor(entryId){
   const list = sortedEntries();
@@ -4251,6 +4287,67 @@ function overrideForLubeKind(override, label, tanks){
 function slugKey(k){ return k.replace(/[^a-zA-Z]/g,'').toLowerCase(); }
 
 let currentVsEntryId = null;
+let vsPhotoDataUrl = null;
+
+function renderVsPhotoPreview(dataUrl){
+  vsPhotoDataUrl = dataUrl || null;
+  const box = document.getElementById('vs_photoPreview');
+  const fileEl = document.getElementById('vs_photoFile');
+  if (fileEl && !dataUrl) fileEl.value = '';
+  if (!box) return;
+  if (!vsPhotoDataUrl){
+    box.innerHTML = `<div class="hint" style="margin:0;">No photo attached.</div>`;
+    return;
+  }
+  box.innerHTML = `<img src="${vsPhotoDataUrl}" alt="Attached voyage summary photo">`;
+}
+function readFileAsDataUrl(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(reader.result);
+    reader.onerror = ()=> reject(reader.error || new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+async function compressImageFileToDataUrl(file, maxEdge=1280, quality=0.82){
+  const raw = await readFileAsDataUrl(file);
+  if (!raw || typeof raw !== 'string' || !raw.startsWith('data:image/')) return raw;
+  const img = new Image();
+  const loaded = new Promise((resolve, reject)=>{
+    img.onload = ()=> resolve();
+    img.onerror = ()=> reject(new Error('Invalid image'));
+  });
+  img.src = raw;
+  await loaded;
+  let w = img.naturalWidth || img.width;
+  let h = img.naturalHeight || img.height;
+  if (!(w>0 && h>0)) return raw;
+  const scale = Math.min(1, maxEdge / Math.max(w, h));
+  w = Math.round(w * scale);
+  h = Math.round(h * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  try {
+    return canvas.toDataURL('image/jpeg', quality);
+  } catch {
+    return raw;
+  }
+}
+document.getElementById('vs_photoFile')?.addEventListener('change', async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  try {
+    const dataUrl = await compressImageFileToDataUrl(file);
+    renderVsPhotoPreview(dataUrl);
+  } catch (err){
+    alert('Could not load that photo. Try another image file.');
+  }
+});
+document.getElementById('btnVsClearPhoto')?.addEventListener('click', ()=>{
+  renderVsPhotoPreview(null);
+});
 
 /* ---------------- all-entries ROB snapshot (Reports tab) ---------------- */
 function openRobSnapshot(entryId){
@@ -4463,14 +4560,21 @@ function openVoyageSummary(entryId){
   document.getElementById('vs_blrPeriod').value = blrPeriod==null ? '—' : fmt(blrPeriod, 1);
   document.getElementById('vs_blrCons').value = row.blrCons==null ? '—' : fmt(row.blrCons, 3);
   document.getElementById('vs_geTotalCons').value = row.geCons==null ? '—' : fmt(row.geCons, 3);
+  document.getElementById('vs_blrKw').value = entry?.report?.perfTable?.BOILER?.avgPower ?? '';
+  syncBoilerLoadPctDisplay('vs_blrKw', 'vs_blrLoadPct');
   document.getElementById('vs_incRuntime').value = entryIncineratorRunTime(entry) ?? '';
   document.getElementById('vs_incKw').value = entryIncineratorKw(entry) ?? '';
   syncIncineratorLoadPctDisplay('vs_incKw', 'vs_incLoadPct');
+  renderVsPhotoPreview(r.photo || null);
   renderVsGeRuntimeFields(entryId, r);
   document.getElementById('vs_blrRuntime').oninput = ()=>{
     const cur = parseFloat(document.getElementById('vs_blrRuntime').value);
     const period = (!isNaN(cur) && prevBlr!=null) ? runtimeDelta(cur, prevBlr) : null;
     document.getElementById('vs_blrPeriod').value = period==null ? '—' : fmt(period, 1);
+    renderVsPerfTable(entryId);
+  };
+  document.getElementById('vs_blrKw').oninput = ()=>{
+    syncBoilerLoadPctDisplay('vs_blrKw', 'vs_blrLoadPct');
     renderVsPerfTable(entryId);
   };
   document.getElementById('vs_incRuntime').oninput = ()=> renderVsPerfTable(entryId);
@@ -4637,7 +4741,11 @@ function renderVsPerfTable(entryId){
     if (!isNaN(cur) && prevBlr!=null) return runtimeDelta(cur, prevBlr);
     return entry?.report?.perfTable?.BOILER?.runTime ?? null;
   })();
-  const blrKw = entry?.report?.perfTable?.BOILER?.avgPower ?? null;
+  const blrKw = (()=>{
+    const v = document.getElementById('vs_blrKw')?.value;
+    if (v!=='' && v!=null && !isNaN(parseFloat(v))) return parseFloat(v);
+    return entry?.report?.perfTable?.BOILER?.avgPower ?? null;
+  })();
   const incRt = (()=>{
     const v = document.getElementById('vs_incRuntime')?.value;
     if (v!=='' && v!=null && !isNaN(parseFloat(v))) return parseFloat(v);
@@ -4709,6 +4817,7 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   const prev = previousEntryFor(entry.id);
   const isSea = SEA_TYPE_OPS.has(entry.operation);
   const blrRuntime = num('vs_blrRuntime');
+  const blrKw = num('vs_blrKw');
   const incRunTime = num('vs_incRuntime');
   const incKw = num('vs_incKw');
   const inUse = parseInt(document.getElementById('vs_geInUse')?.value) || 1;
@@ -4770,11 +4879,12 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   const prevBlr = entryBlrRuntime(prev);
   const blrPeriod = (blrRuntime!=null && prevBlr!=null) ? runtimeDelta(blrRuntime, prevBlr) : null;
   perfTable.BOILER = Object.assign({}, entry.report.perfTable?.BOILER || {}, computeKwPerf({
-    avgPower: entry.report.perfTable?.BOILER?.avgPower ?? null,
+    avgPower: blrKw,
     runTime: blrPeriod
   }, boilerMaxKw()));
   perfTable.INCINERATOR = buildIncineratorPerf(incRunTime, incKw);
   entry.report.perfTable = Object.assign({}, entry.report.perfTable || {}, perfTable);
+  entry.report.photo = vsPhotoDataUrl || null;
   entry.updatedAt = new Date().toISOString();
 
   await dbPut('entries', entry);
