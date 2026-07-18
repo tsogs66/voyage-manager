@@ -4543,7 +4543,7 @@ function printVoyageSummary(entryId){
     ${printRow('Voyage Avg Gen Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct,1)}%`)}
     ${printRow('Voyage Avg Gen kW', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted,0))}`) : '';
 
-  const blrPrev = entryBlrRuntime(priorEntry);
+  const blrPrev = entryBlrRuntime(previousEntryFor(entryId));
   const blrCur = entryBlrRuntime(entry);
   const blrPeriodPrint = (blrCur!=null && blrPrev!=null) ? runtimeDelta(blrCur, blrPrev) : (entry.report?.perfTable?.BOILER?.runTime ?? null);
   const incRtPrint = entryIncineratorRunTime(entry);
