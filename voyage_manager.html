@@ -699,14 +699,75 @@
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
-        <h3 class="sub" style="margin-top:0;">Generator Report — <span id="vsGeArrLabel">—</span></h3>
-        <div class="table-scroll">
+        <h3 class="sub" style="margin-top:0;">Common — Engine Room &amp; Tank Readings</h3>
+        <div class="form-grid cols3">
+          <div class="field"><label>E/R Temp (°C)</label><input type="number" step="0.1" id="vs_erTemp"></div>
+          <div class="field"><label>Bilge ROB (m³)</label><input type="number" step="0.01" id="vs_bilgeRob"></div>
+          <div class="field"><label>Sludge ROB (m³)</label><input type="number" step="0.01" id="vs_sludgeRob"></div>
+          <div class="field"><label>S/T Temp — Settling Tank (°C)</label><input type="number" step="0.1" id="vs_stTemp"></div>
+          <div class="field"><label>S/W Temp — Sea Water (°C)</label><input type="number" step="0.1" id="vs_swTemp"></div>
+        </div>
+      </div>
+
+      <div id="vsSeaReportBlock">
+        <div class="panel" style="margin:0 0 16px; padding:16px;">
+          <h3 class="sub" style="margin-top:0;">Main Engine — Cylinder Readings</h3>
+          <div class="unit-group cols5" id="vsCylFields"></div>
+        </div>
+        <div class="panel" style="margin:0 0 16px; padding:16px;">
+          <h3 class="sub" style="margin-top:0;">Turbochargers &amp; Scavenge</h3>
+          <div class="unit-group cols3" id="vsTurboFields"></div>
+          <div class="form-grid cols3" style="margin-top:10px;">
+            <div class="field"><label>Scavenge Temp (°C)</label><input type="number" step="0.1" id="vs_scavTemp"></div>
+            <div class="field"><label>Scavenge Pressure (bar)</label><input type="number" step="0.01" id="vs_scavPress"></div>
+            <div class="field"><label>Fuel Temp (°C)</label><input type="number" step="0.1" id="vs_fuelTemp"></div>
+            <div class="field"><label>Pump Mark</label><input type="number" step="0.1" id="vs_pumpMark"></div>
+            <div class="field"><label>Pressure Diff. (bar)</label><input type="number" step="0.01" id="vs_pressDiff"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin:0 0 16px; padding:16px;">
+        <h3 class="sub" style="margin-top:0;">Generators, Boiler &amp; Incinerator — Runtime / Load</h3>
+        <div class="form-grid cols3">
+          <div class="field"><label>Generators in Use</label>
+            <select id="vs_geInUse"></select>
+          </div>
+          <div class="field"><label>Boiler Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="vs_blrRuntime"></div>
+          <div class="field"><label>Total G/E Fuel Cons (MT)</label><input type="text" id="vs_geTotalCons" readonly></div>
+          <div class="field"><label>Incinerator Run Time (hrs)</label><input type="number" step="0.1" id="vs_incRuntime"></div>
+          <div class="field"><label>Incinerator Avg Load (kW)</label><input type="number" step="1" id="vs_incKw"></div>
+          <div class="field"><label>Incinerator Load % (calc)</label><input type="text" id="vs_incLoadPct" readonly></div>
+        </div>
+        <div class="unit-group cols3" id="vsGeRuntimeFields" style="margin-top:10px;"></div>
+        <div class="hint">Same fields as the Reports tab. Period hours and fuel share calculate from cumulative hour-meters. Incinerator load % = (kW ÷ max kW from Setup) × 100.</div>
+        <div class="table-scroll" style="margin-top:14px;">
           <table>
             <thead><tr><th>Unit</th><th>Period Hrs</th><th>Avg kW</th><th>Load %</th><th>Fuel Cons (MT)</th><th>Voyage Hrs (total)</th><th>Voyage Avg kW (time-wtd)</th><th>Voyage Load %</th></tr></thead>
             <tbody id="vsGeReportBody"></tbody>
           </table>
         </div>
         <div class="stat-strip cols3" id="vsVoyageAvgStrip" style="margin-top:12px;"></div>
+        <div class="form-grid cols3" style="margin-top:10px;">
+          <div class="field"><label>Boiler Period Hrs (calc)</label><input type="text" id="vs_blrPeriod" readonly></div>
+          <div class="field"><label>Boiler Fuel Cons (MT)</label><input type="text" id="vs_blrCons" readonly></div>
+          <div class="field"><label>Arrangement</label><input type="text" id="vsGeArrLabel" readonly></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin:0 0 16px; padding:16px;">
+        <h3 class="sub" style="margin-top:0;">Performance — By Unit</h3>
+        <div class="table-scroll">
+          <table id="vsPerfTable">
+            <thead><tr><th></th><th>M/E</th><th>A/E #1</th><th>A/E #2</th><th>A/E #3</th><th>Boiler</th><th>Incinerator</th></tr></thead>
+            <tbody id="vsPerfBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" style="margin:0 0 16px; padding:16px;">
+        <h3 class="sub" style="margin-top:0;">Remarks</h3>
+        <div class="field"><textarea id="vs_remarks" rows="3" style="width:100%; background:var(--ink); border:1px solid var(--line-strong); border-radius:3px; color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:8px;"></textarea></div>
       </div>
 
       <div class="grid">
@@ -733,7 +794,7 @@
       </div>
 
       <div class="btn-row">
-        <button class="primary" id="btnSaveVoyageSummary">Save Consumption &amp; Misc.</button>
+        <button class="primary" id="btnSaveVoyageSummary">Save Summary &amp; Report Data</button>
         <button class="ghost" id="btnPrintVoyageSummary">Print Voyage Summary (A4, 2-Up)</button>
         <button class="ghost" id="btnCloseVoyageSummary">Close</button>
       </div>
@@ -1024,16 +1085,19 @@
         </div>
       </div>
 
-      <h3 class="sub">Generators &amp; Boiler — Runtime / Load</h3>
+      <h3 class="sub">Generators, Boiler &amp; Incinerator — Runtime / Load</h3>
       <div class="form-grid cols3">
         <div class="field"><label>Generators in Use</label>
           <select id="rep_geInUse"></select>
         </div>
         <div class="field"><label>Boiler Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="rep_blrRuntime"></div>
         <div class="field"><label>Total G/E Fuel Cons (MT)</label><input type="text" id="rep_geTotalCons" readonly></div>
+        <div class="field"><label>Incinerator Run Time (hrs)</label><input type="number" step="0.1" id="rep_incRuntime"></div>
+        <div class="field"><label>Incinerator Avg Load (kW)</label><input type="number" step="1" id="rep_incKw"></div>
+        <div class="field"><label>Incinerator Load % (calc)</label><input type="text" id="rep_incLoadPct" readonly></div>
       </div>
       <div class="unit-group cols3" id="reportGeRuntimeFields" style="margin-top:10px;"></div>
-      <div class="hint" id="reportGeSplitHint">Select how many generators ran this period. Enter each unit's cumulative hour-meter and average kW — period hours and fuel share (split of total G/E consumption by running hours) calculate automatically.</div>
+      <div class="hint" id="reportGeSplitHint">Select how many generators ran this period. Enter each unit's cumulative hour-meter and average kW — period hours and fuel share (split of total G/E consumption by running hours) calculate automatically. Incinerator load % = (kW ÷ max kW from Setup) × 100.</div>
 
       <h3 class="sub">Performance — By Unit</h3>
       <div class="hint">M/E column is calculated from this entry (RPM → %MCR/kW). A/E columns use runtime and average kW entered above — load % = (kW ÷ max kW from Setup) × 100. Fuel cons per A/E is the G/E total split by running hours.</div>
@@ -1221,10 +1285,40 @@ function entryBlrRuntime(e){
   if (e.report?.blrRuntime!=null && !isNaN(e.report.blrRuntime)) return e.report.blrRuntime;
   return (e.blrRuntime!=null && !isNaN(e.blrRuntime)) ? e.blrRuntime : null;
 }
+function entryIncineratorRunTime(e){
+  if (!e) return null;
+  const fromInc = e.report?.incinerator?.runTime;
+  if (fromInc!=null && !isNaN(fromInc)) return fromInc;
+  const fromPerf = e.report?.perfTable?.INCINERATOR?.runTime;
+  return (fromPerf!=null && !isNaN(fromPerf)) ? fromPerf : null;
+}
+function entryIncineratorKw(e){
+  if (!e) return null;
+  const fromInc = e.report?.incinerator?.avgKw;
+  if (fromInc!=null && !isNaN(fromInc)) return fromInc;
+  const fromPerf = e.report?.perfTable?.INCINERATOR?.avgPower;
+  return (fromPerf!=null && !isNaN(fromPerf)) ? fromPerf : null;
+}
+function incineratorLoadPct(kw){
+  const max = incineratorMaxKw();
+  if (kw==null || isNaN(kw) || !(max>0)) return null;
+  return (kw / max) * 100;
+}
 function entryGeneratorsInUse(e){
   const n = e?.report?.generatorsInUse;
   if (n!=null && !isNaN(n)) return Math.max(1, Math.min(geUnitCount(), n));
   return geUnitCount();
+}
+function buildIncineratorPerf(runTime, avgKw){
+  return computeKwPerf({ avgPower: avgKw, runTime }, incineratorMaxKw());
+}
+function syncIncineratorLoadPctDisplay(kwInputId, loadInputId){
+  const kwEl = document.getElementById(kwInputId);
+  const loadEl = document.getElementById(loadInputId);
+  if (!loadEl) return;
+  const kw = kwEl && kwEl.value!=='' ? parseFloat(kwEl.value) : NaN;
+  const pct = incineratorLoadPct(kw);
+  loadEl.value = pct==null ? '—' : fmt(pct, 1) + ' %';
 }
 function previousEntryFor(entryId){
   const list = sortedEntries();
@@ -2847,9 +2941,24 @@ function wireReportAeInputs(){
     updateAePerfDisplays(inp.dataset.aeUnit);
   });
   document.querySelectorAll('.kw-perf-input').forEach(inp=>{
-    inp.addEventListener('input', ()=> updateKwPerfDisplays(inp.dataset.kwUnit, parseFloat(inp.dataset.kwMax)));
+    inp.addEventListener('input', ()=>{
+      updateKwPerfDisplays(inp.dataset.kwUnit, parseFloat(inp.dataset.kwMax));
+      if (inp.dataset.kwUnit === 'INCINERATOR'){
+        const geKw = document.getElementById('rep_incKw');
+        if (geKw && document.activeElement !== geKw) geKw.value = inp.value;
+        syncIncineratorLoadPctDisplay('rep_incKw', 'rep_incLoadPct');
+      }
+    });
     updateKwPerfDisplays(inp.dataset.kwUnit, parseFloat(inp.dataset.kwMax));
   });
+  const pfIncRt = document.getElementById('rep_pf_runTime_INCINERATOR');
+  if (pfIncRt && !pfIncRt.dataset.wiredInc){
+    pfIncRt.dataset.wiredInc = '1';
+    pfIncRt.addEventListener('input', ()=>{
+      const el = document.getElementById('rep_incRuntime');
+      if (el && document.activeElement !== el) el.value = pfIncRt.value;
+    });
+  }
 }
 
 function renderReportGeRuntimeFields(entryId, report){
@@ -2959,7 +3068,7 @@ function rebuildReportPerfTable(entryId, report){
   if (thead){
     thead.innerHTML = `<th></th><th>M/E (auto)</th>${visibleUnits.map(u=>`<th>${PERF_UNIT_LABELS[u]}</th>`).join('')}`;
   }
-  // inject draft AE values from runtime fields into perfTable for display
+  // inject draft AE / incinerator values from runtime fields into perfTable for display
   const draft = readReportGeGeneratorsDraft(inUse);
   const prev = previousEntryFor(entryId);
   draft.forEach((g,i)=>{
@@ -2973,6 +3082,16 @@ function rebuildReportPerfTable(entryId, report){
       maxLoad: avgLoad!=null ? avgLoad*1.15 : null
     });
   });
+  const incRtEl = document.getElementById('rep_incRuntime');
+  const incKwEl = document.getElementById('rep_incKw');
+  if (incRtEl || incKwEl){
+    const incRt = incRtEl && incRtEl.value!=='' ? parseFloat(incRtEl.value) : (perfTable.INCINERATOR?.runTime ?? null);
+    const incKw = incKwEl && incKwEl.value!=='' ? parseFloat(incKwEl.value) : (perfTable.INCINERATOR?.avgPower ?? null);
+    perfTable.INCINERATOR = Object.assign({}, perfTable.INCINERATOR, buildIncineratorPerf(
+      incRt!=null && !isNaN(incRt) ? incRt : null,
+      incKw!=null && !isNaN(incKw) ? incKw : null
+    ));
+  }
   perfBody.innerHTML = PERF_ROWS.map(([key,label])=>{
     const meVal = fmtP(mePerf[key], key==='avgPower'||key==='runTime'?0:1);
     return `<tr><td>${label}</td><td class="pf-computed">${meVal}</td>${visibleUnits.map(u=>renderReportPerfCell(u, key, entryId, perfTable)).join('')}</tr>`;
@@ -3088,8 +3207,24 @@ function openReportEditor(entryId){
   const r = e.report || {};
 
   document.getElementById('rep_blrRuntime').value = r.blrRuntime ?? e.blrRuntime ?? '';
+  document.getElementById('rep_incRuntime').value = entryIncineratorRunTime(e) ?? '';
+  document.getElementById('rep_incKw').value = entryIncineratorKw(e) ?? '';
+  syncIncineratorLoadPctDisplay('rep_incKw', 'rep_incLoadPct');
+  const syncIncFromForm = ()=>{
+    syncIncineratorLoadPctDisplay('rep_incKw', 'rep_incLoadPct');
+    const rt = document.getElementById('rep_incRuntime')?.value;
+    const kw = document.getElementById('rep_incKw')?.value;
+    const pfRt = document.getElementById('rep_pf_runTime_INCINERATOR');
+    const pfKw = document.getElementById('rep_pf_avgPower_INCINERATOR');
+    if (pfRt && document.activeElement !== pfRt) pfRt.value = rt || '';
+    if (pfKw && document.activeElement !== pfKw) pfKw.value = kw || '';
+    if (pfKw) updateKwPerfDisplays('INCINERATOR', incineratorMaxKw());
+  };
+  document.getElementById('rep_incRuntime')?.addEventListener('input', syncIncFromForm);
+  document.getElementById('rep_incKw')?.addEventListener('input', syncIncFromForm);
   renderReportGeRuntimeFields(entryId, r);
   rebuildReportPerfTable(entryId, r);
+  syncIncFromForm();
 
   document.getElementById('rep_port').value = r.port ?? '';
   document.getElementById('rep_cargoOp').value = r.cargoOp ?? '';
@@ -3129,7 +3264,12 @@ function openReportEditor(entryId){
       stTemp: num('rep_stTemp'), swTemp: num('rep_swTemp'),
       remarks: document.getElementById('rep_remarks').value,
       blrRuntime: num('rep_blrRuntime'),
-      generatorsInUse: parseInt(document.getElementById('rep_geInUse')?.value) || 1
+      generatorsInUse: parseInt(document.getElementById('rep_geInUse')?.value) || 1,
+      incinerator: {
+        runTime: num('rep_incRuntime'),
+        avgKw: num('rep_incKw'),
+        loadPct: incineratorLoadPct(num('rep_incKw'))
+      }
     };
     if (!isSea){
       report.port = document.getElementById('rep_port').value;
@@ -3162,20 +3302,23 @@ function openReportEditor(entryId){
           runTime: g.periodHrs ?? null,
           fuelCons: g.fuelCons ?? null
         };
-      } else if (u === 'BOILER' || u === 'INCINERATOR'){
-        const maxKw = u === 'BOILER' ? boilerMaxKw() : incineratorMaxKw();
+      } else if (u === 'BOILER'){
+        const maxKw = boilerMaxKw();
         const kw = num(`rep_pf_avgPower_${u}`);
         const avgLoad = (kw!=null && maxKw>0) ? (kw/maxKw)*100 : null;
-        const runTime = u === 'BOILER'
-          ? (()=>{ const prevBlr = entryBlrRuntime(prev); const cur = report.blrRuntime; return (cur!=null && prevBlr!=null) ? runtimeDelta(cur, prevBlr) : num(`rep_pf_runTime_${u}`); })()
-          : num(`rep_pf_runTime_${u}`);
+        const prevBlr = entryBlrRuntime(prev);
+        const cur = report.blrRuntime;
+        const runTime = (cur!=null && prevBlr!=null) ? runtimeDelta(cur, prevBlr) : num(`rep_pf_runTime_${u}`);
         perfTable[u] = {
-          avgPower: kw,
-          avgLoad,
+          avgPower: kw, avgLoad,
           minLoad: avgLoad!=null ? avgLoad*0.90 : null,
           maxLoad: avgLoad!=null ? avgLoad*1.15 : null,
           runTime
         };
+      } else if (u === 'INCINERATOR'){
+        const kw = report.incinerator?.avgKw ?? num(`rep_pf_avgPower_${u}`);
+        const runTime = report.incinerator?.runTime ?? num(`rep_pf_runTime_${u}`);
+        perfTable[u] = buildIncineratorPerf(runTime, kw);
       } else {
         perfTable[u] = {};
         PERF_ROWS.forEach(([key])=>{ perfTable[u][key] = num(`rep_pf_${key}_${u}`); });
@@ -4073,7 +4216,7 @@ function openVoyageSummary(entryId){
     ${stat('Days To Go', daysToGoVal!=null? fmt(daysToGoVal,2):'—')}
   `;
 
-  document.getElementById('vsGeArrLabel').textContent = GE_ARR_LABELS[state.setup.geArrangement || 'SINGLE'] || 'Single Generator';
+  document.getElementById('vsGeArrLabel').value = GE_ARR_LABELS[state.setup.geArrangement || 'SINGLE'] || 'Single Generator';
   document.getElementById('vsMePerfStrip').innerHTML = `
     ${stat('RPM', fmt(entry.rpm,1))}
     ${stat('% MCR', fmt(row.mcrPct,1))}
@@ -4086,6 +4229,51 @@ function openVoyageSummary(entryId){
     ${stat('Actual SFOC', fmt(row.sfocActual,1))}
     ${stat('SFOC Δ %', row.sfocDelta==null?'—':((row.sfocDelta>0?'+':'')+fmt(row.sfocDelta,1)))}
   `;
+
+  const r = entry.report || {};
+  const isSea = SEA_TYPE_OPS.has(entry.operation);
+  document.getElementById('vsSeaReportBlock').style.display = isSea ? '' : 'none';
+
+  // Common — Engine Room & Tank Readings
+  document.getElementById('vs_erTemp').value = r.erTemp ?? '';
+  document.getElementById('vs_bilgeRob').value = r.bilgeRob ?? '';
+  document.getElementById('vs_sludgeRob').value = r.sludgeRob ?? '';
+  document.getElementById('vs_stTemp').value = r.stTemp ?? '';
+  document.getElementById('vs_swTemp').value = r.swTemp ?? '';
+  document.getElementById('vs_remarks').value = r.remarks ?? '';
+
+  // Sea: cylinders + turbos + scavenge
+  const cylBox = document.getElementById('vsCylFields');
+  const turboBox = document.getElementById('vsTurboFields');
+  const cylN = meCylinderCount();
+  if (isSea){
+    cylBox.innerHTML = Array.from({length:cylN}, (_,i)=>{
+      const n = i+1;
+      return `<div class="unit-box"><h3>Cyl ${n}</h3>
+        <div class="field"><label>Pump Rack</label><input type="number" step="0.1" id="vs_pumpRack${n}" value="${(r.pumpRack && r.pumpRack[i]!=null)?r.pumpRack[i]:''}"></div>
+        <div class="field"><label>Exhaust Temp (°C)</label><input type="number" step="0.1" id="vs_exhaust${n}" value="${(r.exhaustTemp && r.exhaustTemp[i]!=null)?r.exhaustTemp[i]:''}"></div>
+      </div>`;
+    }).join('');
+    const turboN = turboCount();
+    const turbos = r.turbos || (r.turbo1 ? [r.turbo1, r.turbo2].filter(Boolean) : []);
+    turboBox.innerHTML = Array.from({length:turboN}, (_,i)=>{
+      const n = i+1;
+      const t = turbos[i] || {};
+      return `<div class="unit-box"><h3>T/C #${n}</h3>
+        <div class="field"><label>In Temp (°C)</label><input type="number" step="0.1" id="vs_t${n}in" value="${t.in??''}"></div>
+        <div class="field"><label>Out Temp (°C)</label><input type="number" step="0.1" id="vs_t${n}out" value="${t.out??''}"></div>
+        <div class="field"><label>RPM</label><input type="number" step="1" id="vs_t${n}rpm" value="${t.rpm??''}"></div>
+      </div>`;
+    }).join('');
+    document.getElementById('vs_scavTemp').value = r.scavTemp ?? '';
+    document.getElementById('vs_scavPress').value = r.scavPress ?? '';
+    document.getElementById('vs_fuelTemp').value = r.fuelTemp ?? '';
+    document.getElementById('vs_pumpMark').value = r.pumpMark ?? '';
+    document.getElementById('vs_pressDiff').value = r.pressDiff ?? '';
+  } else {
+    cylBox.innerHTML = '';
+    turboBox.innerHTML = '';
+  }
 
   const geN = geUnitCount();
   document.getElementById('vsGeReportBody').innerHTML = Array.from({length:geN}, (_,i)=>{
@@ -4113,6 +4301,32 @@ function openVoyageSummary(entryId){
     ${stat('Avg %MCR (hrs-wtd)', perf.avgMcrTimeWeighted==null?'—':fmt(perf.avgMcrTimeWeighted,1))}
     ${stat('Avg Ship Speed', perf.avgSpeedShip==null?'—':fmt(perf.avgSpeedShip,2)+' kn')}
   `;
+
+  // Generators / Boiler / Incinerator (same fields as Reports tab)
+  const prevForRt = previousEntryFor(entryId);
+  const prevBlr = entryBlrRuntime(prevForRt);
+  const curBlr = entryBlrRuntime(entry);
+  const blrPeriod = (curBlr!=null && prevBlr!=null) ? runtimeDelta(curBlr, prevBlr) : null;
+  document.getElementById('vs_blrRuntime').value = curBlr ?? '';
+  document.getElementById('vs_blrPeriod').value = blrPeriod==null ? '—' : fmt(blrPeriod, 1);
+  document.getElementById('vs_blrCons').value = row.blrCons==null ? '—' : fmt(row.blrCons, 3);
+  document.getElementById('vs_geTotalCons').value = row.geCons==null ? '—' : fmt(row.geCons, 3);
+  document.getElementById('vs_incRuntime').value = entryIncineratorRunTime(entry) ?? '';
+  document.getElementById('vs_incKw').value = entryIncineratorKw(entry) ?? '';
+  syncIncineratorLoadPctDisplay('vs_incKw', 'vs_incLoadPct');
+  renderVsGeRuntimeFields(entryId, r);
+  document.getElementById('vs_blrRuntime').oninput = ()=>{
+    const cur = parseFloat(document.getElementById('vs_blrRuntime').value);
+    const period = (!isNaN(cur) && prevBlr!=null) ? runtimeDelta(cur, prevBlr) : null;
+    document.getElementById('vs_blrPeriod').value = period==null ? '—' : fmt(period, 1);
+    renderVsPerfTable(entryId);
+  };
+  document.getElementById('vs_incRuntime').oninput = ()=> renderVsPerfTable(entryId);
+  document.getElementById('vs_incKw').oninput = ()=>{
+    syncIncineratorLoadPctDisplay('vs_incKw', 'vs_incLoadPct');
+    renderVsPerfTable(entryId);
+  };
+  renderVsPerfTable(entryId);
 
   document.getElementById('vsFuelConsBox').innerHTML = `
     <div class="field"><label>M/E</label><input value="${fmt(row.meCons,2)}" readonly></div>
@@ -4158,20 +4372,233 @@ function openVoyageSummary(entryId){
   document.getElementById('voyageSummaryPanel').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
+function readVsGeGeneratorsDraft(inUse){
+  const n = inUse || parseInt(document.getElementById('vs_geInUse')?.value) || 1;
+  return Array.from({length:n}, (_,i)=>{
+    const rt = document.getElementById(`vs_ge${i+1}_runtime`);
+    const kw = document.getElementById(`vs_ge${i+1}_kw`);
+    return {
+      runtime: rt && rt.value!=='' ? parseFloat(rt.value) : null,
+      avgKw: kw && kw.value!=='' ? parseFloat(kw.value) : null
+    };
+  });
+}
+
+function updateVsGeSplit(entryId){
+  const prev = previousEntryFor(entryId);
+  const row = getComputedRow(entryId);
+  const inUse = parseInt(document.getElementById('vs_geInUse')?.value) || 1;
+  const periodHrs = [];
+  for (let i=0; i<inUse; i++){
+    const n = i+1;
+    const rt = parseFloat(document.getElementById(`vs_ge${n}_runtime`)?.value);
+    const kw = parseFloat(document.getElementById(`vs_ge${n}_kw`)?.value);
+    const prevRt = entryGeRuntime(prev, n);
+    const hrs = (!isNaN(rt) && prevRt!=null) ? runtimeDelta(rt, prevRt) : null;
+    periodHrs.push(hrs);
+    const periodEl = document.getElementById(`vs_ge${n}_period`);
+    if (periodEl) periodEl.value = hrs==null ? '—' : fmt(hrs, 1);
+    const max = geMaxKw(i);
+    const loadEl = document.getElementById(`vs_ge${n}_loadpct`);
+    if (loadEl) loadEl.value = (!isNaN(kw) && max>0) ? fmt((kw/max)*100, 1)+' %' : '—';
+  }
+  const shares = splitGeConsByHours(row?.geCons, periodHrs);
+  for (let i=0; i<inUse; i++){
+    const fuelEl = document.getElementById(`vs_ge${i+1}_fuel`);
+    if (fuelEl) fuelEl.value = shares[i]==null ? '—' : fmt(shares[i], 3);
+  }
+  renderVsPerfTable(entryId);
+}
+
+function renderVsGeRuntimeFields(entryId, report){
+  const box = document.getElementById('vsGeRuntimeFields');
+  const sel = document.getElementById('vs_geInUse');
+  if (!box || !sel) return;
+  const maxN = geUnitCount();
+  const savedN = report?.generatorsInUse || maxN;
+  const inUse = Math.max(1, Math.min(maxN, savedN));
+  sel.innerHTML = Array.from({length:maxN}, (_,i)=>`<option value="${i+1}"${i+1===inUse?' selected':''}>${i+1}</option>`).join('');
+  const prev = previousEntryFor(entryId);
+  const gens = report?.generators || [];
+  box.innerHTML = Array.from({length:inUse}, (_,i)=>{
+    const n = i+1;
+    const saved = gens[i] || {};
+    const runtime = saved.runtime ?? entryGeRuntime(state.entries.find(e=>e.id===entryId), n) ?? '';
+    const avgKw = saved.avgKw ?? entryGeKw(state.entries.find(e=>e.id===entryId), n) ?? '';
+    const prevRt = entryGeRuntime(prev, n);
+    const periodHrs = (runtime!=='' && prevRt!=null) ? runtimeDelta(parseFloat(runtime), prevRt) : null;
+    return `<div class="unit-box"><h3>A/E #${n}</h3>
+      <div class="field"><label>Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="vs_ge${n}_runtime" class="vs-ge-runtime" value="${runtime===null||runtime===undefined?'':runtime}"></div>
+      <div class="field"><label>Avg Load (kW)</label><input type="number" step="1" id="vs_ge${n}_kw" class="vs-ge-kw" value="${avgKw===null||avgKw===undefined?'':avgKw}"></div>
+      <div class="field"><label>Period Hrs (calc)</label><input type="text" id="vs_ge${n}_period" readonly value="${periodHrs==null?'—':fmt(periodHrs,1)}"></div>
+      <div class="field"><label>Fuel Share (MT)</label><input type="text" id="vs_ge${n}_fuel" readonly value="—"></div>
+      <div class="field"><label>Load % (calc)</label><input type="text" id="vs_ge${n}_loadpct" readonly value=""></div>
+    </div>`;
+  }).join('');
+  sel.onchange = ()=>{
+    const draft = { generatorsInUse: parseInt(sel.value)||1, generators: readVsGeGeneratorsDraft(parseInt(sel.value)||1) };
+    renderVsGeRuntimeFields(entryId, draft);
+    updateVsGeSplit(entryId);
+  };
+  box.querySelectorAll('.vs-ge-runtime, .vs-ge-kw').forEach(inp=>{
+    inp.addEventListener('input', ()=> updateVsGeSplit(entryId));
+  });
+  updateVsGeSplit(entryId);
+}
+
+function renderVsPerfTable(entryId){
+  const body = document.getElementById('vsPerfBody');
+  const thead = document.querySelector('#vsPerfTable thead tr');
+  if (!body || !thead) return;
+  const entry = state.entries.find(e=>e.id===entryId);
+  const row = getComputedRow(entryId);
+  const prev = previousEntryFor(entryId);
+  const inUse = parseInt(document.getElementById('vs_geInUse')?.value) || entryGeneratorsInUse(entry);
+  const units = reportPerfVisibleUnits(inUse);
+  thead.innerHTML = `<th></th><th>M/E</th>${units.map(u=>`<th>${PERF_UNIT_LABELS[u]}</th>`).join('')}`;
+
+  const mePerf = computeMePerf(entryId);
+  const draft = readVsGeGeneratorsDraft(inUse);
+  const periodHrs = draft.map((g,i)=>{
+    const prevRt = entryGeRuntime(prev, i+1);
+    return (g.runtime!=null && prevRt!=null) ? runtimeDelta(g.runtime, prevRt) : null;
+  });
+  const shares = splitGeConsByHours(row?.geCons, periodHrs);
+
+  const blrRt = (()=>{
+    const cur = parseFloat(document.getElementById('vs_blrRuntime')?.value);
+    const prevBlr = entryBlrRuntime(prev);
+    if (!isNaN(cur) && prevBlr!=null) return runtimeDelta(cur, prevBlr);
+    return entry?.report?.perfTable?.BOILER?.runTime ?? null;
+  })();
+  const blrKw = entry?.report?.perfTable?.BOILER?.avgPower ?? null;
+  const incRt = (()=>{
+    const v = document.getElementById('vs_incRuntime')?.value;
+    if (v!=='' && v!=null && !isNaN(parseFloat(v))) return parseFloat(v);
+    return entryIncineratorRunTime(entry);
+  })();
+  const incKw = (()=>{
+    const v = document.getElementById('vs_incKw')?.value;
+    if (v!=='' && v!=null && !isNaN(parseFloat(v))) return parseFloat(v);
+    return entryIncineratorKw(entry);
+  })();
+
+  const unitPerf = { ME: mePerf };
+  draft.forEach((g,i)=>{
+    const maxKw = geMaxKw(i);
+    const avgLoad = (g.avgKw!=null && maxKw>0) ? (g.avgKw/maxKw)*100 : null;
+    unitPerf[`AE${i+1}`] = {
+      avgPower: g.avgKw, avgLoad,
+      minLoad: avgLoad!=null ? avgLoad*0.90 : null,
+      maxLoad: avgLoad!=null ? avgLoad*1.15 : null,
+      runTime: periodHrs[i], fuelCons: shares[i]
+    };
+  });
+  unitPerf.BOILER = computeKwPerf({ avgPower: blrKw, runTime: blrRt }, boilerMaxKw());
+  unitPerf.INCINERATOR = buildIncineratorPerf(incRt, incKw);
+
+  body.innerHTML = PERF_ROWS.map(([key,label])=>{
+    const dec = (key==='avgPower'||key==='runTime') ? (key==='runTime'?1:0) : 1;
+    return `<tr><td>${label}</td><td>${fmtP(mePerf[key], dec)}</td>${units.map(u=>`<td>${fmtP(unitPerf[u]?.[key], dec)}</td>`).join('')}</tr>`;
+  }).join('') + `<tr><td>Fuel Cons (MT)</td><td>${row?.meCons==null?'—':fmt(row.meCons,3)}</td>${units.map(u=>{
+    if (u.startsWith('AE')){
+      const fc = unitPerf[u]?.fuelCons;
+      return `<td>${fc==null?'—':fmt(fc,3)}</td>`;
+    }
+    if (u==='BOILER') return `<td>${row?.blrCons==null?'—':fmt(row.blrCons,3)}</td>`;
+    return `<td>—</td>`;
+  }).join('')}</tr>`;
+}
+
 document.getElementById('btnSaveVoyageSummary').addEventListener('click', async ()=>{
   const entry = state.entries.find(e=>e.id===currentVsEntryId);
   if (!entry) return;
-  const num = id => { const v = document.getElementById(id).value; return isNaN(parseFloat(v)) ? 0 : parseFloat(v); };
-  entry.miscCons = { 'MDO/MGO': num('vs_misc_mdomgo'), 'LSMGO': num('vs_misc_lsmgo') };
+  const num = id => { const el = document.getElementById(id); if (!el || el.value==='') return null; const v = parseFloat(el.value); return isNaN(v) ? null : v; };
+  const num0 = id => { const v = document.getElementById(id).value; return isNaN(parseFloat(v)) ? 0 : parseFloat(v); };
+  entry.miscCons = { 'MDO/MGO': num0('vs_misc_mdomgo'), 'LSMGO': num0('vs_misc_lsmgo') };
   entry.consOverride = {};
   getRobRows().forEach(r=>{
     const el = document.getElementById('vs_cons_'+slugKey(r.key));
     entry.consOverride[r.key] = el ? (parseFloat(el.value)||0) : null;
   });
+
+  // Persist full supplementary-report machinery fields from voyage summary
+  const prev = previousEntryFor(entry.id);
+  const isSea = SEA_TYPE_OPS.has(entry.operation);
+  const blrRuntime = num('vs_blrRuntime');
+  const incRunTime = num('vs_incRuntime');
+  const incKw = num('vs_incKw');
+  const inUse = parseInt(document.getElementById('vs_geInUse')?.value) || 1;
+  const row = getComputedRow(entry.id);
+  entry.report = entry.report || {};
+  entry.report.erTemp = num('vs_erTemp');
+  entry.report.bilgeRob = num('vs_bilgeRob');
+  entry.report.sludgeRob = num('vs_sludgeRob');
+  entry.report.stTemp = num('vs_stTemp');
+  entry.report.swTemp = num('vs_swTemp');
+  entry.report.remarks = document.getElementById('vs_remarks')?.value || '';
+  entry.report.blrRuntime = blrRuntime;
+  entry.blrRuntime = blrRuntime;
+  entry.report.generatorsInUse = inUse;
+  entry.report.generators = readVsGeGeneratorsDraft(inUse).map((g,i)=>{
+    const prevRt = entryGeRuntime(prev, i+1);
+    const periodHrs = (g.runtime!=null && prevRt!=null) ? runtimeDelta(g.runtime, prevRt) : null;
+    return { ...g, periodHrs };
+  });
+  const shares = splitGeConsByHours(row?.geCons, entry.report.generators.map(g=>g.periodHrs));
+  entry.report.generators.forEach((g,i)=>{ g.fuelCons = shares[i] ?? null; });
+  for (let i=1; i<=3; i++){
+    const g = entry.report.generators?.[i-1];
+    entry[`ge${i}Runtime`] = g?.runtime ?? null;
+    entry[`ge${i}Kw`] = g?.avgKw ?? null;
+  }
+  entry.report.incinerator = {
+    runTime: incRunTime,
+    avgKw: incKw,
+    loadPct: incineratorLoadPct(incKw)
+  };
+  if (isSea){
+    const cylN = meCylinderCount();
+    entry.report.pumpRack = Array.from({length:cylN}, (_,i)=> num(`vs_pumpRack${i+1}`));
+    entry.report.exhaustTemp = Array.from({length:cylN}, (_,i)=> num(`vs_exhaust${i+1}`));
+    entry.report.turbos = Array.from({length:turboCount()}, (_,i)=>({
+      in: num(`vs_t${i+1}in`), out: num(`vs_t${i+1}out`), rpm: num(`vs_t${i+1}rpm`)
+    }));
+    entry.report.turbo1 = entry.report.turbos[0] || null;
+    entry.report.turbo2 = entry.report.turbos[1] || null;
+    entry.report.scavTemp = num('vs_scavTemp');
+    entry.report.scavPress = num('vs_scavPress');
+    entry.report.fuelTemp = num('vs_fuelTemp');
+    entry.report.pumpMark = num('vs_pumpMark');
+    entry.report.pressDiff = num('vs_pressDiff');
+  }
+
+  const perfTable = { ME: computeMePerf(entry.id) };
+  entry.report.generators.forEach((g,i)=>{
+    const maxKw = geMaxKw(i);
+    const avgLoad = (g.avgKw!=null && maxKw>0) ? (g.avgKw/maxKw)*100 : null;
+    perfTable[`AE${i+1}`] = {
+      avgPower: g.avgKw, avgLoad,
+      minLoad: avgLoad!=null ? avgLoad*0.90 : null,
+      maxLoad: avgLoad!=null ? avgLoad*1.15 : null,
+      runTime: g.periodHrs, fuelCons: g.fuelCons
+    };
+  });
+  const prevBlr = entryBlrRuntime(prev);
+  const blrPeriod = (blrRuntime!=null && prevBlr!=null) ? runtimeDelta(blrRuntime, prevBlr) : null;
+  perfTable.BOILER = Object.assign({}, entry.report.perfTable?.BOILER || {}, computeKwPerf({
+    avgPower: entry.report.perfTable?.BOILER?.avgPower ?? null,
+    runTime: blrPeriod
+  }, boilerMaxKw()));
+  perfTable.INCINERATOR = buildIncineratorPerf(incRunTime, incKw);
+  entry.report.perfTable = Object.assign({}, entry.report.perfTable || {}, perfTable);
+  entry.updatedAt = new Date().toISOString();
+
   await dbPut('entries', entry);
+  markPendingSync();
   render();
   document.getElementById('voyageSummaryPanel').style.display = 'none';
-  alert('Consumption and Misc. saved — R.O.B. recalculated for this and all later entries.');
+  alert('Consumption, misc. and report machinery data saved — R.O.B. recalculated for this and all later entries.');
 });
 /* ---------------- print history (Log Entry) ---------------- */
 async function recordPrintHistory(label, entry, htmlContent){
@@ -4329,6 +4756,21 @@ function printVoyageSummary(entryId){
     ${printRow('Voyage Avg Gen Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct,1)}%`)}
     ${printRow('Voyage Avg Gen kW', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted,0))}`) : '';
 
+  const blrPrev = entryBlrRuntime(previousEntryFor(entryId));
+  const blrCur = entryBlrRuntime(entry);
+  const blrPeriodPrint = (blrCur!=null && blrPrev!=null) ? runtimeDelta(blrCur, blrPrev) : (entry.report?.perfTable?.BOILER?.runTime ?? null);
+  const incRtPrint = entryIncineratorRunTime(entry);
+  const incKwPrint = entryIncineratorKw(entry);
+  const incLoadPrint = incineratorLoadPct(incKwPrint);
+  const blrIncSection = printSection('Boiler & Incinerator', [
+    printRow('Boiler Runtime (cum.)', blrCur==null?'—':`${fmt(blrCur,1)} hrs`),
+    printRow('Boiler Period Hrs', blrPeriodPrint==null?'—':fmt(blrPeriodPrint,1)),
+    printRow('Boiler Fuel Cons', row.blrCons==null?'—':`${fmt(row.blrCons,3)} MT`),
+    printRow('Incinerator Run Time', incRtPrint==null?'—':`${fmt(incRtPrint,1)} hrs`),
+    printRow('Incinerator Avg kW', incKwPrint==null?'—':fmt(incKwPrint,0)),
+    printRow('Incinerator Load %', incLoadPrint==null?'—':`${fmt(incLoadPrint,1)}%`)
+  ].join(''));
+
   const voyageAvgSection = printSection('Voyage Time Averages', [
     printRow('Total Voyage Hours', fmt(perf.totalHrs,1)),
     printRow('Total Generator Hours', fmt(perf.totalGeHrs,1)),
@@ -4364,6 +4806,7 @@ function printVoyageSummary(entryId){
       ${fwSection}
       ${meSection}
       ${geSection}
+      ${blrIncSection}
       ${voyageAvgSection}
       <div class="pr-span2">${robTable}</div>
     </div>
