@@ -747,22 +747,12 @@
           <div class="field"><label>Total G/E Fuel Cons (MT)</label><input type="text" id="vs_geTotalCons" readonly></div>
           <div class="field"><label>Boiler Avg Load (kW)</label><input type="number" step="1" id="vs_blrKw"></div>
           <div class="field"><label>Incinerator Avg Load (kW)</label><input type="number" step="1" id="vs_incKw"></div>
-          <div class="field"><label>Arrangement</label><input type="text" id="vsGeArrLabel" readonly></div>
+          <div class="field"></div>
           <div class="field"><label>Boiler Load % (calc)</label><input type="text" id="vs_blrLoadPct" readonly></div>
           <div class="field"><label>Incinerator Load % (calc)</label><input type="text" id="vs_incLoadPct" readonly></div>
-          <div class="field"><label>Boiler Period Hrs (calc)</label><input type="text" id="vs_blrPeriod" readonly></div>
-          <div class="field"><label>Boiler Fuel Cons (MT)</label><input type="text" id="vs_blrCons" readonly></div>
-          <div class="field"></div>
         </div>
         <div class="unit-group cols3" id="vsGeRuntimeFields" style="margin-top:10px;"></div>
         <div class="hint">Period hours and fuel share calculate from cumulative hour-meters. Boiler / incinerator load % = (kW ÷ max kW from Setup) × 100.</div>
-        <div class="table-scroll" style="margin-top:14px;">
-          <table>
-            <thead><tr><th>Unit</th><th>Period Hrs</th><th>Avg kW</th><th>Load %</th><th>Fuel Cons (MT)</th><th>Voyage Hrs (total)</th><th>Voyage Avg kW (time-wtd)</th><th>Voyage Load %</th></tr></thead>
-            <tbody id="vsGeReportBody"></tbody>
-          </table>
-        </div>
-        <div class="stat-strip cols3" id="vsVoyageAvgStrip" style="margin-top:12px;"></div>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -824,6 +814,22 @@
         </div>
         <div class="vs-photo-preview" id="vs_photoPreview"></div>
         <div class="hint">Attach a photo to this voyage summary (stored with the entry). Shown here above Save.</div>
+      </div>
+
+      <div class="panel" style="margin:0 0 16px; padding:16px;">
+        <h3 class="sub" style="margin-top:0;">Generator Voyage Totals</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Unit</th><th>Period Hrs</th><th>Avg kW</th><th>Load %</th><th>Fuel Cons (MT)</th><th>Voyage Hrs (total)</th><th>Voyage Avg kW (time-wtd)</th><th>Voyage Load %</th></tr></thead>
+            <tbody id="vsGeReportBody"></tbody>
+          </table>
+        </div>
+        <div class="stat-strip cols3" id="vsVoyageAvgStrip" style="margin-top:12px;"></div>
+        <div class="form-grid cols3" style="margin-top:12px;">
+          <div class="field"><label>Boiler Period Hrs (calc)</label><input type="text" id="vs_blrPeriod" readonly></div>
+          <div class="field"><label>Boiler Fuel Cons (MT)</label><input type="text" id="vs_blrCons" readonly></div>
+          <div class="field"><label>Arrangement</label><input type="text" id="vsGeArrLabel" readonly></div>
+        </div>
       </div>
 
       <div class="btn-row">
