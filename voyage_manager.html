@@ -324,7 +324,7 @@
       <div class="brass-dot"></div>
       <div>
         <h1>Noon Report</h1>
-        <div class="subtitle">Engine Department — Voyage Log &amp; Performance</div>
+        <div class="subtitle" id="activeVesselLabel">Engine Department — Voyage Log &amp; Performance</div>
       </div>
     </div>
     <div class="status-row">
@@ -347,6 +347,24 @@
 
   <!-- SETUP -->
   <div class="page" id="page-setup">
+    <div class="panel">
+      <h2>Fleet — Vessel Selection</h2>
+      <div class="form-grid cols3">
+        <div class="field span2">
+          <label>Active Vessel</label>
+          <select id="s_vesselSelect"></select>
+        </div>
+        <div class="field" style="display:flex; align-items:flex-end;">
+          <button class="primary" id="btnLoadVessel" style="width:100%;">Load Selected Vessel</button>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="ghost small" id="btnAddVessel">Add New Vessel…</button>
+        <button class="ghost small" id="btnPullVesselRemote">Pull Selected from Server</button>
+      </div>
+      <div class="hint" id="vesselSwitchHint">Each vessel keeps its own setup, voyage log, receipts, and documents in this browser. Switch vessels here to review or continue another ship's records. Use Pull from Server when sync is configured for that vessel's slug.</div>
+    </div>
+
     <div class="panel">
       <h2>Vessel</h2>
       <div class="form-grid cols2">
@@ -1219,8 +1237,324 @@ const state = {
   receipts: [],
   documents: [],
   abstracts: [],
-  printHistory: []
+  printHistory: [],
+  vessels: [],
+  activeVesselId: null
 };
+
+const LEGACY_VESSEL_ID = 'v-fangcheng';
+
+function vesselSlugFromName(name){
+  return (name || 'vessel').replace(/^M\/V\s*/i,'').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase().slice(0, 48) || 'vessel';
+}
+
+function activeVessel(){
+  return state.vessels.find(v=>v.id===state.activeVesselId) || state.vessels[0] || null;
+}
+
+function defaultSetupTemplate(overrides){
+  const base = {
+    vesselName:'New Vessel', chEng:'', voyageNumber:'', shipCondition:'BALLAST',
+    departPort:'', arrivePort:'', place:'', flowArr:'SINGLE',
+    initDateTime:'', initRuntime:null,
+    pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
+    sfoc100:null, sfoc85:null, alternatorMaxKw:660,
+    geArrangement:'SINGLE', generatorCount:1, meCylinderCount:6, turboCount:2,
+    boilerMaxKw:null, incineratorMaxKw:null,
+    fuelTankCount:4, lubeTankCount:4, fwTankCount:1,
+    fuelTanks: DEFAULT_FUEL_TANKS.map(t=>({...t})),
+    lubeTanks: DEFAULT_LUBE_TANKS.map(t=>({...t})),
+    fwTanks: DEFAULT_FW_TANKS.map(t=>({...t})),
+    generators:[{maxKw:660},{maxKw:660},{maxKw:660}],
+    flowmeters:{
+      main:{ reading:null, digits:8 }, mainOut:{ reading:null, digits:8 },
+      aux:{ reading:null, digits:8 }, auxOut:{ reading:null, digits:8 },
+      boiler:{ reading:null, digits:8 },
+      cyl:{ reading:null, digits:8 }, rc:{ reading:null, digits:8 }
+    },
+    defaults:{ cylTbn:'HIGH', meType:'HFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.980, geSg:0.870, blrSg:0.870 },
+    voyageDistance: null,
+    rob:{ hfo:500, lsfo:150, mdomgo:120, lsmgo:60 },
+    robLube:{ cylhigh:8000, cyllow:0, mesysoil:5000, gesysoil:2000, freshwater:50000 },
+    capacity:{ hfo:1200, lsfo:400, mdomgo:300, lsmgo:150 },
+    capacityLube:{ cylhigh:15000, cyllow:15000, mesysoil:8000, gesysoil:4000, freshwater:150000 },
+    carryover: null,
+    sync: { serverUrl:'', apiToken:'', vesselId:'', autoSync:true, conflictPolicy:'merge', deviceId:null, lastSyncedAt:null, lastSyncError:null, pendingChanges:false }
+  };
+  return migrateSetup(Object.assign(base, overrides || {}));
+}
+
+function buildDemoPackFangcheng(){
+  const setup = defaultSetupTemplate({
+    vesselName:'M/V FANGCHENG', chEng:'Chief Engr. Wei Chen', voyageNumber:'11-B', shipCondition:'BALLAST',
+    departPort:'FANGCHENG, CHINA', arrivePort:'SANTOS, BRAZIL', voyageDistance:11200,
+    initDateTime:'2026-06-01T08:00', pitch:5.85, mcrRpm:91, mcrKw:18630,
+    sfoc100:178.5, sfoc85:175.2, alternatorMaxKw:660, generatorCount:1,
+    boilerMaxKw:1200, incineratorMaxKw:85,
+    flowmeters:{
+      main:{ reading:1250000, digits:8 }, mainOut:{ reading:null, digits:8 },
+      aux:{ reading:890000, digits:8 }, auxOut:{ reading:null, digits:8 },
+      boiler:{ reading:45000, digits:8 }, cyl:{ reading:560000, digits:8 }, rc:{ reading:125000, digits:8 }
+    },
+    rob:{ hfo:1180, lsfo:142, mdomgo:98, lsmgo:52 },
+    robLube:{ cylhigh:9200, cyllow:0, mesysoil:6200, gesysoil:2400, freshwater:48200 },
+    sync:{ vesselId:'mv-fangcheng' }
+  });
+  const entries = [
+    { id:'e-fc1', datetime:'2026-06-01T08:00', operation:'START - PASSAGE', condition:'BALLAST', distanceShip:0,
+      rpm:null, revCounter:125000, tbn:'HIGH', meRuntime:45210, blrRuntime:120, ge1Runtime:8840, ge1Kw:320,
+      me:{ meter:1250000, type:'HFO', sg:0.98 }, ge:{ meter:890000, type:'MDO/MGO', sg:0.87 },
+      blr:{ meter:45000, type:'MDO/MGO', sg:0.87 }, cylMeter:560000, meLo:210000, geLo:88000,
+      fwProd:0, fwRob:48200, miscCons:{ 'MDO/MGO':0,'LSMGO':0 } },
+    { id:'e-fc2', datetime:'2026-06-02T12:00', operation:'AT SEA - NOON', condition:'BALLAST', distanceShip:385,
+      rpm:78.2, revCounter:127840, tbn:'HIGH', meRuntime:45234, blrRuntime:120, ge1Runtime:8858, ge1Kw:410,
+      me:{ meter:1252840, type:'HFO', sg:0.98 }, ge:{ meter:890462, type:'MDO/MGO', sg:0.87 },
+      blr:{ meter:45000, type:'MDO/MGO', sg:0.87 }, cylMeter:560185, meLo:210042, geLo:88018,
+      fwProd:1200, fwRob:47650, miscCons:{ 'MDO/MGO':0,'LSMGO':0 } },
+    { id:'e-fc3', datetime:'2026-06-05T12:00', operation:'AT SEA - NOON', condition:'BALLAST', distanceShip:398,
+      rpm:79.1, revCounter:131020, tbn:'HIGH', meRuntime:45306, blrRuntime:121, ge1Runtime:8882, ge1Kw:395,
+      me:{ meter:1255710, type:'HFO', sg:0.98 }, ge:{ meter:890918, type:'MDO/MGO', sg:0.87 },
+      blr:{ meter:45012, type:'MDO/MGO', sg:0.87 }, cylMeter:560372, meLo:210088, geLo:88036,
+      fwProd:1150, fwRob:47120, miscCons:{ 'MDO/MGO':0,'LSMGO':0 } }
+  ].map(normalizeEntry);
+  const receipts = [
+    { id:'r-fc1', date:'2026-05-28', category:'fuel', type:'MDO/MGO', tankId:'mdomgo', qty:80, bdnNo:'BDN-FC-8821', company:'Sinopec Bunker', location:'Fangcheng' }
+  ];
+  return { setup, entries, receipts, documents:[], abstracts:[], printHistory:[] };
+}
+
+function buildDemoPackAtlanticStar(){
+  const setup = defaultSetupTemplate({
+    vesselName:'M/V ATLANTIC STAR', chEng:'Chief Engr. James Okafor', voyageNumber:'24-A', shipCondition:'LADEN',
+    departPort:'ROTTERDAM, NL', arrivePort:'NEW YORK, USA', voyageDistance:3450,
+    initDateTime:'2026-05-15T14:00', pitch:4.65, mcrRpm:118, mcrKw:9480,
+    sfoc100:172.0, sfoc85:169.5, alternatorMaxKw:520, generatorCount:2,
+    boilerMaxKw:850, incineratorMaxKw:75,
+    defaults:{ cylTbn:'LOW', meType:'LSFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.965, geSg:0.870, blrSg:0.870 },
+    flowmeters:{
+      main:{ reading:842500, digits:8 }, aux:{ reading:412800, digits:8 },
+      boiler:{ reading:22100, digits:8 }, cyl:{ reading:318500, digits:8 }, rc:{ reading:88400, digits:8 }
+    },
+    rob:{ hfo:0, lsfo:820, mdomgo:145, lsmgo:38 },
+    robLube:{ cylhigh:6400, cyllow:2100, mesysoil:4800, gesysoil:1900, freshwater:35200 },
+    sync:{ vesselId:'mv-atlantic-star' }
+  });
+  setup.generators = [{maxKw:520},{maxKw:520},{maxKw:520}];
+  const entries = [
+    { id:'e-as1', datetime:'2026-05-15T14:00', operation:'LAST LINE - DEPARTURE', condition:'LADEN', distanceShip:0,
+      rpm:null, revCounter:88400, tbn:'LOW', meRuntime:18640, blrRuntime:88, ge1Runtime:4210, ge2Runtime:4188, ge1Kw:280, ge2Kw:260,
+      me:{ meter:842500, type:'LSFO', sg:0.965 }, ge:{ meter:412800, type:'MDO/MGO', sg:0.87 },
+      blr:{ meter:22100, type:'MDO/MGO', sg:0.87 }, cylMeter:318500, meLo:142000, geLo:62000,
+      fwProd:0, fwRob:35200, miscCons:{ 'MDO/MGO':0,'LSMGO':0 } },
+    { id:'e-as2', datetime:'2026-05-16T12:00', operation:'AT SEA - NOON', condition:'LADEN', distanceShip:312,
+      rpm:92.4, revCounter:90120, tbn:'LOW', meRuntime:18664, blrRuntime:88, ge1Runtime:4232, ge2Runtime:4210, ge1Kw:360, ge2Kw:340,
+      me:{ meter:843120, type:'LSFO', sg:0.965 }, ge:{ meter:413018, type:'MDO/MGO', sg:0.87 },
+      blr:{ meter:22100, type:'MDO/MGO', sg:0.87 }, cylMeter:318612, meLo:142038, geLo:62014,
+      fwProd:980, fwRob:34880, miscCons:{ 'MDO/MGO':0,'LSMGO':0 } },
+    { id:'e-as3', datetime:'2026-05-18T12:00', operation:'AT SEA - NOON', condition:'LADEN', distanceShip:328,
+      rpm:93.8, revCounter:93480, tbn:'LOW', meRuntime:18712, blrRuntime:89, ge1Runtime:4258, ge2Runtime:4236, ge1Kw:375, ge2Kw:355,
+      me:{ meter:843860, type:'LSFO', sg:0.965 }, ge:{ meter:413286, type:'MDO/MGO', sg:0.87 },
+      blr:{ meter:22108, type:'MDO/MGO', sg:0.87 }, cylMeter:318748, meLo:142082, geLo:62032,
+      fwProd:1020, fwRob:34410, miscCons:{ 'MDO/MGO':0,'LSMGO':0 } }
+  ].map(normalizeEntry);
+  const receipts = [
+    { id:'r-as1', date:'2026-05-14', category:'lube', type:'ME SYS OIL', tankId:'mesysoil', qty:500, bdnNo:'BDN-AS-4410', company:'Shell Marine', location:'Rotterdam' }
+  ];
+  return { setup, entries, receipts, documents:[], abstracts:[], printHistory:[] };
+}
+
+async function saveVesselRegistry(){
+  await dbPut('meta', { key:'vessels', value: state.vessels });
+  if (state.activeVesselId) await dbPut('meta', { key:'activeVesselId', value: state.activeVesselId });
+}
+
+function tagVesselId(item){
+  if (!item) return item;
+  if (!item.vesselId) item.vesselId = state.activeVesselId || LEGACY_VESSEL_ID;
+  return item;
+}
+
+function belongsToActiveVessel(item){
+  const vid = item?.vesselId || LEGACY_VESSEL_ID;
+  return vid === (state.activeVesselId || LEGACY_VESSEL_ID);
+}
+
+async function saveVesselPack(vesselId, pack){
+  const setup = migrateSetup(pack.setup || {});
+  setup.sync = setup.sync || {};
+  if (!setup.sync.vesselId){
+    const v = state.vessels.find(x=>x.id===vesselId);
+    setup.sync.vesselId = v?.slug || vesselSlugFromName(setup.vesselName);
+  }
+  await dbPut('meta', { key:`setup:${vesselId}`, value: setup });
+  for (const e of (pack.entries || []).map(normalizeEntry)){
+    e.vesselId = vesselId;
+    await dbPut('entries', e);
+  }
+  for (const r of (pack.receipts || [])){
+    r.vesselId = vesselId;
+    await dbPut('receipts', r);
+  }
+  for (const d of (pack.documents || [])){
+    d.vesselId = vesselId;
+    await dbPut('documents', d);
+  }
+  for (const a of (pack.abstracts || [])){
+    a.vesselId = vesselId;
+    await dbPut('abstracts', a);
+  }
+  for (const p of (pack.printHistory || [])){
+    p.vesselId = vesselId;
+    await dbPut('printHistory', p);
+  }
+}
+
+async function loadVesselFromDb(vesselId){
+  state.activeVesselId = vesselId;
+  const metaAll = await dbGetAll('meta');
+  const setupRow = metaAll.find(m=>m.key===`setup:${vesselId}`) || metaAll.find(m=>m.key==='setup');
+  state.setup = migrateSetup(setupRow ? setupRow.value : defaultSetupTemplate());
+  ensureTankStores();
+  const [allEntries, allReceipts, allDocs, allAbstracts, allPrint] = await Promise.all([
+    dbGetAll('entries'), dbGetAll('receipts'), dbGetAll('documents'), dbGetAll('abstracts'), dbGetAll('printHistory')
+  ]);
+  const match = item => (item.vesselId || LEGACY_VESSEL_ID) === vesselId;
+  state.entries = allEntries.filter(match).map(normalizeEntry);
+  state.receipts = allReceipts.filter(match);
+  state.documents = allDocs.filter(match);
+  state.abstracts = allAbstracts.filter(match);
+  state.printHistory = allPrint.filter(match);
+  exitEditMode();
+}
+
+async function saveCurrentVesselState(){
+  if (!state.activeVesselId) return;
+  const v = activeVessel();
+  if (v && state.setup.vesselName) v.name = state.setup.vesselName;
+  await saveSetup();
+  await saveVesselRegistry();
+  for (const e of state.entries) await dbPut('entries', tagVesselId(e));
+  for (const r of state.receipts) await dbPut('receipts', tagVesselId(r));
+  for (const d of state.documents) await dbPut('documents', tagVesselId(d));
+  for (const a of state.abstracts) await dbPut('abstracts', tagVesselId(a));
+  for (const p of state.printHistory) await dbPut('printHistory', tagVesselId(p));
+}
+
+async function switchVessel(vesselId){
+  if (!vesselId || vesselId === state.activeVesselId) return;
+  const target = state.vessels.find(v=>v.id===vesselId);
+  if (!target) return;
+  await saveCurrentVesselState();
+  await loadVesselFromDb(vesselId);
+  await dbPut('meta', { key:'activeVesselId', value: vesselId });
+  render();
+  applyEntryDefaults();
+  renderSyncUi();
+  const lbl = document.getElementById('activeVesselLabel');
+  if (lbl) lbl.textContent = `${state.setup.vesselName || target.name} — Voyage Log & Performance`;
+}
+
+async function createNewVessel(name){
+  const trimmed = (name || '').trim();
+  if (!trimmed) return null;
+  const id = 'v-' + uid();
+  const slug = vesselSlugFromName(trimmed);
+  const vessel = { id, name: trimmed, slug, createdAt: new Date().toISOString() };
+  state.vessels.push(vessel);
+  const setup = defaultSetupTemplate({ vesselName: trimmed, sync: { vesselId: slug } });
+  await dbPut('meta', { key:`setup:${id}`, value: setup });
+  await saveVesselRegistry();
+  return vessel;
+}
+
+async function migrateToMultiVessel(metaAll){
+  const vesselsRow = metaAll.find(m=>m.key==='vessels');
+  if (vesselsRow?.value?.length){
+    state.vessels = vesselsRow.value;
+    const activeRow = metaAll.find(m=>m.key==='activeVesselId');
+    state.activeVesselId = activeRow?.value || state.vessels[0].id;
+    return;
+  }
+
+  const setupRow = metaAll.find(m=>m.key==='setup');
+  const existingSetup = setupRow ? migrateSetup(setupRow.value) : defaultSetupTemplate();
+  const allEntries = await dbGetAll('entries');
+  const hasUserData = allEntries.length > 0;
+
+  const vFang = { id:'v-fangcheng', name: existingSetup.vesselName || 'M/V FANGCHENG', slug:'mv-fangcheng', createdAt: new Date().toISOString() };
+  const vAtlantic = { id:'v-atlanticstar', name:'M/V ATLANTIC STAR', slug:'mv-atlantic-star', createdAt: new Date().toISOString() };
+  state.vessels = [vFang, vAtlantic];
+  state.activeVesselId = vFang.id;
+
+  if (hasUserData){
+    existingSetup.sync = existingSetup.sync || {};
+    if (!existingSetup.sync.vesselId) existingSetup.sync.vesselId = vFang.slug;
+    await dbPut('meta', { key:`setup:${vFang.id}`, value: existingSetup });
+    const stores = ['entries','receipts','documents','abstracts','printHistory'];
+    for (const store of stores){
+      const all = await dbGetAll(store);
+      for (const item of all){
+        item.vesselId = vFang.id;
+        await dbPut(store, item);
+      }
+    }
+    await saveVesselPack(vAtlantic.id, buildDemoPackAtlanticStar());
+  } else {
+    await saveVesselPack(vFang.id, buildDemoPackFangcheng());
+    await saveVesselPack(vAtlantic.id, buildDemoPackAtlanticStar());
+  }
+
+  await saveVesselRegistry();
+  if (setupRow) await dbDelete('meta', 'setup');
+}
+
+function renderVesselSelector(){
+  const sel = document.getElementById('s_vesselSelect');
+  if (!sel) return;
+  const current = state.activeVesselId;
+  sel.innerHTML = state.vessels.map(v=>{
+    const active = v.id===current ? ' (active)' : '';
+    return `<option value="${v.id}"${v.id===current?' selected':''}>${v.name}${active}</option>`;
+  }).join('');
+  const hint = document.getElementById('vesselSwitchHint');
+  if (hint){
+    const n = state.entries.length;
+    hint.textContent = `Each vessel keeps its own records in this browser. Active vessel has ${n} log entries and ${state.receipts.length} receipts. Select another vessel and click Load, or pull from the sync server using that vessel's slug.`;
+  }
+  const lbl = document.getElementById('activeVesselLabel');
+  if (lbl && state.setup.vesselName) lbl.textContent = `${state.setup.vesselName} — Voyage Log & Performance`;
+}
+
+async function clearVesselStore(storeName, vesselId){
+  const all = await dbGetAll(storeName);
+  for (const item of all){
+    if ((item.vesselId || LEGACY_VESSEL_ID) === vesselId) await dbDelete(storeName, item.id);
+  }
+}
+
+async function pullVesselFromServer(vesselId){
+  const vessel = state.vessels.find(v=>v.id===vesselId);
+  if (!vessel) return;
+  const sync = ensureSyncConfig();
+  if (!syncApiBase()){ alert('Configure the sync server URL on the Data tab first.'); return; }
+  const prevSlug = sync.vesselId;
+  sync.vesselId = vessel.slug;
+  try {
+    if (vesselId !== state.activeVesselId) await switchVessel(vesselId);
+    for (const store of ['entries','receipts','documents','abstracts','printHistory']){
+      await clearVesselStore(store, vesselId);
+    }
+    await syncNow({ pullOnly:true, policy:'remote' });
+    await persistAllToDb();
+    await loadVesselFromDb(vesselId);
+    render();
+    alert(`Pulled records for ${vessel.name} from server.`);
+  } catch(err){
+    alert('Pull failed: ' + err.message);
+  } finally {
+    sync.vesselId = prevSlug || vessel.slug;
+  }
+}
 
 /* Synthetic starting baseline built from Setup's initial readings, used only when no explicit
    carryover (from Create New Voyage) and no log entries exist yet. */
@@ -1966,6 +2300,7 @@ function csvEscape(v){
 
 function render(){
   _gaugeUid = 0;
+  renderVesselSelector();
   const {rows, consByFuel, consByLube, perf} = computeDerived();
   const {rob, robLube} = currentROB(consByFuel, consByLube);
   renderLastEntryRef();
@@ -2246,7 +2581,13 @@ function render(){
 }
 
 /* ---------------- persistence helpers ---------------- */
-async function saveSetup(){ await dbPut('meta', {key:'setup', value: state.setup}); }
+async function saveSetup(){
+  if (!state.activeVesselId) state.activeVesselId = LEGACY_VESSEL_ID;
+  await dbPut('meta', {key:`setup:${state.activeVesselId}`, value: state.setup});
+  const v = activeVessel();
+  if (v && state.setup.vesselName) v.name = state.setup.vesselName;
+  await saveVesselRegistry();
+}
 
 /* ---------------- tabs ---------------- */
 function switchTab(pageName){
@@ -2988,13 +3329,54 @@ async function saveVoyageDetails(){
   state.setup.initDateTime = document.getElementById('s_initDateTime').value;
   state.setup.voyageDistance = parseFloat(document.getElementById('s_voyageDistance').value)||null;
 
+  const v = activeVessel();
+  if (v) v.name = document.getElementById('s_vesselName').value.trim() || v.name;
+
   document.querySelectorAll('[data-setup-fuel-rob]').forEach(inp=> state.setup.rob[inp.dataset.setupFuelRob] = parseFloat(inp.value)||0);
   document.querySelectorAll('[data-setup-lube-rob]').forEach(inp=> state.setup.robLube[inp.dataset.setupLubeRob] = parseFloat(inp.value)||0);
   await saveSetup();
+  await saveVesselRegistry();
   render();
   alert('Voyage Details saved.');
 }
 document.getElementById('btnSaveVoyageDetails').addEventListener('click', saveVoyageDetails);
+
+document.getElementById('btnLoadVessel').addEventListener('click', async ()=>{
+  const sel = document.getElementById('s_vesselSelect');
+  const vesselId = sel?.value;
+  if (!vesselId || vesselId === state.activeVesselId){
+    if (vesselId === state.activeVesselId) alert('This vessel is already loaded.');
+    return;
+  }
+  await switchVessel(vesselId);
+  alert(`Loaded ${state.setup.vesselName || 'vessel'} — ${state.entries.length} log entries, ${state.receipts.length} receipts.`);
+});
+
+document.getElementById('s_vesselSelect').addEventListener('change', ()=>{
+  const sel = document.getElementById('s_vesselSelect');
+  const v = state.vessels.find(x=>x.id===sel?.value);
+  const hint = document.getElementById('vesselSwitchHint');
+  if (hint && v) hint.textContent = `Selected: ${v.name} (sync slug: ${v.slug}). Click Load Selected Vessel to switch, or Pull from Server if sync is configured.`;
+});
+
+document.getElementById('btnAddVessel').addEventListener('click', async ()=>{
+  const name = prompt('New vessel name (e.g. M/V PACIFIC HARMONY):');
+  if (!name) return;
+  const vessel = await createNewVessel(name);
+  if (!vessel) return;
+  await switchVessel(vessel.id);
+  renderVesselSelector();
+  switchTab('setup');
+  alert(`Vessel "${name}" created. Update voyage details and ship details, then start logging entries.`);
+});
+
+document.getElementById('btnPullVesselRemote').addEventListener('click', async ()=>{
+  const sel = document.getElementById('s_vesselSelect');
+  const vesselId = sel?.value || state.activeVesselId;
+  if (!vesselId) return;
+  if (!confirm('Pull this vessel\'s records from the sync server? Local data for this vessel will be replaced by the server copy.')) return;
+  await pullVesselFromServer(vesselId);
+});
 
 document.getElementById('btnToggleShipDetails').addEventListener('click', ()=>{
   const section = document.getElementById('shipDetailsSection');
@@ -3019,6 +3401,7 @@ function normalizeEntry(e){
   if (e.revCounter===undefined) e.revCounter = null;
   if (e.rpm===undefined) e.rpm = null;
   if (!e.id) e.id = uid();
+  if (!e.vesselId) e.vesselId = state.activeVesselId || LEGACY_VESSEL_ID;
   return e;
 }
 
@@ -3167,6 +3550,7 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
   const abstractName = `noon-report-backup_${safe(state.setup.voyageNumber)}_${safe(state.setup.shipCondition)}_${stamp}_abstract.csv`;
   const abstractRecord = {
     id: uid(), savedAt: new Date().toISOString(),
+    vesselId: state.activeVesselId,
     voyageNumber: state.setup.voyageNumber, condition: state.setup.shipCondition,
     filename: abstractName, rows: rows
   };
@@ -3187,8 +3571,8 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
 
   state.entries = [];
   state.receipts = [];
-  await dbClear('entries');
-  await dbClear('receipts');
+  await clearVesselStore('entries', state.activeVesselId);
+  await clearVesselStore('receipts', state.activeVesselId);
   await saveSetup();
   render();
   switchTab('setup');
@@ -3447,6 +3831,7 @@ async function recordPrintHistory(label, entry, htmlContent){
   </head><body>${htmlContent}</body></html>`;
   const record = {
     id: uid(), printedAt: new Date().toISOString(), label,
+    vesselId: state.activeVesselId,
     entryDatetime: entry ? entry.datetime : null,
     operation: entry ? entry.operation : null,
     html: fullDoc
@@ -4105,6 +4490,7 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
 
   const entry = {
     id: editingId || uid(),
+    vesselId: state.activeVesselId,
     datetime: dtVal,
     operation: document.getElementById('in_operation').value,
     condition: document.getElementById('in_condition').value,
@@ -4334,6 +4720,7 @@ document.getElementById('btnUploadDoc').addEventListener('click', async ()=>{
   reader.onload = async () => {
     const doc = {
       id: uid(),
+      vesselId: state.activeVesselId,
       filename: file.name,
       bdnNo: document.getElementById('doc_bdn').value,
       company: document.getElementById('doc_company').value,
@@ -4377,6 +4764,7 @@ document.getElementById('btnAddReceipt').addEventListener('click', async ()=>{
     type: document.getElementById('rcpt_type').selectedOptions[0]?.textContent || document.getElementById('rcpt_type').value,
     tankId: document.getElementById('rcpt_type').value,
     qty,
+    vesselId: state.activeVesselId,
     bdnNo: document.getElementById('rcpt_bdn').value,
     company: document.getElementById('rcpt_company').value,
     location: document.getElementById('rcpt_location').value
@@ -4529,11 +4917,11 @@ function applyRemoteSnapshot(remote, policy){
   const remoteData = remote.data || remote;
   if (policy === 'remote'){
     state.setup = migrateSetup(remoteData.setup || {});
-    state.entries = (remoteData.entries || []).map(normalizeEntry);
-    state.receipts = remoteData.receipts || [];
-    state.documents = remoteData.documents || [];
-    state.abstracts = remoteData.abstracts || [];
-    state.printHistory = remoteData.printHistory || [];
+    state.entries = (remoteData.entries || []).map(e=> normalizeEntry({...e, vesselId: state.activeVesselId}));
+    state.receipts = (remoteData.receipts || []).map(r=> tagVesselId({...r}));
+    state.documents = (remoteData.documents || []).map(d=> tagVesselId({...d}));
+    state.abstracts = (remoteData.abstracts || []).map(a=> tagVesselId({...a}));
+    state.printHistory = (remoteData.printHistory || []).map(p=> tagVesselId({...p}));
     return;
   }
   if (policy === 'local'){
@@ -4554,11 +4942,11 @@ function applyRemoteSnapshot(remote, policy){
 
 async function persistAllToDb(){
   await saveSetup();
-  for (const e of state.entries) await dbPut('entries', e);
-  for (const r of state.receipts) await dbPut('receipts', r);
-  for (const d of state.documents) await dbPut('documents', d);
-  for (const a of state.abstracts) await dbPut('abstracts', a);
-  for (const p of state.printHistory) await dbPut('printHistory', p);
+  for (const e of state.entries) await dbPut('entries', tagVesselId(e));
+  for (const r of state.receipts) await dbPut('receipts', tagVesselId(r));
+  for (const d of state.documents) await dbPut('documents', tagVesselId(d));
+  for (const a of state.abstracts) await dbPut('abstracts', tagVesselId(a));
+  for (const p of state.printHistory) await dbPut('printHistory', tagVesselId(p));
 }
 
 let syncInFlight = null;
@@ -4724,10 +5112,12 @@ document.getElementById('fileImport').addEventListener('change', (ev)=>{
     try{
       const payload = JSON.parse(reader.result);
       if (payload.setup) state.setup = migrateSetup(payload.setup);
-      state.entries = (payload.entries || []).map(normalizeEntry);
-      state.receipts = payload.receipts || [];
-      state.documents = payload.documents || [];
-      await dbClear('entries'); await dbClear('receipts'); await dbClear('documents');
+      state.entries = (payload.entries || []).map(e=> normalizeEntry({...e, vesselId: state.activeVesselId}));
+      state.receipts = (payload.receipts || []).map(r=> tagVesselId({...r}));
+      state.documents = (payload.documents || []).map(d=> tagVesselId({...d}));
+      await clearVesselStore('entries', state.activeVesselId);
+      await clearVesselStore('receipts', state.activeVesselId);
+      await clearVesselStore('documents', state.activeVesselId);
       for (const en of state.entries) await dbPut('entries', en);
       for (const r of state.receipts) await dbPut('receipts', r);
       for (const doc of state.documents) await dbPut('documents', doc);
@@ -4876,14 +5266,9 @@ function migrateSetup(setup){
   try {
     await openDB();
     const metaAll = await dbGetAll('meta');
-    const setupRow = metaAll.find(m=>m.key==='setup');
-    if (setupRow) state.setup = migrateSetup(Object.assign(state.setup, setupRow.value));
+    await migrateToMultiVessel(metaAll);
+    await loadVesselFromDb(state.activeVesselId);
     ensureTankStores();
-    state.entries = await dbGetAll('entries');
-    state.receipts = await dbGetAll('receipts');
-    state.documents = await dbGetAll('documents');
-    state.abstracts = await dbGetAll('abstracts');
-    state.printHistory = await dbGetAll('printHistory');
 
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
