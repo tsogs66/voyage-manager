@@ -617,7 +617,22 @@
       <div class="unit-group cols3" id="meBlrRuntimeFields">
         <div class="unit-box"><h3>Main Engine</h3><div class="field"><label>Runtime (hrs)</label><input type="number" step="0.1" id="me_runtime"></div></div>
       </div>
-      <div class="hint">Generator and boiler running hours are entered on the Supplementary Report after you save this log entry. Total G/E fuel is still recorded here via the Generator fuel meter.</div>
+
+      <h3 class="sub">Boiler &amp; Incinerator — Runtime / Load</h3>
+      <div class="unit-group cols2" id="blrIncRuntimeFields">
+        <div class="unit-box">
+          <h3>Boiler</h3>
+          <div class="field"><label>Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="blr_runtime"></div>
+          <div class="field"><label>Period Hrs (calc)</label><input type="text" id="blr_period_disp" readonly></div>
+        </div>
+        <div class="unit-box">
+          <h3>Incinerator</h3>
+          <div class="field"><label>Run Time (hrs)</label><input type="number" step="0.1" id="inc_runtime"></div>
+          <div class="field"><label>Avg Load (kW)</label><input type="number" step="1" id="inc_kw"></div>
+          <div class="field"><label>Load % (calc)</label><input type="text" id="inc_loadpct" readonly></div>
+        </div>
+      </div>
+      <div class="hint">Boiler uses a cumulative hour-meter (period hours = this reading − previous entry). Incinerator load % = (kW ÷ max kW from Setup) × 100. Generator running hours remain on the Supplementary Report / Voyage Summary. Total G/E fuel is still recorded here via the Generator fuel meter.</div>
 
       <h3 class="sub">Fuel Meters (litres, cumulative)</h3>
       <div class="unit-group">
@@ -684,6 +699,8 @@
         <button class="primary" id="btnAdd">Add Entry</button>
         <button class="ghost" id="btnClearForm">Clear Form</button>
         <button class="ghost" id="btnResetConsOverride">Reset to Calculated</button>
+        <button class="ghost" id="btnUndoEntry" style="display:none;">Undo Last Save</button>
+        <button class="danger" id="btnDeleteEntry" style="display:none;">Delete Entry</button>
         <button class="danger" id="btnCancelEdit" style="display:none;">Cancel Edit</button>
         <span class="badge" id="editingBadge" style="display:none;">Editing saved entry</span>
       </div>
@@ -1767,6 +1784,182 @@ function effectiveCarryover(){
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
 let editingId = null;
+const ENTRY_UNDO_MAX = 15;
+/** @type {{type:'add'|'update'|'delete', entry:object, laterSnapshots?:object[]}[]} */
+let entryUndoStack = [];
+
+function cloneEntry(e){ return e ? JSON.parse(JSON.stringify(e)) : null; }
+
+function updateEntryActionButtons(){
+  const delBtn = document.getElementById('btnDeleteEntry');
+  const undoBtn = document.getElementById('btnUndoEntry');
+  if (delBtn) delBtn.style.display = editingId ? '' : 'none';
+  if (undoBtn){
+    undoBtn.style.display = entryUndoStack.length ? '' : 'none';
+    undoBtn.disabled = !entryUndoStack.length;
+    undoBtn.textContent = entryUndoStack.length
+      ? `Undo Last Save${entryUndoStack.length>1 ? ` (${entryUndoStack.length})` : ''}`
+      : 'Undo Last Save';
+  }
+}
+
+function pushEntryUndo(record){
+  entryUndoStack.push(record);
+  if (entryUndoStack.length > ENTRY_UNDO_MAX) entryUndoStack.shift();
+  updateEntryActionButtons();
+}
+
+/** Refresh stored report period/fuel stamps on entries after a mutation so later watches follow the new previous values. */
+async function cascadeSucceedingEntries(startIdx, { clearOverrides = true } = {}){
+  const sorted = sortedEntries();
+  if (startIdx < 0 || startIdx >= sorted.length) return;
+  // Ensure derived rows reflect current meters before we stamp fuel shares
+  computeDerived();
+  for (let i = startIdx; i < sorted.length; i++){
+    const e = sorted[i];
+    const prev = i > 0 ? sorted[i-1] : effectiveCarryover();
+    let changed = false;
+    if (clearOverrides){
+      if (e.consOverride && Object.keys(e.consOverride).length){ e.consOverride = {}; changed = true; }
+      if (e.unitOverride && (e.unitOverride.ME!=null || e.unitOverride.GE!=null || e.unitOverride.BLR!=null)){
+        e.unitOverride = { ME:null, GE:null, BLR:null };
+        changed = true;
+      }
+    }
+    if (e.report?.generators?.length){
+      e.report.generators = e.report.generators.map((g, gi)=>{
+        const prevRt = entryGeRuntime(prev, gi+1);
+        const periodHrs = (g.runtime!=null && prevRt!=null) ? runtimeDelta(g.runtime, prevRt) : null;
+        return Object.assign({}, g, { periodHrs });
+      });
+      const row = getComputedRow(e.id);
+      const shares = splitGeConsByHours(row?.geCons, e.report.generators.map(g=>g.periodHrs));
+      e.report.generators.forEach((g, gi)=>{ g.fuelCons = shares[gi] ?? null; });
+      e.report.perfTable = e.report.perfTable || {};
+      e.report.generators.forEach((g, gi)=>{
+        const maxKw = geMaxKw(gi);
+        const avgLoad = (g.avgKw!=null && maxKw>0) ? (g.avgKw/maxKw)*100 : null;
+        e.report.perfTable[`AE${gi+1}`] = Object.assign({}, e.report.perfTable[`AE${gi+1}`] || {}, {
+          avgPower: g.avgKw, avgLoad,
+          minLoad: avgLoad!=null ? avgLoad*0.90 : null,
+          maxLoad: avgLoad!=null ? avgLoad*1.15 : null,
+          runTime: g.periodHrs, fuelCons: g.fuelCons
+        });
+      });
+      changed = true;
+    }
+    const prevBlr = entryBlrRuntime(prev);
+    const curBlr = entryBlrRuntime(e);
+    if (curBlr!=null || e.report?.perfTable?.BOILER){
+      e.report = e.report || {};
+      e.report.perfTable = e.report.perfTable || {};
+      const blrPeriod = (curBlr!=null && prevBlr!=null) ? runtimeDelta(curBlr, prevBlr) : null;
+      e.report.perfTable.BOILER = Object.assign({}, e.report.perfTable.BOILER || {}, {
+        runTime: blrPeriod,
+        avgPower: e.report.perfTable.BOILER?.avgPower ?? null
+      });
+      const blrPerf = computeKwPerf(e.report.perfTable.BOILER, boilerMaxKw());
+      e.report.perfTable.BOILER = Object.assign({}, e.report.perfTable.BOILER, blrPerf);
+      changed = true;
+    }
+    if (changed){
+      e.updatedAt = new Date().toISOString();
+      const idx = state.entries.findIndex(x=>x.id===e.id);
+      if (idx>-1) state.entries[idx] = e;
+      await dbPut('entries', e);
+    }
+  }
+}
+
+function snapshotLaterEntries(afterDatetime, afterId){
+  const sorted = sortedEntries();
+  const idx = sorted.findIndex(e=>e.id===afterId);
+  const start = idx >= 0 ? idx + 1 : sorted.findIndex(e=>e.datetime > afterDatetime);
+  if (start < 0) return [];
+  return sorted.slice(start).map(cloneEntry);
+}
+
+async function restoreLaterSnapshots(snapshots){
+  if (!snapshots?.length) return;
+  for (const snap of snapshots){
+    const idx = state.entries.findIndex(e=>e.id===snap.id);
+    if (idx>-1) state.entries[idx] = cloneEntry(snap);
+    else state.entries.push(cloneEntry(snap));
+    await dbPut('entries', snap);
+  }
+}
+
+async function deleteEntryById(id, { confirmMsg } = {}){
+  const entry = state.entries.find(e=>e.id===id);
+  if (!entry) return false;
+  if (confirmMsg !== false){
+    const msg = confirmMsg || 'Delete this log entry? Later entries will recalculate from the previous remaining entry. You can Undo Last Save to restore.';
+    if (!confirm(msg)) return false;
+  }
+  const laterSnapshots = snapshotLaterEntries(entry.datetime, entry.id);
+  const sorted = sortedEntries();
+  const delIdx = sorted.findIndex(e=>e.id===id);
+  pushEntryUndo({ type:'delete', entry: cloneEntry(entry), laterSnapshots });
+  state.entries = state.entries.filter(e=>e.id!==id);
+  await dbDelete('entries', id);
+  // Succeeding entries now sit at delIdx onward
+  await cascadeSucceedingEntries(delIdx, { clearOverrides: true });
+  markPendingSync();
+  if (editingId === id){
+    exitEditMode();
+    document.getElementById('voyageSummaryPanel').style.display = 'none';
+    prefillFromLastEntry();
+  }
+  render();
+  updateEntryActionButtons();
+  return true;
+}
+
+async function undoLastEntryAction(){
+  const action = entryUndoStack.pop();
+  updateEntryActionButtons();
+  if (!action) return;
+  if (action.type === 'delete'){
+    // Restore deleted entry, then restore later entries to pre-cascade state
+    state.entries.push(cloneEntry(action.entry));
+    await dbPut('entries', action.entry);
+    await restoreLaterSnapshots(action.laterSnapshots);
+  } else if (action.type === 'update'){
+    const idx = state.entries.findIndex(e=>e.id===action.entry.id);
+    if (idx>-1) state.entries[idx] = cloneEntry(action.entry);
+    else state.entries.push(cloneEntry(action.entry));
+    await dbPut('entries', action.entry);
+    await restoreLaterSnapshots(action.laterSnapshots);
+  } else if (action.type === 'add'){
+    state.entries = state.entries.filter(e=>e.id!==action.entry.id);
+    await dbDelete('entries', action.entry.id);
+    await restoreLaterSnapshots(action.laterSnapshots);
+  }
+  markPendingSync();
+  render();
+  if (editingId){
+    const still = state.entries.find(e=>e.id===editingId);
+    if (still) loadEntryIntoForm(editingId);
+    else { exitEditMode(); prefillFromLastEntry(); }
+  } else {
+    prefillFromLastEntry();
+  }
+  updateEntryActionButtons();
+  alert('Last save undone. Succeeding entries restored.');
+}
+
+function updateEntryBlrIncDisplays(){
+  const dt = document.getElementById('in_datetime')?.value;
+  const prev = getPrevReferenceFor(dt, editingId);
+  const curBlr = parseFloat(document.getElementById('blr_runtime')?.value);
+  const prevBlr = entryBlrRuntime(prev);
+  const periodEl = document.getElementById('blr_period_disp');
+  if (periodEl){
+    const period = (!isNaN(curBlr) && prevBlr!=null) ? runtimeDelta(curBlr, prevBlr) : null;
+    periodEl.value = period==null ? '—' : fmt(period, 1);
+  }
+  syncIncineratorLoadPctDisplay('inc_kw', 'inc_loadpct');
+}
 function fmt(n,d=2){ if (n===null||n===undefined||isNaN(n)) return "—"; return Number(n).toFixed(d); }
 function meterCellText(unit){
   if (unit.meterIn!==undefined && unit.meterOut!==undefined && unit.meterIn!==null && unit.meterOut!==null){
@@ -2580,11 +2773,7 @@ function render(){
         </td>
       </tr>`).join('');
     vlBody.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', async ()=>{
-      if (!confirm('Delete this log entry permanently?')) return;
-      state.entries = state.entries.filter(e=>e.id!==b.dataset.del);
-      await dbDelete('entries', b.dataset.del);
-      markPendingSync();
-      render();
+      await deleteEntryById(b.dataset.del);
     }));
     vlBody.querySelectorAll('[data-view]').forEach(b=> b.addEventListener('click', ()=>{
       loadEntryIntoForm(b.dataset.view);
@@ -3737,6 +3926,10 @@ function loadEntryIntoForm(id){
   document.getElementById('in_revCounter').value = e.revCounter ?? '';
   document.getElementById('in_tbn').value = e.tbn;
   document.getElementById('me_runtime').value = e.meRuntime ?? '';
+  document.getElementById('blr_runtime').value = entryBlrRuntime(e) ?? '';
+  document.getElementById('inc_runtime').value = entryIncineratorRunTime(e) ?? '';
+  document.getElementById('inc_kw').value = entryIncineratorKw(e) ?? '';
+  updateEntryBlrIncDisplays();
 
   const meIn = document.getElementById('me_meter_in'), meOut = document.getElementById('me_meter_out'), meSingle = document.getElementById('me_meter');
   if (meIn && meOut){ meIn.value = e.me.meterIn ?? ''; meOut.value = e.me.meterOut ?? ''; }
@@ -3765,6 +3958,7 @@ function loadEntryIntoForm(id){
   document.getElementById('logEntryTitle').textContent = 'EDIT LOG ENTRY';
   document.getElementById('btnCancelEdit').style.display = '';
   document.getElementById('editingBadge').style.display = '';
+  updateEntryActionButtons();
   switchTab('entry');
   updateLivePreview();
   renderEntryUnitFields();
@@ -5277,6 +5471,31 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
   if (isNaN(blrMeter)){ alert('Please enter the Boiler fuel meter reading.'); return; }
 
   const existing = editingId ? state.entries.find(x=>x.id===editingId) : null;
+  const blrRuntimeVal = document.getElementById('blr_runtime').value;
+  const blrRuntime = blrRuntimeVal==='' ? null : parseFloat(blrRuntimeVal);
+  const incRuntimeVal = document.getElementById('inc_runtime').value;
+  const incKwVal = document.getElementById('inc_kw').value;
+  const incRunTime = incRuntimeVal==='' ? null : parseFloat(incRuntimeVal);
+  const incKw = incKwVal==='' ? null : parseFloat(incKwVal);
+
+  const report = Object.assign({}, existing?.report || {});
+  report.blrRuntime = (blrRuntime!=null && !isNaN(blrRuntime)) ? blrRuntime : null;
+  report.incinerator = {
+    runTime: (incRunTime!=null && !isNaN(incRunTime)) ? incRunTime : null,
+    avgKw: (incKw!=null && !isNaN(incKw)) ? incKw : null,
+    loadPct: incineratorLoadPct(incKw)
+  };
+  report.perfTable = Object.assign({}, report.perfTable || {});
+  const prevRef = editingId
+    ? previousEntryFor(editingId)
+    : (sortedEntries().filter(e=>e.datetime < dtVal).slice(-1)[0] || effectiveCarryover());
+  const prevBlr = entryBlrRuntime(prevRef);
+  const blrPeriod = (report.blrRuntime!=null && prevBlr!=null) ? runtimeDelta(report.blrRuntime, prevBlr) : null;
+  report.perfTable.BOILER = Object.assign({}, report.perfTable.BOILER || {}, computeKwPerf({
+    avgPower: report.perfTable.BOILER?.avgPower ?? null,
+    runTime: blrPeriod
+  }, boilerMaxKw()));
+  report.perfTable.INCINERATOR = buildIncineratorPerf(report.incinerator.runTime, report.incinerator.avgKw);
 
   const entry = {
     id: editingId || uid(),
@@ -5289,15 +5508,14 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     revCounter: document.getElementById('in_revCounter').value===''? null : parseFloat(document.getElementById('in_revCounter').value),
     tbn: document.getElementById('in_tbn').value,
     meRuntime: parseFloat(document.getElementById('me_runtime').value)||null,
-    // GE / boiler runtime & load are entered on the Supplementary Report
-    blrRuntime: existing?.blrRuntime ?? null,
+    blrRuntime: report.blrRuntime,
     ge1Runtime: existing?.ge1Runtime ?? null,
     ge2Runtime: existing?.ge2Runtime ?? null,
     ge3Runtime: existing?.ge3Runtime ?? null,
     ge1Kw: existing?.ge1Kw ?? null,
     ge2Kw: existing?.ge2Kw ?? null,
     ge3Kw: existing?.ge3Kw ?? null,
-    report: existing?.report || null,
+    report,
     me: meField,
     ge: geField,
     blr:{ meter: blrMeter, type: document.getElementById('blr_type').value, sg: parseFloat(document.getElementById('blr_sg').value)||0 },
@@ -5325,19 +5543,36 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     },
     updatedAt: new Date().toISOString()
   };
+
   if (editingId){
+    const laterSnapshots = snapshotLaterEntries(existing.datetime, existing.id);
+    pushEntryUndo({ type:'update', entry: cloneEntry(existing), laterSnapshots });
     const idx = state.entries.findIndex(e=>e.id===editingId);
     if (idx>-1) state.entries[idx] = entry; else state.entries.push(entry);
   } else {
+    // Capture later entries before insert (in case datetime slots into the middle of the voyage)
+    const laterSnapshots = sortedEntries()
+      .filter(e=> new Date(e.datetime) > new Date(dtVal))
+      .map(cloneEntry);
+    pushEntryUndo({ type:'add', entry: cloneEntry(entry), laterSnapshots });
     state.entries.push(entry);
   }
   await dbPut('entries', entry);
+
+  // Recalculate succeeding entries so period hrs / ROB chain follow this save
+  const sortedAfter = sortedEntries();
+  const savedIdx = sortedAfter.findIndex(e=>e.id===entry.id);
+  if (savedIdx >= 0 && savedIdx < sortedAfter.length - 1){
+    await cascadeSucceedingEntries(savedIdx + 1, { clearOverrides: true });
+  }
+
   markPendingSync();
   exitEditMode();
   render();
   openVoyageSummary(entry.id);
   // prepare form for the next new entry using just-saved meters as reference
   prefillFromLastEntry();
+  updateEntryActionButtons();
 });
 
 function exitEditMode(){
@@ -5348,6 +5583,7 @@ function exitEditMode(){
   document.getElementById('editingBadge').style.display = 'none';
   const sel = document.getElementById('in_selectEntry');
   if (sel) sel.value = '';
+  updateEntryActionButtons();
 }
 
 document.getElementById('btnCancelEdit').addEventListener('click', ()=>{
@@ -5402,6 +5638,10 @@ function prefillFromLastEntry(){
   set('in_tbn', last.tbn);
   set('in_revCounter', last.revCounter);
   set('me_runtime', last.meRuntime);
+  set('blr_runtime', entryBlrRuntime(last));
+  set('inc_runtime', entryIncineratorRunTime(last));
+  set('inc_kw', entryIncineratorKw(last));
+  updateEntryBlrIncDisplays();
 
   const meIn = document.getElementById('me_meter_in'), meOut = document.getElementById('me_meter_out'), meSingle = document.getElementById('me_meter');
   if (meIn && meOut){ meIn.value = last.me?.meterIn ?? ''; meOut.value = last.me?.meterOut ?? ''; }
@@ -5437,13 +5677,28 @@ document.getElementById('btnClearForm').addEventListener('click', ()=>{
   document.getElementById('in_datetime').value = now.toISOString().slice(0,16);
   document.getElementById('in_distanceShip').value = '0';
   ['in_rpm','in_revCounter','me_meter','ge_meter','me_meter_in','me_meter_out','ge_meter_in','ge_meter_out',
-   'blr_meter','me_runtime','cyl_meter','me_lo_meter','ge_lo_meter','fw_prod_meter','fw_rob_reading'].forEach(id=>{
+   'blr_meter','me_runtime','blr_runtime','inc_runtime','inc_kw','blr_period_disp','inc_loadpct',
+   'cyl_meter','me_lo_meter','ge_lo_meter','fw_prod_meter','fw_rob_reading'].forEach(id=>{
     const el = document.getElementById(id); if (el) el.value='';
   });
   document.getElementById('entry_misc_mdomgo').value = '0';
   document.getElementById('entry_misc_lsmgo').value = '0';
   ['entry_unit_me','entry_unit_ge','entry_unit_blr'].forEach(id=>{ document.getElementById(id).value=''; });
   prefillFromLastEntry();
+});
+
+document.getElementById('btnDeleteEntry')?.addEventListener('click', async ()=>{
+  if (!editingId) return;
+  await deleteEntryById(editingId);
+});
+document.getElementById('btnUndoEntry')?.addEventListener('click', async ()=>{
+  if (!entryUndoStack.length) return;
+  if (!confirm('Undo the last entry save/delete? Succeeding entries will be restored to their previous values.')) return;
+  await undoLastEntryAction();
+});
+['blr_runtime','inc_runtime','inc_kw','in_datetime'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('input', updateEntryBlrIncDisplays);
+  document.getElementById(id)?.addEventListener('change', updateEntryBlrIncDisplays);
 });
 
 /* ---------------- receipts ---------------- */
