@@ -4537,17 +4537,23 @@ function openVoyageSummary(entryId){
   const isSea = SEA_TYPE_OPS.has(entry.operation);
   document.getElementById('vsSeaReportBlock').style.display = isSea ? '' : 'none';
 
-  // Common — Engine Room & Tank Readings
+  // Others (ex-Common ER/tank + scavenge) — always available
   document.getElementById('vs_erTemp').value = r.erTemp ?? '';
+  document.getElementById('vs_swTemp').value = r.swTemp ?? '';
+  document.getElementById('vs_stTemp').value = r.stTemp ?? '';
   document.getElementById('vs_bilgeRob').value = r.bilgeRob ?? '';
   document.getElementById('vs_sludgeRob').value = r.sludgeRob ?? '';
-  document.getElementById('vs_stTemp').value = r.stTemp ?? '';
-  document.getElementById('vs_swTemp').value = r.swTemp ?? '';
+  document.getElementById('vs_scavTemp').value = r.scavTemp ?? '';
+  document.getElementById('vs_scavPress').value = r.scavPress ?? '';
+  document.getElementById('vs_pumpMark').value = r.pumpMark ?? '';
+  document.getElementById('vs_fuelTemp').value = r.fuelTemp ?? '';
+  document.getElementById('vs_pressDiff').value = r.pressDiff ?? '';
   document.getElementById('vs_remarks').value = r.remarks ?? '';
 
-  // Sea: cylinders + turbos + scavenge
+  // Sea: cylinders + turbos; Others stays beside T/C boxes
   const cylBox = document.getElementById('vsCylFields');
   const turboBox = document.getElementById('vsTurboFields');
+  const turboRow = document.getElementById('vsTurboScavRow');
   const cylN = meCylinderCount();
   if (isSea){
     cylBox.innerHTML = Array.from({length:cylN}, (_,i)=>{
@@ -4568,14 +4574,11 @@ function openVoyageSummary(entryId){
         <div class="field"><label>RPM</label><input type="number" step="1" id="vs_t${n}rpm" value="${t.rpm??''}"></div>
       </div>`;
     }).join('');
-    document.getElementById('vs_scavTemp').value = r.scavTemp ?? '';
-    document.getElementById('vs_scavPress').value = r.scavPress ?? '';
-    document.getElementById('vs_fuelTemp').value = r.fuelTemp ?? '';
-    document.getElementById('vs_pumpMark').value = r.pumpMark ?? '';
-    document.getElementById('vs_pressDiff').value = r.pressDiff ?? '';
+    turboRow?.classList.toggle('no-turbos', turboN < 1);
   } else {
     cylBox.innerHTML = '';
     turboBox.innerHTML = '';
+    turboRow?.classList.add('no-turbos');
   }
 
   const geN = geUnitCount();
