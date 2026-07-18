@@ -191,6 +191,17 @@
     .stat-strip,.stat-strip.cols3,.stat-strip.cols5{grid-template-columns:repeat(2,1fr);}
     .gauge-grid,.gauge-grid.cols4,.gauge-grid.cols5{grid-template-columns:repeat(2,1fr);}
     .unit-group.cols6{grid-template-columns:repeat(2,1fr);}
+    #voyageSummaryPanel .form-grid.cols5{
+      grid-template-columns:repeat(5, minmax(96px, 1fr));
+      overflow-x:auto;
+    }
+    #vsCylFields.unit-group.cols6{
+      grid-template-columns:repeat(6, minmax(96px, 1fr));
+      overflow-x:auto;
+    }
+    #vsTurboScavRow.unit-group.cols3{
+      grid-template-columns:repeat(3, minmax(0, 1fr));
+    }
     button,.tab{touch-action:manipulation;}
     .masthead{align-items:flex-start;}
     .status-row{align-items:flex-start;}
