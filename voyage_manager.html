@@ -575,10 +575,8 @@
       <h3 class="sub">Running Hour Meters (cumulative)</h3>
       <div class="unit-group cols3" id="meBlrRuntimeFields">
         <div class="unit-box"><h3>Main Engine</h3><div class="field"><label>Runtime (hrs)</label><input type="number" step="0.1" id="me_runtime"></div></div>
-        <div class="unit-box"><h3>Boiler</h3><div class="field"><label>Runtime (hrs)</label><input type="number" step="0.1" id="blr_runtime"></div></div>
       </div>
-      <h3 class="sub">Generators — Runtime &amp; Average Load</h3>
-      <div class="unit-group cols3" id="geRuntimeFields"></div>
+      <div class="hint">Generator and boiler running hours are entered on the Supplementary Report after you save this log entry. Total G/E fuel is still recorded here via the Generator fuel meter.</div>
 
       <h3 class="sub">Fuel Meters (litres, cumulative)</h3>
       <div class="unit-group">
@@ -663,7 +661,7 @@
         <h3 class="sub" style="margin-top:0;">Generator Report — <span id="vsGeArrLabel">—</span></h3>
         <div class="table-scroll">
           <table>
-            <thead><tr><th>Unit</th><th>Period Hrs</th><th>Avg kW</th><th>Load %</th><th>Voyage Hrs (total)</th><th>Voyage Avg kW (time-wtd)</th><th>Voyage Load %</th></tr></thead>
+            <thead><tr><th>Unit</th><th>Period Hrs</th><th>Avg kW</th><th>Load %</th><th>Fuel Cons (MT)</th><th>Voyage Hrs (total)</th><th>Voyage Avg kW (time-wtd)</th><th>Voyage Load %</th></tr></thead>
             <tbody id="vsGeReportBody"></tbody>
           </table>
         </div>
@@ -985,8 +983,19 @@
         </div>
       </div>
 
+      <h3 class="sub">Generators &amp; Boiler — Runtime / Load</h3>
+      <div class="form-grid cols3">
+        <div class="field"><label>Generators in Use</label>
+          <select id="rep_geInUse"></select>
+        </div>
+        <div class="field"><label>Boiler Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="rep_blrRuntime"></div>
+        <div class="field"><label>Total G/E Fuel Cons (MT)</label><input type="text" id="rep_geTotalCons" readonly></div>
+      </div>
+      <div class="unit-group cols3" id="reportGeRuntimeFields" style="margin-top:10px;"></div>
+      <div class="hint" id="reportGeSplitHint">Select how many generators ran this period. Enter each unit's cumulative hour-meter and average kW — period hours and fuel share (split of total G/E consumption by running hours) calculate automatically.</div>
+
       <h3 class="sub">Performance — By Unit</h3>
-      <div class="hint">M/E column is calculated from this entry (RPM → %MCR/kW). For each A/E, boiler, and incinerator, enter average kW — load % is calculated as (kW ÷ max kW from Setup) × 100.</div>
+      <div class="hint">M/E column is calculated from this entry (RPM → %MCR/kW). A/E columns use runtime and average kW entered above — load % = (kW ÷ max kW from Setup) × 100. Fuel cons per A/E is the G/E total split by running hours.</div>
       <div class="table-scroll">
         <table id="reportPerfTable">
           <thead><tr><th></th><th>M/E (auto)</th><th>A/E #1</th><th>A/E #2</th><th>A/E #3</th><th>Boiler</th><th>Incinerator</th></tr></thead>
@@ -1152,10 +1161,41 @@ function runtimeDelta(curr, prev){
 
 function entryGeRuntime(e, n){
   if (!e) return null;
+  const fromRep = e.report?.generators?.[n-1]?.runtime;
+  if (fromRep!=null && !isNaN(fromRep)) return fromRep;
   const v = e[`ge${n}Runtime`];
   if (v!=null && v!==undefined && !isNaN(v)) return v;
   if (n===1 && e.ge1Runtime!=null && !isNaN(e.ge1Runtime)) return e.ge1Runtime;
   return null;
+}
+function entryGeKw(e, n){
+  if (!e) return null;
+  const fromRep = e.report?.generators?.[n-1]?.avgKw;
+  if (fromRep!=null && !isNaN(fromRep)) return fromRep;
+  const v = e[`ge${n}Kw`];
+  return (v!=null && !isNaN(v)) ? v : null;
+}
+function entryBlrRuntime(e){
+  if (!e) return null;
+  if (e.report?.blrRuntime!=null && !isNaN(e.report.blrRuntime)) return e.report.blrRuntime;
+  return (e.blrRuntime!=null && !isNaN(e.blrRuntime)) ? e.blrRuntime : null;
+}
+function entryGeneratorsInUse(e){
+  const n = e?.report?.generatorsInUse;
+  if (n!=null && !isNaN(n)) return Math.max(1, Math.min(geUnitCount(), n));
+  return geUnitCount();
+}
+function previousEntryFor(entryId){
+  const list = sortedEntries();
+  const idx = list.findIndex(x=>x.id===entryId);
+  if (idx>0) return list[idx-1];
+  return effectiveCarryover();
+}
+function splitGeConsByHours(geCons, periodHrsList){
+  const hrs = (periodHrsList || []).map(h => (h!=null && h>0) ? h : 0);
+  const totalHrs = hrs.reduce((a,b)=>a+b, 0);
+  if (!(geCons>0) || !(totalHrs>0)) return hrs.map(()=> null);
+  return hrs.map(h => h>0 ? geCons * (h / totalHrs) : 0);
 }
 
 let _gaugeUid = 0;
@@ -1449,6 +1489,7 @@ async function switchVessel(vesselId){
   await dbPut('meta', { key:'activeVesselId', value: vesselId });
   render();
   applyEntryDefaults();
+  prefillFromLastEntry();
   renderSyncUi();
   const lbl = document.getElementById('activeVesselLabel');
   if (lbl) lbl.textContent = `${state.setup.vesselName || target.name} — Voyage Log & Performance`;
@@ -1808,23 +1849,28 @@ function computeDerived(){
       }
 
       const geN = geUnitCount();
+      const inUse = entryGeneratorsInUse(e);
       for (let i=0; i<geN; i++){
         const n = i+1;
         const gh = runtimeDelta(entryGeRuntime(e, n), entryGeRuntime(prev, n));
-        gePeriod[i].hrs = gh;
-        gePeriod[i].kw = e[`ge${n}Kw`] ?? null;
-        if (gh!=null && gh>0){
+        const kw = entryGeKw(e, n);
+        gePeriod[i].hrs = (i < inUse) ? gh : null;
+        gePeriod[i].kw = (i < inUse) ? kw : null;
+        if (i < inUse && gh!=null && gh>0){
           sumGeHrs[i] += gh;
-          if (e[`ge${n}Kw`]!=null){
+          if (kw!=null){
             const max = geMaxKw(i);
-            gePeriod[i].loadPct = max>0 ? (e[`ge${n}Kw`]/max)*100 : null;
-            sumGeKwHrs[i] += e[`ge${n}Kw`] * gh;
+            gePeriod[i].loadPct = max>0 ? (kw/max)*100 : null;
+            sumGeKwHrs[i] += kw * gh;
             sumGeMaxKwHrs[i] += max * gh;
           }
-        } else if (e[`ge${n}Kw`]!=null && geMaxKw(i)>0){
-          gePeriod[i].loadPct = (e[`ge${n}Kw`]/geMaxKw(i))*100;
+        } else if (i < inUse && kw!=null && geMaxKw(i)>0){
+          gePeriod[i].loadPct = (kw/geMaxKw(i))*100;
         }
       }
+      const periodHrs = gePeriod.map(p=>p.hrs);
+      const fuelShares = splitGeConsByHours(geCons, periodHrs.slice(0, inUse));
+      for (let i=0; i<inUse; i++) gePeriod[i].fuelCons = fuelShares[i] ?? null;
 
       totalDistShip += (e.distanceShip||0);
       totalDistEngine += (distEngine||0);
@@ -2201,32 +2247,9 @@ function renderGeMaxKwFields(){
   `).join('');
 }
 
-function renderGeRuntimeFields(){
-  const box = document.getElementById('geRuntimeFields');
-  if (!box) return;
-  const n = geUnitCount();
-  box.innerHTML = Array.from({length:n}, (_,i)=>{
-    const num = i+1;
-    return `<div class="unit-box"><h3>A/E #${num}</h3>
-      <div class="field"><label>Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="ge${num}_runtime"></div>
-      <div class="field"><label>Avg Load (kW)</label><input type="number" step="1" id="ge${num}_kw" placeholder="for this period"></div>
-      <div class="field"><label>Load % (calc)</label><input type="text" id="ge${num}_loadpct" readonly></div>
-    </div>`;
-  }).join('');
-  for (let i=1; i<=n; i++){
-    const kwEl = document.getElementById(`ge${i}_kw`);
-    if (kwEl) kwEl.addEventListener('input', ()=>updateGeLoadPctPreview(i));
-  }
-}
+function renderGeRuntimeFields(){ /* GE runtime moved to Supplementary Report */ }
 
-function updateGeLoadPctPreview(i){
-  const kw = parseFloat(document.getElementById(`ge${i}_kw`)?.value);
-  const out = document.getElementById(`ge${i}_loadpct`);
-  if (!out) return;
-  if (isNaN(kw)){ out.value=''; return; }
-  const max = geMaxKw(i-1);
-  out.value = max>0 ? fmt((kw/max)*100, 1)+' %' : '—';
-}
+function updateGeLoadPctPreview(){ /* no-op — load % preview is on the report form */ }
 
 function renderFlowmeterCounterRows(){
   const arr = state.setup.flowArr || 'SINGLE';
@@ -2569,7 +2592,7 @@ function render(){
   const geHint = document.getElementById('geHoursHint');
   if (geHint){
     geHint.textContent = perf.totalGeHrs>0 ? '' :
-      'Generator hours are blank — enter A/E runtime (cumulative hour meter) and avg kW on each Log Entry under Generators.';
+      'Generator hours are blank — after saving a log entry, open its Supplementary Report and enter A/E runtime (cumulative) and avg kW under Generators & Boiler.';
   }
 
   document.getElementById('entryCount').textContent = `${state.entries.length} log entries · ${state.receipts.length} receipts stored locally.`;
@@ -2704,8 +2727,8 @@ function computeEntryEta(entryId){
   return toDatetimeLocalValue(new Date(new Date(entry.datetime).getTime() + daysToGo*24*3600000));
 }
 
-function reportPerfVisibleUnits(){
-  const geN = geUnitCount();
+function reportPerfVisibleUnits(generatorsInUse){
+  const geN = generatorsInUse != null ? generatorsInUse : geUnitCount();
   return PERF_UNITS.slice(1).filter(u=>{
     if (u==='AE1') return geN>=1;
     if (u==='AE2') return geN>=2;
@@ -2718,16 +2741,18 @@ function computeAePerf(entryId, geIndex, saved){
   const entry = state.entries.find(e=>e.id===entryId);
   const row = getComputedRow(entryId);
   const n = geIndex + 1;
-  const kw = saved?.avgPower ?? entry?.[`ge${n}Kw`] ?? null;
+  const kw = saved?.avgPower ?? entryGeKw(entry, n);
   const hrs = saved?.runTime ?? row?.gePeriod?.[geIndex]?.hrs ?? null;
   const maxKw = geMaxKw(geIndex);
   const avgLoad = (kw!=null && !isNaN(kw) && maxKw>0) ? (kw/maxKw)*100 : null;
+  const fuelCons = saved?.fuelCons ?? row?.gePeriod?.[geIndex]?.fuelCons ?? null;
   return {
     avgPower: kw,
     avgLoad,
     minLoad: avgLoad!=null ? avgLoad*0.90 : null,
     maxLoad: avgLoad!=null ? avgLoad*1.15 : null,
-    runTime: hrs
+    runTime: hrs,
+    fuelCons
   };
 }
 
@@ -2786,6 +2811,160 @@ function wireReportAeInputs(){
   });
 }
 
+function renderReportGeRuntimeFields(entryId, report){
+  const box = document.getElementById('reportGeRuntimeFields');
+  const sel = document.getElementById('rep_geInUse');
+  const totalEl = document.getElementById('rep_geTotalCons');
+  if (!box || !sel) return;
+  const maxN = geUnitCount();
+  const savedN = report?.generatorsInUse || maxN;
+  const inUse = Math.max(1, Math.min(maxN, savedN));
+  sel.innerHTML = Array.from({length:maxN}, (_,i)=>`<option value="${i+1}"${i+1===inUse?' selected':''}>${i+1}</option>`).join('');
+  const row = getComputedRow(entryId);
+  const prev = previousEntryFor(entryId);
+  if (totalEl) totalEl.value = row?.geCons==null ? '—' : fmt(row.geCons, 3);
+
+  const gens = report?.generators || [];
+  box.innerHTML = Array.from({length:inUse}, (_,i)=>{
+    const n = i+1;
+    const saved = gens[i] || {};
+    const runtime = saved.runtime ?? entryGeRuntime(state.entries.find(e=>e.id===entryId), n) ?? '';
+    const avgKw = saved.avgKw ?? entryGeKw(state.entries.find(e=>e.id===entryId), n) ?? '';
+    const prevRt = entryGeRuntime(prev, n);
+    const periodHrs = (runtime!=='' && prevRt!=null) ? runtimeDelta(parseFloat(runtime), prevRt) : null;
+    return `<div class="unit-box"><h3>A/E #${n}</h3>
+      <div class="field"><label>Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="rep_ge${n}_runtime" class="rep-ge-runtime" data-ge-idx="${i}" value="${runtime===null||runtime===undefined?'':runtime}"></div>
+      <div class="field"><label>Avg Load (kW)</label><input type="number" step="1" id="rep_ge${n}_kw" class="rep-ge-kw" data-ge-idx="${i}" value="${avgKw===null||avgKw===undefined?'':avgKw}"></div>
+      <div class="field"><label>Period Hrs (calc)</label><input type="text" id="rep_ge${n}_period" readonly value="${periodHrs==null?'—':fmt(periodHrs,1)}"></div>
+      <div class="field"><label>Fuel Share (MT)</label><input type="text" id="rep_ge${n}_fuel" readonly value="—"></div>
+      <div class="field"><label>Load % (calc)</label><input type="text" id="rep_ge${n}_loadpct" readonly value=""></div>
+    </div>`;
+  }).join('');
+
+  const refresh = ()=> updateReportGeSplit(entryId);
+  sel.onchange = ()=>{
+    const r = Object.assign({}, report || {}, { generatorsInUse: parseInt(sel.value)||1 });
+    // preserve typed values before re-render
+    r.generators = readReportGeGeneratorsDraft(parseInt(sel.value)||1);
+    renderReportGeRuntimeFields(entryId, r);
+    rebuildReportPerfTable(entryId, r);
+    refresh();
+  };
+  box.querySelectorAll('.rep-ge-runtime, .rep-ge-kw').forEach(inp=>{
+    inp.addEventListener('input', refresh);
+  });
+  refresh();
+}
+
+function readReportGeGeneratorsDraft(inUse){
+  const n = inUse || parseInt(document.getElementById('rep_geInUse')?.value) || 1;
+  return Array.from({length:n}, (_,i)=>{
+    const rt = document.getElementById(`rep_ge${i+1}_runtime`);
+    const kw = document.getElementById(`rep_ge${i+1}_kw`);
+    return {
+      runtime: rt && rt.value!=='' ? parseFloat(rt.value) : null,
+      avgKw: kw && kw.value!=='' ? parseFloat(kw.value) : null
+    };
+  });
+}
+
+function updateReportGeSplit(entryId){
+  const entry = state.entries.find(e=>e.id===entryId);
+  const prev = previousEntryFor(entryId);
+  const row = getComputedRow(entryId);
+  const inUse = parseInt(document.getElementById('rep_geInUse')?.value) || 1;
+  const periodHrs = [];
+  for (let i=0; i<inUse; i++){
+    const n = i+1;
+    const rt = parseFloat(document.getElementById(`rep_ge${n}_runtime`)?.value);
+    const kw = parseFloat(document.getElementById(`rep_ge${n}_kw`)?.value);
+    const prevRt = entryGeRuntime(prev, n);
+    const hrs = (!isNaN(rt) && prevRt!=null) ? runtimeDelta(rt, prevRt) : null;
+    periodHrs.push(hrs);
+    const periodEl = document.getElementById(`rep_ge${n}_period`);
+    if (periodEl) periodEl.value = hrs==null ? '—' : fmt(hrs, 1);
+    const max = geMaxKw(i);
+    const loadEl = document.getElementById(`rep_ge${n}_loadpct`);
+    if (loadEl) loadEl.value = (!isNaN(kw) && max>0) ? fmt((kw/max)*100, 1)+' %' : '—';
+    // sync into perf table inputs if present
+    const pfKw = document.getElementById(`rep_pf_avgPower_AE${n}`);
+    if (pfKw && document.activeElement !== pfKw && !isNaN(kw)) pfKw.value = kw;
+    const pfRt = document.getElementById(`rep_pf_runTime_AE${n}`);
+    if (pfRt && document.activeElement !== pfRt) pfRt.value = hrs==null ? '' : hrs;
+    if (pfKw) updateAePerfDisplays(`AE${n}`);
+  }
+  const shares = splitGeConsByHours(row?.geCons, periodHrs);
+  for (let i=0; i<inUse; i++){
+    const fuelEl = document.getElementById(`rep_ge${i+1}_fuel`);
+    if (fuelEl) fuelEl.value = shares[i]==null ? '—' : fmt(shares[i], 3);
+  }
+  const hint = document.getElementById('reportGeSplitHint');
+  if (hint){
+    const totalHrs = periodHrs.reduce((a,h)=>a+(h>0?h:0),0);
+    hint.textContent = totalHrs>0 && row?.geCons!=null
+      ? `G/E fuel ${fmt(row.geCons,3)} MT split across ${inUse} generator(s) by ${fmt(totalHrs,1)} total running hours.`
+      : 'Select how many generators ran this period. Enter each unit\'s cumulative hour-meter and average kW — period hours and fuel share (split of total G/E consumption by running hours) calculate automatically.';
+  }
+}
+
+function rebuildReportPerfTable(entryId, report){
+  const perfBody = document.querySelector('#reportPerfTable tbody');
+  if (!perfBody) return;
+  const perfTable = report?.perfTable || {};
+  const mePerf = computeMePerf(entryId);
+  const inUse = parseInt(document.getElementById('rep_geInUse')?.value) || report?.generatorsInUse || geUnitCount();
+  const visibleUnits = reportPerfVisibleUnits(inUse);
+  const thead = document.querySelector('#reportPerfTable thead tr');
+  if (thead){
+    thead.innerHTML = `<th></th><th>M/E (auto)</th>${visibleUnits.map(u=>`<th>${PERF_UNIT_LABELS[u]}</th>`).join('')}`;
+  }
+  // inject draft AE values from runtime fields into perfTable for display
+  const draft = readReportGeGeneratorsDraft(inUse);
+  const prev = previousEntryFor(entryId);
+  draft.forEach((g,i)=>{
+    const unit = `AE${i+1}`;
+    const hrs = (g.runtime!=null && entryGeRuntime(prev, i+1)!=null) ? runtimeDelta(g.runtime, entryGeRuntime(prev, i+1)) : null;
+    const maxKw = geMaxKw(i);
+    const avgLoad = (g.avgKw!=null && maxKw>0) ? (g.avgKw/maxKw)*100 : null;
+    perfTable[unit] = Object.assign({}, perfTable[unit], {
+      avgPower: g.avgKw, runTime: hrs, avgLoad,
+      minLoad: avgLoad!=null ? avgLoad*0.90 : null,
+      maxLoad: avgLoad!=null ? avgLoad*1.15 : null
+    });
+  });
+  perfBody.innerHTML = PERF_ROWS.map(([key,label])=>{
+    const meVal = fmtP(mePerf[key], key==='avgPower'||key==='runTime'?0:1);
+    return `<tr><td>${label}</td><td class="pf-computed">${meVal}</td>${visibleUnits.map(u=>renderReportPerfCell(u, key, entryId, perfTable)).join('')}</tr>`;
+  }).join('');
+  // add fuel cons row
+  const row = getComputedRow(entryId);
+  const periodHrs = draft.map((g,i)=>{
+    const prevRt = entryGeRuntime(prev, i+1);
+    return (g.runtime!=null && prevRt!=null) ? runtimeDelta(g.runtime, prevRt) : null;
+  });
+  const shares = splitGeConsByHours(row?.geCons, periodHrs);
+  const fuelCells = visibleUnits.map(u=>{
+    if (u.startsWith('AE')){
+      const idx = parseInt(u.slice(2),10)-1;
+      return `<td class="pf-computed">${shares[idx]==null?'—':fmt(shares[idx],3)}</td>`;
+    }
+    if (u==='BOILER') return `<td class="pf-computed">${row?.blrCons==null?'—':fmt(row.blrCons,3)}</td>`;
+    return `<td class="pf-computed">—</td>`;
+  }).join('');
+  perfBody.insertAdjacentHTML('beforeend', `<tr><td>Fuel Cons (MT)</td><td class="pf-computed">${row?.meCons==null?'—':fmt(row.meCons,3)}</td>${fuelCells}</tr>`);
+  wireReportAeInputs();
+  // keep AE avgPower/runTime inputs in sync when user edits GE section after rebuild
+  document.querySelectorAll('.ae-kw-input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const unit = inp.dataset.aeUnit;
+      const n = parseInt(unit.slice(2),10);
+      const geKw = document.getElementById(`rep_ge${n}_kw`);
+      if (geKw && document.activeElement !== geKw) geKw.value = inp.value;
+      updateAePerfDisplays(unit);
+    });
+  });
+}
+
 function renderReportPerfCell(unit, key, entryId, perfTable){
   const aeIdx = unit.startsWith('AE') ? parseInt(unit.slice(2),10)-1 : -1;
   const isAe = aeIdx >= 0;
@@ -2807,6 +2986,9 @@ function renderReportPerfCell(unit, key, entryId, perfTable){
     }
     if (key === 'runTime'){
       const v = kwPerf.runTime;
+      if (isAe){
+        return `<td class="pf-computed" id="rep_pf_runTime_${unit}_disp">${fmtP(v, 1)}</td>`;
+      }
       return `<td><input class="pf-input" type="number" step="0.1" id="rep_pf_runTime_${unit}" value="${v===null||v===undefined?'':v}"></td>`;
     }
     return `<td class="pf-computed" id="rep_pf_${key}_${unit}_disp">${fmtP(kwPerf[key], dec)}</td>`;
@@ -2864,19 +3046,9 @@ function openReportEditor(entryId){
 
   const r = e.report || {};
 
-  const perfBody = document.querySelector('#reportPerfTable tbody');
-  const perfTable = r.perfTable || {};
-  const mePerf = computeMePerf(entryId);
-  const visibleUnits = reportPerfVisibleUnits();
-  const thead = document.querySelector('#reportPerfTable thead tr');
-  if (thead){
-    thead.innerHTML = `<th></th><th>M/E (auto)</th>${visibleUnits.map(u=>`<th>${PERF_UNIT_LABELS[u]}</th>`).join('')}`;
-  }
-  perfBody.innerHTML = PERF_ROWS.map(([key,label])=>{
-    const meVal = fmtP(mePerf[key], key==='avgPower'||key==='runTime'?0:1);
-    return `<tr><td>${label}</td><td class="pf-computed">${meVal}</td>${visibleUnits.map(u=>renderReportPerfCell(u, key, entryId, perfTable)).join('')}</tr>`;
-  }).join('');
-  wireReportAeInputs();
+  document.getElementById('rep_blrRuntime').value = r.blrRuntime ?? e.blrRuntime ?? '';
+  renderReportGeRuntimeFields(entryId, r);
+  rebuildReportPerfTable(entryId, r);
 
   document.getElementById('rep_port').value = r.port ?? '';
   document.getElementById('rep_cargoOp').value = r.cargoOp ?? '';
@@ -2910,21 +3082,35 @@ function openReportEditor(entryId){
   }
 
   function readReportFormValues(){
-    const num = id => { const v = document.getElementById(id).value; return v===''? null : parseFloat(v); };
+    const num = id => { const el = document.getElementById(id); if (!el) return null; const v = el.value; return v===''? null : parseFloat(v); };
     const report = {
       erTemp: num('rep_erTemp'), bilgeRob: num('rep_bilgeRob'), sludgeRob: num('rep_sludgeRob'),
       stTemp: num('rep_stTemp'), swTemp: num('rep_swTemp'),
-      remarks: document.getElementById('rep_remarks').value
+      remarks: document.getElementById('rep_remarks').value,
+      blrRuntime: num('rep_blrRuntime'),
+      generatorsInUse: parseInt(document.getElementById('rep_geInUse')?.value) || 1
     };
     if (!isSea){
       report.port = document.getElementById('rep_port').value;
       report.cargoOp = document.getElementById('rep_cargoOp').value;
     }
+    const prev = previousEntryFor(entryId);
+    const row = getComputedRow(entryId);
+    report.generators = readReportGeGeneratorsDraft(report.generatorsInUse).map((g,i)=>{
+      const prevRt = entryGeRuntime(prev, i+1);
+      const periodHrs = (g.runtime!=null && prevRt!=null) ? runtimeDelta(g.runtime, prevRt) : null;
+      return { ...g, periodHrs };
+    });
+    const shares = splitGeConsByHours(row?.geCons, report.generators.map(g=>g.periodHrs));
+    report.generators.forEach((g,i)=>{ g.fuelCons = shares[i] ?? null; });
+
     const perfTable = { ME: computeMePerf(entryId) };
-    PERF_UNITS.slice(1).forEach(u=>{
+    const visibleUnits = reportPerfVisibleUnits(report.generatorsInUse);
+    visibleUnits.forEach(u=>{
       if (u.startsWith('AE')){
         const idx = parseInt(u.slice(2),10)-1;
-        const kw = num(`rep_pf_avgPower_${u}`);
+        const g = report.generators[idx] || {};
+        const kw = g.avgKw ?? num(`rep_pf_avgPower_${u}`);
         const maxKw = geMaxKw(idx);
         const avgLoad = (kw!=null && maxKw>0) ? (kw/maxKw)*100 : null;
         perfTable[u] = {
@@ -2932,18 +3118,22 @@ function openReportEditor(entryId){
           avgLoad,
           minLoad: avgLoad!=null ? avgLoad*0.90 : null,
           maxLoad: avgLoad!=null ? avgLoad*1.15 : null,
-          runTime: num(`rep_pf_runTime_${u}`)
+          runTime: g.periodHrs ?? null,
+          fuelCons: g.fuelCons ?? null
         };
       } else if (u === 'BOILER' || u === 'INCINERATOR'){
         const maxKw = u === 'BOILER' ? boilerMaxKw() : incineratorMaxKw();
         const kw = num(`rep_pf_avgPower_${u}`);
         const avgLoad = (kw!=null && maxKw>0) ? (kw/maxKw)*100 : null;
+        const runTime = u === 'BOILER'
+          ? (()=>{ const prevBlr = entryBlrRuntime(prev); const cur = report.blrRuntime; return (cur!=null && prevBlr!=null) ? runtimeDelta(cur, prevBlr) : num(`rep_pf_runTime_${u}`); })()
+          : num(`rep_pf_runTime_${u}`);
         perfTable[u] = {
           avgPower: kw,
           avgLoad,
           minLoad: avgLoad!=null ? avgLoad*0.90 : null,
           maxLoad: avgLoad!=null ? avgLoad*1.15 : null,
-          runTime: num(`rep_pf_runTime_${u}`)
+          runTime
         };
       } else {
         perfTable[u] = {};
@@ -2968,9 +3158,19 @@ function openReportEditor(entryId){
 
   document.getElementById('btnSaveReport').onclick = async ()=>{
     e.report = readReportFormValues();
+    // mirror onto entry for computeDerived / voyage summary compatibility
+    e.blrRuntime = e.report.blrRuntime;
+    for (let i=1; i<=3; i++){
+      const g = e.report.generators?.[i-1];
+      e[`ge${i}Runtime`] = g?.runtime ?? null;
+      e[`ge${i}Kw`] = g?.avgKw ?? null;
+    }
+    e.updatedAt = new Date().toISOString();
     await dbPut('entries', e);
+    markPendingSync();
     alert('Supplementary report saved.');
     document.getElementById('reportEditorPanel').style.display = 'none';
+    render();
   };
   document.getElementById('btnCloseReport').onclick = ()=>{
     document.getElementById('reportEditorPanel').style.display = 'none';
@@ -3230,14 +3430,6 @@ function loadEntryIntoForm(id){
   document.getElementById('in_revCounter').value = e.revCounter ?? '';
   document.getElementById('in_tbn').value = e.tbn;
   document.getElementById('me_runtime').value = e.meRuntime ?? '';
-  document.getElementById('blr_runtime').value = e.blrRuntime ?? '';
-  for (let i=1; i<=3; i++){
-    const rt = document.getElementById(`ge${i}_runtime`);
-    if (rt) rt.value = e[`ge${i}Runtime`] ?? (i===1 ? e.ge1Runtime : null) ?? '';
-    const kw = document.getElementById(`ge${i}_kw`);
-    if (kw) kw.value = e[`ge${i}Kw`] ?? '';
-    updateGeLoadPctPreview(i);
-  }
 
   const meIn = document.getElementById('me_meter_in'), meOut = document.getElementById('me_meter_out'), meSingle = document.getElementById('me_meter');
   if (meIn && meOut){ meIn.value = e.me.meterIn ?? ''; meOut.value = e.me.meterOut ?? ''; }
@@ -3743,6 +3935,7 @@ function openVoyageSummary(entryId){
       <td>${p.hrs==null?'—':fmt(p.hrs,1)}</td>
       <td>${p.kw==null?'—':fmt(p.kw,0)}</td>
       <td>${p.loadPct==null?'—':fmt(p.loadPct,1)}</td>
+      <td>${p.fuelCons==null?'—':fmt(p.fuelCons,3)}</td>
       <td>${fmt(totH,1)}</td>
       <td>${totKw==null?'—':fmt(totKw,0)}</td>
       <td>${totLoad==null?'—':fmt(totLoad,1)}</td>
@@ -3968,6 +4161,7 @@ function printVoyageSummary(entryId){
       <td>${p.hrs==null?'—':fmt(p.hrs,1)}</td>
       <td>${p.kw==null?'—':fmt(p.kw,0)}</td>
       <td>${p.loadPct==null?'—':fmt(p.loadPct,1)}</td>
+      <td>${p.fuelCons==null?'—':fmt(p.fuelCons,3)}</td>
       <td>${fmt(totH,1)}</td>
       <td>${totKw==null?'—':fmt(totKw,0)}</td>
       <td>${totLoad==null?'—':fmt(totLoad,1)}</td>
@@ -3975,7 +4169,7 @@ function printVoyageSummary(entryId){
   }).join('');
   const geSection = geN>0 ? printSection(`Generators — ${GE_ARR_LABELS[state.setup.geArrangement || 'SINGLE']}`, `
     <table class="pr-table">
-      <tr><th>Unit</th><th>Period Hrs</th><th>kW</th><th>Load %</th><th>Voy Hrs</th><th>Voy Avg kW</th><th>Voy Load %</th></tr>
+      <tr><th>Unit</th><th>Period Hrs</th><th>kW</th><th>Load %</th><th>Fuel MT</th><th>Voy Hrs</th><th>Voy Avg kW</th><th>Voy Load %</th></tr>
       ${geRows}
     </table>
     ${printRow('Voyage Avg Gen Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct,1)}%`)}
@@ -4499,13 +4693,15 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     revCounter: document.getElementById('in_revCounter').value===''? null : parseFloat(document.getElementById('in_revCounter').value),
     tbn: document.getElementById('in_tbn').value,
     meRuntime: parseFloat(document.getElementById('me_runtime').value)||null,
-    blrRuntime: parseFloat(document.getElementById('blr_runtime').value)||null,
-    ge1Runtime: parseFloat(document.getElementById('ge1_runtime')?.value)||null,
-    ge2Runtime: parseFloat(document.getElementById('ge2_runtime')?.value)||null,
-    ge3Runtime: parseFloat(document.getElementById('ge3_runtime')?.value)||null,
-    ge1Kw: document.getElementById('ge1_kw')?.value==='' ? null : parseFloat(document.getElementById('ge1_kw')?.value)||null,
-    ge2Kw: document.getElementById('ge2_kw')?.value==='' ? null : parseFloat(document.getElementById('ge2_kw')?.value)||null,
-    ge3Kw: document.getElementById('ge3_kw')?.value==='' ? null : parseFloat(document.getElementById('ge3_kw')?.value)||null,
+    // GE / boiler runtime & load are entered on the Supplementary Report
+    blrRuntime: existing?.blrRuntime ?? null,
+    ge1Runtime: existing?.ge1Runtime ?? null,
+    ge2Runtime: existing?.ge2Runtime ?? null,
+    ge3Runtime: existing?.ge3Runtime ?? null,
+    ge1Kw: existing?.ge1Kw ?? null,
+    ge2Kw: existing?.ge2Kw ?? null,
+    ge3Kw: existing?.ge3Kw ?? null,
+    report: existing?.report || null,
     me: meField,
     ge: geField,
     blr:{ meter: blrMeter, type: document.getElementById('blr_type').value, sg: parseFloat(document.getElementById('blr_sg').value)||0 },
@@ -4544,6 +4740,8 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
   exitEditMode();
   render();
   openVoyageSummary(entry.id);
+  // prepare form for the next new entry using just-saved meters as reference
+  prefillFromLastEntry();
 });
 
 function exitEditMode(){
@@ -4597,17 +4795,59 @@ function applyEntryDefaults(){
   renderEntryConsTable();
 }
 
+/** Prefill a new log entry from the last saved entry (meters, types, condition) — not consumption. */
+function prefillFromLastEntry(){
+  const last = sortedEntries().slice(-1)[0] || state.setup.carryover;
+  applyEntryDefaults();
+  if (!last) return;
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val!=null && val!==undefined) el.value = val; };
+  set('in_condition', last.condition || state.setup.shipCondition);
+  set('in_tbn', last.tbn);
+  set('in_revCounter', last.revCounter);
+  set('me_runtime', last.meRuntime);
+
+  const meIn = document.getElementById('me_meter_in'), meOut = document.getElementById('me_meter_out'), meSingle = document.getElementById('me_meter');
+  if (meIn && meOut){ meIn.value = last.me?.meterIn ?? ''; meOut.value = last.me?.meterOut ?? ''; }
+  else if (meSingle) meSingle.value = last.me?.meter ?? '';
+  set('me_type', last.me?.type); set('me_sg', last.me?.sg);
+
+  const geIn = document.getElementById('ge_meter_in'), geOut = document.getElementById('ge_meter_out'), geSingle = document.getElementById('ge_meter');
+  if (geIn && geOut){ geIn.value = last.ge?.meterIn ?? ''; geOut.value = last.ge?.meterOut ?? ''; }
+  else if (geSingle) geSingle.value = last.ge?.meter ?? '';
+  set('ge_type', last.ge?.type); set('ge_sg', last.ge?.sg);
+
+  set('blr_meter', last.blr?.meter); set('blr_type', last.blr?.type); set('blr_sg', last.blr?.sg);
+  set('cyl_meter', last.cylMeter); set('me_lo_meter', last.meLo); set('ge_lo_meter', last.geLo);
+  set('fw_prod_meter', last.fwProd); set('fw_rob_reading', last.fwRob);
+
+  // new period fields — leave blank / zero so user enters this watch's figures
+  document.getElementById('in_distanceShip').value = '0';
+  document.getElementById('in_rpm').value = '';
+  document.getElementById('entry_misc_mdomgo').value = '0';
+  document.getElementById('entry_misc_lsmgo').value = '0';
+  ['entry_unit_me','entry_unit_ge','entry_unit_blr'].forEach(id=>{ const el = document.getElementById(id); if (el) el.value=''; });
+  const body = document.getElementById('entryConsBody');
+  if (body) body.innerHTML = '';
+  updateLivePreview();
+  renderEntryUnitFields();
+  renderFwLivePreview();
+  renderEntryConsTable();
+}
+
 document.getElementById('btnClearForm').addEventListener('click', ()=>{
-  ['in_distanceShip'].forEach(id=>document.getElementById(id).value='0');
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  document.getElementById('in_datetime').value = now.toISOString().slice(0,16);
+  document.getElementById('in_distanceShip').value = '0';
   ['in_rpm','in_revCounter','me_meter','ge_meter','me_meter_in','me_meter_out','ge_meter_in','ge_meter_out',
-   'blr_meter','me_runtime','ge1_runtime','blr_runtime',
-   'cyl_meter','me_lo_meter','ge_lo_meter','fw_prod_meter','fw_rob_reading'].forEach(id=>{
+   'blr_meter','me_runtime','cyl_meter','me_lo_meter','ge_lo_meter','fw_prod_meter','fw_rob_reading'].forEach(id=>{
     const el = document.getElementById(id); if (el) el.value='';
   });
   document.getElementById('entry_misc_mdomgo').value = '0';
   document.getElementById('entry_misc_lsmgo').value = '0';
   ['entry_unit_me','entry_unit_ge','entry_unit_blr'].forEach(id=>{ document.getElementById(id).value=''; });
-  applyEntryDefaults();
+  prefillFromLastEntry();
 });
 
 /* ---------------- receipts ---------------- */
@@ -5278,7 +5518,7 @@ function migrateSetup(setup){
     renderReportCategoryButtons();
 
     render();
-    applyEntryDefaults();
+    prefillFromLastEntry();
     ensureSyncConfig();
     registerServiceWorker();
     renderSyncUi();
