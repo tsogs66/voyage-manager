@@ -65,7 +65,11 @@
 
   .unit-group{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px;}
   .unit-group.cols2{grid-template-columns:1fr 1fr;}
+  .unit-group.cols4{grid-template-columns:repeat(4,1fr);}
   .unit-group.cols5{grid-template-columns:repeat(5,1fr);}
+  @media (max-width:1100px){
+    .unit-group.cols4{grid-template-columns:repeat(2,1fr);}
+  }
   .unit-box{border:1px solid var(--line); border-radius:4px; padding:10px; background:rgba(0,0,0,0.15);}
   .unit-box h3{margin:0 0 8px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:var(--teal);}
   .unit-box .field{margin-bottom:8px;}
@@ -572,6 +576,10 @@
       <h2 id="logEntryTitle">New Log Entry</h2>
       <h3 class="sub" style="margin-top:0;">Live Calculation Preview</h3>
       <div class="stat-strip" id="livePreviewBox" style="margin-bottom:14px;"></div>
+      <!-- Hidden bridges: distance/RPM edited on Voyage Summary; kept here for live preview & save -->
+      <input type="hidden" id="in_distanceShip" value="0">
+      <input type="hidden" id="in_rpm" value="">
+
       <div class="form-grid">
         <div class="field span2"><label>Date &amp; Time</label><input type="datetime-local" id="in_datetime"></div>
         <div class="field span2"><label>Operation</label>
@@ -607,98 +615,56 @@
           </select>
         </div>
         <div class="field"><label>Condition</label><select id="in_condition"><option>BALLAST</option><option>LADEN</option></select></div>
-        <div class="field"><label>Distance Run — Ship/GPS (nm)</label><input type="number" step="0.1" id="in_distanceShip" value="0"></div>
-        <div class="field"><label>M/E Avg RPM</label><input type="number" step="0.1" id="in_rpm"></div>
-        <div class="field"><label>M/E Rev. Counter (cumulative)</label><input type="number" step="1" id="in_revCounter"></div>
+        <div class="field"><label>Engine Distance (nm, calc)</label><input type="text" id="in_engineDist" readonly></div>
+        <div class="field"><label>Engine Speed (kn, calc)</label><input type="text" id="in_engineSpeed" readonly></div>
       </div>
-      <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous Rev. Counter) ÷ (Run Hours × 60), where Run Hours = this entry's time − the previous entry's time. Type either field and the other fills in automatically.</div>
+      <div class="hint">Distance run and M/E avg RPM are entered on the Voyage Summary after you save. Engine distance / speed update here from RPM, rev. counter, and run hours. Consumption, freshwater, misc., boiler &amp; incinerator are also reviewed on Voyage Summary.</div>
 
-      <h3 class="sub">Running Hour Meters (cumulative)</h3>
-      <div class="unit-group cols3" id="meBlrRuntimeFields">
-        <div class="unit-box"><h3>Main Engine</h3><div class="field"><label>Runtime (hrs)</label><input type="number" step="0.1" id="me_runtime"></div></div>
-      </div>
-
-      <h3 class="sub">Boiler &amp; Incinerator — Runtime / Load</h3>
-      <div class="unit-group cols2" id="blrIncRuntimeFields">
-        <div class="unit-box">
-          <h3>Boiler</h3>
-          <div class="field"><label>Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="blr_runtime"></div>
-          <div class="field"><label>Period Hrs (calc)</label><input type="text" id="blr_period_disp" readonly></div>
-        </div>
-        <div class="unit-box">
-          <h3>Incinerator</h3>
-          <div class="field"><label>Run Time (hrs)</label><input type="number" step="0.1" id="inc_runtime"></div>
-          <div class="field"><label>Avg Load (kW)</label><input type="number" step="1" id="inc_kw"></div>
-          <div class="field"><label>Load % (calc)</label><input type="text" id="inc_loadpct" readonly></div>
-        </div>
-      </div>
-      <div class="hint">Boiler uses a cumulative hour-meter (period hours = this reading − previous entry). Incinerator load % = (kW ÷ max kW from Setup) × 100. Generator running hours remain on the Supplementary Report / Voyage Summary. Total G/E fuel is still recorded here via the Generator fuel meter.</div>
-
-      <h3 class="sub">Fuel Meters (litres, cumulative)</h3>
-      <div class="unit-group">
+      <h3 class="sub">Main Engine — Runtime &amp; Revolutions</h3>
+      <div class="unit-group cols2" id="meBlrRuntimeFields">
         <div class="unit-box">
           <h3>Main Engine</h3>
+          <div class="field"><label>Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="me_runtime"></div>
+          <div class="field"><label>Rev. Counter (cumulative)</label><input type="number" step="1" id="in_revCounter"></div>
+        </div>
+        <div class="unit-box">
+          <h3>Linked from Voyage Summary</h3>
+          <div class="field"><label>M/E Avg RPM (from summary)</label><input type="text" id="in_rpm_display" readonly></div>
+          <div class="hint" style="margin:0;">Editing RPM on Voyage Summary updates Rev. Counter here: Rev = previous Rev + RPM × Run Hours × 60. Editing Rev. Counter updates RPM on the summary the same way.</div>
+        </div>
+      </div>
+
+      <h3 class="sub">Fuel &amp; Cylinder Oil Meters (litres, cumulative)</h3>
+      <div class="unit-group cols4" id="fuelLubeMeterRow">
+        <div class="unit-box">
+          <h3>Main Engine Fuel</h3>
           <div id="meMeterFields"></div>
           <div class="field"><label>Fuel Type</label><select id="me_type"><option>HFO</option><option>LSFO</option><option>MDO/MGO</option><option>LSMGO</option></select></div>
           <div class="field"><label>Spec. Gravity</label><input type="number" step="0.001" id="me_sg" value="0.980"></div>
-          <div class="field"><label>Consumption (MT, calculated — edit to override)</label><input class="pf-input" type="number" step="0.001" id="entry_unit_me"></div>
         </div>
         <div class="unit-box">
-          <h3>Generator</h3>
+          <h3>Generator Fuel</h3>
           <div id="geMeterFields"></div>
           <div class="field"><label>Fuel Type</label><select id="ge_type"><option>HFO</option><option selected>MDO/MGO</option><option>LSFO</option><option>LSMGO</option></select></div>
           <div class="field"><label>Spec. Gravity</label><input type="number" step="0.001" id="ge_sg" value="0.870"></div>
-          <div class="field"><label>Consumption (MT, calculated — edit to override)</label><input class="pf-input" type="number" step="0.001" id="entry_unit_ge"></div>
         </div>
         <div class="unit-box">
-          <h3>Boiler</h3>
+          <h3>Boiler Fuel</h3>
           <div class="field"><label>Fuel Meter</label><input type="number" id="blr_meter"></div>
           <div class="field"><label>Fuel Type</label><select id="blr_type"><option>HFO</option><option selected>MDO/MGO</option><option>LSFO</option><option>LSMGO</option></select></div>
           <div class="field"><label>Spec. Gravity</label><input type="number" step="0.001" id="blr_sg" value="0.870"></div>
-          <div class="field"><label>Consumption (MT, calculated — edit to override)</label><input class="pf-input" type="number" step="0.001" id="entry_unit_blr"></div>
         </div>
-      </div>
-      <div class="hint">Each Consumption field auto-fills from that unit's own meter reading — edit it directly to correct one unit without touching the others.</div>
-
-      <h3 class="sub">Lube Oil Meters (litres, cumulative)</h3>
-      <div class="unit-group">
         <div class="unit-box">
           <h3>Cylinder Oil</h3>
-          <div class="field"><label>TBN in Use</label><select id="in_tbn"><option>HIGH</option><option>LOW</option></select></div>
           <div class="field"><label>Cylinder Oil Meter</label><input type="number" id="cyl_meter"></div>
+          <div class="field"><label>TBN in Use</label><select id="in_tbn"><option>HIGH</option><option>LOW</option></select></div>
         </div>
-        <div class="unit-box"><h3>M/E System Oil</h3><div class="field"><label>Meter</label><input type="number" id="me_lo_meter"></div></div>
-        <div class="unit-box"><h3>G/E System Oil</h3><div class="field"><label>Meter</label><input type="number" id="ge_lo_meter"></div></div>
       </div>
-
-      <h3 class="sub">Misc. Consumption (manual, added to Consumption below)</h3>
-      <div class="form-grid cols3">
-        <div class="field"><label>MDO/MGO</label><input type="number" step="0.01" id="entry_misc_mdomgo" value="0"></div>
-        <div class="field"><label>LS MGO</label><input type="number" step="0.01" id="entry_misc_lsmgo" value="0"></div>
-      </div>
-
-      <h3 class="sub">Fresh Water</h3>
-      <div class="form-grid cols3">
-        <div class="field"><label>Flowmeter (cumulative)</label><input type="number" id="fw_prod_meter"></div>
-        <div class="field"><label>R.O.B. (tank sounding, present)</label><input type="number" id="fw_rob_reading"></div>
-        <div class="field"><label>Produced (calculated, L)</label><input type="text" id="fw_produced_display" readonly></div>
-      </div>
-      <div class="stat-strip cols2" id="fwLivePreview" style="margin-top:10px;"></div>
-      <div class="hint">Produced = flowmeter delta (present − previous). Consumed is derived: Previous R.O.B. + Produced − Present R.O.B. (whatever isn't accounted for by production is assumed consumed).</div>
-
-      <h3 class="sub">Consumption — Calculated (edit any cell to override before saving)</h3>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th></th><th>Consumption</th></tr></thead>
-          <tbody id="entryConsBody"></tbody>
-        </table>
-      </div>
-      <div class="hint">Cells auto-fill from the meter readings above as you type. Click into any cell to type your own value instead — it will be saved as an override for this entry and used for R.O.B. going forward. Click "Reset to Calculated" to clear all overrides and use the calculated values again.</div>
+      <div class="hint">Fuel consumption overrides and ROB review are on the Voyage Summary after you add or open an entry. M/E and G/E system oil meters are no longer entered here — those grades follow opening ROB / receipts unless adjusted on the summary ROB table.</div>
 
       <div class="btn-row">
         <button class="primary" id="btnAdd">Add Entry</button>
         <button class="ghost" id="btnClearForm">Clear Form</button>
-        <button class="ghost" id="btnResetConsOverride">Reset to Calculated</button>
         <button class="ghost" id="btnUndoEntry" style="display:none;">Undo Last Save</button>
         <button class="danger" id="btnDeleteEntry" style="display:none;">Delete Entry</button>
         <button class="danger" id="btnCancelEdit" style="display:none;">Cancel Edit</button>
@@ -709,6 +675,19 @@
     <div class="panel" id="voyageSummaryPanel" style="display:none;">
       <h2>Voyage Summary — Reference &amp; Consumption Review</h2>
       <div class="stat-strip" id="vsTopStrip" style="margin-bottom:14px;"></div>
+
+      <div class="panel" style="margin:0 0 16px; padding:16px;">
+        <h3 class="sub" style="margin-top:0;">Voyage Run — Distance &amp; RPM</h3>
+        <div class="form-grid cols3">
+          <div class="field"><label>Distance Run — Ship/GPS (nm)</label><input type="number" step="0.1" id="vs_distanceShip" value="0"></div>
+          <div class="field"><label>M/E Avg RPM</label><input type="number" step="0.1" id="vs_rpm"></div>
+          <div class="field"><label>M/E Rev. Counter (linked)</label><input type="number" step="1" id="vs_revCounter"></div>
+          <div class="field"><label>Engine Distance (nm, calc)</label><input type="text" id="vs_engineDist" readonly></div>
+          <div class="field"><label>Engine Speed (kn, calc)</label><input type="text" id="vs_engineSpeed" readonly></div>
+          <div class="field"><label>Ship Speed (kn, calc)</label><input type="text" id="vs_shipSpeed" readonly></div>
+        </div>
+        <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous) ÷ (Run Hours × 60). Change either field and the other updates. These values save with this summary.</div>
+      </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
         <h3 class="sub" style="margin-top:0;">Main Engine Performance</h3>
@@ -789,10 +768,16 @@
 
       <div class="grid">
         <div>
-          <h3 class="sub">Fuel Cons. (by unit, computed)</h3>
+          <h3 class="sub">Fuel Cons. (by unit — edit to override)</h3>
           <div class="unit-box" id="vsFuelConsBox"></div>
+          <button class="ghost small" id="btnVsResetUnitCons" type="button" style="margin-top:8px;">Reset Unit Cons. to Calculated</button>
           <h3 class="sub">Fresh Water</h3>
-          <div class="unit-box" id="vsFreshWaterBox"></div>
+          <div class="unit-box">
+            <div class="field"><label>Flowmeter (cumulative)</label><input type="number" id="vs_fwProdMeter"></div>
+            <div class="field"><label>R.O.B. (tank sounding, present)</label><input type="number" id="vs_fwRob"></div>
+            <div class="field"><label>Produced (calc, L)</label><input type="text" id="vs_fwProduced" readonly></div>
+            <div class="field"><label>Consumed (calc, L)</label><input type="text" id="vs_fwConsumed" readonly></div>
+          </div>
           <h3 class="sub">Misc. Cons. (manual, added to Consumption)</h3>
           <div class="unit-box">
             <div class="field"><label>MDO/MGO</label><input type="number" step="0.01" id="vs_misc_mdomgo" value="0"></div>
@@ -807,6 +792,7 @@
               <tbody id="vsRobBody"></tbody>
             </table>
           </div>
+          <button class="ghost small" id="btnVsResetConsOverride" type="button" style="margin-top:8px;">Reset ROB Cons. to Calculated</button>
         </div>
       </div>
 
@@ -815,7 +801,7 @@
         <button class="ghost" id="btnPrintVoyageSummary">Print Voyage Summary (A4, 2-Up)</button>
         <button class="ghost" id="btnCloseVoyageSummary">Close</button>
       </div>
-      <div class="hint">Consumption cells default to the calculated value from meter readings — edit any cell to override it (e.g. to match a manual sounding). R.O.B. updates live as you type. Overrides apply only to this entry; every later entry's R.O.B. recalculates from it automatically.</div>
+      <div class="hint">Edit distance, RPM, boiler/incinerator, freshwater, misc., unit fuel cons, and ROB consumption here. Consumption cells default from meter readings — override any cell as needed. Saving updates this entry and recalculates every later entry.</div>
     </div>
 
     <div class="panel">
@@ -1949,16 +1935,8 @@ async function undoLastEntryAction(){
 }
 
 function updateEntryBlrIncDisplays(){
-  const dt = document.getElementById('in_datetime')?.value;
-  const prev = getPrevReferenceFor(dt, editingId);
-  const curBlr = parseFloat(document.getElementById('blr_runtime')?.value);
-  const prevBlr = entryBlrRuntime(prev);
-  const periodEl = document.getElementById('blr_period_disp');
-  if (periodEl){
-    const period = (!isNaN(curBlr) && prevBlr!=null) ? runtimeDelta(curBlr, prevBlr) : null;
-    periodEl.value = period==null ? '—' : fmt(period, 1);
-  }
-  syncIncineratorLoadPctDisplay('inc_kw', 'inc_loadpct');
+  /* Boiler / incinerator editing lives on Voyage Summary */
+  syncIncineratorLoadPctDisplay('vs_incKw', 'vs_incLoadPct');
 }
 function fmt(n,d=2){ if (n===null||n===undefined||isNaN(n)) return "—"; return Number(n).toFixed(d); }
 function meterCellText(unit){
@@ -2496,8 +2474,6 @@ function renderLastEntryRef(){
     ${item('Blr Meter (L)', e.blr.meter)}
     ${item('Blr Type / SG', e.blr.type+' / '+e.blr.sg)}
     ${item('Cylinder Oil Meter', e.cylMeter)}
-    ${item('M/E LO Meter', e.meLo)}
-    ${item('G/E LO Meter', e.geLo)}
     ${item('FW Produced Meter', e.fwProd)}
     ${item('FW ROB Reading (L)', e.fwRob)}
   </div>`;
@@ -3921,15 +3897,13 @@ function loadEntryIntoForm(id){
   document.getElementById('in_datetime').value = e.datetime;
   document.getElementById('in_operation').value = e.operation;
   document.getElementById('in_condition').value = e.condition;
-  document.getElementById('in_distanceShip').value = e.distanceShip;
+  document.getElementById('in_distanceShip').value = e.distanceShip ?? 0;
   document.getElementById('in_rpm').value = e.rpm ?? '';
   document.getElementById('in_revCounter').value = e.revCounter ?? '';
   document.getElementById('in_tbn').value = e.tbn;
   document.getElementById('me_runtime').value = e.meRuntime ?? '';
-  document.getElementById('blr_runtime').value = entryBlrRuntime(e) ?? '';
-  document.getElementById('inc_runtime').value = entryIncineratorRunTime(e) ?? '';
-  document.getElementById('inc_kw').value = entryIncineratorKw(e) ?? '';
-  updateEntryBlrIncDisplays();
+  const rpmDisp = document.getElementById('in_rpm_display');
+  if (rpmDisp) rpmDisp.value = e.rpm==null?'—':fmt(e.rpm,2);
 
   const meIn = document.getElementById('me_meter_in'), meOut = document.getElementById('me_meter_out'), meSingle = document.getElementById('me_meter');
   if (meIn && meOut){ meIn.value = e.me.meterIn ?? ''; meOut.value = e.me.meterOut ?? ''; }
@@ -3947,12 +3921,6 @@ function loadEntryIntoForm(id){
   document.getElementById('blr_type').value = e.blr.type;
   document.getElementById('blr_sg').value = e.blr.sg;
   document.getElementById('cyl_meter').value = e.cylMeter;
-  document.getElementById('me_lo_meter').value = e.meLo;
-  document.getElementById('ge_lo_meter').value = e.geLo;
-  document.getElementById('fw_prod_meter').value = e.fwProd;
-  document.getElementById('fw_rob_reading').value = e.fwRob;
-  document.getElementById('entry_misc_mdomgo').value = (e.miscCons && e.miscCons['MDO/MGO']) || 0;
-  document.getElementById('entry_misc_lsmgo').value = (e.miscCons && e.miscCons['LSMGO']) || 0;
 
   document.getElementById('btnAdd').textContent = 'Update Entry';
   document.getElementById('logEntryTitle').textContent = 'EDIT LOG ENTRY';
@@ -3961,27 +3929,7 @@ function loadEntryIntoForm(id){
   updateEntryActionButtons();
   switchTab('entry');
   updateLivePreview();
-  renderEntryUnitFields();
-  renderFwLivePreview();
-  const rowForUnits = getComputedRow(id);
-  if (rowForUnits){
-    document.getElementById('entry_unit_me').value = rowForUnits.meCons===null||rowForUnits.meCons===undefined ? '' : rowForUnits.meCons;
-    document.getElementById('entry_unit_ge').value = rowForUnits.geCons===null||rowForUnits.geCons===undefined ? '' : rowForUnits.geCons;
-    document.getElementById('entry_unit_blr').value = rowForUnits.blrCons===null||rowForUnits.blrCons===undefined ? '' : rowForUnits.blrCons;
-  }
-  // populate consumption table with this entry's saved values (override if present, else calculated)
-  const body = document.getElementById('entryConsBody');
-  if (body) body.innerHTML = '';
-  renderEntryConsTable();
-  const row = getComputedRow(id);
-  if (row){
-    getRobRows().forEach(r=>{
-      const el = document.getElementById('entry_cons_'+slugKey(r.key));
-      if (!el) return;
-      const val = robRowCons(row, r);
-      el.value = (val===null||val===undefined) ? '' : val;
-    });
-  }
+  updateVsRunCalcDisplays();
   openVoyageSummary(id);
 }
 
@@ -4411,6 +4359,16 @@ function openVoyageSummary(entryId){
   `;
 
   document.getElementById('vsGeArrLabel').value = GE_ARR_LABELS[state.setup.geArrangement || 'SINGLE'] || 'Single Generator';
+
+  // Voyage run inputs (editable)
+  document.getElementById('vs_distanceShip').value = entry.distanceShip ?? 0;
+  document.getElementById('vs_rpm').value = entry.rpm ?? '';
+  document.getElementById('vs_revCounter').value = entry.revCounter ?? '';
+  document.getElementById('in_distanceShip').value = entry.distanceShip ?? 0;
+  document.getElementById('in_rpm').value = entry.rpm ?? '';
+  document.getElementById('in_revCounter').value = entry.revCounter ?? '';
+  updateVsRunCalcDisplays();
+
   document.getElementById('vsMePerfStrip').innerHTML = `
     ${stat('RPM', fmt(entry.rpm,1))}
     ${stat('% MCR', fmt(row.mcrPct,1))}
@@ -4522,18 +4480,32 @@ function openVoyageSummary(entryId){
   };
   renderVsPerfTable(entryId);
 
+  const unitOv = entry.unitOverride || {};
+  const meConsVal = unitOv.ME!=null ? unitOv.ME : row.meCons;
+  const geConsVal = unitOv.GE!=null ? unitOv.GE : row.geCons;
+  const blrConsVal = unitOv.BLR!=null ? unitOv.BLR : row.blrCons;
   document.getElementById('vsFuelConsBox').innerHTML = `
-    <div class="field"><label>M/E</label><input value="${fmt(row.meCons,2)}" readonly></div>
-    <div class="field"><label>D/G</label><input value="${fmt(row.geCons,2)}" readonly></div>
-    <div class="field"><label>Boiler</label><input value="${fmt(row.blrCons,2)}" readonly></div>
-    <div class="field"><label>TOTAL</label><input value="${fmt(row.total,2)}" readonly></div>
+    <div class="field"><label>M/E (MT)</label><input class="pf-input" type="number" step="0.001" id="vs_unit_me" value="${meConsVal==null?'':meConsVal}"></div>
+    <div class="field"><label>D/G (MT)</label><input class="pf-input" type="number" step="0.001" id="vs_unit_ge" value="${geConsVal==null?'':geConsVal}"></div>
+    <div class="field"><label>Boiler (MT)</label><input class="pf-input" type="number" step="0.001" id="vs_unit_blr" value="${blrConsVal==null?'':blrConsVal}"></div>
+    <div class="field"><label>TOTAL (MT)</label><input type="text" id="vs_unit_total" value="${fmt((meConsVal||0)+(geConsVal||0)+(blrConsVal||0),3)}" readonly></div>
   `;
+  const refreshVsUnitTotal = ()=>{
+    const a = parseFloat(document.getElementById('vs_unit_me')?.value)||0;
+    const b = parseFloat(document.getElementById('vs_unit_ge')?.value)||0;
+    const c = parseFloat(document.getElementById('vs_unit_blr')?.value)||0;
+    const tot = document.getElementById('vs_unit_total');
+    if (tot) tot.value = fmt(a+b+c, 3);
+  };
+  ['vs_unit_me','vs_unit_ge','vs_unit_blr'].forEach(id=>{
+    document.getElementById(id)?.addEventListener('input', refreshVsUnitTotal);
+  });
 
-  document.getElementById('vsFreshWaterBox').innerHTML = `
-    <div class="field"><label>Produced (L)</label><input value="${row.fwProdD==null?'—':fmt(row.fwProdD,0)}" readonly></div>
-    <div class="field"><label>Consumed (L)</label><input value="${row.fwConsD==null?'—':fmt(row.fwConsD,0)}" readonly></div>
-    <div class="field"><label>R.O.B. (L)</label><input value="${entry.fwRob==null?'—':fmt(entry.fwRob,0)}" readonly></div>
-  `;
+  document.getElementById('vs_fwProdMeter').value = entry.fwProd ?? '';
+  document.getElementById('vs_fwRob').value = entry.fwRob ?? '';
+  document.getElementById('vs_fwProduced').value = row.fwProdD==null?'—':fmt(row.fwProdD,0);
+  document.getElementById('vs_fwConsumed').value = row.fwConsD==null?'—':fmt(row.fwConsD,0);
+  updateVsFwDisplays();
 
   const misc = entry.miscCons || {"MDO/MGO":0,"LSMGO":0};
   document.getElementById('vs_misc_mdomgo').value = misc['MDO/MGO'] ?? 0;
@@ -4708,13 +4680,30 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   const entry = state.entries.find(e=>e.id===currentVsEntryId);
   if (!entry) return;
   const num = id => { const el = document.getElementById(id); if (!el || el.value==='') return null; const v = parseFloat(el.value); return isNaN(v) ? null : v; };
-  const num0 = id => { const v = document.getElementById(id).value; return isNaN(parseFloat(v)) ? 0 : parseFloat(v); };
+  const num0 = id => { const el = document.getElementById(id); if (!el) return 0; const v = parseFloat(el.value); return isNaN(v) ? 0 : v; };
+
+  // Voyage run + freshwater + misc + unit fuel overrides (editable only on summary)
+  entry.distanceShip = num0('vs_distanceShip');
+  entry.rpm = num('vs_rpm');
+  entry.revCounter = num('vs_revCounter');
+  entry.fwProd = num0('vs_fwProdMeter');
+  entry.fwRob = num('vs_fwRob');
   entry.miscCons = { 'MDO/MGO': num0('vs_misc_mdomgo'), 'LSMGO': num0('vs_misc_lsmgo') };
+  entry.unitOverride = {
+    ME: num('vs_unit_me'),
+    GE: num('vs_unit_ge'),
+    BLR: num('vs_unit_blr')
+  };
   entry.consOverride = {};
   getRobRows().forEach(r=>{
     const el = document.getElementById('vs_cons_'+slugKey(r.key));
     entry.consOverride[r.key] = el ? (parseFloat(el.value)||0) : null;
   });
+
+  // Keep log-entry bridges in sync
+  document.getElementById('in_distanceShip').value = entry.distanceShip ?? 0;
+  document.getElementById('in_rpm').value = entry.rpm ?? '';
+  document.getElementById('in_revCounter').value = entry.revCounter ?? '';
 
   // Persist full supplementary-report machinery fields from voyage summary
   const prev = previousEntryFor(entry.id);
@@ -4789,10 +4778,16 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   entry.updatedAt = new Date().toISOString();
 
   await dbPut('entries', entry);
+  const sortedAfter = sortedEntries();
+  const savedIdx = sortedAfter.findIndex(e=>e.id===entry.id);
+  if (savedIdx >= 0 && savedIdx < sortedAfter.length - 1){
+    await cascadeSucceedingEntries(savedIdx + 1, { clearOverrides: false });
+  }
   markPendingSync();
   render();
   document.getElementById('voyageSummaryPanel').style.display = 'none';
-  alert('Consumption, misc. and report machinery data saved — R.O.B. recalculated for this and all later entries.');
+  currentVsEntryId = null;
+  alert('Voyage summary saved — distance, RPM, consumption, freshwater, misc., and machinery data updated. Later entries recalculated.');
 });
 /* ---------------- print history (Log Entry) ---------------- */
 async function recordPrintHistory(label, entry, htmlContent){
@@ -5029,37 +5024,150 @@ function getPrevReferenceFor(dtValue, excludeId){
   return effectiveCarryover();
 }
 
+function isVoyageSummaryOpen(){
+  const p = document.getElementById('voyageSummaryPanel');
+  return !!(p && p.style.display !== 'none' && currentVsEntryId);
+}
+/** When Voyage Summary is open, period math must use that entry — not the next-entry form. */
+function getActivePeriodContext(){
+  if (isVoyageSummaryOpen()){
+    const entry = state.entries.find(e=>e.id===currentVsEntryId);
+    if (entry){
+      const formRt = parseFloat(document.getElementById('me_runtime')?.value);
+      const meRuntime = (editingId === currentVsEntryId && !isNaN(formRt)) ? formRt : (entry.meRuntime ?? (isNaN(formRt)?null:formRt));
+      return { datetime: entry.datetime, excludeId: currentVsEntryId, meRuntime, entry };
+    }
+  }
+  const formRt = parseFloat(document.getElementById('me_runtime')?.value);
+  return {
+    datetime: document.getElementById('in_datetime')?.value || null,
+    excludeId: editingId,
+    meRuntime: isNaN(formRt) ? null : formRt,
+    entry: null
+  };
+}
+function periodRunHours(prevRef, curDt, curMeRuntime){
+  if (prevRef?.meRuntime!=null && curMeRuntime!=null && !isNaN(curMeRuntime)){
+    const d = runtimeDelta(curMeRuntime, prevRef.meRuntime);
+    if (d!=null && d>0) return d;
+  }
+  if (prevRef && curDt){
+    const wall = (new Date(curDt) - new Date(prevRef.datetime)) / 3600000;
+    if (wall>0) return wall;
+  }
+  return null;
+}
+
 let rpmSyncGuard = false;
+function setLinkedRpmFields(rpm, revCounter){
+  const rpmStr = rpm==null || isNaN(rpm) ? '' : Number(rpm).toFixed(2);
+  const rcStr = revCounter==null || isNaN(revCounter) ? '' : String(Math.round(revCounter));
+  const set = (id, val)=>{ const el = document.getElementById(id); if (el && document.activeElement!==el) el.value = val; };
+  set('in_rpm', rpmStr);
+  set('vs_rpm', rpmStr);
+  set('in_rpm_display', rpmStr==='' ? '—' : rpmStr);
+  set('in_revCounter', rcStr);
+  set('vs_revCounter', rcStr);
+}
 function syncRpmRevCounter(sourceId){
   if (rpmSyncGuard) return;
-  const prevRef = getPrevReferenceFor(document.getElementById('in_datetime').value, editingId);
+  const ctx = getActivePeriodContext();
+  if (!ctx.datetime) return;
+  const prevRef = getPrevReferenceFor(ctx.datetime, ctx.excludeId);
   if (!prevRef || prevRef.revCounter==null) return;
-  const curDt = document.getElementById('in_datetime').value;
-  if (!curDt) return;
-  const runHours = (new Date(curDt) - new Date(prevRef.datetime)) / 3600000;
+  const runHours = periodRunHours(prevRef, ctx.datetime, ctx.meRuntime);
   if (!(runHours>0)) return;
   rpmSyncGuard = true;
-  if (sourceId === 'in_rpm'){
-    const rpm = parseFloat(document.getElementById('in_rpm').value);
+  const src = (sourceId === 'vs_rpm' || sourceId === 'in_rpm') ? 'rpm' : 'rev';
+  if (src === 'rpm'){
+    const rpmEl = document.getElementById(sourceId === 'vs_rpm' ? 'vs_rpm' : 'in_rpm') || document.getElementById('vs_rpm');
+    const rpm = parseFloat(rpmEl?.value);
     if (!isNaN(rpm)){
       const revCounter = prevRef.revCounter + rpm*runHours*60;
-      document.getElementById('in_revCounter').value = Math.round(revCounter);
+      setLinkedRpmFields(rpm, revCounter);
     }
   } else {
-    const rc = parseFloat(document.getElementById('in_revCounter').value);
+    const rcEl = document.getElementById(sourceId === 'vs_revCounter' ? 'vs_revCounter' : 'in_revCounter');
+    const rc = parseFloat(rcEl?.value);
     if (!isNaN(rc)){
       const rpm = (rc - prevRef.revCounter)/(runHours*60);
-      document.getElementById('in_rpm').value = rpm.toFixed(2);
+      setLinkedRpmFields(rpm, rc);
     }
   }
   rpmSyncGuard = false;
+  updateLivePreview();
+  updateVsRunCalcDisplays();
 }
-document.getElementById('in_rpm').addEventListener('input', ()=>syncRpmRevCounter('in_rpm'));
-document.getElementById('in_revCounter').addEventListener('input', ()=>syncRpmRevCounter('in_revCounter'));
+function updateVsRunCalcDisplays(){
+  const distEl = document.getElementById('vs_distanceShip');
+  const rpmEl = document.getElementById('vs_rpm');
+  if (distEl) document.getElementById('in_distanceShip').value = distEl.value || '0';
+  if (rpmEl && rpmEl.value!=='') document.getElementById('in_rpm').value = rpmEl.value;
+  const ctx = getActivePeriodContext();
+  const curEntry = readCurrentFormAsEntry();
+  if (ctx.entry){
+    curEntry.datetime = ctx.datetime;
+    if (curEntry.distanceShip==null) curEntry.distanceShip = ctx.entry.distanceShip;
+  }
+  const prevRef = getPrevReferenceFor(ctx.datetime || curEntry.datetime, ctx.excludeId);
+  const pitch = state.setup.pitch||0, propConstant = pitch*60/1852;
+  let distEngine=null, speedEngine=null, shipSpeed=null;
+  if (curEntry.rpm!=null) speedEngine = curEntry.rpm * propConstant;
+  const hrs = periodRunHours(prevRef, ctx.datetime || curEntry.datetime, ctx.meRuntime);
+  if (hrs>0 && curEntry.rpm!=null) distEngine = curEntry.rpm * propConstant * hrs;
+  if (hrs>0 && curEntry.distanceShip!=null) shipSpeed = curEntry.distanceShip / hrs;
+  const set = (id, val)=>{ const el=document.getElementById(id); if (el) el.value = val==null?'—':fmt(val,2); };
+  set('in_engineDist', distEngine);
+  set('in_engineSpeed', speedEngine);
+  set('vs_engineDist', distEngine);
+  set('vs_engineSpeed', speedEngine);
+  set('vs_shipSpeed', shipSpeed);
+  const rpmDisp = document.getElementById('in_rpm_display');
+  if (rpmDisp && document.activeElement!==rpmDisp) rpmDisp.value = curEntry.rpm==null?'—':fmt(curEntry.rpm,2);
+}
+function updateVsFwDisplays(){
+  if (!currentVsEntryId) return;
+  const entry = state.entries.find(e=>e.id===currentVsEntryId);
+  if (!entry) return;
+  const prev = previousEntryFor(currentVsEntryId) || effectiveCarryover();
+  const num = id => { const el = document.getElementById(id); if (!el || el.value==='') return null; const v = parseFloat(el.value); return isNaN(v) ? null : v; };
+  const fwProd = num('vs_fwProdMeter');
+  const fwRob = num('vs_fwRob');
+  const rolls = meterRollovers();
+  const fwProdD = (prev && fwProd!=null) ? meterDelta(fwProd, prev.fwProd, rolls.generic) : null;
+  let fwCons = null;
+  if (prev && prev.fwRob!=null && fwRob!=null && fwProdD!=null){
+    fwCons = prev.fwRob + fwProdD - fwRob;
+  }
+  const set = (id, val)=>{ const el=document.getElementById(id); if (el) el.value = val==null?'—':fmt(val,0); };
+  set('vs_fwProduced', fwProdD);
+  set('vs_fwConsumed', fwCons);
+}
+['vs_rpm','vs_revCounter','in_revCounter'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('input', ()=> syncRpmRevCounter(id));
+});
+document.getElementById('me_runtime')?.addEventListener('input', ()=>{
+  if (document.getElementById('vs_rpm')?.value)
+    syncRpmRevCounter('vs_rpm');
+  else if (document.getElementById('in_revCounter')?.value)
+    syncRpmRevCounter('in_revCounter');
+  updateVsRunCalcDisplays();
+  updateLivePreview();
+});
+document.getElementById('vs_distanceShip')?.addEventListener('input', ()=>{
+  document.getElementById('in_distanceShip').value = document.getElementById('vs_distanceShip').value || '0';
+  updateVsRunCalcDisplays();
+  updateLivePreview();
+});
+['vs_fwProdMeter','vs_fwRob'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('input', updateVsFwDisplays);
+});
 document.getElementById('in_datetime').addEventListener('change', ()=>{
-  // re-sync whichever field has a value, preferring RPM as the "master" input
-  if (document.getElementById('in_rpm').value !== '') syncRpmRevCounter('in_rpm');
-  else if (document.getElementById('in_revCounter').value !== '') syncRpmRevCounter('in_revCounter');
+  if (document.getElementById('vs_rpm')?.value || document.getElementById('in_rpm')?.value)
+    syncRpmRevCounter(document.getElementById('vs_rpm')?.value ? 'vs_rpm' : 'in_rpm');
+  else if (document.getElementById('in_revCounter')?.value)
+    syncRpmRevCounter('in_revCounter');
+  updateVsRunCalcDisplays();
 });
 
 /* ---------------- live calculation preview ---------------- */
@@ -5075,16 +5183,24 @@ function readCurrentFormAsEntry(){
   const geField = geDual
     ? { meterIn: num('ge_meter_in'), meterOut: num('ge_meter_out'), type: txt('ge_type'), sg: num('ge_sg') }
     : { meter: num('ge_meter'), type: txt('ge_type'), sg: num('ge_sg') };
+  const last = (editingId && state.entries.find(e=>e.id===editingId))
+    || sortedEntries().slice(-1)[0]
+    || state.setup.carryover;
+  const vsFwProd = num('vs_fwProdMeter');
+  const vsFwRob = num('vs_fwRob');
   return {
     datetime: txt('in_datetime'),
-    distanceShip: num('in_distanceShip'),
-    rpm: num('in_rpm'),
-    revCounter: num('in_revCounter'),
+    distanceShip: num('vs_distanceShip') ?? num('in_distanceShip'),
+    rpm: num('vs_rpm') ?? num('in_rpm'),
+    revCounter: num('vs_revCounter') ?? num('in_revCounter'),
     tbn: txt('in_tbn'),
     me: meField, ge: geField,
     blr: { meter: num('blr_meter'), type: txt('blr_type'), sg: num('blr_sg') },
-    cylMeter: num('cyl_meter'), meLo: num('me_lo_meter'), geLo: num('ge_lo_meter'),
-    fwProd: num('fw_prod_meter'), fwRob: num('fw_rob_reading')
+    cylMeter: num('cyl_meter'),
+    meLo: last?.meLo ?? 0,
+    geLo: last?.geLo ?? 0,
+    fwProd: vsFwProd ?? last?.fwProd ?? 0,
+    fwRob: vsFwRob ?? last?.fwRob ?? null
   };
 }
 
@@ -5116,9 +5232,9 @@ function updateLivePreview(){
       meCons = (meRaw!=null && curEntry.me.sg!=null) ? (meRaw*curEntry.me.sg)/1000 : null;
       geCons = (geRaw!=null && curEntry.ge.sg!=null) ? (geRaw*curEntry.ge.sg)/1000 : null;
       blrCons = (blrD!=null && curEntry.blr.sg!=null) ? (blrD*curEntry.blr.sg)/1000 : null;
-      const unitMe = document.getElementById('entry_unit_me');
-      const unitGe = document.getElementById('entry_unit_ge');
-      const unitBlr = document.getElementById('entry_unit_blr');
+      const unitMe = document.getElementById('vs_unit_me');
+      const unitGe = document.getElementById('vs_unit_ge');
+      const unitBlr = document.getElementById('vs_unit_blr');
       if (unitMe && unitMe.value!=='') meCons = parseFloat(unitMe.value);
       if (unitGe && unitGe.value!=='') geCons = parseFloat(unitGe.value);
       if (unitBlr && unitBlr.value!=='') blrCons = parseFloat(unitBlr.value);
@@ -5131,6 +5247,13 @@ function updateLivePreview(){
       }
     }
   }
+
+  const engDistEl = document.getElementById('in_engineDist');
+  const engSpdEl = document.getElementById('in_engineSpeed');
+  if (engDistEl) engDistEl.value = distEngine==null?'—':fmt(distEngine,2);
+  if (engSpdEl) engSpdEl.value = speedEngine==null?'—':fmt(speedEngine,2);
+  const rpmDisp = document.getElementById('in_rpm_display');
+  if (rpmDisp) rpmDisp.value = curEntry.rpm==null?'—':fmt(curEntry.rpm,2);
 
   const stat = (label,val) => `<div class="stat"><div class="num">${val}</div><div class="lbl">${label}</div></div>`;
   box.innerHTML =
@@ -5157,10 +5280,7 @@ function updateLivePreview(){
         stat('SFOC Δ %', delta==null?'—':((delta>0?'+':'')+fmt(delta,1)));
     })();
 }
-document.getElementById('logEntryFormPanel').addEventListener('input', updateLivePreview);
-document.getElementById('logEntryFormPanel').addEventListener('change', updateLivePreview);
-
-/* ---------------- editable consumption table on Log Entry form ---------------- */
+/* ---------------- editable consumption helpers (Voyage Summary) ---------------- */
 function computeRawUnitCons(curEntry, prevRef, rolls){
   const {meRaw, geRaw} = meGeRawLitres(curEntry, prevRef, rolls);
   const blrD = meterDelta(curEntry.blr.meter, prevRef.blr.meter, rolls.boiler);
@@ -5171,10 +5291,13 @@ function computeRawUnitCons(curEntry, prevRef, rolls){
 }
 
 function renderEntryUnitFields(){
+  /* Unit fuel cons fields live on Voyage Summary (vs_unit_*). */
+  if (!isVoyageSummaryOpen()) return;
   const curEntry = readCurrentFormAsEntry();
-  const prevRef = getPrevReferenceFor(curEntry.datetime, editingId);
-  if (!prevRef || !curEntry.datetime) return;
-  const hrs = (new Date(curEntry.datetime) - new Date(prevRef.datetime)) / 3600000;
+  const ctx = getActivePeriodContext();
+  const prevRef = getPrevReferenceFor(ctx.datetime || curEntry.datetime, ctx.excludeId);
+  if (!prevRef || !(ctx.datetime || curEntry.datetime)) return;
+  const hrs = periodRunHours(prevRef, ctx.datetime || curEntry.datetime, ctx.meRuntime);
   if (!(hrs>0)) return;
   const rolls = meterRollovers();
   const {meCons, geCons, blrCons} = computeRawUnitCons(curEntry, prevRef, rolls);
@@ -5182,9 +5305,11 @@ function renderEntryUnitFields(){
     const el = document.getElementById(id);
     if (el && document.activeElement!==el) el.value = (val===null||val===undefined) ? '' : val;
   };
-  set('entry_unit_me', meCons);
-  set('entry_unit_ge', geCons);
-  set('entry_unit_blr', blrCons);
+  set('vs_unit_me', meCons);
+  set('vs_unit_ge', geCons);
+  set('vs_unit_blr', blrCons);
+  const tot = document.getElementById('vs_unit_total');
+  if (tot && document.activeElement!==tot) tot.value = fmt((meCons||0)+(geCons||0)+(blrCons||0), 3);
 }
 
 function renderVoyageProgress(animateShip){
@@ -5323,27 +5448,7 @@ function renderVoyageProgress(animateShip){
 }
 
 function renderFwLivePreview(){
-  const box = document.getElementById('fwLivePreview');
-  const producedField = document.getElementById('fw_produced_display');
-  if (!box) return;
-  const curEntry = readCurrentFormAsEntry();
-  const prevRef = getPrevReferenceFor(curEntry.datetime, editingId);
-  const stat = (label,val) => `<div class="stat"><div class="num">${val}</div><div class="lbl">${label}</div></div>`;
-  if (!prevRef){
-    box.innerHTML = stat('Consumed (L)','—') + stat('Previous R.O.B. (L)','—');
-    if (producedField) producedField.value = '';
-    return;
-  }
-  const rolls = meterRollovers();
-  const fwProdD = meterDelta(curEntry.fwProd, prevRef.fwProd, rolls.generic);
-  let fwCons = null;
-  if (prevRef.fwRob!=null && curEntry.fwRob!=null && fwProdD!=null){
-    fwCons = prevRef.fwRob + fwProdD - curEntry.fwRob;
-  }
-  if (producedField) producedField.value = fwProdD==null ? '' : fmt(fwProdD,0);
-  box.innerHTML =
-    stat('Consumed (L)', fwCons==null?'—':fmt(fwCons,0)) +
-    stat('Previous R.O.B. (L)', prevRef.fwRob==null?'—':fmt(prevRef.fwRob,0));
+  updateVsFwDisplays();
 }
 
 function computeLiveConsByType(){
@@ -5357,9 +5462,9 @@ function computeLiveConsByType(){
   const rolls = meterRollovers();
 
   let {meCons, geCons, blrCons} = computeRawUnitCons(curEntry, prevRef, rolls);
-  const unitMe = document.getElementById('entry_unit_me');
-  const unitGe = document.getElementById('entry_unit_ge');
-  const unitBlr = document.getElementById('entry_unit_blr');
+  const unitMe = document.getElementById('vs_unit_me');
+  const unitGe = document.getElementById('vs_unit_ge');
+  const unitBlr = document.getElementById('vs_unit_blr');
   if (unitMe && unitMe.value!=='') meCons = parseFloat(unitMe.value);
   if (unitGe && unitGe.value!=='') geCons = parseFloat(unitGe.value);
   if (unitBlr && unitBlr.value!=='') blrCons = parseFloat(unitBlr.value);
@@ -5367,8 +5472,8 @@ function computeLiveConsByType(){
   if (meCons && curEntry.me.type) rawFuel[curEntry.me.type] += meCons;
   if (geCons && curEntry.ge.type) rawFuel[curEntry.ge.type] += geCons;
   if (blrCons && curEntry.blr.type) rawFuel[curEntry.blr.type] += blrCons;
-  const miscMdo = parseFloat((document.getElementById('entry_misc_mdomgo')||{}).value) || 0;
-  const miscLs = parseFloat((document.getElementById('entry_misc_lsmgo')||{}).value) || 0;
+  const miscMdo = parseFloat(document.getElementById('vs_misc_mdomgo')?.value) || 0;
+  const miscLs = parseFloat(document.getElementById('vs_misc_lsmgo')?.value) || 0;
   rawFuel['MDO/MGO'] += miscMdo;
   rawFuel['LSMGO'] += miscLs;
   FUEL_TYPES.forEach(t=> consByType[t] = rawFuel[t]);
@@ -5412,27 +5517,29 @@ function renderEntryConsTable(){
   });
 }
 
-document.getElementById('btnResetConsOverride').addEventListener('click', ()=>{
-  ['entry_unit_me','entry_unit_ge','entry_unit_blr'].forEach(id=>{ document.getElementById(id).value=''; });
-  renderEntryUnitFields();
-  renderEntryConsTable();
-  getRobRows().forEach(r=>{
-    const id = 'entry_cons_' + slugKey(r.key);
-    const inp = document.getElementById(id);
-    if (inp) inp.removeAttribute('data-touched');
-  });
-  // force refresh ignoring focus
-  const body = document.getElementById('entryConsBody');
-  if (body) body.innerHTML = '';
-  renderEntryConsTable();
+document.getElementById('btnVsResetUnitCons')?.addEventListener('click', ()=>{
+  if (!currentVsEntryId) return;
+  const entry = state.entries.find(e=>e.id===currentVsEntryId);
+  if (!entry) return;
+  entry.unitOverride = { ME:null, GE:null, BLR:null };
+  const row = getComputedRow(currentVsEntryId);
+  const set = (id, val)=>{ const el=document.getElementById(id); if (el) el.value = val==null?'':val; };
+  set('vs_unit_me', row?.meCons);
+  set('vs_unit_ge', row?.geCons);
+  set('vs_unit_blr', row?.blrCons);
+  const tot = document.getElementById('vs_unit_total');
+  if (tot) tot.value = fmt((row?.meCons||0)+(row?.geCons||0)+(row?.blrCons||0), 3);
+});
+document.getElementById('btnVsResetConsOverride')?.addEventListener('click', ()=>{
+  if (!currentVsEntryId) return;
+  const entry = state.entries.find(e=>e.id===currentVsEntryId);
+  if (!entry) return;
+  entry.consOverride = {};
+  openVoyageSummary(currentVsEntryId);
 });
 
-document.getElementById('logEntryFormPanel').addEventListener('input', renderEntryUnitFields);
-document.getElementById('logEntryFormPanel').addEventListener('change', renderEntryUnitFields);
-document.getElementById('logEntryFormPanel').addEventListener('input', renderFwLivePreview);
-document.getElementById('logEntryFormPanel').addEventListener('change', renderFwLivePreview);
-document.getElementById('logEntryFormPanel').addEventListener('input', renderEntryConsTable);
-document.getElementById('logEntryFormPanel').addEventListener('change', renderEntryConsTable);
+document.getElementById('logEntryFormPanel').addEventListener('input', ()=>{ updateLivePreview(); updateVsRunCalcDisplays(); });
+document.getElementById('logEntryFormPanel').addEventListener('change', ()=>{ updateLivePreview(); updateVsRunCalcDisplays(); });
 
 /* ---------------- entry form handlers ---------------- */
 document.getElementById('btnAdd').addEventListener('click', async ()=>{
@@ -5471,31 +5578,9 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
   if (isNaN(blrMeter)){ alert('Please enter the Boiler fuel meter reading.'); return; }
 
   const existing = editingId ? state.entries.find(x=>x.id===editingId) : null;
-  const blrRuntimeVal = document.getElementById('blr_runtime').value;
-  const blrRuntime = blrRuntimeVal==='' ? null : parseFloat(blrRuntimeVal);
-  const incRuntimeVal = document.getElementById('inc_runtime').value;
-  const incKwVal = document.getElementById('inc_kw').value;
-  const incRunTime = incRuntimeVal==='' ? null : parseFloat(incRuntimeVal);
-  const incKw = incKwVal==='' ? null : parseFloat(incKwVal);
-
+  const lastRef = existing || sortedEntries().filter(e=>e.datetime < dtVal).slice(-1)[0] || state.setup.carryover;
+  // Distance/RPM/FW/misc/boiler/inc/consumption overrides are set on Voyage Summary
   const report = Object.assign({}, existing?.report || {});
-  report.blrRuntime = (blrRuntime!=null && !isNaN(blrRuntime)) ? blrRuntime : null;
-  report.incinerator = {
-    runTime: (incRunTime!=null && !isNaN(incRunTime)) ? incRunTime : null,
-    avgKw: (incKw!=null && !isNaN(incKw)) ? incKw : null,
-    loadPct: incineratorLoadPct(incKw)
-  };
-  report.perfTable = Object.assign({}, report.perfTable || {});
-  const prevRef = editingId
-    ? previousEntryFor(editingId)
-    : (sortedEntries().filter(e=>e.datetime < dtVal).slice(-1)[0] || effectiveCarryover());
-  const prevBlr = entryBlrRuntime(prevRef);
-  const blrPeriod = (report.blrRuntime!=null && prevBlr!=null) ? runtimeDelta(report.blrRuntime, prevBlr) : null;
-  report.perfTable.BOILER = Object.assign({}, report.perfTable.BOILER || {}, computeKwPerf({
-    avgPower: report.perfTable.BOILER?.avgPower ?? null,
-    runTime: blrPeriod
-  }, boilerMaxKw()));
-  report.perfTable.INCINERATOR = buildIncineratorPerf(report.incinerator.runTime, report.incinerator.avgKw);
 
   const entry = {
     id: editingId || uid(),
@@ -5508,7 +5593,7 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     revCounter: document.getElementById('in_revCounter').value===''? null : parseFloat(document.getElementById('in_revCounter').value),
     tbn: document.getElementById('in_tbn').value,
     meRuntime: parseFloat(document.getElementById('me_runtime').value)||null,
-    blrRuntime: report.blrRuntime,
+    blrRuntime: existing?.blrRuntime ?? report.blrRuntime ?? null,
     ge1Runtime: existing?.ge1Runtime ?? null,
     ge2Runtime: existing?.ge2Runtime ?? null,
     ge3Runtime: existing?.ge3Runtime ?? null,
@@ -5520,27 +5605,13 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     ge: geField,
     blr:{ meter: blrMeter, type: document.getElementById('blr_type').value, sg: parseFloat(document.getElementById('blr_sg').value)||0 },
     cylMeter: parseFloat(document.getElementById('cyl_meter').value)||0,
-    meLo: parseFloat(document.getElementById('me_lo_meter').value)||0,
-    geLo: parseFloat(document.getElementById('ge_lo_meter').value)||0,
-    fwProd: parseFloat(document.getElementById('fw_prod_meter').value)||0,
-    fwRob: document.getElementById('fw_rob_reading').value===''? null : parseFloat(document.getElementById('fw_rob_reading').value),
-    consOverride: (function(){
-      const o = {};
-      getRobRows().forEach(r=>{
-        const el = document.getElementById('entry_cons_'+slugKey(r.key));
-        o[r.key] = (el && el.value!=='') ? parseFloat(el.value) : null;
-      });
-      return o;
-    })(),
-    miscCons: {
-      'MDO/MGO': parseFloat(document.getElementById('entry_misc_mdomgo').value)||0,
-      'LSMGO': parseFloat(document.getElementById('entry_misc_lsmgo').value)||0
-    },
-    unitOverride: {
-      ME: document.getElementById('entry_unit_me').value==='' ? null : parseFloat(document.getElementById('entry_unit_me').value),
-      GE: document.getElementById('entry_unit_ge').value==='' ? null : parseFloat(document.getElementById('entry_unit_ge').value),
-      BLR: document.getElementById('entry_unit_blr').value==='' ? null : parseFloat(document.getElementById('entry_unit_blr').value)
-    },
+    meLo: existing?.meLo ?? lastRef?.meLo ?? 0,
+    geLo: existing?.geLo ?? lastRef?.geLo ?? 0,
+    fwProd: existing?.fwProd ?? lastRef?.fwProd ?? 0,
+    fwRob: existing?.fwRob ?? lastRef?.fwRob ?? null,
+    consOverride: existing?.consOverride || {},
+    miscCons: existing?.miscCons || { 'MDO/MGO':0, 'LSMGO':0 },
+    unitOverride: existing?.unitOverride || { ME:null, GE:null, BLR:null },
     updatedAt: new Date().toISOString()
   };
 
@@ -5569,9 +5640,10 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
   markPendingSync();
   exitEditMode();
   render();
-  openVoyageSummary(entry.id);
-  // prepare form for the next new entry using just-saved meters as reference
+  // Prefill next-entry form first, then open summary for the saved watch
+  // (RPM/distance sync uses the summary entry datetime, not the next-entry form).
   prefillFromLastEntry();
+  openVoyageSummary(entry.id);
   updateEntryActionButtons();
 });
 
@@ -5620,11 +5692,7 @@ function applyEntryDefaults(){
   set('ge_type', d.geType); set('ge_sg', d.geSg);
   set('blr_type', d.blrType); set('blr_sg', d.blrSg);
   updateLivePreview();
-  renderEntryUnitFields();
-  renderFwLivePreview();
-  const body = document.getElementById('entryConsBody');
-  if (body) body.innerHTML = '';
-  renderEntryConsTable();
+  updateVsRunCalcDisplays();
 }
 
 /** Prefill a new log entry from the last saved entry (meters, types, condition) — not consumption. */
@@ -5638,10 +5706,7 @@ function prefillFromLastEntry(){
   set('in_tbn', last.tbn);
   set('in_revCounter', last.revCounter);
   set('me_runtime', last.meRuntime);
-  set('blr_runtime', entryBlrRuntime(last));
-  set('inc_runtime', entryIncineratorRunTime(last));
-  set('inc_kw', entryIncineratorKw(last));
-  updateEntryBlrIncDisplays();
+  set('in_revCounter', last.revCounter);
 
   const meIn = document.getElementById('me_meter_in'), meOut = document.getElementById('me_meter_out'), meSingle = document.getElementById('me_meter');
   if (meIn && meOut){ meIn.value = last.me?.meterIn ?? ''; meOut.value = last.me?.meterOut ?? ''; }
@@ -5654,21 +5719,15 @@ function prefillFromLastEntry(){
   set('ge_type', last.ge?.type); set('ge_sg', last.ge?.sg);
 
   set('blr_meter', last.blr?.meter); set('blr_type', last.blr?.type); set('blr_sg', last.blr?.sg);
-  set('cyl_meter', last.cylMeter); set('me_lo_meter', last.meLo); set('ge_lo_meter', last.geLo);
-  set('fw_prod_meter', last.fwProd); set('fw_rob_reading', last.fwRob);
+  set('cyl_meter', last.cylMeter);
 
-  // new period fields — leave blank / zero so user enters this watch's figures
+  // Distance / RPM / FW / misc / cons overrides are entered on Voyage Summary for the new watch
   document.getElementById('in_distanceShip').value = '0';
   document.getElementById('in_rpm').value = '';
-  document.getElementById('entry_misc_mdomgo').value = '0';
-  document.getElementById('entry_misc_lsmgo').value = '0';
-  ['entry_unit_me','entry_unit_ge','entry_unit_blr'].forEach(id=>{ const el = document.getElementById(id); if (el) el.value=''; });
-  const body = document.getElementById('entryConsBody');
-  if (body) body.innerHTML = '';
+  const rpmDisp = document.getElementById('in_rpm_display');
+  if (rpmDisp) rpmDisp.value = '—';
   updateLivePreview();
-  renderEntryUnitFields();
-  renderFwLivePreview();
-  renderEntryConsTable();
+  updateVsRunCalcDisplays();
 }
 
 document.getElementById('btnClearForm').addEventListener('click', ()=>{
@@ -5677,13 +5736,9 @@ document.getElementById('btnClearForm').addEventListener('click', ()=>{
   document.getElementById('in_datetime').value = now.toISOString().slice(0,16);
   document.getElementById('in_distanceShip').value = '0';
   ['in_rpm','in_revCounter','me_meter','ge_meter','me_meter_in','me_meter_out','ge_meter_in','ge_meter_out',
-   'blr_meter','me_runtime','blr_runtime','inc_runtime','inc_kw','blr_period_disp','inc_loadpct',
-   'cyl_meter','me_lo_meter','ge_lo_meter','fw_prod_meter','fw_rob_reading'].forEach(id=>{
+   'blr_meter','me_runtime','cyl_meter','in_engineDist','in_engineSpeed','in_rpm_display'].forEach(id=>{
     const el = document.getElementById(id); if (el) el.value='';
   });
-  document.getElementById('entry_misc_mdomgo').value = '0';
-  document.getElementById('entry_misc_lsmgo').value = '0';
-  ['entry_unit_me','entry_unit_ge','entry_unit_blr'].forEach(id=>{ document.getElementById(id).value=''; });
   prefillFromLastEntry();
 });
 
@@ -5695,10 +5750,6 @@ document.getElementById('btnUndoEntry')?.addEventListener('click', async ()=>{
   if (!entryUndoStack.length) return;
   if (!confirm('Undo the last entry save/delete? Succeeding entries will be restored to their previous values.')) return;
   await undoLastEntryAction();
-});
-['blr_runtime','inc_runtime','inc_kw','in_datetime'].forEach(id=>{
-  document.getElementById(id)?.addEventListener('input', updateEntryBlrIncDisplays);
-  document.getElementById(id)?.addEventListener('change', updateEntryBlrIncDisplays);
 });
 
 /* ---------------- receipts ---------------- */
