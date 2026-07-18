@@ -709,6 +709,29 @@
         <div class="stat-strip cols3" id="vsVoyageAvgStrip" style="margin-top:12px;"></div>
       </div>
 
+      <div class="panel" style="margin:0 0 16px; padding:16px;">
+        <h3 class="sub" style="margin-top:0;">Boiler &amp; Incinerator — Runtime / Load</h3>
+        <div class="form-grid cols3">
+          <div class="field"><label>Boiler Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="vs_blrRuntime"></div>
+          <div class="field"><label>Boiler Period Hrs (calc)</label><input type="text" id="vs_blrPeriod" readonly></div>
+          <div class="field"><label>Boiler Fuel Cons (MT)</label><input type="text" id="vs_blrCons" readonly></div>
+          <div class="field"><label>Incinerator Run Time (hrs)</label><input type="number" step="0.1" id="vs_incRuntime"></div>
+          <div class="field"><label>Incinerator Avg Load (kW)</label><input type="number" step="1" id="vs_incKw"></div>
+          <div class="field"><label>Incinerator Load % (calc)</label><input type="text" id="vs_incLoadPct" readonly></div>
+        </div>
+        <div class="hint">Same machinery fields as the Reports tab. Incinerator load % = (kW ÷ max kW from Setup) × 100. Values save onto this entry's supplementary report.</div>
+      </div>
+
+      <div class="panel" style="margin:0 0 16px; padding:16px;">
+        <h3 class="sub" style="margin-top:0;">Performance — By Unit</h3>
+        <div class="table-scroll">
+          <table id="vsPerfTable">
+            <thead><tr><th></th><th>M/E</th><th>A/E #1</th><th>A/E #2</th><th>A/E #3</th><th>Boiler</th><th>Incinerator</th></tr></thead>
+            <tbody id="vsPerfBody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="grid">
         <div>
           <h3 class="sub">Fuel Cons. (by unit, computed)</h3>
@@ -1024,16 +1047,19 @@
         </div>
       </div>
 
-      <h3 class="sub">Generators &amp; Boiler — Runtime / Load</h3>
+      <h3 class="sub">Generators, Boiler &amp; Incinerator — Runtime / Load</h3>
       <div class="form-grid cols3">
         <div class="field"><label>Generators in Use</label>
           <select id="rep_geInUse"></select>
         </div>
         <div class="field"><label>Boiler Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="rep_blrRuntime"></div>
         <div class="field"><label>Total G/E Fuel Cons (MT)</label><input type="text" id="rep_geTotalCons" readonly></div>
+        <div class="field"><label>Incinerator Run Time (hrs)</label><input type="number" step="0.1" id="rep_incRuntime"></div>
+        <div class="field"><label>Incinerator Avg Load (kW)</label><input type="number" step="1" id="rep_incKw"></div>
+        <div class="field"><label>Incinerator Load % (calc)</label><input type="text" id="rep_incLoadPct" readonly></div>
       </div>
       <div class="unit-group cols3" id="reportGeRuntimeFields" style="margin-top:10px;"></div>
-      <div class="hint" id="reportGeSplitHint">Select how many generators ran this period. Enter each unit's cumulative hour-meter and average kW — period hours and fuel share (split of total G/E consumption by running hours) calculate automatically.</div>
+      <div class="hint" id="reportGeSplitHint">Select how many generators ran this period. Enter each unit's cumulative hour-meter and average kW — period hours and fuel share (split of total G/E consumption by running hours) calculate automatically. Incinerator load % = (kW ÷ max kW from Setup) × 100.</div>
 
       <h3 class="sub">Performance — By Unit</h3>
       <div class="hint">M/E column is calculated from this entry (RPM → %MCR/kW). A/E columns use runtime and average kW entered above — load % = (kW ÷ max kW from Setup) × 100. Fuel cons per A/E is the G/E total split by running hours.</div>
@@ -1221,10 +1247,40 @@ function entryBlrRuntime(e){
   if (e.report?.blrRuntime!=null && !isNaN(e.report.blrRuntime)) return e.report.blrRuntime;
   return (e.blrRuntime!=null && !isNaN(e.blrRuntime)) ? e.blrRuntime : null;
 }
+function entryIncineratorRunTime(e){
+  if (!e) return null;
+  const fromInc = e.report?.incinerator?.runTime;
+  if (fromInc!=null && !isNaN(fromInc)) return fromInc;
+  const fromPerf = e.report?.perfTable?.INCINERATOR?.runTime;
+  return (fromPerf!=null && !isNaN(fromPerf)) ? fromPerf : null;
+}
+function entryIncineratorKw(e){
+  if (!e) return null;
+  const fromInc = e.report?.incinerator?.avgKw;
+  if (fromInc!=null && !isNaN(fromInc)) return fromInc;
+  const fromPerf = e.report?.perfTable?.INCINERATOR?.avgPower;
+  return (fromPerf!=null && !isNaN(fromPerf)) ? fromPerf : null;
+}
+function incineratorLoadPct(kw){
+  const max = incineratorMaxKw();
+  if (kw==null || isNaN(kw) || !(max>0)) return null;
+  return (kw / max) * 100;
+}
 function entryGeneratorsInUse(e){
   const n = e?.report?.generatorsInUse;
   if (n!=null && !isNaN(n)) return Math.max(1, Math.min(geUnitCount(), n));
   return geUnitCount();
+}
+function buildIncineratorPerf(runTime, avgKw){
+  return computeKwPerf({ avgPower: avgKw, runTime }, incineratorMaxKw());
+}
+function syncIncineratorLoadPctDisplay(kwInputId, loadInputId){
+  const kwEl = document.getElementById(kwInputId);
+  const loadEl = document.getElementById(loadInputId);
+  if (!loadEl) return;
+  const kw = kwEl && kwEl.value!=='' ? parseFloat(kwEl.value) : NaN;
+  const pct = incineratorLoadPct(kw);
+  loadEl.value = pct==null ? '—' : fmt(pct, 1) + ' %';
 }
 function previousEntryFor(entryId){
   const list = sortedEntries();
@@ -2847,9 +2903,24 @@ function wireReportAeInputs(){
     updateAePerfDisplays(inp.dataset.aeUnit);
   });
   document.querySelectorAll('.kw-perf-input').forEach(inp=>{
-    inp.addEventListener('input', ()=> updateKwPerfDisplays(inp.dataset.kwUnit, parseFloat(inp.dataset.kwMax)));
+    inp.addEventListener('input', ()=>{
+      updateKwPerfDisplays(inp.dataset.kwUnit, parseFloat(inp.dataset.kwMax));
+      if (inp.dataset.kwUnit === 'INCINERATOR'){
+        const geKw = document.getElementById('rep_incKw');
+        if (geKw && document.activeElement !== geKw) geKw.value = inp.value;
+        syncIncineratorLoadPctDisplay('rep_incKw', 'rep_incLoadPct');
+      }
+    });
     updateKwPerfDisplays(inp.dataset.kwUnit, parseFloat(inp.dataset.kwMax));
   });
+  const pfIncRt = document.getElementById('rep_pf_runTime_INCINERATOR');
+  if (pfIncRt && !pfIncRt.dataset.wiredInc){
+    pfIncRt.dataset.wiredInc = '1';
+    pfIncRt.addEventListener('input', ()=>{
+      const el = document.getElementById('rep_incRuntime');
+      if (el && document.activeElement !== el) el.value = pfIncRt.value;
+    });
+  }
 }
 
 function renderReportGeRuntimeFields(entryId, report){
@@ -2959,7 +3030,7 @@ function rebuildReportPerfTable(entryId, report){
   if (thead){
     thead.innerHTML = `<th></th><th>M/E (auto)</th>${visibleUnits.map(u=>`<th>${PERF_UNIT_LABELS[u]}</th>`).join('')}`;
   }
-  // inject draft AE values from runtime fields into perfTable for display
+  // inject draft AE / incinerator values from runtime fields into perfTable for display
   const draft = readReportGeGeneratorsDraft(inUse);
   const prev = previousEntryFor(entryId);
   draft.forEach((g,i)=>{
@@ -2973,6 +3044,16 @@ function rebuildReportPerfTable(entryId, report){
       maxLoad: avgLoad!=null ? avgLoad*1.15 : null
     });
   });
+  const incRtEl = document.getElementById('rep_incRuntime');
+  const incKwEl = document.getElementById('rep_incKw');
+  if (incRtEl || incKwEl){
+    const incRt = incRtEl && incRtEl.value!=='' ? parseFloat(incRtEl.value) : (perfTable.INCINERATOR?.runTime ?? null);
+    const incKw = incKwEl && incKwEl.value!=='' ? parseFloat(incKwEl.value) : (perfTable.INCINERATOR?.avgPower ?? null);
+    perfTable.INCINERATOR = Object.assign({}, perfTable.INCINERATOR, buildIncineratorPerf(
+      incRt!=null && !isNaN(incRt) ? incRt : null,
+      incKw!=null && !isNaN(incKw) ? incKw : null
+    ));
+  }
   perfBody.innerHTML = PERF_ROWS.map(([key,label])=>{
     const meVal = fmtP(mePerf[key], key==='avgPower'||key==='runTime'?0:1);
     return `<tr><td>${label}</td><td class="pf-computed">${meVal}</td>${visibleUnits.map(u=>renderReportPerfCell(u, key, entryId, perfTable)).join('')}</tr>`;
@@ -3088,8 +3169,24 @@ function openReportEditor(entryId){
   const r = e.report || {};
 
   document.getElementById('rep_blrRuntime').value = r.blrRuntime ?? e.blrRuntime ?? '';
+  document.getElementById('rep_incRuntime').value = entryIncineratorRunTime(e) ?? '';
+  document.getElementById('rep_incKw').value = entryIncineratorKw(e) ?? '';
+  syncIncineratorLoadPctDisplay('rep_incKw', 'rep_incLoadPct');
+  const syncIncFromForm = ()=>{
+    syncIncineratorLoadPctDisplay('rep_incKw', 'rep_incLoadPct');
+    const rt = document.getElementById('rep_incRuntime')?.value;
+    const kw = document.getElementById('rep_incKw')?.value;
+    const pfRt = document.getElementById('rep_pf_runTime_INCINERATOR');
+    const pfKw = document.getElementById('rep_pf_avgPower_INCINERATOR');
+    if (pfRt && document.activeElement !== pfRt) pfRt.value = rt || '';
+    if (pfKw && document.activeElement !== pfKw) pfKw.value = kw || '';
+    if (pfKw) updateKwPerfDisplays('INCINERATOR', incineratorMaxKw());
+  };
+  document.getElementById('rep_incRuntime')?.addEventListener('input', syncIncFromForm);
+  document.getElementById('rep_incKw')?.addEventListener('input', syncIncFromForm);
   renderReportGeRuntimeFields(entryId, r);
   rebuildReportPerfTable(entryId, r);
+  syncIncFromForm();
 
   document.getElementById('rep_port').value = r.port ?? '';
   document.getElementById('rep_cargoOp').value = r.cargoOp ?? '';
@@ -3129,7 +3226,12 @@ function openReportEditor(entryId){
       stTemp: num('rep_stTemp'), swTemp: num('rep_swTemp'),
       remarks: document.getElementById('rep_remarks').value,
       blrRuntime: num('rep_blrRuntime'),
-      generatorsInUse: parseInt(document.getElementById('rep_geInUse')?.value) || 1
+      generatorsInUse: parseInt(document.getElementById('rep_geInUse')?.value) || 1,
+      incinerator: {
+        runTime: num('rep_incRuntime'),
+        avgKw: num('rep_incKw'),
+        loadPct: incineratorLoadPct(num('rep_incKw'))
+      }
     };
     if (!isSea){
       report.port = document.getElementById('rep_port').value;
@@ -3162,20 +3264,23 @@ function openReportEditor(entryId){
           runTime: g.periodHrs ?? null,
           fuelCons: g.fuelCons ?? null
         };
-      } else if (u === 'BOILER' || u === 'INCINERATOR'){
-        const maxKw = u === 'BOILER' ? boilerMaxKw() : incineratorMaxKw();
+      } else if (u === 'BOILER'){
+        const maxKw = boilerMaxKw();
         const kw = num(`rep_pf_avgPower_${u}`);
         const avgLoad = (kw!=null && maxKw>0) ? (kw/maxKw)*100 : null;
-        const runTime = u === 'BOILER'
-          ? (()=>{ const prevBlr = entryBlrRuntime(prev); const cur = report.blrRuntime; return (cur!=null && prevBlr!=null) ? runtimeDelta(cur, prevBlr) : num(`rep_pf_runTime_${u}`); })()
-          : num(`rep_pf_runTime_${u}`);
+        const prevBlr = entryBlrRuntime(prev);
+        const cur = report.blrRuntime;
+        const runTime = (cur!=null && prevBlr!=null) ? runtimeDelta(cur, prevBlr) : num(`rep_pf_runTime_${u}`);
         perfTable[u] = {
-          avgPower: kw,
-          avgLoad,
+          avgPower: kw, avgLoad,
           minLoad: avgLoad!=null ? avgLoad*0.90 : null,
           maxLoad: avgLoad!=null ? avgLoad*1.15 : null,
           runTime
         };
+      } else if (u === 'INCINERATOR'){
+        const kw = report.incinerator?.avgKw ?? num(`rep_pf_avgPower_${u}`);
+        const runTime = report.incinerator?.runTime ?? num(`rep_pf_runTime_${u}`);
+        perfTable[u] = buildIncineratorPerf(runTime, kw);
       } else {
         perfTable[u] = {};
         PERF_ROWS.forEach(([key])=>{ perfTable[u][key] = num(`rep_pf_${key}_${u}`); });
@@ -4114,6 +4219,30 @@ function openVoyageSummary(entryId){
     ${stat('Avg Ship Speed', perf.avgSpeedShip==null?'—':fmt(perf.avgSpeedShip,2)+' kn')}
   `;
 
+  // Boiler & Incinerator (same fields as Reports tab)
+  const prevForRt = previousEntryFor(entryId);
+  const prevBlr = entryBlrRuntime(prevForRt);
+  const curBlr = entryBlrRuntime(entry);
+  const blrPeriod = (curBlr!=null && prevBlr!=null) ? runtimeDelta(curBlr, prevBlr) : null;
+  document.getElementById('vs_blrRuntime').value = curBlr ?? '';
+  document.getElementById('vs_blrPeriod').value = blrPeriod==null ? '—' : fmt(blrPeriod, 1);
+  document.getElementById('vs_blrCons').value = row.blrCons==null ? '—' : fmt(row.blrCons, 3);
+  document.getElementById('vs_incRuntime').value = entryIncineratorRunTime(entry) ?? '';
+  document.getElementById('vs_incKw').value = entryIncineratorKw(entry) ?? '';
+  syncIncineratorLoadPctDisplay('vs_incKw', 'vs_incLoadPct');
+  document.getElementById('vs_blrRuntime').oninput = ()=>{
+    const cur = parseFloat(document.getElementById('vs_blrRuntime').value);
+    const period = (!isNaN(cur) && prevBlr!=null) ? runtimeDelta(cur, prevBlr) : null;
+    document.getElementById('vs_blrPeriod').value = period==null ? '—' : fmt(period, 1);
+    renderVsPerfTable(entryId);
+  };
+  document.getElementById('vs_incRuntime').oninput = ()=> renderVsPerfTable(entryId);
+  document.getElementById('vs_incKw').oninput = ()=>{
+    syncIncineratorLoadPctDisplay('vs_incKw', 'vs_incLoadPct');
+    renderVsPerfTable(entryId);
+  };
+  renderVsPerfTable(entryId);
+
   document.getElementById('vsFuelConsBox').innerHTML = `
     <div class="field"><label>M/E</label><input value="${fmt(row.meCons,2)}" readonly></div>
     <div class="field"><label>D/G</label><input value="${fmt(row.geCons,2)}" readonly></div>
@@ -4158,20 +4287,105 @@ function openVoyageSummary(entryId){
   document.getElementById('voyageSummaryPanel').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
+function renderVsPerfTable(entryId){
+  const body = document.getElementById('vsPerfBody');
+  const thead = document.querySelector('#vsPerfTable thead tr');
+  if (!body || !thead) return;
+  const entry = state.entries.find(e=>e.id===entryId);
+  const row = getComputedRow(entryId);
+  const prev = previousEntryFor(entryId);
+  const inUse = entryGeneratorsInUse(entry);
+  const units = reportPerfVisibleUnits(inUse);
+  thead.innerHTML = `<th></th><th>M/E</th>${units.map(u=>`<th>${PERF_UNIT_LABELS[u]}</th>`).join('')}`;
+
+  const mePerf = computeMePerf(entryId);
+  const blrRt = (()=>{
+    const cur = parseFloat(document.getElementById('vs_blrRuntime')?.value);
+    const prevBlr = entryBlrRuntime(prev);
+    if (!isNaN(cur) && prevBlr!=null) return runtimeDelta(cur, prevBlr);
+    return entry?.report?.perfTable?.BOILER?.runTime ?? null;
+  })();
+  const blrKw = entry?.report?.perfTable?.BOILER?.avgPower ?? null;
+  const incRt = (()=>{
+    const v = document.getElementById('vs_incRuntime')?.value;
+    if (v!=='' && v!=null && !isNaN(parseFloat(v))) return parseFloat(v);
+    return entryIncineratorRunTime(entry);
+  })();
+  const incKw = (()=>{
+    const v = document.getElementById('vs_incKw')?.value;
+    if (v!=='' && v!=null && !isNaN(parseFloat(v))) return parseFloat(v);
+    return entryIncineratorKw(entry);
+  })();
+
+  const unitPerf = { ME: mePerf };
+  for (let i=0; i<inUse; i++){
+    const p = row?.gePeriod?.[i] || {};
+    unitPerf[`AE${i+1}`] = {
+      avgPower: p.kw ?? null,
+      avgLoad: p.loadPct ?? null,
+      minLoad: p.loadPct!=null ? p.loadPct*0.90 : null,
+      maxLoad: p.loadPct!=null ? p.loadPct*1.15 : null,
+      runTime: p.hrs ?? null,
+      fuelCons: p.fuelCons ?? null
+    };
+  }
+  unitPerf.BOILER = computeKwPerf({ avgPower: blrKw, runTime: blrRt }, boilerMaxKw());
+  unitPerf.INCINERATOR = buildIncineratorPerf(incRt, incKw);
+
+  body.innerHTML = PERF_ROWS.map(([key,label])=>{
+    const dec = (key==='avgPower'||key==='runTime') ? (key==='runTime'?1:0) : 1;
+    return `<tr><td>${label}</td><td>${fmtP(mePerf[key], dec)}</td>${units.map(u=>`<td>${fmtP(unitPerf[u]?.[key], dec)}</td>`).join('')}</tr>`;
+  }).join('') + `<tr><td>Fuel Cons (MT)</td><td>${row?.meCons==null?'—':fmt(row.meCons,3)}</td>${units.map(u=>{
+    if (u.startsWith('AE')){
+      const idx = parseInt(u.slice(2),10)-1;
+      const fc = unitPerf[u]?.fuelCons;
+      return `<td>${fc==null?'—':fmt(fc,3)}</td>`;
+    }
+    if (u==='BOILER') return `<td>${row?.blrCons==null?'—':fmt(row.blrCons,3)}</td>`;
+    return `<td>—</td>`;
+  }).join('')}</tr>`;
+}
+
 document.getElementById('btnSaveVoyageSummary').addEventListener('click', async ()=>{
   const entry = state.entries.find(e=>e.id===currentVsEntryId);
   if (!entry) return;
-  const num = id => { const v = document.getElementById(id).value; return isNaN(parseFloat(v)) ? 0 : parseFloat(v); };
-  entry.miscCons = { 'MDO/MGO': num('vs_misc_mdomgo'), 'LSMGO': num('vs_misc_lsmgo') };
+  const num = id => { const el = document.getElementById(id); if (!el || el.value==='') return null; const v = parseFloat(el.value); return isNaN(v) ? null : v; };
+  const num0 = id => { const v = document.getElementById(id).value; return isNaN(parseFloat(v)) ? 0 : parseFloat(v); };
+  entry.miscCons = { 'MDO/MGO': num0('vs_misc_mdomgo'), 'LSMGO': num0('vs_misc_lsmgo') };
   entry.consOverride = {};
   getRobRows().forEach(r=>{
     const el = document.getElementById('vs_cons_'+slugKey(r.key));
     entry.consOverride[r.key] = el ? (parseFloat(el.value)||0) : null;
   });
+
+  // Persist boiler / incinerator onto supplementary report (same as Reports tab)
+  const prev = previousEntryFor(entry.id);
+  const blrRuntime = num('vs_blrRuntime');
+  const incRunTime = num('vs_incRuntime');
+  const incKw = num('vs_incKw');
+  entry.report = entry.report || {};
+  entry.report.blrRuntime = blrRuntime;
+  entry.blrRuntime = blrRuntime;
+  entry.report.incinerator = {
+    runTime: incRunTime,
+    avgKw: incKw,
+    loadPct: incineratorLoadPct(incKw)
+  };
+  entry.report.perfTable = entry.report.perfTable || {};
+  const prevBlr = entryBlrRuntime(prev);
+  const blrPeriod = (blrRuntime!=null && prevBlr!=null) ? runtimeDelta(blrRuntime, prevBlr) : entry.report.perfTable.BOILER?.runTime ?? null;
+  entry.report.perfTable.BOILER = Object.assign({}, entry.report.perfTable.BOILER || {}, computeKwPerf({
+    avgPower: entry.report.perfTable.BOILER?.avgPower ?? null,
+    runTime: blrPeriod
+  }, boilerMaxKw()));
+  entry.report.perfTable.INCINERATOR = buildIncineratorPerf(incRunTime, incKw);
+  entry.updatedAt = new Date().toISOString();
+
   await dbPut('entries', entry);
+  markPendingSync();
   render();
   document.getElementById('voyageSummaryPanel').style.display = 'none';
-  alert('Consumption and Misc. saved — R.O.B. recalculated for this and all later entries.');
+  alert('Consumption, misc., boiler & incinerator saved — R.O.B. recalculated for this and all later entries.');
 });
 /* ---------------- print history (Log Entry) ---------------- */
 async function recordPrintHistory(label, entry, htmlContent){
@@ -4329,6 +4543,21 @@ function printVoyageSummary(entryId){
     ${printRow('Voyage Avg Gen Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct,1)}%`)}
     ${printRow('Voyage Avg Gen kW', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted,0))}`) : '';
 
+  const blrPrev = entryBlrRuntime(priorEntry);
+  const blrCur = entryBlrRuntime(entry);
+  const blrPeriodPrint = (blrCur!=null && blrPrev!=null) ? runtimeDelta(blrCur, blrPrev) : (entry.report?.perfTable?.BOILER?.runTime ?? null);
+  const incRtPrint = entryIncineratorRunTime(entry);
+  const incKwPrint = entryIncineratorKw(entry);
+  const incLoadPrint = incineratorLoadPct(incKwPrint);
+  const blrIncSection = printSection('Boiler & Incinerator', [
+    printRow('Boiler Runtime (cum.)', blrCur==null?'—':`${fmt(blrCur,1)} hrs`),
+    printRow('Boiler Period Hrs', blrPeriodPrint==null?'—':fmt(blrPeriodPrint,1)),
+    printRow('Boiler Fuel Cons', row.blrCons==null?'—':`${fmt(row.blrCons,3)} MT`),
+    printRow('Incinerator Run Time', incRtPrint==null?'—':`${fmt(incRtPrint,1)} hrs`),
+    printRow('Incinerator Avg kW', incKwPrint==null?'—':fmt(incKwPrint,0)),
+    printRow('Incinerator Load %', incLoadPrint==null?'—':`${fmt(incLoadPrint,1)}%`)
+  ].join(''));
+
   const voyageAvgSection = printSection('Voyage Time Averages', [
     printRow('Total Voyage Hours', fmt(perf.totalHrs,1)),
     printRow('Total Generator Hours', fmt(perf.totalGeHrs,1)),
@@ -4364,6 +4593,7 @@ function printVoyageSummary(entryId){
       ${fwSection}
       ${meSection}
       ${geSection}
+      ${blrIncSection}
       ${voyageAvgSection}
       <div class="pr-span2">${robTable}</div>
     </div>
