@@ -164,6 +164,7 @@
   .stat-strip{display:grid; grid-template-columns:repeat(4,1fr); gap:14px;}
   .stat-strip.cols3{grid-template-columns:repeat(3,1fr);}
   .stat-strip.cols2{grid-template-columns:repeat(2,1fr);}
+  .stat-strip.cols4{grid-template-columns:repeat(4,1fr);}
   .stat-strip.cols5{grid-template-columns:repeat(5,1fr);}
   .stat{border-left:2px solid var(--brass-dim); padding-left:10px;}
   .stat .num{font-family:'IBM Plex Mono',monospace; font-size:19px; color:var(--paper);}
@@ -257,7 +258,7 @@
     .field textarea, textarea{min-height:88px; line-height:1.35;}
     .pf-input{width:100%; max-width:100%; min-height:40px; font-size:16px; padding:8px;}
 
-    .stat-strip,.stat-strip.cols2,.stat-strip.cols3,.stat-strip.cols5{
+    .stat-strip,.stat-strip.cols2,.stat-strip.cols3,.stat-strip.cols4,.stat-strip.cols5{
       grid-template-columns:repeat(2,1fr); gap:10px;
     }
     .stat .num{font-size:16px;}
@@ -757,7 +758,7 @@
     <div class="panel" id="logEntryFormPanel">
       <h2 id="logEntryTitle">New Log Entry</h2>
       <h3 class="sub" style="margin-top:0;">Live Calculation Preview</h3>
-      <div class="stat-strip" id="livePreviewBox" style="margin-bottom:14px;"></div>
+      <div class="stat-strip cols4" id="livePreviewBox" style="margin-bottom:14px;"></div>
       <!-- Hidden bridges: distance/RPM edited on Voyage Summary; kept here for live preview & save -->
       <input type="hidden" id="in_distanceShip" value="0">
       <input type="hidden" id="in_rpm" value="">
@@ -797,9 +798,8 @@
           </select>
         </div>
         <div class="field"><label>Condition</label><select id="in_condition"><option>BALLAST</option><option>LADEN</option></select></div>
-        <div class="field"><label>Slip % (calc)</label><input type="text" id="in_slip" readonly></div>
       </div>
-      <div class="hint">Distance run and M/E avg RPM are entered on the Voyage Summary after you save. Slip % updates here with RPM / distance: Slip = (Engine Dist − Ship Dist) ÷ Engine Dist × 100. Engine distance and speed stay on Voyage Summary.</div>
+      <div class="hint">Distance run, M/E avg RPM, slip, engine distance/speed, and consumption review are on the Voyage Summary after you save or open an entry.</div>
 
       <h3 class="sub">Main Engine — Runtime &amp; Revolutions</h3>
       <div class="unit-group cols2" id="meBlrRuntimeFields">
@@ -855,7 +855,7 @@
 
     <div class="panel" id="voyageSummaryPanel" style="display:none;">
       <h2>Voyage Summary — Reference &amp; Consumption Review</h2>
-      <div class="stat-strip" id="vsTopStrip" style="margin-bottom:14px;"></div>
+      <div class="stat-strip cols4" id="vsTopStrip" style="margin-bottom:14px;"></div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
         <h3 class="sub" style="margin-top:0;">Voyage Run — Distance &amp; RPM</h3>
@@ -869,11 +869,6 @@
           <div class="field"><label>Slip % (calc)</label><input type="text" id="vs_slip" readonly></div>
         </div>
         <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous) ÷ (Run Hours × 60). Engine distance = RPM × pitch constant × period hrs. Slip % = (Engine Dist − Ship Dist) ÷ Engine Dist × 100 — recalculates when RPM or distance run changes.</div>
-      </div>
-
-      <div class="panel" style="margin:0 0 16px; padding:16px;">
-        <h3 class="sub" style="margin-top:0;">Main Engine Performance</h3>
-        <div class="stat-strip cols5" id="vsMePerfStrip"></div>
       </div>
 
       <div id="vsSeaReportBlock">
@@ -925,7 +920,7 @@
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
-        <h3 class="sub" style="margin-top:0;">Fuel Cons. / Fresh Water / Misc.</h3>
+        <h3 class="sub" style="margin-top:0;">Fuel Cons. / Misc. / Fresh Water</h3>
         <div class="unit-group cols3">
           <div class="unit-box">
             <h3>Fuel Cons. (by unit — edit to override)</h3>
@@ -933,16 +928,16 @@
             <button class="ghost small" id="btnVsResetUnitCons" type="button" style="margin-top:8px;">Reset Unit Cons. to Calculated</button>
           </div>
           <div class="unit-box">
+            <h3>Misc. Cons. (manual, added to Consumption)</h3>
+            <div class="field"><label>MDO/MGO</label><input type="number" step="0.01" id="vs_misc_mdomgo" value="0"></div>
+            <div class="field"><label>LS MGO</label><input type="number" step="0.01" id="vs_misc_lsmgo" value="0"></div>
+          </div>
+          <div class="unit-box">
             <h3>Fresh Water</h3>
             <div class="field"><label>Flowmeter (cumulative)</label><input type="number" id="vs_fwProdMeter"></div>
             <div class="field"><label>R.O.B. (tank sounding, present)</label><input type="number" id="vs_fwRob"></div>
             <div class="field"><label>Produced (calc, L)</label><input type="text" id="vs_fwProduced" readonly></div>
             <div class="field"><label>Consumed (calc, L)</label><input type="text" id="vs_fwConsumed" readonly></div>
-          </div>
-          <div class="unit-box">
-            <h3>Misc. Cons. (manual, added to Consumption)</h3>
-            <div class="field"><label>MDO/MGO</label><input type="number" step="0.01" id="vs_misc_mdomgo" value="0"></div>
-            <div class="field"><label>LS MGO</label><input type="number" step="0.01" id="vs_misc_lsmgo" value="0"></div>
           </div>
         </div>
         <h3 class="sub">Fuel &amp; Lube ROB — Previous / Consumption / R.O.B.</h3>
@@ -971,18 +966,8 @@
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
-        <h3 class="sub" style="margin-top:0;">Attached Photo</h3>
-        <div class="form-grid cols3">
-          <div class="field span2">
-            <label>Photo (optional)</label>
-            <input type="file" id="vs_photoFile" accept="image/*">
-          </div>
-          <div class="field" style="justify-content:flex-end;">
-            <button class="ghost small" id="btnVsClearPhoto" type="button">Remove Photo</button>
-          </div>
-        </div>
-        <div class="vs-photo-preview" id="vs_photoPreview"></div>
-        <div class="hint">Attach a photo to this voyage summary (stored with the entry). Shown here above Save.</div>
+        <h3 class="sub" style="margin-top:0;">Main Engine Voyage Totals</h3>
+        <div class="stat-strip cols4" id="vsMeVoyageStrip"></div>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -999,6 +984,21 @@
           <div class="field"><label>Boiler Fuel Cons (MT)</label><input type="text" id="vs_blrCons" readonly></div>
           <div class="field"><label>Arrangement</label><input type="text" id="vsGeArrLabel" readonly></div>
         </div>
+      </div>
+
+      <div class="panel" style="margin:0 0 16px; padding:16px;">
+        <h3 class="sub" style="margin-top:0;">Attached Photo</h3>
+        <div class="form-grid cols3">
+          <div class="field span2">
+            <label>Photo (optional)</label>
+            <input type="file" id="vs_photoFile" accept="image/*">
+          </div>
+          <div class="field" style="justify-content:flex-end;">
+            <button class="ghost small" id="btnVsClearPhoto" type="button">Remove Photo</button>
+          </div>
+        </div>
+        <div class="vs-photo-preview" id="vs_photoPreview"></div>
+        <div class="hint">Attach a photo to this voyage summary (stored with the entry).</div>
       </div>
 
       <div class="btn-row">
@@ -4612,22 +4612,29 @@ function openVoyageSummary(entryId){
   const eta = (daysToGoVal!=null) ? new Date(dt.getTime() + daysToGoVal*24*3600000) : null;
 
   const stat = (label,val) => `<div class="stat"><div class="num">${val}</div><div class="lbl">${label}</div></div>`;
+  const etaStr = eta ? eta.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+  const sfocDeltaStr = row.sfocDelta==null ? '—' : ((row.sfocDelta>0?'+':'')+fmt(row.sfocDelta,1));
   document.getElementById('vsTopStrip').innerHTML = `
     ${stat('Voyage', state.setup.voyageNumber||'—')}
+    ${stat('Date', dtStr)}
+    ${stat('Ship Distance', fmt(entry.distanceShip,1))}
+    ${stat('Ship Speed', row.speedShip==null?'—':fmt(row.speedShip,2)+' kn')}
     ${stat('Run Time (hrs)', fmt(row.hrs,1))}
-    ${stat('Date &amp; Time', dtStr)}
-    ${stat("Ship's Distance", fmt(entry.distanceShip,1))}
-    ${stat('RPM', fmt(entry.rpm,2))}
-    ${stat('ETA', eta ? eta.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—')}
-    ${stat('Engine Distance', fmt(row.distEngine,2))}
-    ${stat('Load (KW)', fmt(row.kwEst,0))}
+    ${stat('Load (kW)', fmt(row.kwEst,0))}
     ${stat('Distance To Go', distanceToGo!=null? fmt(distanceToGo,1):'—')}
-    ${stat('Slip %', fmt(row.slip,2))}
-    ${stat('Load %', fmt(row.mcrPct,2))}
-    ${stat('Speed', fmt(row.speedShip,2))}
-    ${stat('Total Rev.', fmt(row.dailyRevs,0))}
-    ${stat('Ave. KW (voyage)', fmt(perf.avgKw,0))}
     ${stat('Days To Go', daysToGoVal!=null? fmt(daysToGoVal,2):'—')}
+    ${stat('Total Rev.', fmt(row.dailyRevs,0))}
+    ${stat('Load %', fmt(row.mcrPct,2))}
+    ${stat('Engine Distance', fmt(row.distEngine,2))}
+    ${stat('Engine Speed', row.speedEngine==null?'—':fmt(row.speedEngine,2)+' kn')}
+    ${stat('RPM', fmt(entry.rpm,2))}
+    ${stat('Ave. kW', fmt(perf.avgKw,0))}
+    ${stat('Slip %', fmt(row.slip,2))}
+    ${stat('ETA', etaStr)}
+    ${stat('SFOC @ 100%', state.setup.sfoc100==null?'—':fmt(state.setup.sfoc100,1))}
+    ${stat('Ref. SFOC', fmt(row.sfocRef,1))}
+    ${stat('Actual SFOC', fmt(row.sfocActual,1))}
+    ${stat('SFOC Δ %', sfocDeltaStr)}
   `;
 
   document.getElementById('vsGeArrLabel').value = GE_ARR_LABELS[state.setup.geArrangement || 'SINGLE'] || 'Single Generator';
@@ -4640,19 +4647,6 @@ function openVoyageSummary(entryId){
   document.getElementById('in_rpm').value = entry.rpm ?? '';
   document.getElementById('in_revCounter').value = entry.revCounter ?? '';
   updateVsRunCalcDisplays();
-
-  document.getElementById('vsMePerfStrip').innerHTML = `
-    ${stat('RPM', fmt(entry.rpm,1))}
-    ${stat('% MCR', fmt(row.mcrPct,1))}
-    ${stat('Est. kW', fmt(row.kwEst,0))}
-    ${stat('Engine Speed', row.speedEngine==null?'—':fmt(row.speedEngine,2)+' kn')}
-    ${stat('Ship Speed', row.speedShip==null?'—':fmt(row.speedShip,2)+' kn')}
-    ${stat('Slip %', fmt(row.slip,2))}
-    ${stat('SFOC @ 100%', state.setup.sfoc100==null?'—':fmt(state.setup.sfoc100,1))}
-    ${stat('Ref. SFOC', fmt(row.sfocRef,1))}
-    ${stat('Actual SFOC', fmt(row.sfocActual,1))}
-    ${stat('SFOC Δ %', row.sfocDelta==null?'—':((row.sfocDelta>0?'+':'')+fmt(row.sfocDelta,1)))}
-  `;
 
   const r = entry.report || {};
   const isSea = SEA_TYPE_OPS.has(entry.operation);
@@ -4720,13 +4714,32 @@ function openVoyageSummary(entryId){
     </tr>`;
   }).join('');
 
+  const meVoyageStrip = document.getElementById('vsMeVoyageStrip');
+  if (meVoyageStrip){
+    meVoyageStrip.innerHTML = `
+      ${stat('Voyage Hours', fmt(perf.totalHrs,1))}
+      ${stat('M/E Cons (MT)', fmt(row.meCons,3))}
+      ${stat('Engine Dist (nm)', fmt(row.distEngine,2))}
+      ${stat('Slip %', fmt(row.slip,2))}
+      ${stat('Avg RPM', fmt(perf.avgRpm,1))}
+      ${stat('Avg %MCR (hrs-wtd)', perf.avgMcrTimeWeighted==null?'—':fmt(perf.avgMcrTimeWeighted,1))}
+      ${stat('Avg kW', fmt(perf.avgKw,0))}
+      ${stat('Avg Slip %', perf.avgSlip==null?'—':fmt(perf.avgSlip,2))}
+      ${stat('SFOC @ 100%', state.setup.sfoc100==null?'—':fmt(state.setup.sfoc100,1))}
+      ${stat('Avg Ref. SFOC', perf.avgSfocRef==null?'—':fmt(perf.avgSfocRef,1))}
+      ${stat('Avg Actual SFOC', perf.avgSfocActual==null?'—':fmt(perf.avgSfocActual,1))}
+      ${stat('Avg SFOC Δ %', perf.avgSfocDelta==null?'—':((perf.avgSfocDelta>0?'+':'')+fmt(perf.avgSfocDelta,1)))}
+      ${stat('Cum. Engine Dist', fmt(perf.totalDistEngine,1))}
+      ${stat('Cum. Ship Dist', fmt(perf.totalDistShip,1))}
+      ${stat('Avg Ship Speed', perf.avgSpeedShip==null?'—':fmt(perf.avgSpeedShip,2)+' kn')}
+      ${stat('Load (kW)', fmt(row.kwEst,0))}
+    `;
+  }
   document.getElementById('vsVoyageAvgStrip').innerHTML = `
     ${stat('Voyage Hours', fmt(perf.totalHrs,1))}
     ${stat('Generator Hours', fmt(perf.totalGeHrs,1))}
     ${stat('Avg Gen Load %', perf.avgGeLoadPct==null?'—':fmt(perf.avgGeLoadPct,1))}
     ${stat('Avg Gen kW (hrs-wtd)', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted,0))}
-    ${stat('Avg %MCR (hrs-wtd)', perf.avgMcrTimeWeighted==null?'—':fmt(perf.avgMcrTimeWeighted,1))}
-    ${stat('Avg Ship Speed', perf.avgSpeedShip==null?'—':fmt(perf.avgSpeedShip,2)+' kn')}
   `;
 
   // Generators / Boiler / Incinerator (same fields as Reports tab)
@@ -5413,7 +5426,6 @@ function updateVsRunCalcDisplays(){
   set('vs_engineSpeed', speedEngine);
   set('vs_shipSpeed', shipSpeed);
   set('vs_slip', slip);
-  set('in_slip', slip);
   const rpmDisp = document.getElementById('in_rpm_display');
   if (rpmDisp && document.activeElement!==rpmDisp) rpmDisp.value = curEntry.rpm==null?'—':fmt(curEntry.rpm,2);
 }
@@ -5540,35 +5552,30 @@ function updateLivePreview(){
     }
   }
 
-  const slipEl = document.getElementById('in_slip');
-  if (slipEl && document.activeElement!==slipEl) slipEl.value = slip==null?'—':fmt(slip,2);
   const rpmDisp = document.getElementById('in_rpm_display');
   if (rpmDisp) rpmDisp.value = curEntry.rpm==null?'—':fmt(curEntry.rpm,2);
 
+  const sfoc100 = state.setup.sfoc100;
+  const sfocRef = mcrPct!=null ? referenceSfocAtLoad(mcrPct) : null;
+  const sfocAct = actualMeSfoc(meCons, kwEst, hrs);
+  const sfocDelta = sfocDeltaPct(sfocAct, sfocRef);
   const stat = (label,val) => `<div class="stat"><div class="num">${val}</div><div class="lbl">${label}</div></div>`;
+  box.className = 'stat-strip cols4';
   box.innerHTML =
-    stat('Rev. Counter', curEntry.revCounter==null?'—':curEntry.revCounter) +
     stat('Daily Revs', dailyRevs==null?'—':fmt(dailyRevs,0)) +
+    stat('Engine Speed', speedEngine==null?'—':fmt(speedEngine,2)) +
+    stat('Actual SFOC', sfocAct==null?'—':fmt(sfocAct,1)) +
     stat('M/E Cons (MT)', meCons==null?'—':fmt(meCons,3)) +
+    stat('RPM', curEntry.rpm==null?'—':fmt(curEntry.rpm,2)) +
+    stat('Engine Dist', distEngine==null?'—':fmt(distEngine,2)) +
+    stat('SFOC @ 100%', sfoc100==null?'—':fmt(sfoc100,1)) +
     stat('G/E Cons (MT)', geCons==null?'—':fmt(geCons,3)) +
+    stat('M/E Load (kW)', kwEst==null?'—':fmt(kwEst,0)) +
+    stat('Slip %', slip==null?'—':fmt(slip,2)) +
+    stat('Ref. SFOC', sfocRef==null?'—':fmt(sfocRef,1)) +
     stat('Boiler Cons (MT)', blrCons==null?'—':fmt(blrCons,3)) +
-    stat('Total Cons (MT)', total==null?'—':fmt(total,3)) +
-    stat('M/E Load (KW)', kwEst==null?'—':fmt(kwEst,0)) +
-    stat('M/E Load (%)', mcrPct==null?'—':fmt(mcrPct,1)) +
-    stat('Engine Speed (kn)', speedEngine==null?'—':fmt(speedEngine,2)) +
-    stat('Engine Distance (nm)', distEngine==null?'—':fmt(distEngine,2)) +
-    stat('Slip (%)', slip==null?'—':fmt(slip,2)) +
-    (function(){
-      const sfoc100 = state.setup.sfoc100;
-      const ref = mcrPct!=null ? referenceSfocAtLoad(mcrPct) : null;
-      const act = actualMeSfoc(meCons, kwEst, hrs);
-      const delta = sfocDeltaPct(act, ref);
-      const refLbl = mcrPct!=null ? `Ref. SFOC @ ${fmt(mcrPct,0)}%` : 'Ref. SFOC';
-      return stat('SFOC @ 100%', sfoc100==null?'—':fmt(sfoc100,1)) +
-        stat(refLbl, ref==null?'—':fmt(ref,1)) +
-        stat('Actual SFOC', act==null?'—':fmt(act,1)) +
-        stat('SFOC Δ %', delta==null?'—':((delta>0?'+':'')+fmt(delta,1)));
-    })();
+    stat('M/E Load %', mcrPct==null?'—':fmt(mcrPct,1)) +
+    stat('SFOC Δ %', sfocDelta==null?'—':((sfocDelta>0?'+':'')+fmt(sfocDelta,1)));
 }
 /* ---------------- editable consumption helpers (Voyage Summary) ---------------- */
 function computeRawUnitCons(curEntry, prevRef, rolls){
@@ -6026,7 +6033,7 @@ document.getElementById('btnClearForm').addEventListener('click', ()=>{
   document.getElementById('in_datetime').value = now.toISOString().slice(0,16);
   document.getElementById('in_distanceShip').value = '0';
   ['in_rpm','in_revCounter','me_meter','ge_meter','me_meter_in','me_meter_out','ge_meter_in','ge_meter_out',
-   'blr_meter','me_runtime','cyl_meter','in_slip','in_rpm_display'].forEach(id=>{
+   'blr_meter','me_runtime','cyl_meter','in_rpm_display'].forEach(id=>{
     const el = document.getElementById(id); if (el) el.value='';
   });
   prefillFromLastEntry();
