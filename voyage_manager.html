@@ -5396,7 +5396,7 @@ function loadEntryIntoForm(id){
   if (sel) sel.value = id;
   document.getElementById('in_datetime').value = e.datetime;
   document.getElementById('in_operation').value = e.operation;
-  document.getElementById('in_condition').value = e.condition;
+  document.getElementById('in_condition').value = normalizeCondition(e.condition);
   document.getElementById('in_distanceShip').value = e.distanceShip ?? 0;
   document.getElementById('in_rpm').value = e.rpm ?? '';
   document.getElementById('in_revCounter').value = e.revCounter ?? '';
@@ -7233,7 +7233,7 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     vesselId: state.activeVesselId,
     datetime: dtVal,
     operation: document.getElementById('in_operation').value,
-    condition: document.getElementById('in_condition').value,
+    condition: normalizeCondition(document.getElementById('in_condition').value),
     distanceShip: parseFloat(document.getElementById('in_distanceShip').value)||0,
     rpm: document.getElementById('in_rpm').value===''? null : parseFloat(document.getElementById('in_rpm').value),
     revCounter: document.getElementById('in_revCounter').value===''? null : parseFloat(document.getElementById('in_revCounter').value),
