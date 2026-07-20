@@ -594,8 +594,10 @@
       <div class="btn-row" style="margin-top:10px;">
         <button class="ghost small" id="btnAddVessel">Add New Vessel…</button>
         <button class="ghost small" id="btnPullVesselRemote">Pull Selected from Server</button>
+        <button class="ghost small" id="btnInstallTestFleet">Install / Reset Test Fleet</button>
       </div>
       <div class="hint" id="vesselSwitchHint">Each vessel keeps its own setup, voyage log, receipts, and documents in this browser. Switch vessels here to review or continue another ship's records. Use Pull from Server when sync is configured for that vessel's slug.</div>
+      <div class="hint">Test Fleet loads three scenario vessels for formula checks: <strong>M/V HARBOUR KEY</strong> (port ops), <strong>M/V ROADSTEAD</strong> (anchorage/drifting), <strong>M/V CIRCUMNAV</strong> (full voyage). Re-running replaces only those three ships' data — your other vessels are left alone.</div>
     </div>
 
     <div class="panel">
@@ -1757,84 +1759,773 @@ function defaultSetupTemplate(overrides){
   return migrateSetup(Object.assign(base, overrides || {}));
 }
 
-function buildDemoPackFangcheng(){
-  const setup = defaultSetupTemplate({
-    vesselName:'M/V FANGCHENG', chEng:'Chief Engr. Wei Chen', voyageNumber:'11-B', shipCondition:'BALLAST',
-    departPort:'FANGCHENG, CHINA', arrivePort:'SANTOS, BRAZIL', voyageDistance:11200,
-    initDateTime:'2026-06-01T08:00', pitch:5.85, mcrRpm:91, mcrKw:18630,
-    sfoc100:178.5, sfoc85:175.2, alternatorMaxKw:660, generatorCount:1,
-    boilerMaxKw:1200, incineratorMaxKw:85,
-    flowmeters:{
-      main:{ reading:1250000, digits:8 }, mainOut:{ reading:null, digits:8 },
-      aux:{ reading:890000, digits:8 }, auxOut:{ reading:null, digits:8 },
-      boiler:{ reading:45000, digits:8 }, cyl:{ reading:560000, digits:8 }, rc:{ reading:125000, digits:8 }
-    },
-    rob:{ hfo:1180, lsfo:142, mdomgo:98, lsmgo:52 },
-    robLube:{ cylhigh:9200, cyllow:0, mesysoil:6200, gesysoil:2400, freshwater:48200 },
-    sync:{ vesselId:'mv-fangcheng' }
-  });
-  const entries = [
-    { id:'e-fc1', datetime:'2026-06-01T08:00', operation:'START - PASSAGE', condition:'BALLAST', distanceShip:0,
-      rpm:null, revCounter:125000, tbn:'HIGH', meRuntime:45210, blrRuntime:120, ge1Runtime:8840, ge1Kw:320,
-      me:{ meter:1250000, type:'HFO', sg:0.98 }, ge:{ meter:890000, type:'MDO/MGO', sg:0.87 },
-      blr:{ meter:45000, type:'MDO/MGO', sg:0.87 }, cylMeter:560000, meLo:210000, geLo:88000,
-      fwProd:0, fwRob:48200, miscCons:{ 'MDO/MGO':0,'LSMGO':0 } },
-    { id:'e-fc2', datetime:'2026-06-02T12:00', operation:'AT SEA - NOON', condition:'BALLAST', distanceShip:385,
-      rpm:78.2, revCounter:127840, tbn:'HIGH', meRuntime:45234, blrRuntime:120, ge1Runtime:8858, ge1Kw:410,
-      me:{ meter:1252840, type:'HFO', sg:0.98 }, ge:{ meter:890462, type:'MDO/MGO', sg:0.87 },
-      blr:{ meter:45000, type:'MDO/MGO', sg:0.87 }, cylMeter:560185, meLo:210042, geLo:88018,
-      fwProd:1200, fwRob:47650, miscCons:{ 'MDO/MGO':0,'LSMGO':0 } },
-    { id:'e-fc3', datetime:'2026-06-05T12:00', operation:'AT SEA - NOON', condition:'BALLAST', distanceShip:398,
-      rpm:79.1, revCounter:131020, tbn:'HIGH', meRuntime:45306, blrRuntime:121, ge1Runtime:8882, ge1Kw:395,
-      me:{ meter:1255710, type:'HFO', sg:0.98 }, ge:{ meter:890918, type:'MDO/MGO', sg:0.87 },
-      blr:{ meter:45012, type:'MDO/MGO', sg:0.87 }, cylMeter:560372, meLo:210088, geLo:88036,
-      fwProd:1150, fwRob:47120, miscCons:{ 'MDO/MGO':0,'LSMGO':0 } }
-  ].map(normalizeEntry);
-  const receipts = [
-    { id:'r-fc1', date:'2026-05-28', category:'fuel', type:'MDO/MGO', tankId:'mdomgo', qty:80, bdnNo:'BDN-FC-8821', company:'Sinopec Bunker', location:'Fangcheng' }
-  ];
-  return { setup, entries, receipts, documents:[], abstracts:[], printHistory:[] };
+function seaReport(extra){
+  return Object.assign({
+    erTemp: 34, bilgeRob: 12.5, sludgeRob: 8.2, stTemp: 42, swTemp: 28,
+    remarks: '',
+    eta: null,
+    pumpRack: [48,48,49,48,47,48],
+    exhaustTemp: [385,390,388,392,386,389],
+    turbos: [{in:45,out:320,rpm:9800},{in:44,out:318,rpm:9750}],
+    scavTemp: 38, scavPress: 2.15, fuelTemp: 135, pumpMark: 6.2, pressDiff: 1.8,
+    generators: [],
+    perfTable: {}
+  }, extra || {});
 }
 
-function buildDemoPackAtlanticStar(){
+function portReport(extra){
+  return Object.assign({
+    erTemp: 36, bilgeRob: 11.0, sludgeRob: 7.5, stTemp: 38, swTemp: 29,
+    port: '', cargoOp: '', remarks: '',
+    generators: [],
+    perfTable: {},
+    blrRuntime: null
+  }, extra || {});
+}
+
+function weather(w){
+  return Object.assign({ windDir:'', windBft:null, seaState:null, swellDir:'', airTemp:null, seaTemp:null }, w || {});
+}
+
+/** Progressive meter builder for coherent demo entries. */
+function createMeterTracker(base){
+  const s = Object.assign({
+    me:0, ge:0, blr:0, cyl:0, meLo:0, geLo:0, fwProd:0, fwRob:0, rev:0,
+    meRt:0, blrRt:0, ge1:0, ge2:0, ge3:0
+  }, base);
+  return {
+    snapshot(opts){
+      const o = opts || {};
+      return {
+        me: s.me, ge: s.ge, blr: s.blr, cyl: s.cyl, meLo: s.meLo, geLo: s.geLo,
+        fwProd: s.fwProd, fwRob: s.fwRob, rev: s.rev,
+        meRt: s.meRt, blrRt: s.blrRt, ge1: s.ge1, ge2: s.ge2, ge3: s.ge3,
+        meType: o.meType, geType: o.geType, blrType: o.blrType,
+        meSg: o.meSg, geSg: o.geSg, blrSg: o.blrSg
+      };
+    },
+    apply(d){
+      const x = d || {};
+      if (x.me!=null) s.me += x.me;
+      if (x.ge!=null) s.ge += x.ge;
+      if (x.blr!=null) s.blr += x.blr;
+      if (x.cyl!=null) s.cyl += x.cyl;
+      if (x.meLo!=null) s.meLo += x.meLo;
+      if (x.geLo!=null) s.geLo += x.geLo;
+      if (x.fwProd!=null) s.fwProd += x.fwProd;
+      if (x.fwRob!=null) s.fwRob = x.fwRob;
+      if (x.fwRobDelta!=null) s.fwRob += x.fwRobDelta;
+      if (x.rev!=null) s.rev += x.rev;
+      if (x.meRt!=null) s.meRt += x.meRt;
+      if (x.blrRt!=null) s.blrRt += x.blrRt;
+      if (x.ge1!=null) s.ge1 += x.ge1;
+      if (x.ge2!=null) s.ge2 += x.ge2;
+      if (x.ge3!=null) s.ge3 += x.ge3;
+      return this.snapshot(x);
+    },
+    state: s
+  };
+}
+
+function entryFromSnap(id, datetime, operation, condition, snap, extra){
+  const e = extra || {};
+  const types = {
+    meType: snap.meType || e.meType || 'HFO',
+    geType: snap.geType || e.geType || 'MDO/MGO',
+    blrType: snap.blrType || e.blrType || 'MDO/MGO',
+    meSg: snap.meSg != null ? snap.meSg : (e.meSg != null ? e.meSg : 0.98),
+    geSg: snap.geSg != null ? snap.geSg : (e.geSg != null ? e.geSg : 0.87),
+    blrSg: snap.blrSg != null ? snap.blrSg : (e.blrSg != null ? e.blrSg : 0.87)
+  };
+  const report = e.report ? Object.assign({}, e.report) : null;
+  if (report && e.generatorsInUse != null) report.generatorsInUse = e.generatorsInUse;
+  return {
+    id, datetime, operation, condition,
+    distanceShip: e.distanceShip != null ? e.distanceShip : 0,
+    rpm: e.rpm != null ? e.rpm : null,
+    revCounter: snap.rev,
+    tbn: e.tbn || 'HIGH',
+    meRuntime: snap.meRt,
+    blrRuntime: snap.blrRt,
+    ge1Runtime: snap.ge1,
+    ge2Runtime: snap.ge2,
+    ge3Runtime: snap.ge3,
+    ge1Kw: e.ge1Kw != null ? e.ge1Kw : null,
+    ge2Kw: e.ge2Kw != null ? e.ge2Kw : null,
+    ge3Kw: e.ge3Kw != null ? e.ge3Kw : null,
+    me:{ meter: snap.me, type: types.meType, sg: types.meSg },
+    ge:{ meter: snap.ge, type: types.geType, sg: types.geSg },
+    blr:{ meter: snap.blr, type: types.blrType, sg: types.blrSg },
+    cylMeter: snap.cyl,
+    meLo: snap.meLo,
+    geLo: snap.geLo,
+    fwProd: snap.fwProd,
+    fwRob: snap.fwRob,
+    miscCons: e.miscCons || { 'MDO/MGO':0, 'LSMGO':0 },
+    consOverride: e.consOverride || null,
+    unitOverride: e.unitOverride || { ME:null, GE:null, BLR:null },
+    weather: e.weather || weather(),
+    report
+  };
+}
+
+function buildDemoPackHarbourKey(){
+  /* Port-stay vessel: cargo, bunkering, shifting, idle — M/E stopped, A/E + boiler active. */
   const setup = defaultSetupTemplate({
-    vesselName:'M/V ATLANTIC STAR', chEng:'Chief Engr. James Okafor', voyageNumber:'24-A', shipCondition:'LADEN',
-    departPort:'ROTTERDAM, NL', arrivePort:'NEW YORK, USA', voyageDistance:3450,
-    initDateTime:'2026-05-15T14:00', pitch:4.65, mcrRpm:118, mcrKw:9480,
-    sfoc100:172.0, sfoc85:169.5, alternatorMaxKw:520, generatorCount:2,
-    boilerMaxKw:850, incineratorMaxKw:75,
+    vesselName:'M/V HARBOUR KEY', chEng:'Chief Engr. Ana Ruiz', voyageNumber:'08-P', shipCondition:'LADEN',
+    departPort:'SINGAPORE', arrivePort:'SINGAPORE', voyageDistance:0,
+    initDateTime:'2026-07-01T06:00', pitch:5.40, mcrRpm:105, mcrKw:12200,
+    sfoc100:175.0, sfoc85:172.0, lcvRef:42700, lcvActual:42100,
+    dwt:58000, imoNo:'IMO 9722101',
+    alternatorMaxKw:720, generatorCount:2,
+    boilerMaxKw:1100, incineratorMaxKw:90,
+    defaults:{ cylTbn:'HIGH', meType:'HFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.980, geSg:0.870, blrSg:0.870 },
+    flowmeters:{
+      main:{ reading:980000, digits:8 }, aux:{ reading:410000, digits:8 },
+      boiler:{ reading:18500, digits:8 }, cyl:{ reading:275000, digits:8 }, rc:{ reading:168000, digits:8 }
+    },
+    rob:{ hfo:420, lsfo:95, mdomgo:110, lsmgo:48 },
+    robLube:{ cylhigh:7100, cyllow:1200, mesysoil:4500, gesysoil:2100, freshwater:62000 },
+    capacity:{ hfo:900, lsfo:350, mdomgo:280, lsmgo:160 },
+    capacityLube:{ cylhigh:12000, cyllow:12000, mesysoil:7000, gesysoil:4000, freshwater:160000 },
+    sync:{ vesselId:'mv-harbour-key' }
+  });
+  setup.generators = [{maxKw:720},{maxKw:720},{maxKw:720}];
+
+  const tr = createMeterTracker({
+    me:980000, ge:410000, blr:18500, cyl:275000, meLo:155000, geLo:72000,
+    fwProd:8200, fwRob:62000, rev:168000,
+    meRt:31200, blrRt:640, ge1:15420, ge2:14880, ge3:0
+  });
+
+  const fuelTypes = { meType:'HFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.98, geSg:0.87, blrSg:0.87 };
+  const entries = [];
+
+  // 1. Alongside — opening reference
+  let snap = tr.snapshot(fuelTypes);
+  entries.push(entryFromSnap('e-hk1','2026-07-01T06:00','FIRST LINE - ARRIVAL','LADEN', snap, {
+    ge1Kw:380, ge2Kw:360, generatorsInUse:2,
+    report: portReport({
+      port:'Singapore PSA T3', cargoOp:'Awaiting discharge',
+      remarks:'All fast. M/E secured. Two A/E in parallel for cargo readiness.',
+      blrRuntime:640,
+      generators:[
+        {runtime:15420, avgKw:380, periodHrs:null, fuelCons:null},
+        {runtime:14880, avgKw:360, periodHrs:null, fuelCons:null}
+      ],
+      perfTable:{
+        BOILER:{ avgPower:420, runTime:0 },
+        INCINERATOR:{ avgPower:0, runTime:0 }
+      }
+    })
+  }));
+
+  // 2. In-port noon — hotel + boiler, FW consumption, no ME
+  snap = tr.apply({
+    ...fuelTypes, me:0, ge:1850, blr:620, cyl:0, meLo:0, geLo:28,
+    fwProd:0, fwRob:61250, rev:0, meRt:0, blrRt:18, ge1:18, ge2:18
+  });
+  entries.push(entryFromSnap('e-hk2','2026-07-02T12:00','IN PORT - NOON','LADEN', snap, {
+    ge1Kw:310, ge2Kw:295, generatorsInUse:2,
+    weather: weather({ windDir:'SW', windBft:3, seaState:2, airTemp:31, seaTemp:29 }),
+    report: portReport({
+      port:'Singapore PSA T3', cargoOp:'Pre-cargo checks',
+      remarks:'Port noon. M/E stopped. Dual A/E. Boiler on for heating.',
+      blrRuntime:658,
+      generators:[
+        {runtime:15438, avgKw:310},
+        {runtime:14898, avgKw:295}
+      ],
+      perfTable:{ BOILER:{ avgPower:380, runTime:18 }, INCINERATOR:{ avgPower:35, runTime:4 } }
+    })
+  }));
+
+  // 3. Cargo discharging — high hotel load, misc LSMGO for shore/crane support
+  snap = tr.apply({
+    ...fuelTypes, me:0, ge:4200, blr:900, cyl:0, meLo:0, geLo:55,
+    fwProd:0, fwRob:59800, rev:0, meRt:0, blrRt:24, ge1:24, ge2:24
+  });
+  entries.push(entryFromSnap('e-hk3','2026-07-03T12:00','CARGO - DISCHARGING','LADEN', snap, {
+    ge1Kw:540, ge2Kw:520, generatorsInUse:2,
+    miscCons:{ 'MDO/MGO':0.15, 'LSMGO':0.42 },
+    report: portReport({
+      port:'Singapore PSA T3', cargoOp:'Discharging bulk cargo',
+      remarks:'Heavy A/E load during discharge. Misc LSMGO for harbour equipment.',
+      blrRuntime:682,
+      generators:[{runtime:15462, avgKw:540},{runtime:14922, avgKw:520}],
+      perfTable:{ BOILER:{ avgPower:450, runTime:24 }, INCINERATOR:{ avgPower:40, runTime:6 } }
+    })
+  }));
+
+  // 4. Discharge complete — ballast condition, idle overnight into noon
+  snap = tr.apply({
+    ...fuelTypes, me:0, ge:1100, blr:400, cyl:0, meLo:0, geLo:18,
+    fwProd:0, fwRob:59100, rev:0, meRt:0, blrRt:12, ge1:12, ge2:0
+  });
+  entries.push(entryFromSnap('e-hk4','2026-07-04T12:00','IDLE IN PORT','BALLAST', snap, {
+    ge1Kw:280, ge2Kw:null, generatorsInUse:1,
+    report: portReport({
+      port:'Singapore PSA T3', cargoOp:'Discharge complete — ballast',
+      remarks:'Single A/E. Holds empty. Condition changed to BALLAST.',
+      blrRuntime:694,
+      generators:[{runtime:15474, avgKw:280},{runtime:14922, avgKw:null}],
+      perfTable:{ BOILER:{ avgPower:320, runTime:12 }, INCINERATOR:{ avgPower:0, runTime:0 } }
+    })
+  }));
+
+  // 5. Bunkering day — GE on MDO, receipt recorded separately; fuel ROB rises via receipt
+  snap = tr.apply({
+    meType:'HFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.98, geSg:0.87, blrSg:0.87,
+    me:0, ge:1600, blr:350, cyl:0, meLo:0, geLo:22,
+    fwProd:0, fwRob:58600, rev:0, meRt:0, blrRt:10, ge1:10, ge2:10
+  });
+  entries.push(entryFromSnap('e-hk5','2026-07-05T12:00','BUNKERING','BALLAST', snap, {
+    ge1Kw:300, ge2Kw:280, generatorsInUse:2,
+    report: portReport({
+      port:'Singapore — bunker barge alongside', cargoOp:'Bunkering HFO + LSMGO',
+      remarks:'BDN received. Opening ROB + receipts applied on Receipts tab. No cargo.',
+      blrRuntime:704,
+      generators:[{runtime:15484, avgKw:300},{runtime:14932, avgKw:280}],
+      perfTable:{ BOILER:{ avgPower:300, runTime:10 }, INCINERATOR:{ avgPower:0, runTime:0 } }
+    })
+  }));
+
+  // 6. Cargo loading — ballast → laden, dual GE, override test on one GE fuel figure optional skip
+  snap = tr.apply({
+    ...fuelTypes, me:0, ge:3900, blr:850, cyl:0, meLo:0, geLo:48,
+    fwProd:0, fwRob:57200, rev:0, meRt:0, blrRt:22, ge1:22, ge2:22
+  });
+  entries.push(entryFromSnap('e-hk6','2026-07-06T12:00','CARGO - LOADING','LADEN', snap, {
+    ge1Kw:560, ge2Kw:545, generatorsInUse:2,
+    miscCons:{ 'MDO/MGO':0.08, 'LSMGO':0.25 },
+    report: portReport({
+      port:'Singapore PSA T3', cargoOp:'Loading bulk cargo',
+      remarks:'Loading. Condition LADEN. Dual A/E parallel.',
+      blrRuntime:726,
+      generators:[{runtime:15506, avgKw:560},{runtime:14954, avgKw:545}],
+      perfTable:{ BOILER:{ avgPower:480, runTime:22 }, INCINERATOR:{ avgPower:42, runTime:5 } }
+    })
+  }));
+
+  // 7. Shifting berth — short ME kick shortly after cargo noon (calendar hrs ≈ run time)
+  snap = tr.apply({
+    ...fuelTypes, me:420, ge:900, blr:180, cyl:8, meLo:5, geLo:12,
+    fwProd:0, fwRob:56950, rev:3780, meRt:1.5, blrRt:2, ge1:3, ge2:3
+  });
+  entries.push(entryFromSnap('e-hk7','2026-07-06T13:30','SHIFTING','LADEN', snap, {
+    distanceShip:10.5, rpm:42, ge1Kw:400, ge2Kw:380, generatorsInUse:2, tbn:'HIGH',
+    weather: weather({ windDir:'SE', windBft:2, seaState:1, airTemp:30, seaTemp:29 }),
+    report: portReport({
+      port:'Singapore — shift T3 to T5', cargoOp:'Shifting',
+      remarks:'Short shift under own power. Pilot onboard. Low RPM manoeuvring.',
+      blrRuntime:728,
+      generators:[{runtime:15509, avgKw:400},{runtime:14957, avgKw:380}],
+      perfTable:{ BOILER:{ avgPower:250, runTime:2 }, ME:{ avgPower:null, runTime:1.5 } }
+    })
+  }));
+
+  // 8. Final port noon before sailing
+  snap = tr.apply({
+    ...fuelTypes, me:0, ge:1400, blr:480, cyl:0, meLo:0, geLo:20,
+    fwProd:0, fwRob:56200, rev:0, meRt:0, blrRt:14, ge1:14, ge2:14
+  });
+  entries.push(entryFromSnap('e-hk8','2026-07-08T12:00','IN PORT - NOON','LADEN', snap, {
+    ge1Kw:320, ge2Kw:300, generatorsInUse:2,
+    report: portReport({
+      port:'Singapore PSA T5', cargoOp:'Ready for departure',
+      remarks:'Final port noon. Stores completed. Awaiting last line.',
+      blrRuntime:742,
+      generators:[{runtime:15523, avgKw:320},{runtime:14971, avgKw:300}],
+      perfTable:{ BOILER:{ avgPower:360, runTime:14 }, INCINERATOR:{ avgPower:30, runTime:3 } }
+    })
+  }));
+
+  const receipts = [
+    { id:'r-hk1', date:'2026-07-05', category:'fuel', type:'HFO', tankId:'hfo', qty:350, bdnNo:'BDN-SG-7105-H', company:'Vitol Bunkers', location:'Singapore' },
+    { id:'r-hk2', date:'2026-07-05', category:'fuel', type:'LSMGO', tankId:'lsmgo', qty:80, bdnNo:'BDN-SG-7105-L', company:'Vitol Bunkers', location:'Singapore' },
+    { id:'r-hk3', date:'2026-07-05', category:'lube', type:'CYL HIGH', tankId:'cylhigh', qty:2000, bdnNo:'BDN-SG-7105-C', company:'TotalEnergies', location:'Singapore' },
+    { id:'r-hk4', date:'2026-07-06', category:'fw', type:'FRESH WATER', tankId:'freshwater', qty:15000, bdnNo:'FW-SG-0607', company:'PSA Water', location:'Singapore' }
+  ];
+  return { setup, entries: entries.map(normalizeEntry), receipts, documents:[], abstracts:[], printHistory:[] };
+}
+
+function buildDemoPackRoadstead(){
+  /* Anchorage / drifting vessel waiting berth — M/E secured, A/E hotel load, weather. */
+  const setup = defaultSetupTemplate({
+    vesselName:'M/V ROADSTEAD', chEng:'Chief Engr. Henrik Berg', voyageNumber:'15-A', shipCondition:'LADEN',
+    departPort:'ROTTERDAM, NL', arrivePort:'HAMBURG, DE', voyageDistance:320,
+    initDateTime:'2026-07-10T04:00', pitch:4.80, mcrRpm:112, mcrKw:9600,
+    sfoc100:171.0, sfoc85:168.5, lcvRef:42700, lcvActual:41950,
+    dwt:42000, imoNo:'IMO 9684412',
+    alternatorMaxKw:580, generatorCount:2,
+    boilerMaxKw:900, incineratorMaxKw:70,
     defaults:{ cylTbn:'LOW', meType:'LSFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.965, geSg:0.870, blrSg:0.870 },
     flowmeters:{
-      main:{ reading:842500, digits:8 }, aux:{ reading:412800, digits:8 },
-      boiler:{ reading:22100, digits:8 }, cyl:{ reading:318500, digits:8 }, rc:{ reading:88400, digits:8 }
+      main:{ reading:712500, digits:8 }, aux:{ reading:288400, digits:8 },
+      boiler:{ reading:14200, digits:8 }, cyl:{ reading:198200, digits:8 }, rc:{ reading:94200, digits:8 }
     },
-    rob:{ hfo:0, lsfo:820, mdomgo:145, lsmgo:38 },
-    robLube:{ cylhigh:6400, cyllow:2100, mesysoil:4800, gesysoil:1900, freshwater:35200 },
-    sync:{ vesselId:'mv-atlantic-star' }
+    rob:{ hfo:0, lsfo:610, mdomgo:95, lsmgo:72 },
+    robLube:{ cylhigh:3200, cyllow:4800, mesysoil:3900, gesysoil:1750, freshwater:41000 },
+    sync:{ vesselId:'mv-roadstead' }
   });
-  setup.generators = [{maxKw:520},{maxKw:520},{maxKw:520}];
-  const entries = [
-    { id:'e-as1', datetime:'2026-05-15T14:00', operation:'LAST LINE - DEPARTURE', condition:'LADEN', distanceShip:0,
-      rpm:null, revCounter:88400, tbn:'LOW', meRuntime:18640, blrRuntime:88, ge1Runtime:4210, ge2Runtime:4188, ge1Kw:280, ge2Kw:260,
-      me:{ meter:842500, type:'LSFO', sg:0.965 }, ge:{ meter:412800, type:'MDO/MGO', sg:0.87 },
-      blr:{ meter:22100, type:'MDO/MGO', sg:0.87 }, cylMeter:318500, meLo:142000, geLo:62000,
-      fwProd:0, fwRob:35200, miscCons:{ 'MDO/MGO':0,'LSMGO':0 } },
-    { id:'e-as2', datetime:'2026-05-16T12:00', operation:'AT SEA - NOON', condition:'LADEN', distanceShip:312,
-      rpm:92.4, revCounter:90120, tbn:'LOW', meRuntime:18664, blrRuntime:88, ge1Runtime:4232, ge2Runtime:4210, ge1Kw:360, ge2Kw:340,
-      me:{ meter:843120, type:'LSFO', sg:0.965 }, ge:{ meter:413018, type:'MDO/MGO', sg:0.87 },
-      blr:{ meter:22100, type:'MDO/MGO', sg:0.87 }, cylMeter:318612, meLo:142038, geLo:62014,
-      fwProd:980, fwRob:34880, miscCons:{ 'MDO/MGO':0,'LSMGO':0 } },
-    { id:'e-as3', datetime:'2026-05-18T12:00', operation:'AT SEA - NOON', condition:'LADEN', distanceShip:328,
-      rpm:93.8, revCounter:93480, tbn:'LOW', meRuntime:18712, blrRuntime:89, ge1Runtime:4258, ge2Runtime:4236, ge1Kw:375, ge2Kw:355,
-      me:{ meter:843860, type:'LSFO', sg:0.965 }, ge:{ meter:413286, type:'MDO/MGO', sg:0.87 },
-      blr:{ meter:22108, type:'MDO/MGO', sg:0.87 }, cylMeter:318748, meLo:142082, geLo:62032,
-      fwProd:1020, fwRob:34410, miscCons:{ 'MDO/MGO':0,'LSMGO':0 } }
-  ].map(normalizeEntry);
+  setup.generators = [{maxKw:580},{maxKw:580},{maxKw:580}];
+
+  const tr = createMeterTracker({
+    me:712500, ge:288400, blr:14200, cyl:198200, meLo:128000, geLo:54000,
+    fwProd:6400, fwRob:41000, rev:94200,
+    meRt:22140, blrRt:410, ge1:9820, ge2:9650, ge3:0
+  });
+  const ft = { meType:'LSFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.965, geSg:0.87, blrSg:0.87 };
+  const entries = [];
+
+  // 1. EOSP — end sea passage, arrive roads
+  let snap = tr.snapshot(ft);
+  entries.push(entryFromSnap('e-rd1','2026-07-10T04:00','EOSP - END OF SEA PASSAGE','LADEN', snap, {
+    distanceShip:0, rpm:null, tbn:'LOW', ge1Kw:300, ge2Kw:0, generatorsInUse:1,
+    weather: weather({ windDir:'NW', windBft:4, seaState:3, swellDir:'NW', airTemp:16, seaTemp:14 }),
+    report: portReport({
+      port:'Elbe roads / Hamburg approaches', cargoOp:'Awaiting berth',
+      remarks:'EOSP. Anchor dropped on roads. M/E finished with.',
+      blrRuntime:410,
+      generators:[{runtime:9820, avgKw:300}],
+      perfTable:{ BOILER:{ avgPower:280, runTime:0 } }
+    })
+  }));
+
+  // 2. At anchor noon day 1
+  snap = tr.apply({
+    ...ft, me:0, ge:980, blr:280, cyl:0, meLo:0, geLo:14,
+    fwProd:0, fwRob:40450, rev:0, meRt:0, blrRt:12, ge1:12, ge2:0
+  });
+  entries.push(entryFromSnap('e-rd2','2026-07-11T12:00','AT ANCHOR - NOON','LADEN', snap, {
+    tbn:'LOW', ge1Kw:265, generatorsInUse:1,
+    weather: weather({ windDir:'W', windBft:5, seaState:4, swellDir:'W', airTemp:15, seaTemp:14 }),
+    report: portReport({
+      port:'Elbe anchorage A', cargoOp:'Waiting berth',
+      remarks:'Riding to port anchor. Single A/E. Moderate swell.',
+      blrRuntime:422,
+      generators:[{runtime:9832, avgKw:265}],
+      perfTable:{ BOILER:{ avgPower:260, runTime:12 }, INCINERATOR:{ avgPower:0, runTime:0 } }
+    })
+  }));
+
+  // 3. At anchor noon day 2 — dual GE for cargo prep / hold fans
+  snap = tr.apply({
+    ...ft, me:0, ge:2100, blr:320, cyl:0, meLo:0, geLo:30,
+    fwProd:0, fwRob:39700, rev:0, meRt:0, blrRt:14, ge1:14, ge2:14
+  });
+  entries.push(entryFromSnap('e-rd3','2026-07-12T12:00','AT ANCHOR - NOON','LADEN', snap, {
+    tbn:'LOW', ge1Kw:310, ge2Kw:290, generatorsInUse:2,
+    weather: weather({ windDir:'SW', windBft:6, seaState:5, swellDir:'SW', airTemp:14, seaTemp:13 }),
+    report: portReport({
+      port:'Elbe anchorage A', cargoOp:'Waiting berth — cargo fans on',
+      remarks:'Fresh breeze. Second A/E started for hold ventilation.',
+      blrRuntime:436,
+      generators:[{runtime:9846, avgKw:310},{runtime:9664, avgKw:290}],
+      perfTable:{ BOILER:{ avgPower:300, runTime:14 }, INCINERATOR:{ avgPower:28, runTime:3 } }
+    })
+  }));
+
+  // 4. Drifting — short ME use to reposition (period ≈ 4 h so RPM matches Δrevs)
+  snap = tr.apply({
+    ...ft, me:1850, ge:720, blr:120, cyl:22, meLo:8, geLo:10,
+    fwProd:0, fwRob:39400, rev:13200, meRt:4.0, blrRt:4, ge1:6, ge2:0
+  });
+  entries.push(entryFromSnap('e-rd4','2026-07-12T16:00','DRIFTING','LADEN', snap, {
+    distanceShip:32.5, rpm:55, tbn:'LOW', ge1Kw:280, generatorsInUse:1,
+    weather: weather({ windDir:'W', windBft:7, seaState:6, swellDir:'W', airTemp:13, seaTemp:12 }),
+    report: portReport({
+      port:'Elbe approaches — drifting', cargoOp:'Reposition for weather',
+      remarks:'Weighed anchor; drifting / slow steam to clear traffic lane. Low RPM.',
+      blrRuntime:440,
+      generators:[{runtime:9852, avgKw:280}],
+      perfTable:{ BOILER:{ avgPower:200, runTime:4 }, ME:{ runTime:4.0 } }
+    })
+  }));
+
+  // 5. Back at anchor
+  snap = tr.apply({
+    ...ft, me:0, ge:1050, blr:260, cyl:0, meLo:0, geLo:15,
+    fwProd:0, fwRob:38850, rev:0, meRt:0, blrRt:11, ge1:11, ge2:0
+  });
+  entries.push(entryFromSnap('e-rd5','2026-07-14T12:00','AT ANCHOR - NOON','LADEN', snap, {
+    tbn:'LOW', ge1Kw:270, generatorsInUse:1,
+    weather: weather({ windDir:'NW', windBft:4, seaState:3, swellDir:'NW', airTemp:15, seaTemp:13 }),
+    report: portReport({
+      port:'Elbe anchorage B', cargoOp:'Waiting berth',
+      remarks:'Re-anchored. Berth expected next tide.',
+      blrRuntime:451,
+      generators:[{runtime:9863, avgKw:270}],
+      perfTable:{ BOILER:{ avgPower:250, runTime:11 } }
+    })
+  }));
+
+  // 5b. Pre-arrival anchor morning (no M/E) so stand-by period is short
+  snap = tr.apply({
+    ...ft, me:0, ge:480, blr:90, cyl:0, meLo:0, geLo:6,
+    fwProd:0, fwRob:38680, rev:0, meRt:0, blrRt:3, ge1:4, ge2:0
+  });
+  entries.push(entryFromSnap('e-rd5b','2026-07-15T04:00','AT ANCHOR - NOON','LADEN', snap, {
+    tbn:'LOW', ge1Kw:260, generatorsInUse:1,
+    report: portReport({
+      port:'Elbe anchorage B', cargoOp:'Awaiting pilot',
+      remarks:'Heaving short. Berth confirmed.',
+      blrRuntime:454,
+      generators:[{runtime:9867, avgKw:260}],
+      perfTable:{ BOILER:{ avgPower:200, runTime:3 } }
+    })
+  }));
+
+  // 6. Stand by arrival — 1.5 h @ 48 RPM → 4320 revs; ~5% slip
+  snap = tr.apply({
+    ...ft, me:620, ge:450, blr:80, cyl:6, meLo:3, geLo:6,
+    fwProd:0, fwRob:38600, rev:4320, meRt:1.5, blrRt:2, ge1:1.5, ge2:1.5
+  });
+  entries.push(entryFromSnap('e-rd6','2026-07-15T05:30','STAND BY - ARRIVAL','LADEN', snap, {
+    distanceShip:10.6, rpm:48, tbn:'LOW', ge1Kw:350, ge2Kw:320, generatorsInUse:2,
+    report: portReport({
+      port:'Hamburg approaches', cargoOp:'Pilot boarding',
+      remarks:'Stand by engines. Pilot ladder ready.',
+      blrRuntime:456,
+      generators:[{runtime:9868.5, avgKw:350},{runtime:9665.5, avgKw:320}],
+      perfTable:{ BOILER:{ avgPower:180, runTime:2 } }
+    })
+  }));
+
+  // 7. First line — 2.0 h @ 35 RPM → 4200 revs
+  snap = tr.apply({
+    ...ft, me:380, ge:520, blr:60, cyl:4, meLo:2, geLo:8,
+    fwProd:0, fwRob:38400, rev:4200, meRt:2.0, blrRt:1.5, ge1:2.0, ge2:2.0
+  });
+  entries.push(entryFromSnap('e-rd7','2026-07-15T07:30','FIRST LINE - ARRIVAL','LADEN', snap, {
+    distanceShip:10.3, rpm:35, tbn:'LOW', ge1Kw:400, ge2Kw:380, generatorsInUse:2,
+    report: portReport({
+      port:'Hamburg — Hansaport', cargoOp:'All fast berth 4',
+      remarks:'First line. M/E finished with after all fast.',
+      blrRuntime:457.5,
+      generators:[{runtime:9870.5, avgKw:400},{runtime:9667.5, avgKw:380}],
+      perfTable:{ BOILER:{ avgPower:160, runTime:1.5 } }
+    })
+  }));
+
   const receipts = [
-    { id:'r-as1', date:'2026-05-14', category:'lube', type:'ME SYS OIL', tankId:'mesysoil', qty:500, bdnNo:'BDN-AS-4410', company:'Shell Marine', location:'Rotterdam' }
+    { id:'r-rd1', date:'2026-07-09', category:'fuel', type:'LSFO', tankId:'lsfo', qty:120, bdnNo:'BDN-RTM-0907', company:'TFG Marine', location:'Rotterdam' },
+    { id:'r-rd2', date:'2026-07-09', category:'lube', type:'GE SYS OIL', tankId:'gesysoil', qty:400, bdnNo:'BDN-RTM-LO', company:'Shell Marine', location:'Rotterdam' }
   ];
-  return { setup, entries, receipts, documents:[], abstracts:[], printHistory:[] };
+  return { setup, entries: entries.map(normalizeEntry), receipts, documents:[], abstracts:[], printHistory:[] };
 }
+
+function buildDemoPackCircumnav(){
+  /* Full voyage: departure → sea passage (all sea ops) → arrival. Tests slip/SFOC/ECA/fuel switch. */
+  const setup = defaultSetupTemplate({
+    vesselName:'M/V CIRCUMNAV', chEng:'Chief Engr. Priya Nair', voyageNumber:'22-F', shipCondition:'BALLAST',
+    departPort:'ROTTERDAM, NL', arrivePort:'SINGAPORE', voyageDistance:8350,
+    initDateTime:'2026-06-01T10:00', pitch:5.85, mcrRpm:91, mcrKw:18630,
+    sfoc100:178.5, sfoc85:175.2, lcvRef:42700, lcvActual:41200,
+    dwt:82000, imoNo:'IMO 9810024',
+    alternatorMaxKw:660, generatorCount:2,
+    boilerMaxKw:1200, incineratorMaxKw:85,
+    meCylinderCount:6, turboCount:2,
+    defaults:{ cylTbn:'HIGH', meType:'HFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.980, geSg:0.870, blrSg:0.870 },
+    flowmeters:{
+      main:{ reading:1500000, digits:8 }, aux:{ reading:620000, digits:8 },
+      boiler:{ reading:28000, digits:8 }, cyl:{ reading:410000, digits:8 }, rc:{ reading:210000, digits:8 }
+    },
+    rob:{ hfo:1450, lsfo:180, mdomgo:130, lsmgo:95 },
+    robLube:{ cylhigh:10500, cyllow:800, mesysoil:6800, gesysoil:2600, freshwater:72000 },
+    capacity:{ hfo:1800, lsfo:450, mdomgo:320, lsmgo:200 },
+    capacityLube:{ cylhigh:18000, cyllow:15000, mesysoil:9000, gesysoil:4500, freshwater:180000 },
+    sync:{ vesselId:'mv-circumnav' }
+  });
+  setup.generators = [{maxKw:660},{maxKw:660},{maxKw:660}];
+
+  const tr = createMeterTracker({
+    me:1500000, ge:620000, blr:28000, cyl:410000, meLo:195000, geLo:88000,
+    fwProd:12000, fwRob:72000, rev:210000,
+    meRt:48000, blrRt:880, ge1:16200, ge2:15800, ge3:0
+  });
+  const hfo = { meType:'HFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.98, geSg:0.87, blrSg:0.87 };
+  const lsmgoMe = { meType:'LSMGO', geType:'LSMGO', blrType:'LSMGO', meSg:0.86, geSg:0.86, blrSg:0.86 };
+  const entries = [];
+
+  const seaOps = new Set(['START - PASSAGE','AT SEA - NOON','END - PASSAGE','DRIFTING','ECA - ENTRY','ECA - EXIT','CHANGE OF SPEED','HEAVY WEATHER']);
+  let lastDt = '2026-06-01T10:00';
+  function pushSea(id, dt, op, cond, delta, extra){
+    const hrs = (new Date(dt) - new Date(lastDt)) / 3600000;
+    const rpm = extra.rpm;
+    const d = Object.assign({}, delta.types || hfo, delta);
+    if (rpm != null && rpm > 0 && hrs > 0){
+      d.rev = Math.round(rpm * hrs * 60);
+      if (d.meRt == null) d.meRt = Math.round(hrs * 10) / 10;
+    }
+    let distanceShip = extra.distanceShip;
+    if (rpm != null && rpm > 0 && d.rev > 0 && extra.autoDist !== false){
+      const eng = (setup.pitch * d.rev) / NM_METERS;
+      const slipPct = extra.slipPct != null ? extra.slipPct : (op === 'HEAVY WEATHER' ? 12 : 5);
+      distanceShip = Math.round(eng * (1 - slipPct / 100) * 10) / 10;
+    }
+    const snap = tr.apply(d);
+    const common = {
+      remarks: extra.remarks || '',
+      eta: extra.eta || null,
+      blrRuntime: snap.blrRt,
+      generatorsInUse: extra.generatorsInUse != null ? extra.generatorsInUse : 2,
+      generators:[
+        {runtime:snap.ge1, avgKw:extra.ge1Kw},
+        {runtime:snap.ge2, avgKw:extra.ge2Kw}
+      ],
+      perfTable:{
+        BOILER:{ avgPower:extra.blrKw != null ? extra.blrKw : 200, runTime:delta.blrRt || 0 },
+        INCINERATOR:{ avgPower:extra.incKw != null ? extra.incKw : 40, runTime:extra.incRt != null ? extra.incRt : 4 }
+      }
+    };
+    const report = seaOps.has(op)
+      ? seaReport(Object.assign(common, extra.reportExtra || {}))
+      : portReport(Object.assign(common, extra.reportExtra || {}));
+    entries.push(entryFromSnap(id, dt, op, cond, snap, {
+      distanceShip, rpm, tbn: extra.tbn || 'HIGH',
+      ge1Kw: extra.ge1Kw, ge2Kw: extra.ge2Kw, generatorsInUse: common.generatorsInUse,
+      miscCons: extra.miscCons, consOverride: extra.consOverride, unitOverride: extra.unitOverride,
+      weather: extra.weather, report
+    }));
+    lastDt = dt;
+  }
+
+  // 1. Last line
+  let snap = tr.snapshot(hfo);
+  entries.push(entryFromSnap('e-cn1','2026-06-01T10:00','LAST LINE - DEPARTURE','BALLAST', snap, {
+    ge1Kw:420, ge2Kw:400, generatorsInUse:2, tbn:'HIGH',
+    report: portReport({
+      port:'Rotterdam Europoort', cargoOp:'Departure',
+      remarks:'Last line. Proceeding to pilot station.',
+      blrRuntime:880,
+      generators:[{runtime:16200, avgKw:420},{runtime:15800, avgKw:400}]
+    })
+  }));
+
+  // 2. Pilot onboard departure — manoeuvring (Δrevs = 58 RPM × 2.5 h × 60)
+  pushSea('e-cn2','2026-06-01T12:30','PILOT ONBOARD - DEPARTURE','BALLAST', {
+    types:hfo, me:2100, ge:900, blr:150, cyl:12, meLo:6, geLo:10,
+    fwProd:0, fwRob:71600, rev:8700, meRt:2.5, blrRt:2, ge1:2.5, ge2:2.5
+  }, {
+    distanceShip:14, rpm:58, ge1Kw:450, ge2Kw:430, blrKw:180, incRt:0, incKw:0,
+    weather: weather({ windDir:'SW', windBft:4, seaState:3, airTemp:17, seaTemp:15 }),
+    remarks:'Pilot onboard. Outbound channel.',
+    eta:'2026-06-28T08:00',
+    reportExtra:{ port:'Maasvlakte outbound' }
+  });
+
+  // 3. Start passage
+  pushSea('e-cn3','2026-06-01T18:00','START - PASSAGE','BALLAST', {
+    types:hfo, me:9800, ge:1100, blr:200, cyl:55, meLo:18, geLo:14,
+    fwProd:400, fwRob:71200, rev:26400, meRt:5.5, blrRt:4, ge1:5.5, ge2:5.5
+  }, {
+    distanceShip:72, rpm:80, ge1Kw:380, ge2Kw:360, blrKw:220,
+    weather: weather({ windDir:'W', windBft:5, seaState:4, swellDir:'W', airTemp:16, seaTemp:15 }),
+    remarks:'Dropped pilot. Full away on passage.',
+    eta:'2026-06-28T08:00'
+  });
+
+  // 4. First sea noon — 18 h from start @ 80 rpm (revs auto)
+  pushSea('e-cn4','2026-06-02T12:00','AT SEA - NOON','BALLAST', {
+    types:hfo, me:39000, ge:1240, blr:210, cyl:158, meLo:34, geLo:21,
+    fwProd:1200, fwRob:70100, blrRt:6, ge1:18, ge2:18
+  }, {
+    rpm:80.0, ge1Kw:360, ge2Kw:340, blrKw:200,
+    weather: weather({ windDir:'NW', windBft:4, seaState:3, swellDir:'NW', airTemp:15, seaTemp:14 }),
+    remarks:'Noon position. Steady ballast passage.',
+    eta:'2026-06-28T08:00'
+  });
+
+  // 5. Change of speed — slower for weather / schedule
+  pushSea('e-cn5','2026-06-03T12:00','CHANGE OF SPEED','BALLAST', {
+    types:hfo, me:38000, ge:1580, blr:260, cyl:160, meLo:38, geLo:26,
+    fwProd:1500, fwRob:69050, blrRt:6, ge1:24, ge2:20
+  }, {
+    rpm:66.0, ge1Kw:350, ge2Kw:330, generatorsInUse:2, blrKw:180,
+    weather: weather({ windDir:'W', windBft:6, seaState:5, swellDir:'W', airTemp:14, seaTemp:13 }),
+    remarks:'Reduced RPM for schedule / fuel economy.',
+    eta:'2026-06-29T12:00'
+  });
+
+  // 6. Heavy weather noon
+  pushSea('e-cn6','2026-06-04T12:00','HEAVY WEATHER','BALLAST', {
+    types:hfo, me:41000, ge:1720, blr:400, cyl:175, meLo:42, geLo:30,
+    fwProd:900, fwRob:67800, blrRt:14, ge1:24, ge2:24
+  }, {
+    rpm:70.0, ge1Kw:390, ge2Kw:370, blrKw:320, incRt:6, incKw:45, slipPct:12,
+    weather: weather({ windDir:'SW', windBft:8, seaState:7, swellDir:'SW', airTemp:12, seaTemp:11 }),
+    remarks:'Heavy weather. Pitching. Reduced speed. Boiler on for heating.',
+    eta:'2026-06-30T06:00',
+    miscCons:{ 'MDO/MGO':0.05, 'LSMGO':0 }
+  });
+
+  // 7. Resume normal noon
+  pushSea('e-cn7','2026-06-05T12:00','AT SEA - NOON','BALLAST', {
+    types:hfo, me:53500, ge:1600, blr:200, cyl:220, meLo:48, geLo:27,
+    fwProd:1700, fwRob:66800, blrRt:5, ge1:24, ge2:24
+  }, {
+    rpm:81.0, ge1Kw:355, ge2Kw:345, blrKw:150,
+    weather: weather({ windDir:'W', windBft:4, seaState:3, swellDir:'W', airTemp:16, seaTemp:15 }),
+    remarks:'Weather moderated. Resumed service speed.',
+    eta:'2026-06-28T18:00',
+    unitOverride:{ ME:null, GE:null, BLR:0.180 }
+  });
+
+  // 8. ECA entry — switch to LSMGO (18 h @ 72 rpm)
+  pushSea('e-cn8','2026-06-06T06:00','ECA - ENTRY','BALLAST', {
+    types:lsmgoMe, me:28000, ge:1050, blr:180, cyl:105, meLo:24, geLo:18,
+    fwProd:900, fwRob:66200, blrRt:5, ge1:18, ge2:18
+  }, {
+    rpm:72.0, ge1Kw:340, ge2Kw:330, blrKw:160,
+    weather: weather({ windDir:'N', windBft:3, seaState:2, airTemp:18, seaTemp:16 }),
+    remarks:'Entered ECA. Change-over complete to LSMGO on ME/GE/boiler.',
+    eta:'2026-06-28T18:00'
+  });
+
+  // 9. Noon inside ECA on LSMGO (30 h @ 78 rpm)
+  pushSea('e-cn9','2026-06-07T12:00','AT SEA - NOON','BALLAST', {
+    types:lsmgoMe, me:70000, ge:2100, blr:310, cyl:250, meLo:55, geLo:35,
+    fwProd:1900, fwRob:65000, blrRt:9, ge1:30, ge2:30
+  }, {
+    rpm:78.0, ge1Kw:360, ge2Kw:350, blrKw:180,
+    weather: weather({ windDir:'NE', windBft:3, seaState:2, airTemp:19, seaTemp:17 }),
+    remarks:'ECA passage on LSMGO. Consumption check vs ROB.',
+    eta:'2026-06-28T12:00',
+    consOverride:{ lsmgo: 61.0 }
+  });
+
+  // 10. ECA exit — back to HFO (20 h @ 76 rpm)
+  pushSea('e-cn10','2026-06-08T08:00','ECA - EXIT','BALLAST', {
+    types:hfo, me:44000, ge:1600, blr:200, cyl:160, meLo:36, geLo:24,
+    fwProd:1000, fwRob:64500, blrRt:6, ge1:20, ge2:20
+  }, {
+    rpm:76.0, ge1Kw:350, ge2Kw:340, blrKw:140,
+    weather: weather({ windDir:'E', windBft:4, seaState:3, airTemp:20, seaTemp:18 }),
+    remarks:'Exited ECA. Change-over back to HFO.',
+    eta:'2026-06-28T06:00'
+  });
+
+  // 11. Brief drifting — short 3 h stop (revs auto from 15 rpm)
+  pushSea('e-cn11','2026-06-08T11:00','DRIFTING','BALLAST', {
+    types:hfo, me:400, ge:320, blr:40, cyl:3, meLo:1, geLo:4,
+    fwProd:0, fwRob:64350, blrRt:1, ge1:3, ge2:0
+  }, {
+    rpm:15, ge1Kw:300, ge2Kw:null, generatorsInUse:1, blrKw:100, incRt:0, slipPct:8,
+    weather: weather({ windDir:'SE', windBft:3, seaState:2, airTemp:21, seaTemp:19 }),
+    remarks:'Temporary stop for planned maintenance / traffic. Then resumed.',
+    eta:'2026-06-28T10:00'
+  });
+
+  // 12. Long sea noon stretch (compressed mid-voyage)
+  pushSea('e-cn12','2026-06-20T12:00','AT SEA - NOON','BALLAST', {
+    types:hfo, me:580000, ge:18500, blr:3200, cyl:2400, meLo:520, geLo:320,
+    fwProd:18000, fwRob:52000, blrRt:90, ge1:272, ge2:260
+  }, {
+    rpm:78.5, ge1Kw:370, ge2Kw:355, blrKw:200, tbn:'HIGH',
+    weather: weather({ windDir:'NE', windBft:4, seaState:3, swellDir:'NE', airTemp:26, seaTemp:24 }),
+    remarks:'Indian Ocean noon. Steady passage. Cyl oil HIGH TBN continued.',
+    eta:'2026-06-28T08:00'
+  });
+
+  // 13. End passage
+  pushSea('e-cn13','2026-06-27T20:00','END - PASSAGE','BALLAST', {
+    types:hfo, me:360000, ge:12000, blr:1800, cyl:1500, meLo:320, geLo:200,
+    fwProd:11000, fwRob:45500, blrRt:50, ge1:176, ge2:170
+  }, {
+    rpm:76.5, ge1Kw:365, ge2Kw:350, blrKw:180,
+    weather: weather({ windDir:'N', windBft:3, seaState:2, airTemp:28, seaTemp:27 }),
+    remarks:'Approaching Singapore Strait. End of sea passage preparation.',
+    eta:'2026-06-28T06:00'
+  });
+
+  // 14. EOSP
+  pushSea('e-cn14','2026-06-28T04:00','EOSP - END OF SEA PASSAGE','BALLAST', {
+    types:hfo, me:8500, ge:900, blr:150, cyl:40, meLo:12, geLo:10,
+    fwProd:200, fwRob:45000, blrRt:3, ge1:6, ge2:6
+  }, {
+    rpm:60, ge1Kw:400, ge2Kw:380, blrKw:160,
+    weather: weather({ windDir:'SE', windBft:2, seaState:1, airTemp:29, seaTemp:28 }),
+    remarks:'EOSP Singapore approaches.',
+    eta:'2026-06-28T08:00',
+    reportExtra:{ port:'Singapore Eastern Boarding Ground' }
+  });
+
+  // 15. Stand by arrival
+  pushSea('e-cn15','2026-06-28T07:00','STAND BY - ARRIVAL','BALLAST', {
+    types:hfo, me:2200, ge:700, blr:80, cyl:10, meLo:4, geLo:8,
+    fwProd:0, fwRob:44800, blrRt:2, ge1:3, ge2:3
+  }, {
+    rpm:45, ge1Kw:420, ge2Kw:400, blrKw:140, incRt:0,
+    remarks:'Stand by. Pilot boarded.',
+    reportExtra:{ port:'Singapore' }
+  });
+
+  // 16. First line arrival
+  pushSea('e-cn16','2026-06-28T10:30','FIRST LINE - ARRIVAL','BALLAST', {
+    types:hfo, me:900, ge:550, blr:50, cyl:5, meLo:2, geLo:6,
+    fwProd:0, fwRob:44600, blrRt:1, ge1:2, ge2:2
+  }, {
+    rpm:32, ge1Kw:440, ge2Kw:420, blrKw:120, incRt:0,
+    remarks:'All fast Singapore. Voyage complete.',
+    reportExtra:{ port:'Singapore PSA', cargoOp:'Awaiting orders' }
+  });
+
+  const receipts = [
+    { id:'r-cn1', date:'2026-05-30', category:'fuel', type:'HFO', tankId:'hfo', qty:400, bdnNo:'BDN-RTM-CN-H', company:'TFG Marine', location:'Rotterdam' },
+    { id:'r-cn2', date:'2026-05-30', category:'fuel', type:'LSMGO', tankId:'lsmgo', qty:150, bdnNo:'BDN-RTM-CN-L', company:'TFG Marine', location:'Rotterdam' },
+    { id:'r-cn3', date:'2026-05-30', category:'lube', type:'CYL HIGH', tankId:'cylhigh', qty:3000, bdnNo:'BDN-RTM-CN-C', company:'Castrol Marine', location:'Rotterdam' },
+    { id:'r-cn4', date:'2026-05-30', category:'lube', type:'ME SYS OIL', tankId:'mesysoil', qty:800, bdnNo:'BDN-RTM-CN-M', company:'Castrol Marine', location:'Rotterdam' }
+  ];
+  return { setup, entries: entries.map(normalizeEntry), receipts, documents:[], abstracts:[], printHistory:[] };
+}
+
+/** Compatibility aliases — old names redirect to new packs during migration. */
+function buildDemoPackFangcheng(){ return buildDemoPackHarbourKey(); }
+function buildDemoPackAtlanticStar(){ return buildDemoPackRoadstead(); }
+
+const TEST_FLEET_VESSELS = [
+  { id:'v-harbourkey', name:'M/V HARBOUR KEY', slug:'mv-harbour-key', pack: buildDemoPackHarbourKey },
+  { id:'v-roadstead', name:'M/V ROADSTEAD', slug:'mv-roadstead', pack: buildDemoPackRoadstead },
+  { id:'v-circumnav', name:'M/V CIRCUMNAV', slug:'mv-circumnav', pack: buildDemoPackCircumnav }
+];
+
+async function clearVesselPackData(vesselId){
+  for (const store of ['entries','receipts','documents','abstracts','printHistory']){
+    await clearVesselStore(store, vesselId);
+  }
+  await dbDelete('meta', `setup:${vesselId}`);
+}
+
+async function installTestFleet({ switchToFirst = true } = {}){
+  const created = [];
+  for (const spec of TEST_FLEET_VESSELS){
+    let vessel = state.vessels.find(v=>v.id===spec.id || v.slug===spec.slug);
+    if (!vessel){
+      vessel = { id: spec.id, name: spec.name, slug: spec.slug, createdAt: new Date().toISOString() };
+      state.vessels.push(vessel);
+    } else {
+      vessel.name = spec.name;
+      vessel.slug = spec.slug;
+      await clearVesselPackData(vessel.id);
+    }
+    const pack = spec.pack();
+    await saveVesselPack(vessel.id, pack);
+    created.push(vessel);
+  }
+  await saveVesselRegistry();
+  if (switchToFirst && created[0]){
+    await loadVesselFromDb(created[0].id);
+    await dbPut('meta', { key:'activeVesselId', value: created[0].id });
+  }
+  renderVesselSelector();
+  render();
+  applyEntryDefaults();
+  prefillFromLastEntry();
+  renderSyncUi();
+  return created;
+}
+
 
 async function saveVesselRegistry(){
   await dbPut('meta', { key:'vessels', value: state.vessels });
@@ -1955,27 +2646,30 @@ async function migrateToMultiVessel(metaAll){
   const allEntries = await dbGetAll('entries');
   const hasUserData = allEntries.length > 0;
 
-  const vFang = { id:'v-fangcheng', name: existingSetup.vesselName || 'M/V FANGCHENG', slug:'mv-fangcheng', createdAt: new Date().toISOString() };
-  const vAtlantic = { id:'v-atlanticstar', name:'M/V ATLANTIC STAR', slug:'mv-atlantic-star', createdAt: new Date().toISOString() };
-  state.vessels = [vFang, vAtlantic];
-  state.activeVesselId = vFang.id;
-
   if (hasUserData){
+    const vUser = {
+      id: LEGACY_VESSEL_ID,
+      name: existingSetup.vesselName || 'Current Vessel',
+      slug: existingSetup.sync?.vesselId || vesselSlugFromName(existingSetup.vesselName || 'current-vessel'),
+      createdAt: new Date().toISOString()
+    };
+    state.vessels = [vUser];
+    state.activeVesselId = vUser.id;
     existingSetup.sync = existingSetup.sync || {};
-    if (!existingSetup.sync.vesselId) existingSetup.sync.vesselId = vFang.slug;
-    await dbPut('meta', { key:`setup:${vFang.id}`, value: existingSetup });
-    const stores = ['entries','receipts','documents','abstracts','printHistory'];
-    for (const store of stores){
+    if (!existingSetup.sync.vesselId) existingSetup.sync.vesselId = vUser.slug;
+    await dbPut('meta', { key:`setup:${vUser.id}`, value: existingSetup });
+    for (const store of ['entries','receipts','documents','abstracts','printHistory']){
       const all = await dbGetAll(store);
       for (const item of all){
-        item.vesselId = vFang.id;
+        item.vesselId = vUser.id;
         await dbPut(store, item);
       }
     }
-    await saveVesselPack(vAtlantic.id, buildDemoPackAtlanticStar());
+    await installTestFleet({ switchToFirst: false });
   } else {
-    await saveVesselPack(vFang.id, buildDemoPackFangcheng());
-    await saveVesselPack(vAtlantic.id, buildDemoPackAtlanticStar());
+    state.vessels = [];
+    state.activeVesselId = null;
+    await installTestFleet({ switchToFirst: true });
   }
 
   await saveVesselRegistry();
@@ -3353,9 +4047,10 @@ const REPORT_CATEGORIES = [
   { label: 'Bunkering', keyword: 'BUNKER' },
   { label: 'ECA', keyword: 'ECA' },
   { label: 'Change of Speed', keyword: 'SPEED' },
+  { label: 'Heavy Weather', keyword: 'HEAVY' },
 ];
 const SEA_TYPE_OPS = new Set([
-  'START - PASSAGE','AT SEA - NOON','END - PASSAGE','DRIFTING','ECA - ENTRY','ECA - EXIT','CHANGE OF SPEED'
+  'START - PASSAGE','AT SEA - NOON','END - PASSAGE','DRIFTING','ECA - ENTRY','ECA - EXIT','CHANGE OF SPEED','HEAVY WEATHER'
 ]);
 
 function renderReportCategoryButtons(){
@@ -4423,6 +5118,20 @@ document.getElementById('btnAddVessel').addEventListener('click', async ()=>{
   renderVesselSelector();
   switchTab('setup');
   alert(`Vessel "${name}" created. Update voyage details and ship details, then start logging entries.`);
+});
+
+document.getElementById('btnInstallTestFleet').addEventListener('click', async ()=>{
+  const ok = confirm(
+    'Install / reset the three test vessels?\n\n' +
+    '• M/V HARBOUR KEY — port operations\n' +
+    '• M/V ROADSTEAD — anchorage & drifting\n' +
+    '• M/V CIRCUMNAV — full voyage\n\n' +
+    'Only these three ships are replaced. Your other vessels stay unchanged.'
+  );
+  if (!ok) return;
+  const created = await installTestFleet({ switchToFirst: true });
+  renderVesselSelector();
+  alert(`Test fleet ready (${created.length} vessels). Active: ${state.setup.vesselName}. Use Setup → Active Vessel to switch scenarios.`);
 });
 
 document.getElementById('btnPullVesselRemote').addEventListener('click', async ()=>{
