@@ -6,12 +6,15 @@ Works on **Android phones** and **PC browsers** as a Progressive Web App (PWA), 
 
 ## Features
 
-- **Offline-first**: all voyage data stored in IndexedDB — works without internet
-- **PWA install**: add to home screen on Android or desktop (requires HTTPS or localhost)
-- **Fuel & performance**: flowmeter-based consumption, cubic power law (%MCR/KW), engine vs ship distance, slip
-- **SFOC monitoring**: actual vs reference specific fuel oil consumption (g/kWh) with load-curve interpolation from 85%/100% MCR shop-trial values
-- **Server sync**: push/pull JSON snapshots per vessel + voyage when online
+- **Offline-first**: all voyage data stored in IndexedDB — works without internet on Android and PC
+- **PWA install**: add to home screen (requires HTTPS or localhost); optional persistent storage
+- **Fuel & performance**: flowmeter-based consumption, cubic power law (%MCR/kW), engine vs ship distance, slip
+- **SFOC monitoring**: actual vs reference (g/kWh) with 85%/100% curve calibration and optional LCV ISO correction
+- **CII / CO₂ estimate**: voyage-level attained CII from IMO Cf factors × fuel × DWT × distance
+- **Weather & sea state**: Beaufort wind, Douglas sea state, swell, air/sea temp on Voyage Summary
+- **Server sync**: push/pull JSON snapshots per vessel + voyage; merge by record id; delete tombstones; multi-device
 - **Export/import**: JSON backup and CSV exports
+- **Multi-vessel**: keep several ships in one browser and sync each by vessel slug
 
 ## Proxmox install (one-liner)
 
@@ -107,13 +110,18 @@ On Android (same Wi‑Fi): `http://<your-pc-ip>:8080/voyage_manager.html` → me
 | Metric | Formula |
 |--------|---------|
 | Engine speed (kn) | `RPM × pitch(m) × 60 / 1852` |
-| Engine distance (nm) | `engine speed × hours` |
+| Engine distance (nm) | **Preferred:** `pitch(m) × Δrevs / 1852` · Fallback: `RPM × pitch × 60 / 1852 × hours` |
+| Avg RPM from counter | `Δrevs / (hours × 60)` |
 | Ship speed (kn) | `distance run (nm) / hours` |
 | Slip (%) | `(engine distance − ship distance) / engine distance × 100` |
-| %MCR / KW | `(RPM / MCR RPM)³ × 100` and `(RPM / MCR RPM)³ × MCR kW` |
+| %MCR / kW | `(RPM / MCR RPM)³ × 100` and `(RPM / MCR RPM)³ × MCR kW` |
 | Fuel (MT) | `litres × specific gravity / 1000` |
 | Actual SFOC (g/kWh) | `M/E fuel (g) / (estimated kW × hours)` |
+| ISO-corrected SFOC | `SFOC_meas × (LCV_ref / LCV_actual)` · default LCV_ref = 42 700 kJ/kg |
 | Reference SFOC | `SFOC₁₀₀ × (a + b × (L/100)²)` calibrated through your 85% and 100% MCR points |
+| Attained CII (voyage) | `Σ(fuel_MT × Cf) × 1e6 / (DWT × distance_nm)` · Cf: HFO 3.114, LSFO 3.151, MDO/LSMGO 3.206 |
+
+1 nautical mile = **1852 m** (IHO). Some older references use ~1800 m or 1853 — this app uses the standard 1852.
 
 ## Self-Hosted Sync Server
 
@@ -125,6 +133,8 @@ A minimal Python sync server stores voyage snapshots as JSON files.
 cd sync-server
 export SYNC_API_TOKEN="your-secret-token"
 export SYNC_PORT=8787
+# Optional: serve the PWA from the same process (handy behind one Cloudflare Tunnel)
+export SYNC_STATIC_DIR="$(dirname "$PWD")"
 python3 server.py
 ```
 
@@ -137,11 +147,21 @@ Environment variables:
 | `SYNC_HOST` | `0.0.0.0` | Bind address |
 | `SYNC_DATA_DIR` | `./sync-data` | JSON storage directory |
 | `SYNC_ALLOWED_ORIGINS` | `*` | CORS origins (comma-separated) |
+| `SYNC_STATIC_DIR` | unset | If set, also serves `voyage_manager.html` and assets |
+
+API:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/health` | Health check |
+| GET | `/api/voyage/<vessel>` | List voyage snapshots for a vessel |
+| GET | `/api/voyage/<vessel>/<voyage>` | Pull snapshot |
+| PUT | `/api/voyage/<vessel>/<voyage>` | Push / merge snapshot |
 
 ### Cloudflare Tunnel
 
 ```bash
-# On your Linux server
+# On your Linux server (sync only, or sync+static on same port)
 cloudflared tunnel --url http://localhost:8787
 ```
 
@@ -153,10 +173,11 @@ Use the generated `https://….trycloudflare.com` or your custom domain in the a
 2. Set **Sync Server URL** (e.g. `https://sync.yourdomain.com`)
 3. Set **API Token** (same as `SYNC_API_TOKEN`)
 4. Set **Vessel ID** (short slug, e.g. `captain-veniamis`)
-5. Click **Save Sync Settings**
-6. Use **Sync Now** or rely on auto-sync when online
+5. Optionally set a **Device name** (ER tablet / Chief PC) so multi-device merges are identifiable
+6. Click **Save Sync Settings**, then **Test Connection**
+7. Use **Sync Now**, **List Remote Voyages**, or rely on auto-sync when online
 
-Sync merges records by `id`, keeping the newest `updatedAt` per entry/receipt/document.
+Sync merges records by `id`, keeping the newest `updatedAt` per entry/receipt/document. Deletes propagate via tombstones so a second device does not resurrect removed rows.
 
 ## Files
 

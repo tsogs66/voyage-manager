@@ -346,6 +346,11 @@
   #syncStatus.online{color:var(--good);}
   #syncStatus.pending{color:var(--brass);}
   #syncStatus.error{color:var(--alert);}
+  .cii-strip{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;}
+  .cii-card{flex:1; min-width:120px; border:1px solid var(--line); border-radius:4px; padding:10px 12px; background:rgba(0,0,0,0.15);}
+  .cii-card .val{font-family:'IBM Plex Mono',monospace; font-size:18px; font-weight:600; color:var(--brass);}
+  .cii-card .lbl{font-size:9px; letter-spacing:0.06em; text-transform:uppercase; color:var(--paper-dim); margin-top:3px;}
+  .cii-card .sub{font-size:10px; color:var(--teal); margin-top:4px;}
   .sync-banner{border:1px solid var(--line-strong); border-radius:4px; padding:10px 12px; margin-bottom:12px; font-size:12px; line-height:1.5;}
   .sync-banner.ok{border-color:rgba(95,158,110,0.45); color:var(--good);}
   .sync-banner.warn{border-color:rgba(201,154,83,0.45); color:var(--brass);}
@@ -597,6 +602,8 @@
       <div class="form-grid cols2">
         <div class="field"><label>Vessel Name</label><input id="s_vesselName"></div>
         <div class="field"><label>Chief Engineer</label><input id="s_chEng"></div>
+        <div class="field"><label>DWT (tonnes) — for CII</label><input type="number" step="1" id="s_dwt" placeholder="e.g. 60000"></div>
+        <div class="field"><label>IMO No.</label><input id="s_imoNo" placeholder="IMO 1234567"></div>
       </div>
     </div>
 
@@ -640,7 +647,9 @@
           <div class="field"><label>M/E KW (85% Load)</label><input type="number" step="1" id="s_csrKw"></div>
           <div class="field"><label>SFOC - 100% (g/kW.hr)</label><input type="number" step="0.1" id="s_sfoc100"></div>
           <div class="field"><label>SFOC - 85% (g/kW.hr)</label><input type="number" step="0.1" id="s_sfoc85"></div>
-          <div class="field full-width" style="grid-column:1/-1;"><div class="hint" id="sfocSetupHint">Reference SFOC at any load: SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²). Enter SFOC @ 100% MCR (shop trial). Optional SFOC @ 85% calibrates the curve; otherwise a = 0.25, b = 0.75 (standard slow/medium-speed diesel).</div></div>
+          <div class="field"><label>Shop-trial LCV (kJ/kg)</label><input type="number" step="1" id="s_lcvRef" placeholder="42700"></div>
+          <div class="field"><label>Bunker LCV (kJ/kg)</label><input type="number" step="1" id="s_lcvActual" placeholder="from BDN"></div>
+          <div class="field full-width" style="grid-column:1/-1;"><div class="hint" id="sfocSetupHint">Reference SFOC at any load: SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²). Enter SFOC @ 100% MCR (shop trial). Optional SFOC @ 85% calibrates the curve; otherwise a = 0.25, b = 0.75. LCV correction: SFOC<sub>ISO</sub> = SFOC<sub>meas</sub> × (LCV<sub>ref</sub> / LCV<sub>actual</sub>) — default LCV<sub>ref</sub> = 42 700 kJ/kg.</div></div>
           <div class="field"><label>Alternator Max. Power (KW)</label><input type="number" step="1" id="s_alternatorMaxKw"></div>
           <div class="field"><label>Number of Generators</label>
             <select id="s_generatorCount">
@@ -658,7 +667,7 @@
         <div id="geMaxKwFields" class="form-grid cols3" style="margin-top:12px;"></div>
         <div class="hint">Generator load % is calculated as (average kW ÷ max kW) × 100 for each alternator. Enter per-generator max kW from the nameplate.</div>
         <div class="hint">Boiler and incinerator load % in supplementary reports uses the max kW values above.</div>
-        <div class="hint">Speed by engine (kn) = RPM × Pitch × 60 ÷ 1852. %MCR = (RPM ÷ 100%-Load RPM)³ × 100. KW = (RPM ÷ 100%-Load RPM)³ × 100%-Load KW — this is the basis used throughout Performance and the Reports' M/E figures.</div>
+        <div class="hint">Engine speed (kn) = RPM × Pitch(m) × 60 ÷ 1852. Engine distance (nm) = Pitch × Δrevs ÷ 1852 (preferred from rev counter; RPM × hours is the fallback). Slip % = (Engine Dist − Ship Dist) ÷ Engine Dist × 100. %MCR / kW use the propeller law (RPM ÷ MCR RPM)³.</div>
       </div>
 
       <div class="panel">
@@ -868,7 +877,65 @@
           <div class="field"><label>Ship Speed (kn, calc)</label><input type="text" id="vs_shipSpeed" readonly></div>
           <div class="field"><label>Slip % (calc)</label><input type="text" id="vs_slip" readonly></div>
         </div>
-        <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous) ÷ (Run Hours × 60). Engine distance = RPM × pitch constant × period hrs. Slip % = (Engine Dist − Ship Dist) ÷ Engine Dist × 100 — recalculates when RPM or distance run changes.</div>
+        <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous) ÷ (Run Hours × 60). Engine distance prefers Pitch × Δrevs ÷ 1852 (standard noon-report practice); falls back to RPM × pitch × hours. Slip % = (Engine Dist − Ship Dist) ÷ Engine Dist × 100.</div>
+      </div>
+
+      <div class="panel" style="margin:0 0 16px; padding:16px;">
+        <h3 class="sub" style="margin-top:0;">Weather &amp; Sea State</h3>
+        <div class="form-grid cols3">
+          <div class="field"><label>Wind Direction</label>
+            <select id="vs_windDir">
+              <option value="">—</option>
+              <option>N</option><option>NNE</option><option>NE</option><option>ENE</option>
+              <option>E</option><option>ESE</option><option>SE</option><option>SSE</option>
+              <option>S</option><option>SSW</option><option>SW</option><option>WSW</option>
+              <option>W</option><option>WNW</option><option>NW</option><option>NNW</option>
+            </select>
+          </div>
+          <div class="field"><label>Wind (Beaufort)</label>
+            <select id="vs_windBft">
+              <option value="">—</option>
+              <option value="0">BF 0 — Calm</option>
+              <option value="1">BF 1 — Light air</option>
+              <option value="2">BF 2 — Light breeze</option>
+              <option value="3">BF 3 — Gentle breeze</option>
+              <option value="4">BF 4 — Moderate breeze</option>
+              <option value="5">BF 5 — Fresh breeze</option>
+              <option value="6">BF 6 — Strong breeze</option>
+              <option value="7">BF 7 — Near gale</option>
+              <option value="8">BF 8 — Gale</option>
+              <option value="9">BF 9 — Strong gale</option>
+              <option value="10">BF 10 — Storm</option>
+              <option value="11">BF 11 — Violent storm</option>
+              <option value="12">BF 12 — Hurricane</option>
+            </select>
+          </div>
+          <div class="field"><label>Sea State (Douglas)</label>
+            <select id="vs_seaState">
+              <option value="">—</option>
+              <option value="0">0 — Glassy</option>
+              <option value="1">1 — Rippled</option>
+              <option value="2">2 — Wavelets</option>
+              <option value="3">3 — Slight</option>
+              <option value="4">4 — Moderate</option>
+              <option value="5">5 — Rough</option>
+              <option value="6">6 — Very Rough</option>
+              <option value="7">7 — High</option>
+              <option value="8">8 — Very High</option>
+              <option value="9">9 — Phenomenal</option>
+            </select>
+          </div>
+          <div class="field"><label>Swell Direction</label>
+            <select id="vs_swellDir">
+              <option value="">—</option>
+              <option>N</option><option>NE</option><option>E</option><option>SE</option>
+              <option>S</option><option>SW</option><option>W</option><option>NW</option>
+            </select>
+          </div>
+          <div class="field"><label>Air Temp (°C)</label><input type="number" step="0.1" id="vs_airTemp"></div>
+          <div class="field"><label>Sea Temp (°C)</label><input type="number" step="0.1" id="vs_seaTemp"></div>
+        </div>
+        <div class="hint">Weather helps explain slip and fuel burn (head seas raise positive slip). Beaufort wind force 0–12; Douglas sea state 0–9.</div>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -1189,7 +1256,12 @@
     <div class="panel">
       <h2>Fuel Efficiency (SFOC)</h2>
       <div class="stat-strip cols5" id="sfocStrip"></div>
-      <div class="hint">Reference SFOC uses SFOC₁₀₀ from Setup and the standard load curve SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²) with a + b = 1 (default a = 0.25, b = 0.75; calibrated through 85% when that shop-trial point is entered). Actual SFOC = M/E fuel (g) ÷ shaft energy (kWh) for each steaming period. A sustained +3% deviation from reference often warrants investigation (fouling, injection wear, turbo issues).</div>
+      <div class="hint">Reference SFOC uses SFOC₁₀₀ from Setup and the standard load curve SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²) with a + b = 1 (default a = 0.25, b = 0.75; calibrated through 85% when that shop-trial point is entered). Actual SFOC = M/E fuel (g) ÷ shaft energy (kWh). When bunker LCV is set, ISO-corrected SFOC = measured × (LCV<sub>ref</sub> / LCV<sub>actual</sub>). A sustained +3% deviation from reference often warrants investigation.</div>
+    </div>
+    <div class="panel">
+      <h2>Carbon Intensity &amp; CO₂ (voyage estimate)</h2>
+      <div class="cii-strip" id="ciiStrip"></div>
+      <div class="hint" id="ciiHint">Attained CII ≈ total CO₂ (g) ÷ (DWT × distance nm). CO₂ factors follow IMO EEDI Cf values (HFO 3.114, LSFO 3.151, MDO/MGO &amp; LSMGO 3.206). This is a voyage-level estimate — annual CII for SEEMP uses calendar-year DCS totals.</div>
     </div>
     <div class="panel">
       <h2>Voyage Time Averages</h2>
@@ -1333,20 +1405,25 @@
       <h2>Server Sync</h2>
       <div id="syncBanner" class="sync-banner warn">Configure your self-hosted sync server to back up and merge data when internet is available. Works offline — changes queue locally and upload on reconnect.</div>
       <div class="form-grid cols2">
-        <div class="field span2"><label>Sync Server URL</label><input id="sync_serverUrl" placeholder="https://sync.yourdomain.com"></div>
+        <div class="field span2"><label>Sync Server URL</label><input id="sync_serverUrl" placeholder="https://sync.yourdomain.com or http://192.168.x.x:8787"></div>
         <div class="field"><label>API Token</label><input id="sync_apiToken" type="password" placeholder="Bearer token"></div>
         <div class="field"><label>Vessel ID (slug)</label><input id="sync_vesselId" placeholder="e.g. captain-veniamis"></div>
+        <div class="field"><label>Device name</label><input id="sync_deviceName" placeholder="e.g. ER tablet / Chief PC"></div>
         <div class="field"><label>Auto-sync</label><select id="sync_auto"><option value="true">On save &amp; when online</option><option value="false">Manual only</option></select></div>
         <div class="field"><label>Conflict policy</label><select id="sync_conflict"><option value="merge">Merge by record (recommended)</option><option value="local">Prefer this device</option><option value="remote">Prefer server</option></select></div>
       </div>
       <div class="btn-row">
         <button class="primary small" id="btnSaveSyncSettings">Save Sync Settings</button>
+        <button class="ghost small" id="btnTestSync">Test Connection</button>
         <button class="ghost small" id="btnSyncNow">Sync Now</button>
         <button class="ghost small" id="btnPullRemote">Pull from Server</button>
+        <button class="ghost small" id="btnListRemoteVoyages">List Remote Voyages</button>
         <button class="ghost small" id="btnInstallApp" style="display:none;">Install App</button>
+        <button class="ghost small" id="btnRequestPersist">Keep Data Persistent</button>
       </div>
       <div class="hint" id="syncMetaLine">Last sync: never</div>
-      <div class="hint">Point the URL at your Linux server exposed via Cloudflare Tunnel (or nginx). Run <code>sync-server/server.py</code> on the server — see README. The app stores everything locally in IndexedDB and syncs JSON snapshots per vessel + voyage.</div>
+      <div id="remoteVoyageList" class="hint" style="display:none; margin-top:8px;"></div>
+      <div class="hint">Works fully offline on Android/PC (PWA + IndexedDB). When internet returns — including via Cloudflare Tunnel to your Linux host — changes merge by record <code>id</code> using newest <code>updatedAt</code>. Point the URL at <code>sync-server/server.py</code> (see README). One process can also serve the app files.</div>
     </div>
     <div class="panel">
       <h2>Local Database</h2>
@@ -1377,6 +1454,12 @@ const FUEL_TYPES = ["HFO","LSFO","MDO/MGO","LSMGO"];
 const LUBE_TYPES = ["CYL HIGH","CYL LOW","ME SYS OIL","GE SYS OIL","FRESH WATER"];
 const LUBE_KINDS = ['cylHigh','cylLow','meSys','geSys'];
 const LUBE_KIND_LABELS = { cylHigh:'CYL HIGH', cylLow:'CYL LOW', meSys:'ME SYS OIL', geSys:'GE SYS OIL' };
+/* 1 nautical mile = 1852 m (IHO / IMO). Engine distance = pitch(m) × revolutions / 1852. */
+const NM_METERS = 1852;
+/* IMO EEDI / DCS carbon conversion factors Cf (t CO2 / t fuel) — MEPC.308(73) as amended. */
+const CO2_FACTORS = { "HFO": 3.114, "LSFO": 3.151, "MDO/MGO": 3.206, "LSMGO": 3.206 };
+/* ISO shop-trial reference lower calorific value (kJ/kg). */
+const DEFAULT_LCV_REF = 42700;
 const DEFAULT_FUEL_TANKS = [
   {id:'hfo', name:'HFO', grade:'HFO'},
   {id:'lsfo', name:'LSFO', grade:'LSFO'},
@@ -1590,7 +1673,8 @@ const state = {
     departPort:'CHINA', arrivePort:'BRAZIL', place:'', flowArr:'SINGLE',
     initDateTime:'', initRuntime:null,
     pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
-    sfoc100:null, sfoc85:null, alternatorMaxKw:null,
+    sfoc100:null, sfoc85:null, lcvRef:42700, lcvActual:null, alternatorMaxKw:null,
+    dwt:null, imoNo:'',
     geArrangement:'SINGLE',
     generatorCount:1,
     meCylinderCount:6,
@@ -1618,7 +1702,7 @@ const state = {
     capacityLube:{ cylhigh:15000, cyllow:15000, mesysoil:8000, gesysoil:4000, freshwater:150000 },
     carryover: null,
     sync: {
-      serverUrl:'', apiToken:'', vesselId:'', autoSync:true, conflictPolicy:'merge',
+      serverUrl:'', apiToken:'', vesselId:'', deviceName:'', autoSync:true, conflictPolicy:'merge',
       deviceId:null, lastSyncedAt:null, lastSyncError:null, pendingChanges:false
     }
   },
@@ -2099,6 +2183,7 @@ async function deleteEntryById(id, { confirmMsg } = {}){
   pushEntryUndo({ type:'delete', entry: cloneEntry(entry), laterSnapshots });
   state.entries = state.entries.filter(e=>e.id!==id);
   await dbDelete('entries', id);
+  rememberDeleted('entries', id);
   // Succeeding entries now sit at delIdx onward
   await cascadeSucceedingEntries(delIdx, { clearOverrides: true });
   markPendingSync();
@@ -2240,9 +2325,56 @@ function actualMeSfoc(meConsMt, kwEst, hrs){
   return (meConsMt * 1e6) / (kwEst * hrs);
 }
 
+function lcvCorrectionFactor(){
+  const ref = (state.setup.lcvRef!=null && !isNaN(state.setup.lcvRef) && state.setup.lcvRef>0)
+    ? state.setup.lcvRef : DEFAULT_LCV_REF;
+  const actual = state.setup.lcvActual;
+  if (actual==null || isNaN(actual) || !(actual>0)) return 1;
+  return ref / actual;
+}
+
+function isoCorrectedSfoc(measuredSfoc){
+  if (measuredSfoc==null || isNaN(measuredSfoc)) return null;
+  return measuredSfoc * lcvCorrectionFactor();
+}
+
+/* Attained CII estimate for this voyage (g CO2 / (capacity·nm)).
+   Annual IMO CII uses calendar-year DCS totals; this is the same formula on voyage data. */
+function computeAttainedCII(consByFuel, totalDistNM, capacityDwt){
+  if (!capacityDwt || capacityDwt <= 0 || !totalDistNM || totalDistNM <= 0) return null;
+  let totalCO2_t = 0;
+  FUEL_TYPES.forEach(t => {
+    totalCO2_t += (consByFuel[t] || 0) * (CO2_FACTORS[t] || 3.114);
+  });
+  if (totalCO2_t <= 0) return null;
+  return (totalCO2_t * 1e6) / (capacityDwt * totalDistNM);
+}
+
+function totalCO2Tonnes(consByFuel){
+  let t = 0;
+  FUEL_TYPES.forEach(k => { t += (consByFuel[k] || 0) * (CO2_FACTORS[k] || 3.114); });
+  return t;
+}
+
 function sfocDeltaPct(actual, reference){
   if (actual==null || reference==null || !(reference>0)) return null;
   return ((actual - reference) / reference) * 100;
+}
+
+/* Engine distance from propeller pitch and revolutions (preferred noon-report method). */
+function engineDistanceNm(pitchM, dailyRevs, rpm, hrs){
+  if (pitchM > 0 && dailyRevs != null && dailyRevs > 0){
+    return (pitchM * dailyRevs) / NM_METERS;
+  }
+  if (pitchM > 0 && rpm != null && !isNaN(rpm) && hrs > 0){
+    return rpm * (pitchM * 60 / NM_METERS) * hrs;
+  }
+  return null;
+}
+
+function rpmFromRevs(dailyRevs, hrs){
+  if (dailyRevs == null || !(hrs > 0)) return null;
+  return dailyRevs / (hrs * 60);
 }
 
 /* ---------------- derived calculations ---------------- */
@@ -2252,7 +2384,7 @@ function computeDerived(){
   const pitch = state.setup.pitch || 0;
   const mcrRpm = state.setup.mcrRpm || 1;
   const mcrKw = state.setup.mcrKw || 0;
-  const propConstant = pitch * 60 / 1852;
+  const propConstant = pitch * 60 / NM_METERS;
 
   const consByFuel = {"HFO":0,"LSFO":0,"MDO/MGO":0,"LSMGO":0};
   const consByLube = {"CYL HIGH":0,"CYL LOW":0,"ME SYS OIL":0,"GE SYS OIL":0,"FRESH WATER":0};
@@ -2273,14 +2405,7 @@ function computeDerived(){
     const override = e.consOverride || {};
     const misc = e.miscCons || {"MDO/MGO":0,"LSMGO":0};
 
-    if (e.rpm!==null && e.rpm!==undefined && !isNaN(e.rpm)){
-      speedEngine = e.rpm * propConstant;
-      mcrPct = Math.pow(e.rpm/mcrRpm, 3) * 100;
-      kwEst = Math.pow(e.rpm/mcrRpm, 3) * mcrKw;
-      sumRpm += e.rpm; cntRpm++;
-      sumMcr += mcrPct; cntMcr++;
-      sumKw += kwEst; cntKw++;
-    }
+    let rpmEff = (e.rpm!==null && e.rpm!==undefined && !isNaN(e.rpm)) ? e.rpm : null;
 
     if (prev){
       hrs = (new Date(e.datetime) - new Date(prev.datetime)) / 3600000;
@@ -2334,11 +2459,12 @@ function computeDerived(){
       lubeByType['FRESH WATER'] = fwConsD;
       if (fwConsD!=null) consByLube["FRESH WATER"] += fwConsD;
 
-      // performance
+      // performance — prefer rev-counter distance (pitch × Δrevs / 1852)
       dailyRevs = meterDelta(e.revCounter, prev.revCounter, rolls.rc);
-      if (e.rpm!==null && e.rpm!==undefined && !isNaN(e.rpm) && hrs>0){
-        distEngine = e.rpm * propConstant * hrs;
+      if (rpmEff==null && dailyRevs!=null && hrs>0){
+        rpmEff = rpmFromRevs(dailyRevs, hrs);
       }
+      distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
       if (hrs>0) speedShip = e.distanceShip / hrs;
       if (distEngine && distEngine>0 && e.distanceShip!==null){
         slip = ((distEngine - e.distanceShip)/distEngine)*100;
@@ -2346,8 +2472,18 @@ function computeDerived(){
       }
       if (speedShip!==null && !isNaN(speedShip)){ sumSpeedShip+=speedShip; cntSpeedShip++; }
 
+      if (rpmEff!=null && !isNaN(rpmEff)){
+        speedEngine = rpmEff * propConstant;
+        mcrPct = Math.pow(rpmEff/mcrRpm, 3) * 100;
+        kwEst = Math.pow(rpmEff/mcrRpm, 3) * mcrKw;
+        sumRpm += rpmEff; cntRpm++;
+        sumMcr += mcrPct; cntMcr++;
+        sumKw += kwEst; cntKw++;
+      }
+
       sfocRef = mcrPct!=null ? referenceSfocAtLoad(mcrPct) : null;
-      sfocActual = actualMeSfoc(meCons, kwEst, hrs);
+      const sfocMeas = actualMeSfoc(meCons, kwEst, hrs);
+      sfocActual = isoCorrectedSfoc(sfocMeas);
       sfocDelta = sfocDeltaPct(sfocActual, sfocRef);
       meFuelExpected = expectedMeFuelMtFromSfoc(sfocRef, kwEst, hrs);
       if (hrs>0 && meCons!=null) meFuelMtDay = (meCons / hrs) * 24;
@@ -2392,6 +2528,13 @@ function computeDerived(){
       totalDistShip += (e.distanceShip||0);
       totalDistEngine += (distEngine||0);
       totalHrs += hrs;
+    } else if (rpmEff!=null){
+      speedEngine = rpmEff * propConstant;
+      mcrPct = Math.pow(rpmEff/mcrRpm, 3) * 100;
+      kwEst = Math.pow(rpmEff/mcrRpm, 3) * mcrKw;
+      sumRpm += rpmEff; cntRpm++;
+      sumMcr += mcrPct; cntMcr++;
+      sumKw += kwEst; cntKw++;
     }
 
     prev = e;
@@ -2847,6 +2990,10 @@ function render(){
   // setup fields reflect state
   document.getElementById('s_vesselName').value = state.setup.vesselName;
   document.getElementById('s_chEng').value = state.setup.chEng;
+  const dwtEl = document.getElementById('s_dwt');
+  if (dwtEl) dwtEl.value = state.setup.dwt ?? '';
+  const imoEl = document.getElementById('s_imoNo');
+  if (imoEl) imoEl.value = state.setup.imoNo || '';
   document.getElementById('s_voyageNumber').value = state.setup.voyageNumber;
   document.getElementById('s_shipCondition').value = state.setup.shipCondition;
   document.getElementById('s_departPort').value = state.setup.departPort;
@@ -2861,6 +3008,10 @@ function render(){
   document.getElementById('s_csrKw').value = state.setup.csrKw ?? '';
   document.getElementById('s_sfoc100').value = state.setup.sfoc100 ?? '';
   document.getElementById('s_sfoc85').value = state.setup.sfoc85 ?? '';
+  const lcvRefEl = document.getElementById('s_lcvRef');
+  if (lcvRefEl) lcvRefEl.value = state.setup.lcvRef ?? DEFAULT_LCV_REF;
+  const lcvActEl = document.getElementById('s_lcvActual');
+  if (lcvActEl) lcvActEl.value = state.setup.lcvActual ?? '';
   document.getElementById('s_alternatorMaxKw').value = state.setup.alternatorMaxKw ?? '';
   document.getElementById('s_generatorCount').value = geUnitCount();
   document.getElementById('s_meCylinderCount').value = meCylinderCount();
@@ -3078,20 +3229,25 @@ function render(){
   document.getElementById('sfocStrip').innerHTML = `
     <div class="stat"><div class="num">${sfoc100==null?'—':fmt(sfoc100,1)}</div><div class="lbl">SFOC @ 100% MCR (setup)</div></div>
     <div class="stat"><div class="num">${refAtAvgLoad===null?'—':fmt(refAtAvgLoad,1)}</div><div class="lbl">${avgLoadLbl}</div></div>
-    <div class="stat"><div class="num">${perf.avgSfocActual===null?'—':fmt(perf.avgSfocActual,1)}</div><div class="lbl">Actual SFOC (g/kWh)</div></div>
+    <div class="stat"><div class="num">${perf.avgSfocActual===null?'—':fmt(perf.avgSfocActual,1)}</div><div class="lbl">Actual SFOC (g/kWh)${lcvCorrectionFactor()!==1?' ISO':''}</div></div>
     <div class="stat"><div class="num">${perf.avgSfocDelta===null?'—':((perf.avgSfocDelta>0?'+':'')+fmt(perf.avgSfocDelta,1))}</div><div class="lbl">Δ vs reference %</div></div>
     <div class="stat"><div class="num">${perf.avgMcrTimeWeighted===null?'—':fmt(perf.avgMcrTimeWeighted,1)}</div><div class="lbl">Avg %MCR (hrs-wtd)</div></div>
   `;
   const sfocHint = document.getElementById('sfocSetupHint');
   if (sfocHint){
+    const lcvNote = lcvCorrectionFactor()!==1
+      ? ` LCV correction ×${fmt(lcvCorrectionFactor(),4)} applied (ref ${state.setup.lcvRef||DEFAULT_LCV_REF} / bunker ${state.setup.lcvActual}).`
+      : ' Set bunker LCV in Setup to ISO-correct actual SFOC.';
     if (sfoc100==null || isNaN(sfoc100)){
-      sfocHint.textContent = 'Reference SFOC at any load: SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²). Enter SFOC @ 100% MCR (shop trial). Optional SFOC @ 85% calibrates the curve; otherwise a = 0.25, b = 0.75 (standard slow/medium-speed diesel).';
+      sfocHint.textContent = 'Reference SFOC at any load: SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²). Enter SFOC @ 100% MCR (shop trial). Optional SFOC @ 85% calibrates the curve; otherwise a = 0.25, b = 0.75.' + lcvNote;
     } else if (coeffs?.calibrated){
-      sfocHint.textContent = `Curve calibrated through shop trial: SFOC(100%) = ${fmt(sfoc100,1)}, SFOC(85%) = ${fmt(state.setup.sfoc85,1)} g/kWh → a = ${fmt(coeffs.a,3)}, b = ${fmt(coeffs.b,3)}. At 50% MCR reference = ${fmt(referenceSfocAtLoad(50),1)} g/kWh.`;
+      sfocHint.textContent = `Curve calibrated through shop trial: SFOC(100%) = ${fmt(sfoc100,1)}, SFOC(85%) = ${fmt(state.setup.sfoc85,1)} g/kWh → a = ${fmt(coeffs.a,3)}, b = ${fmt(coeffs.b,3)}. At 50% MCR reference = ${fmt(referenceSfocAtLoad(50),1)} g/kWh.` + lcvNote;
     } else {
-      sfocHint.textContent = `Using standard curve a = 0.25, b = 0.75 with SFOC₁₀₀ = ${fmt(sfoc100,1)} g/kWh from setup. At 85% MCR → ${fmt(referenceSfocAtLoad(85),1)} g/kWh; at 50% MCR → ${fmt(referenceSfocAtLoad(50),1)} g/kWh.`;
+      sfocHint.textContent = `Using standard curve a = 0.25, b = 0.75 with SFOC₁₀₀ = ${fmt(sfoc100,1)} g/kWh from setup. At 85% MCR → ${fmt(referenceSfocAtLoad(85),1)} g/kWh; at 50% MCR → ${fmt(referenceSfocAtLoad(50),1)} g/kWh.` + lcvNote;
     }
   }
+
+  renderCiiStrip(consByFuel, perf);
 
   document.getElementById('voyageTimeAvgStrip').innerHTML = `
     <div class="stat"><div class="num">${fmt(perf.totalHrs/24,2)}</div><div class="lbl">Days at sea</div></div>
@@ -3112,6 +3268,31 @@ function render(){
   renderDocList();
   renderAbstractList();
   renderPrintHistoryList();
+}
+
+function renderCiiStrip(consByFuel, perf){
+  const strip = document.getElementById('ciiStrip');
+  const hint = document.getElementById('ciiHint');
+  if (!strip) return;
+  const totalFuel = FUEL_TYPES.reduce((s,t)=>s+(consByFuel[t]||0), 0);
+  const co2 = totalCO2Tonnes(consByFuel);
+  const dwt = state.setup.dwt;
+  const cii = computeAttainedCII(consByFuel, perf.totalDistShip, dwt);
+  const card = (val, label, unit='') =>
+    `<div class="cii-card"><div class="val">${val==null?'—':val}${unit?`<span style="font-size:11px;color:var(--paper-dim)"> ${unit}</span>`:''}</div><div class="lbl">${label}</div></div>`;
+  strip.innerHTML =
+    card(fmt(totalFuel,2), 'Total fuel', 'MT') +
+    card(fmt(co2,2), 'Total CO₂', 't') +
+    card(perf.totalDistShip?fmt(perf.totalDistShip,1):null, 'Distance run', 'nm') +
+    card(dwt?fmt(dwt,0):null, 'Capacity DWT', 't') +
+    card(cii!=null?fmt(cii,2):null, 'Attained CII', 'g/DWT·nm');
+  if (hint){
+    const parts = [];
+    if (!dwt) parts.push('Enter vessel DWT in Setup → Vessel to compute attained CII.');
+    if (!(perf.totalDistShip>0)) parts.push('Add distance-run on Voyage Summary for CII transport work.');
+    if (cii!=null) parts.push(`Voyage estimate only — annual CII for SEEMP Part III uses calendar-year IMO DCS fuel and distance.`);
+    if (parts.length) hint.textContent = parts.join(' ');
+  }
 }
 
 /* ---------------- persistence helpers ---------------- */
@@ -4174,6 +4355,8 @@ document.getElementById('s_generatorCount')?.addEventListener('change', ()=>{
 async function saveVoyageDetails(){
   state.setup.vesselName = document.getElementById('s_vesselName').value;
   state.setup.chEng = document.getElementById('s_chEng').value;
+  state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value)||null;
+  state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
   state.setup.voyageNumber = document.getElementById('s_voyageNumber').value;
   state.setup.shipCondition = document.getElementById('s_shipCondition').value;
   state.setup.departPort = document.getElementById('s_departPort').value;
@@ -4245,6 +4428,7 @@ function normalizeEntry(e){
   e.miscCons = e.miscCons || {"MDO/MGO":0,"LSMGO":0};
   e.consOverride = e.consOverride || null;
   e.unitOverride = e.unitOverride || {ME:null,GE:null,BLR:null};
+  e.weather = e.weather || { windDir:'', windBft:null, seaState:null, swellDir:'', airTemp:null, seaTemp:null };
   if (e.cylMeter===undefined) e.cylMeter = null;
   if (e.meLo===undefined) e.meLo = null;
   if (e.geLo===undefined) e.geLo = null;
@@ -4267,6 +4451,8 @@ async function saveSetupFromForm(){
   state.setup.csrKw = parseFloat(document.getElementById('s_csrKw').value)||null;
   state.setup.sfoc100 = parseFloat(document.getElementById('s_sfoc100').value)||null;
   state.setup.sfoc85 = parseFloat(document.getElementById('s_sfoc85').value)||null;
+  state.setup.lcvRef = parseFloat(document.getElementById('s_lcvRef')?.value)||DEFAULT_LCV_REF;
+  state.setup.lcvActual = parseFloat(document.getElementById('s_lcvActual')?.value)||null;
   state.setup.alternatorMaxKw = parseFloat(document.getElementById('s_alternatorMaxKw').value)||null;
   state.setup.generatorCount = parseInt(document.getElementById('s_generatorCount').value) || 1;
   state.setup.meCylinderCount = parseInt(document.getElementById('s_meCylinderCount').value) || 6;
@@ -4639,6 +4825,14 @@ function openVoyageSummary(entryId){
   document.getElementById('in_distanceShip').value = entry.distanceShip ?? 0;
   document.getElementById('in_rpm').value = entry.rpm ?? '';
   document.getElementById('in_revCounter').value = entry.revCounter ?? '';
+  const w = entry.weather || {};
+  const setSel = (id, val)=>{ const el=document.getElementById(id); if (el) el.value = (val==null||val==='')?'':String(val); };
+  setSel('vs_windDir', w.windDir);
+  setSel('vs_windBft', w.windBft);
+  setSel('vs_seaState', w.seaState);
+  setSel('vs_swellDir', w.swellDir);
+  setSel('vs_airTemp', w.airTemp);
+  setSel('vs_seaTemp', w.seaTemp);
   updateVsRunCalcDisplays();
 
   document.getElementById('vsMePerfStrip').innerHTML = `
@@ -4972,6 +5166,14 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   entry.distanceShip = num0('vs_distanceShip');
   entry.rpm = num('vs_rpm');
   entry.revCounter = num('vs_revCounter');
+  entry.weather = {
+    windDir: document.getElementById('vs_windDir')?.value || '',
+    windBft: num('vs_windBft'),
+    seaState: num('vs_seaState'),
+    swellDir: document.getElementById('vs_swellDir')?.value || '',
+    airTemp: num('vs_airTemp'),
+    seaTemp: num('vs_seaTemp')
+  };
   entry.fwProd = num0('vs_fwProdMeter');
   entry.fwRob = num('vs_fwRob');
   entry.miscCons = { 'MDO/MGO': num0('vs_misc_mdomgo'), 'LSMGO': num0('vs_misc_lsmgo') };
@@ -5399,11 +5601,20 @@ function updateVsRunCalcDisplays(){
     if (curEntry.distanceShip==null) curEntry.distanceShip = ctx.entry.distanceShip;
   }
   const prevRef = getPrevReferenceFor(ctx.datetime || curEntry.datetime, ctx.excludeId);
-  const pitch = state.setup.pitch||0, propConstant = pitch*60/1852;
+  const pitch = state.setup.pitch||0, propConstant = pitch*60/NM_METERS;
   let distEngine=null, speedEngine=null, shipSpeed=null, slip=null;
-  if (curEntry.rpm!=null) speedEngine = curEntry.rpm * propConstant;
+  let rpmEff = curEntry.rpm;
   const hrs = periodRunHours(prevRef, ctx.datetime || curEntry.datetime, ctx.meRuntime);
-  if (hrs>0 && curEntry.rpm!=null) distEngine = curEntry.rpm * propConstant * hrs;
+  let dailyRevs = null;
+  if (prevRef && curEntry.revCounter!=null && prevRef.revCounter!=null){
+    const rolls = meterRollovers();
+    dailyRevs = meterDelta(curEntry.revCounter, prevRef.revCounter, rolls.rc);
+  }
+  if ((rpmEff==null || isNaN(rpmEff)) && dailyRevs!=null && hrs>0){
+    rpmEff = rpmFromRevs(dailyRevs, hrs);
+  }
+  if (rpmEff!=null) speedEngine = rpmEff * propConstant;
+  distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
   if (hrs>0 && curEntry.distanceShip!=null) shipSpeed = curEntry.distanceShip / hrs;
   if (distEngine!=null && distEngine>0 && curEntry.distanceShip!=null){
     slip = ((distEngine - curEntry.distanceShip) / distEngine) * 100;
@@ -5415,7 +5626,7 @@ function updateVsRunCalcDisplays(){
   set('vs_slip', slip);
   set('in_slip', slip);
   const rpmDisp = document.getElementById('in_rpm_display');
-  if (rpmDisp && document.activeElement!==rpmDisp) rpmDisp.value = curEntry.rpm==null?'—':fmt(curEntry.rpm,2);
+  if (rpmDisp && document.activeElement!==rpmDisp) rpmDisp.value = rpmEff==null?'—':fmt(rpmEff,2);
 }
 function updateVsFwDisplays(){
   if (!currentVsEntryId) return;
@@ -5503,20 +5714,18 @@ function updateLivePreview(){
   const prevRef = getPrevReferenceFor(curEntry.datetime, editingId);
   const rolls = meterRollovers();
   const pitch = state.setup.pitch||0, mcrRpm = state.setup.mcrRpm||1, mcrKw = state.setup.mcrKw||0;
-  const propConstant = pitch*60/1852;
+  const propConstant = pitch*60/NM_METERS;
 
   let hrs=null, meCons=null, geCons=null, blrCons=null, total=null, distEngine=null, slip=null, kwEst=null, mcrPct=null, dailyRevs=null, speedEngine=null;
-
-  if (curEntry.rpm!=null){
-    mcrPct = Math.pow(curEntry.rpm/mcrRpm, 3) * 100;
-    kwEst = Math.pow(curEntry.rpm/mcrRpm, 3) * mcrKw;
-    speedEngine = curEntry.rpm * propConstant;
-  }
+  let rpmEff = curEntry.rpm;
 
   if (prevRef && curEntry.datetime){
     hrs = (new Date(curEntry.datetime) - new Date(prevRef.datetime)) / 3600000;
     if (curEntry.revCounter!=null && prevRef.revCounter!=null){
       dailyRevs = meterDelta(curEntry.revCounter, prevRef.revCounter, rolls.rc);
+    }
+    if ((rpmEff==null || isNaN(rpmEff)) && dailyRevs!=null && hrs>0){
+      rpmEff = rpmFromRevs(dailyRevs, hrs);
     }
     if (hrs>0){
       const {meRaw, geRaw} = meGeRawLitres(curEntry, prevRef, rolls);
@@ -5531,19 +5740,23 @@ function updateLivePreview(){
       if (unitGe && unitGe.value!=='') geCons = parseFloat(unitGe.value);
       if (unitBlr && unitBlr.value!=='') blrCons = parseFloat(unitBlr.value);
       total = (meCons||0)+(geCons||0)+(blrCons||0);
-      if (curEntry.rpm!=null){
-        distEngine = curEntry.rpm * propConstant * hrs;
-        if (distEngine>0 && curEntry.distanceShip!=null){
-          slip = ((distEngine - curEntry.distanceShip)/distEngine)*100;
-        }
+      distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
+      if (distEngine!=null && distEngine>0 && curEntry.distanceShip!=null){
+        slip = ((distEngine - curEntry.distanceShip)/distEngine)*100;
       }
     }
+  }
+
+  if (rpmEff!=null && !isNaN(rpmEff)){
+    mcrPct = Math.pow(rpmEff/mcrRpm, 3) * 100;
+    kwEst = Math.pow(rpmEff/mcrRpm, 3) * mcrKw;
+    speedEngine = rpmEff * propConstant;
   }
 
   const slipEl = document.getElementById('in_slip');
   if (slipEl && document.activeElement!==slipEl) slipEl.value = slip==null?'—':fmt(slip,2);
   const rpmDisp = document.getElementById('in_rpm_display');
-  if (rpmDisp) rpmDisp.value = curEntry.rpm==null?'—':fmt(curEntry.rpm,2);
+  if (rpmDisp) rpmDisp.value = rpmEff==null?'—':fmt(rpmEff,2);
 
   const stat = (label,val) => `<div class="stat"><div class="num">${val}</div><div class="lbl">${label}</div></div>`;
   box.innerHTML =
@@ -5561,7 +5774,7 @@ function updateLivePreview(){
     (function(){
       const sfoc100 = state.setup.sfoc100;
       const ref = mcrPct!=null ? referenceSfocAtLoad(mcrPct) : null;
-      const act = actualMeSfoc(meCons, kwEst, hrs);
+      const act = isoCorrectedSfoc(actualMeSfoc(meCons, kwEst, hrs));
       const delta = sfocDeltaPct(act, ref);
       const refLbl = mcrPct!=null ? `Ref. SFOC @ ${fmt(mcrPct,0)}%` : 'Ref. SFOC';
       return stat('SFOC @ 100%', sfoc100==null?'—':fmt(sfoc100,1)) +
@@ -6224,6 +6437,7 @@ function ensureSyncConfig(){
   }
   if (s.autoSync==null) s.autoSync = true;
   if (!s.conflictPolicy) s.conflictPolicy = 'merge';
+  if (s.deviceName==null) s.deviceName = '';
   return s;
 }
 
@@ -6263,6 +6477,8 @@ function renderSyncUi(){
   document.getElementById('sync_serverUrl').value = sync.serverUrl || '';
   document.getElementById('sync_apiToken').value = sync.apiToken || '';
   document.getElementById('sync_vesselId').value = sync.vesselId || '';
+  const nameEl = document.getElementById('sync_deviceName');
+  if (nameEl) nameEl.value = sync.deviceName || '';
   document.getElementById('sync_auto').value = sync.autoSync ? 'true' : 'false';
   document.getElementById('sync_conflict').value = sync.conflictPolicy || 'merge';
 
@@ -6318,13 +6534,15 @@ function buildSyncPayload(){
     voyageKey: voyageSyncKey(),
     updatedAt: new Date().toISOString(),
     deviceId: sync.deviceId,
+    deviceName: sync.deviceName || '',
     data: {
       setup: state.setup,
       entries: state.entries,
       receipts: state.receipts,
       documents: state.documents,
       abstracts: state.abstracts,
-      printHistory: state.printHistory
+      printHistory: state.printHistory,
+      deletedIds: sync.deletedIds || { entries:[], receipts:[], documents:[], abstracts:[], printHistory:[] }
     }
   };
 }
@@ -6354,6 +6572,7 @@ function applyRemoteSnapshot(remote, policy){
     state.documents = (remoteData.documents || []).map(d=> tagVesselId({...d}));
     state.abstracts = (remoteData.abstracts || []).map(a=> tagVesselId({...a}));
     state.printHistory = (remoteData.printHistory || []).map(p=> tagVesselId({...p}));
+    sync.deletedIds = remoteData.deletedIds || sync.deletedIds || {};
     return;
   }
   if (policy === 'local'){
@@ -6363,13 +6582,40 @@ function applyRemoteSnapshot(remote, policy){
   const remoteSetup = migrateSetup(remoteData.setup || {});
   const localTs = (localSetup.sync || {}).lastModifiedAt || '';
   const remoteTs = (remoteSetup.sync || {}).lastModifiedAt || '';
-  state.setup = remoteTs > localTs ? remoteSetup : localSetup;
-  state.entries = mergeListsById(remoteData.entries, state.entries).map(normalizeEntry);
-  state.receipts = mergeListsById(remoteData.receipts, state.receipts);
-  state.documents = mergeListsById(remoteData.documents, state.documents);
-  state.abstracts = mergeListsById(remoteData.abstracts, state.abstracts);
-  state.printHistory = mergeListsById(remoteData.printHistory, state.printHistory);
+  /* Keep local sync credentials; merge other setup fields by newest edit. */
+  const chosen = remoteTs > localTs ? remoteSetup : localSetup;
+  const localSync = ensureSyncConfig();
+  state.setup = migrateSetup({ ...chosen, sync: { ...chosen.sync, ...localSync, serverUrl: localSync.serverUrl, apiToken: localSync.apiToken, vesselId: localSync.vesselId, deviceId: localSync.deviceId, deviceName: localSync.deviceName, conflictPolicy: localSync.conflictPolicy, autoSync: localSync.autoSync } });
+  state.entries = filterDeleted(mergeListsById(remoteData.entries, state.entries), remoteData.deletedIds?.entries).map(normalizeEntry);
+  state.receipts = filterDeleted(mergeListsById(remoteData.receipts, state.receipts), remoteData.deletedIds?.receipts);
+  state.documents = filterDeleted(mergeListsById(remoteData.documents, state.documents), remoteData.deletedIds?.documents);
+  state.abstracts = filterDeleted(mergeListsById(remoteData.abstracts, state.abstracts), remoteData.deletedIds?.abstracts);
+  state.printHistory = filterDeleted(mergeListsById(remoteData.printHistory, state.printHistory), remoteData.deletedIds?.printHistory);
+  sync.deletedIds = mergeDeletedIds(sync.deletedIds, remoteData.deletedIds);
   sync.pendingChanges = true;
+}
+
+function filterDeleted(items, deleted){
+  if (!deleted || !deleted.length) return items;
+  const gone = new Set(deleted);
+  return (items || []).filter(i => !gone.has(i.id));
+}
+
+function mergeDeletedIds(a, b){
+  const out = { entries:[], receipts:[], documents:[], abstracts:[], printHistory:[] };
+  const keys = Object.keys(out);
+  keys.forEach(k=>{
+    out[k] = [...new Set([...(a?.[k]||[]), ...(b?.[k]||[])])].slice(-500);
+  });
+  return out;
+}
+
+function rememberDeleted(store, id){
+  const sync = ensureSyncConfig();
+  if (!sync.deletedIds) sync.deletedIds = { entries:[], receipts:[], documents:[], abstracts:[], printHistory:[] };
+  if (!sync.deletedIds[store]) sync.deletedIds[store] = [];
+  if (!sync.deletedIds[store].includes(id)) sync.deletedIds[store].push(id);
+  if (sync.deletedIds[store].length > 500) sync.deletedIds[store] = sync.deletedIds[store].slice(-500);
 }
 
 async function persistAllToDb(){
@@ -6395,6 +6641,8 @@ async function syncNow(options = {}){
     const voyage = voyageSyncKey();
     const headers = { 'Content-Type': 'application/json' };
     if (sync.apiToken) headers.Authorization = 'Bearer ' + sync.apiToken;
+    if (sync.deviceId) headers['X-Device-Id'] = sync.deviceId;
+    if (sync.deviceName) headers['X-Device-Name'] = sync.deviceName;
 
     let remote = null;
     try {
@@ -6410,13 +6658,16 @@ async function syncNow(options = {}){
     const policy = forcePolicy || sync.conflictPolicy || 'merge';
     if (pullOnly && !remote) throw new Error('No remote voyage snapshot found on server');
 
+    /* Always merge remote peers before push so multi-device offline edits are not lost. */
     if (remote){
-      const shouldApplyRemote = pullOnly || policy === 'remote' ||
-        (policy === 'merge' && remote.updatedAt > (sync.lastSyncedAt || '') && !sync.pendingChanges);
-      if (shouldApplyRemote){
-        applyRemoteSnapshot(remote, pullOnly || policy === 'remote' ? 'remote' : 'merge');
+      if (pullOnly || policy === 'remote'){
+        applyRemoteSnapshot(remote, 'remote');
+        await persistAllToDb();
+      } else if (policy === 'merge'){
+        applyRemoteSnapshot(remote, 'merge');
         await persistAllToDb();
       }
+      /* policy === 'local': skip applying remote, still push below */
     }
 
     if (!pullOnly){
@@ -6426,8 +6677,10 @@ async function syncNow(options = {}){
       });
       if (!putRes.ok) throw new Error('Upload failed with status ' + putRes.status);
       const merged = await putRes.json();
-      if (policy !== 'local') applyRemoteSnapshot(merged, 'merge');
-      await persistAllToDb();
+      if (policy !== 'local'){
+        applyRemoteSnapshot(merged, 'merge');
+        await persistAllToDb();
+      }
     }
 
     sync.lastSyncedAt = new Date().toISOString();
@@ -6458,6 +6711,7 @@ document.getElementById('btnSaveSyncSettings').addEventListener('click', async (
   sync.serverUrl = document.getElementById('sync_serverUrl').value.trim();
   sync.apiToken = document.getElementById('sync_apiToken').value.trim();
   sync.vesselId = document.getElementById('sync_vesselId').value.trim();
+  sync.deviceName = document.getElementById('sync_deviceName')?.value.trim() || '';
   sync.autoSync = document.getElementById('sync_auto').value === 'true';
   sync.conflictPolicy = document.getElementById('sync_conflict').value;
   sync.lastModifiedAt = new Date().toISOString();
@@ -6485,6 +6739,68 @@ document.getElementById('btnPullRemote').addEventListener('click', async ()=>{
   }
 });
 
+document.getElementById('btnTestSync')?.addEventListener('click', async ()=>{
+  const base = syncApiBase();
+  if (!base){ alert('Enter a Sync Server URL first.'); return; }
+  try {
+    const sync = ensureSyncConfig();
+    const headers = {};
+    if (sync.apiToken) headers.Authorization = 'Bearer ' + sync.apiToken;
+    const res = await fetch(`${base}/api/health`, { headers, cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const body = await res.json();
+    alert('Connection OK.\n' + JSON.stringify(body, null, 2));
+  } catch (e){
+    alert('Connection failed: ' + e.message);
+  }
+});
+
+document.getElementById('btnListRemoteVoyages')?.addEventListener('click', async ()=>{
+  const base = syncApiBase();
+  const box = document.getElementById('remoteVoyageList');
+  if (!base){ alert('Enter a Sync Server URL first.'); return; }
+  try {
+    const sync = ensureSyncConfig();
+    const headers = {};
+    if (sync.apiToken) headers.Authorization = 'Bearer ' + sync.apiToken;
+    const vessel = vesselSyncSlug();
+    const res = await fetch(`${base}/api/voyage/${encodeURIComponent(vessel)}`, { headers, cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const body = await res.json();
+    const voyages = body.voyages || [];
+    if (box){
+      box.style.display = '';
+      box.innerHTML = voyages.length
+        ? `<strong>Remote voyages for ${vessel}:</strong><br>` + voyages.map(v =>
+            `${v.voyageKey} · updated ${v.updatedAt || '—'} · device ${v.deviceName || v.deviceId || '—'}`
+          ).join('<br>')
+        : `No remote voyages found for vessel slug "${vessel}".`;
+    } else {
+      alert(JSON.stringify(body, null, 2));
+    }
+  } catch (e){
+    if (box){ box.style.display = ''; box.textContent = 'List failed: ' + e.message; }
+    else alert('List failed: ' + e.message);
+  }
+});
+
+document.getElementById('btnRequestPersist')?.addEventListener('click', async ()=>{
+  try {
+    if (!navigator.storage || !navigator.storage.persist){
+      alert('Persistent storage API not available in this browser.');
+      return;
+    }
+    const already = await navigator.storage.persisted();
+    if (already){ alert('Storage is already persistent on this device.'); return; }
+    const ok = await navigator.storage.persist();
+    alert(ok
+      ? 'Browser will keep IndexedDB data even under storage pressure. Install as PWA for best results on Android.'
+      : 'Persistent storage was not granted. Install the app (Add to Home Screen) and try again.');
+  } catch (e){
+    alert('Could not request persistence: ' + e.message);
+  }
+});
+
 window.addEventListener('online', ()=>{
   renderSyncUi();
   if (ensureSyncConfig().autoSync && ensureSyncConfig().pendingChanges) queueBackgroundSync();
@@ -6498,7 +6814,30 @@ function registerServiceWorker(){
     console.warn('Service worker requires http(s). Serve this folder with a local web server for offline install.');
     return;
   }
-  navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('SW registration failed', err));
+  navigator.serviceWorker.register('./sw.js').then((reg)=>{
+    if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    reg.addEventListener('updatefound', ()=>{
+      const w = reg.installing;
+      if (!w) return;
+      w.addEventListener('statechange', ()=>{
+        if (w.state === 'installed' && navigator.serviceWorker.controller){
+          w.postMessage({ type: 'SKIP_WAITING' });
+        }
+      });
+    });
+  }).catch(err=>console.warn('SW registration failed', err));
+  navigator.serviceWorker.addEventListener('message', (event)=>{
+    if (event.data && event.data.type === 'SYNC_REQUESTED'){
+      if (ensureSyncConfig().autoSync && ensureSyncConfig().pendingChanges && navigator.onLine){
+        queueBackgroundSync();
+      }
+    }
+  });
+  if (navigator.storage && navigator.storage.persist){
+    navigator.storage.persisted().then((p)=>{
+      if (!p) navigator.storage.persist().catch(()=>{});
+    }).catch(()=>{});
+  }
 }
 
 let deferredInstallPrompt = null;
@@ -6677,6 +7016,10 @@ function migrateSetup(setup){
   if (setup.arrivePort===undefined) setup.arrivePort = '';
   if (setup.initDateTime===undefined) setup.initDateTime = '';
   if (setup.voyageDistance===undefined) setup.voyageDistance = null;
+  if (setup.dwt===undefined) setup.dwt = null;
+  if (setup.imoNo===undefined) setup.imoNo = '';
+  if (setup.lcvRef==null) setup.lcvRef = DEFAULT_LCV_REF;
+  if (setup.lcvActual===undefined) setup.lcvActual = null;
   if (setup.pitch==null) setup.pitch = 5.85;
   if (setup.mcrRpm==null) setup.mcrRpm = 91;
   if (setup.mcrKw==null) setup.mcrKw = 18630;
@@ -6688,8 +7031,12 @@ function migrateSetup(setup){
 
   delete setup.rollover;
   if (!setup.sync){
-    setup.sync = { serverUrl:'', apiToken:'', vesselId:'', autoSync:true, conflictPolicy:'merge', pendingChanges:false };
+    setup.sync = { serverUrl:'', apiToken:'', vesselId:'', deviceName:'', autoSync:true, conflictPolicy:'merge', pendingChanges:false, deletedIds:{ entries:[], receipts:[], documents:[], abstracts:[], printHistory:[] } };
   }
+  if (!setup.sync.deletedIds){
+    setup.sync.deletedIds = { entries:[], receipts:[], documents:[], abstracts:[], printHistory:[] };
+  }
+  if (setup.sync.deviceName==null) setup.sync.deviceName = '';
   return setup;
 }
 

@@ -1,4 +1,4 @@
-const CACHE = 'noon-report-v18';
+const CACHE = 'noon-report-v19';
 const PRECACHE = [
   './voyage_manager.html',
   './manifest.webmanifest',
@@ -8,7 +8,16 @@ const PRECACHE = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
+    caches.open(CACHE).then(async (cache) => {
+      for (const url of PRECACHE) {
+        try {
+          await cache.add(url);
+        } catch (_) {
+          /* optional assets (icons) should not block install */
+        }
+      }
+      await self.skipWaiting();
+    })
   );
 });
 
@@ -26,6 +35,8 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  /* Never cache sync API — always hit the network (or fail offline). */
+  if (url.pathname.includes('/api/')) return;
 
   event.respondWith(
     caches.match(request).then((cached) => {
@@ -38,7 +49,24 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => cached);
+      /* Cache-first for app shell so Android/PC stay usable offline. */
       return cached || network;
     })
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'noon-report-sync') {
+    event.waitUntil(
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+        clients.forEach((c) => c.postMessage({ type: 'SYNC_REQUESTED' }));
+      })
+    );
+  }
 });
