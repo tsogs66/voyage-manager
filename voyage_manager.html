@@ -1609,7 +1609,7 @@ function syncKwLoadPctDisplay(kwInputId, loadInputId, maxKw){
   if (!loadEl) return;
   const kw = kwEl && kwEl.value!=='' ? parseFloat(kwEl.value) : NaN;
   const pct = (!isNaN(kw) && maxKw>0) ? (kw/maxKw)*100 : null;
-  loadEl.value = pct==null ? '—' : fmt(pct, 1) + ' %';
+  loadEl.value = pct==null ? '—' : fmt(pct, 2) + ' %';
 }
 function syncIncineratorLoadPctDisplay(kwInputId, loadInputId){
   syncKwLoadPctDisplay(kwInputId, loadInputId, incineratorMaxKw());
@@ -2234,18 +2234,28 @@ function updateEntryBlrIncDisplays(){
   /* Boiler / incinerator editing lives on Voyage Summary */
   syncIncineratorLoadPctDisplay('vs_incKw', 'vs_incLoadPct');
 }
-function fmt(n,d=3){ if (n===null||n===undefined||isNaN(n)) return "—"; return Number(n).toFixed(3); }
-/* Numeric CSV / export cells — always 3 decimal places; blank when missing. */
-function fmtNum(n){
+function fmt(n,d=2){
+  if (n===null||n===undefined||isNaN(n)) return "—";
+  const decimals = (d===null||d===undefined||isNaN(d)) ? 2 : Math.max(0, Number(d));
+  return Number(n).toFixed(decimals);
+}
+/* Fuel consumption & fuel ROB — always 3 decimals (MT). */
+function fmtFuel(n){ return fmt(n, 3); }
+/* Lube oil quantities — whole litres, no decimals. */
+function fmtLube(n){ return fmt(n, 0); }
+/* Numeric CSV / export cells. Default 2 decimals; pass d for fuel(3)/lube(0). */
+function fmtNum(n, d=2){
   if (n===null||n===undefined||n==='') return '';
   const x = Number(n);
-  return isNaN(x) ? '' : x.toFixed(3);
+  if (isNaN(x)) return '';
+  const decimals = (d===null||d===undefined||isNaN(d)) ? 2 : Math.max(0, Number(d));
+  return x.toFixed(decimals);
 }
 function meterCellText(unit){
   if (unit.meterIn!==undefined && unit.meterOut!==undefined && unit.meterIn!==null && unit.meterOut!==null){
-    return `In ${fmt(unit.meterIn,0)} / Out ${fmt(unit.meterOut,0)}`;
+    return `In ${fmt(unit.meterIn,2)} / Out ${fmt(unit.meterOut,2)}`;
   }
-  return fmt(unit.meter,0);
+  return fmt(unit.meter,2);
 }
 function sortedEntries(){ return [...state.entries].sort((a,b)=> new Date(a.datetime)-new Date(b.datetime)); }
 
@@ -2950,35 +2960,35 @@ function abstractRowCells(r){
   const dt = new Date(r.datetime);
   const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
   const condClass = r.condition==='BALLAST' ? 'cond-B':'cond-L';
-  const cylText = r.cylCons===null||r.cylCons===undefined ? '—' : `${fmt(r.cylCons,1)} (${r.tbn})`;
+  const cylText = r.cylCons===null||r.cylCons===undefined ? '—' : `${fmtLube(r.cylCons)} (${r.tbn})`;
   return `<td>${dtStr}</td><td>${r.operation}</td>
-    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs)}</td><td>${r.rpm==null||r.rpm===undefined?'—':fmt(r.rpm)}</td>
-    <td>${r.distEngine===null||r.distEngine===undefined?'—':fmt(r.distEngine)}</td><td>${r.speedEngine===null||r.speedEngine===undefined?'—':fmt(r.speedEngine)}</td>
-    <td>${fmt(r.distanceShip)}</td><td>${r.speedShip===null||r.speedShip===undefined?'—':fmt(r.speedShip)}</td>
-    <td>${r.slip===null||r.slip===undefined?'—':fmt(r.slip)}</td><td>${r.mcrPct===null||r.mcrPct===undefined?'—':fmt(r.mcrPct)}</td><td>${r.kwEst===null||r.kwEst===undefined?'—':fmt(r.kwEst)}</td>
+    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,2)}</td><td>${r.rpm==null||r.rpm===undefined?'—':fmt(r.rpm,2)}</td>
+    <td>${r.distEngine===null||r.distEngine===undefined?'—':fmt(r.distEngine,2)}</td><td>${r.speedEngine===null||r.speedEngine===undefined?'—':fmt(r.speedEngine,2)}</td>
+    <td>${fmt(r.distanceShip,2)}</td><td>${r.speedShip===null||r.speedShip===undefined?'—':fmt(r.speedShip,2)}</td>
+    <td>${r.slip===null||r.slip===undefined?'—':fmt(r.slip,2)}</td><td>${r.mcrPct===null||r.mcrPct===undefined?'—':fmt(r.mcrPct,2)}</td><td>${r.kwEst===null||r.kwEst===undefined?'—':fmt(r.kwEst,2)}</td>
     <td><span class="cond-tag ${condClass}">${r.condition[0]}</span></td>
-    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs)}</td><td>${fmt(r.distanceShip)}</td><td>${r.rpm==null||r.rpm===undefined?'—':fmt(r.rpm)}</td>
-    <td>${r.revCounter==null||r.revCounter===undefined?'—':fmt(r.revCounter)}</td><td>${r.dailyRevs===null||r.dailyRevs===undefined?'—':fmt(r.dailyRevs)}</td>
-    <td>${meterCellText(r.me)}</td><td>${meterCellText(r.ge)}</td><td>${fmt(r.blr.meter)}</td>
-    <td>${r.meCons===null||r.meCons===undefined?'—':fmt(r.meCons,3)}</td><td>${r.geCons===null||r.geCons===undefined?'—':fmt(r.geCons,3)}</td>
-    <td>${r.blrCons===null||r.blrCons===undefined?'—':fmt(r.blrCons,3)}</td>
-    <td>${r.total===null||r.total===undefined?'—':fmt(r.total,3)}</td>
+    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,2)}</td><td>${fmt(r.distanceShip,2)}</td><td>${r.rpm==null||r.rpm===undefined?'—':fmt(r.rpm,2)}</td>
+    <td>${r.revCounter==null||r.revCounter===undefined?'—':fmt(r.revCounter,2)}</td><td>${r.dailyRevs===null||r.dailyRevs===undefined?'—':fmt(r.dailyRevs,2)}</td>
+    <td>${meterCellText(r.me)}</td><td>${meterCellText(r.ge)}</td><td>${fmt(r.blr.meter,2)}</td>
+    <td>${r.meCons===null||r.meCons===undefined?'—':fmtFuel(r.meCons)}</td><td>${r.geCons===null||r.geCons===undefined?'—':fmtFuel(r.geCons)}</td>
+    <td>${r.blrCons===null||r.blrCons===undefined?'—':fmtFuel(r.blrCons)}</td>
+    <td>${r.total===null||r.total===undefined?'—':fmtFuel(r.total)}</td>
     <td>${cylText}</td>
-    <td>${r.meLoCons===null||r.meLoCons===undefined?'—':fmt(r.meLoCons,1)}</td><td>${r.geLoCons===null||r.geLoCons===undefined?'—':fmt(r.geLoCons,1)}</td>
-    <td>${r.fwProd===null||r.fwProd===undefined?'—':fmt(r.fwProd,0)}</td>
-    <td>${r.fwProdD===null||r.fwProdD===undefined?'—':fmt(r.fwProdD,0)}</td>
-    <td>${r.fwRob===null||r.fwRob===undefined?'—':fmt(r.fwRob,0)}</td>
-    <td>${r.fwConsD===null||r.fwConsD===undefined?'—':fmt(r.fwConsD,0)}</td>`;
+    <td>${r.meLoCons===null||r.meLoCons===undefined?'—':fmtLube(r.meLoCons)}</td><td>${r.geLoCons===null||r.geLoCons===undefined?'—':fmtLube(r.geLoCons)}</td>
+    <td>${r.fwProd===null||r.fwProd===undefined?'—':fmtLube(r.fwProd)}</td>
+    <td>${r.fwProdD===null||r.fwProdD===undefined?'—':fmtLube(r.fwProdD)}</td>
+    <td>${r.fwRob===null||r.fwRob===undefined?'—':fmtLube(r.fwRob)}</td>
+    <td>${r.fwConsD===null||r.fwConsD===undefined?'—':fmtLube(r.fwConsD)}</td>`;
 }
 
 const ABSTRACT_CSV_HEADER = ["DateTime","Operation","RunHrs","RPM","DistEngine","SpeedEngine","DistShip","SpeedShip","Slip%","%MCR","EstKW",
   "Cond","Hrs","DistShip2","RPM2","RevCounter","DailyRevs","MERun","GERun","BlrRun","MECons","GECons","BlrCons","TotalCons",
   "CylOilCons","CylGrade","MELO","GELO","FWMeter","FWProduced","FWRob","FWCons"];
 function abstractRowToCsv(r){
-  return [r.datetime, r.operation, fmtNum(r.hrs), fmtNum(r.rpm), fmtNum(r.distEngine), fmtNum(r.speedEngine), fmtNum(r.distanceShip), fmtNum(r.speedShip),
-    fmtNum(r.slip), fmtNum(r.mcrPct), fmtNum(r.kwEst), r.condition, fmtNum(r.hrs), fmtNum(r.distanceShip), fmtNum(r.rpm), fmtNum(r.revCounter), fmtNum(r.dailyRevs),
-    meterCellText(r.me), meterCellText(r.ge), fmtNum(r.blr.meter), fmtNum(r.meCons), fmtNum(r.geCons), fmtNum(r.blrCons), fmtNum(r.total),
-    fmtNum(r.cylCons), r.tbn, fmtNum(r.meLoCons), fmtNum(r.geLoCons), fmtNum(r.fwProd), fmtNum(r.fwProdD), fmtNum(r.fwRob), fmtNum(r.fwConsD)];
+  return [r.datetime, r.operation, fmtNum(r.hrs,2), fmtNum(r.rpm,2), fmtNum(r.distEngine,2), fmtNum(r.speedEngine,2), fmtNum(r.distanceShip,2), fmtNum(r.speedShip,2),
+    fmtNum(r.slip,2), fmtNum(r.mcrPct,2), fmtNum(r.kwEst,2), r.condition, fmtNum(r.hrs,2), fmtNum(r.distanceShip,2), fmtNum(r.rpm,2), fmtNum(r.revCounter,2), fmtNum(r.dailyRevs,2),
+    meterCellText(r.me), meterCellText(r.ge), fmtNum(r.blr.meter,2), fmtNum(r.meCons,3), fmtNum(r.geCons,3), fmtNum(r.blrCons,3), fmtNum(r.total,3),
+    fmtNum(r.cylCons,0), r.tbn, fmtNum(r.meLoCons,0), fmtNum(r.geLoCons,0), fmtNum(r.fwProd,0), fmtNum(r.fwProdD,0), fmtNum(r.fwRob,0), fmtNum(r.fwConsD,0)];
 }
 function csvEscape(v){
   const s = (v===null||v===undefined) ? '' : String(v);
@@ -3066,22 +3076,22 @@ function render(){
     const cap = tankCapValue(state.setup.capacity, t)||1;
     const val = rob[t.id] ?? 0;
     const pct = val/cap;
-    return `<div class="gauge-box">${gaugeSVG(pct, tankGaugeColor(t))}<div class="gauge-value">${fmt(val,1)}</div><div class="gauge-cap">of ${fmt(cap,0)} MT</div><div class="gauge-label">${t.name}</div></div>`;
+    return `<div class="gauge-box">${gaugeSVG(pct, tankGaugeColor(t))}<div class="gauge-value">${fmtFuel(val)}</div><div class="gauge-cap">of ${fmtFuel(cap)} MT</div><div class="gauge-label">${t.name}</div></div>`;
   }).join('');
   document.getElementById('lubeGauges').innerHTML = lubeTankList().map(t=>{
     const cap = tankCapValue(state.setup.capacityLube, t)||1;
     const val = robLube[t.id] ?? 0;
     const pct = val/cap;
-    return `<div class="gauge-box">${gaugeSVG(pct, tankGaugeColor(t))}<div class="gauge-value">${fmt(val,0)}</div><div class="gauge-cap">of ${fmt(cap,0)} L</div><div class="gauge-label">${t.name}</div></div>`;
+    return `<div class="gauge-box">${gaugeSVG(pct, tankGaugeColor(t))}<div class="gauge-value">${fmtLube(val)}</div><div class="gauge-cap">of ${fmtLube(cap)} L</div><div class="gauge-label">${t.name}</div></div>`;
   }).join('');
   const totalLube = totalLubeRob(robLube);
   document.getElementById('lubeTotalStrip').innerHTML = `
-    <div class="stat"><div class="num">${fmt(totalLube,0)}</div><div class="lbl">Total Lube Oil (L)</div></div>`;
+    <div class="stat"><div class="num">${fmtLube(totalLube)}</div><div class="lbl">Total Lube Oil (L)</div></div>`;
   document.getElementById('fwGauge').innerHTML = fwTankList().map(t=>{
     const cap = tankCapValue(state.setup.capacityLube, t)||1;
     const val = robLube[t.id] ?? 0;
     const pct = val/cap;
-    return `<div class="gauge-box">${gaugeSVG(pct, GAUGE_COLORS['FRESH WATER'])}<div class="gauge-value">${fmt(val,0)}</div><div class="gauge-cap">of ${fmt(cap,0)} L</div><div class="gauge-label">${t.name}</div></div>`;
+    return `<div class="gauge-box">${gaugeSVG(pct, GAUGE_COLORS['FRESH WATER'])}<div class="gauge-value">${fmtLube(val)}</div><div class="gauge-cap">of ${fmtLube(cap)} L</div><div class="gauge-label">${t.name}</div></div>`;
   }).join('');
 
   // receipts
@@ -3091,9 +3101,10 @@ function render(){
   } else {
     rl.innerHTML = state.receipts.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).map(r=>{
       const extra = [r.bdnNo?`BDN ${r.bdnNo}`:'', r.company||'', r.location||''].filter(Boolean).join(' · ');
+      const qtyStr = r.category==='fuel' ? fmtFuel(r.qty) : fmtLube(r.qty);
       return `<div class="receipt-row">
         <span class="desc">${r.date} — ${r.category.toUpperCase()} — ${r.type}${extra?' — '+extra:''}</span>
-        <span class="qty">+${fmt(r.qty,2)} ${r.category==='fuel'?'MT':'L'}</span>
+        <span class="qty">+${qtyStr} ${r.category==='fuel'?'MT':'L'}</span>
         <button class="small danger" data-del-receipt="${r.id}">✕</button>
       </div>`;
     }).join('');
@@ -3137,13 +3148,13 @@ function render(){
       const mdoMe = r.me.type==='MDO/MGO'?r.meCons:null, mdoGe = r.ge.type==='MDO/MGO'?r.geCons:null, mdoBlr = r.blr.type==='MDO/MGO'?r.blrCons:null;
       const lsmgoMe = r.me.type==='LSMGO'?r.meCons:null, lsmgoGe = r.ge.type==='LSMGO'?r.geCons:null, lsmgoBlr = r.blr.type==='LSMGO'?r.blrCons:null;
       const sum = (...vals)=> vals.reduce((a,v)=> a+(v||0),0);
-      const c = v => v===null||v===undefined? '—': fmt(v,3);
+      const c = v => v===null||v===undefined? '—': fmtFuel(v);
       return `<tr><td>${dtStr}</td><td>${r.operation}</td>
-        <td>${c(hfoMe)}</td><td>${c(hfoGe)}</td><td>${c(hfoBlr)}</td><td>${fmt(sum(hfoMe,hfoGe,hfoBlr),3)}</td>
-        <td>${c(lsfoMe)}</td><td>${c(lsfoGe)}</td><td>${c(lsfoBlr)}</td><td>${fmt(sum(lsfoMe,lsfoGe,lsfoBlr),3)}</td>
-        <td>${c(mdoMe)}</td><td>${c(mdoGe)}</td><td>${c(mdoBlr)}</td><td>${fmt(sum(mdoMe,mdoGe,mdoBlr),3)}</td>
-        <td>${c(lsmgoMe)}</td><td>${c(lsmgoGe)}</td><td>${c(lsmgoBlr)}</td><td>${fmt(sum(lsmgoMe,lsmgoGe,lsmgoBlr),3)}</td>
-        <td>${r.fwConsD===null||r.fwConsD===undefined?'—':fmt(r.fwConsD,0)}</td>
+        <td>${c(hfoMe)}</td><td>${c(hfoGe)}</td><td>${c(hfoBlr)}</td><td>${fmtFuel(sum(hfoMe,hfoGe,hfoBlr))}</td>
+        <td>${c(lsfoMe)}</td><td>${c(lsfoGe)}</td><td>${c(lsfoBlr)}</td><td>${fmtFuel(sum(lsfoMe,lsfoGe,lsfoBlr))}</td>
+        <td>${c(mdoMe)}</td><td>${c(mdoGe)}</td><td>${c(mdoBlr)}</td><td>${fmtFuel(sum(mdoMe,mdoGe,mdoBlr))}</td>
+        <td>${c(lsmgoMe)}</td><td>${c(lsmgoGe)}</td><td>${c(lsmgoBlr)}</td><td>${fmtFuel(sum(lsmgoMe,lsmgoGe,lsmgoBlr))}</td>
+        <td>${r.fwConsD===null||r.fwConsD===undefined?'—':fmtLube(r.fwConsD)}</td>
       </tr>`;
     }).join('');
   }
@@ -3154,9 +3165,9 @@ function render(){
 
   // Average consumption per day
   document.getElementById('fuelPerDayStrip').innerHTML = FUEL_TYPES.map(t=>`
-    <div class="stat"><div class="num">${daysAtSea>0 ? fmt(consByFuel[t]/daysAtSea,2) : '—'}</div><div class="lbl">${t} /day</div></div>`).join('');
+    <div class="stat"><div class="num">${daysAtSea>0 ? fmtFuel(consByFuel[t]/daysAtSea) : '—'}</div><div class="lbl">${t} /day</div></div>`).join('');
   document.getElementById('lubePerDayStrip').innerHTML = ["CYL HIGH","CYL LOW","ME SYS OIL","GE SYS OIL","FRESH WATER"].map(t=>`
-    <div class="stat"><div class="num">${daysAtSea>0 ? fmt(consByLube[t]/daysAtSea,1) : '—'}</div><div class="lbl">${t} /day</div></div>`).join('');
+    <div class="stat"><div class="num">${daysAtSea>0 ? fmtLube(consByLube[t]/daysAtSea) : '—'}</div><div class="lbl">${t} /day</div></div>`).join('');
 
   // Voyage Progress strip: merges former Voyage Summary + ETA stats
   const lastRow = rows.length ? rows[rows.length-1] : null;
@@ -3170,7 +3181,7 @@ function render(){
       etaStr = eta.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
       daysToGoStr = fmt(daysToGo,2);
     }
-    distToGoStr = fmt(distToGo,1);
+    distToGoStr = fmt(distToGo,2);
   }
   document.getElementById('voyageProgressStrip').innerHTML = `
     <div class="stat"><div class="num">${fmt(perf.totalHrs/24,2)}</div><div class="lbl">Days at Sea</div></div>
@@ -3185,8 +3196,8 @@ function render(){
     const curVal = rob[t.id] ?? 0;
     const grade = t.grade || t.name;
     return `<div class="gauge-box">${dualGaugeSVG(startVal/cap, curVal/cap, tankGaugeColor(t))}
-      <div class="gauge-value">${fmt(curVal,1)}</div>
-      <div class="gauge-cap">start ${fmt(startVal,1)} · used ${fmt(consByFuel[grade]||0,2)} MT</div>
+      <div class="gauge-value">${fmtFuel(curVal)}</div>
+      <div class="gauge-cap">start ${fmtFuel(startVal)} · used ${fmtFuel(consByFuel[grade]||0)} MT</div>
       <div class="gauge-label">${t.name}</div></div>`;
   }).join('');
   document.getElementById('lubeDualGauges').innerHTML = [
@@ -3198,12 +3209,12 @@ function render(){
     const curVal = robLube[t.id] ?? 0;
     const kindLabel = t.isFw ? 'FRESH WATER' : lubeKindToLabel(t.kind);
     return `<div class="gauge-box">${dualGaugeSVG(startVal/cap, curVal/cap, tankGaugeColor(t))}
-      <div class="gauge-value">${fmt(curVal,0)}</div>
-      <div class="gauge-cap">start ${fmt(startVal,0)} · used ${fmt(consByLube[kindLabel]||0,1)} L</div>
+      <div class="gauge-value">${fmtLube(curVal)}</div>
+      <div class="gauge-cap">start ${fmtLube(startVal)} · used ${fmtLube(consByLube[kindLabel]||0)} L</div>
       <div class="gauge-label">${t.name}</div></div>`;
   }).join('');
   document.getElementById('lubeTotalSummaryStrip').innerHTML = `
-    <div class="stat"><div class="num">${fmt(totalLubeRob(robLube),0)}</div><div class="lbl">Total Lube Oil (L)</div></div>`;
+    <div class="stat"><div class="num">${fmtLube(totalLubeRob(robLube))}</div><div class="lbl">Total Lube Oil (L)</div></div>`;
 
   // Average distance during sea passage: from START - PASSAGE to END - PASSAGE (or latest entry if no end yet)
   let seaAvgDistStr = '—';
@@ -3216,40 +3227,40 @@ function render(){
       for (let i = startIdx+1; i <= endIdx; i++) sumDist += (rows[i].distanceShip || 0);
       const hoursElapsed = (new Date(rows[endIdx].datetime) - new Date(rows[startIdx].datetime)) / 3600000;
       const daysElapsed = hoursElapsed / 24;
-      if (daysElapsed > 0) seaAvgDistStr = fmt(sumDist/daysElapsed, 1);
+      if (daysElapsed > 0) seaAvgDistStr = fmt(sumDist/daysElapsed, 2);
     }
   }
 
   document.getElementById('perfTotalsStrip').innerHTML = `
-    <div class="stat"><div class="num">${perf.avgRpm===null?'—':fmt(perf.avgRpm,1)}</div><div class="lbl">RPM</div></div>
-    <div class="stat"><div class="num">${perf.avgSlip===null?'—':fmt(perf.avgSlip,1)}</div><div class="lbl">Slip %</div></div>
-    <div class="stat"><div class="num">${perf.avgMcrTimeWeighted===null?(perf.avgMcr===null?'—':fmt(perf.avgMcr,1)):fmt(perf.avgMcrTimeWeighted,1)}</div><div class="lbl">%MCR (hrs-wtd)</div></div>
-    <div class="stat"><div class="num">${perf.avgKw===null?'—':fmt(perf.avgKw,0)}</div><div class="lbl">KW</div></div>
+    <div class="stat"><div class="num">${perf.avgRpm===null?'—':fmt(perf.avgRpm,2)}</div><div class="lbl">RPM</div></div>
+    <div class="stat"><div class="num">${perf.avgSlip===null?'—':fmt(perf.avgSlip,2)}</div><div class="lbl">Slip %</div></div>
+    <div class="stat"><div class="num">${perf.avgMcrTimeWeighted===null?(perf.avgMcr===null?'—':fmt(perf.avgMcr,2)):fmt(perf.avgMcrTimeWeighted,2)}</div><div class="lbl">%MCR (hrs-wtd)</div></div>
+    <div class="stat"><div class="num">${perf.avgKw===null?'—':fmt(perf.avgKw,2)}</div><div class="lbl">KW</div></div>
     <div class="stat"><div class="num">${seaAvgDistStr}</div><div class="lbl">Distance (nm/day)</div></div>
   `;
 
   const sfoc100 = state.setup.sfoc100;
   const coeffs = sfocCurveCoefficients();
   const refAtAvgLoad = perf.avgMcrTimeWeighted!=null ? referenceSfocAtLoad(perf.avgMcrTimeWeighted) : null;
-  const avgLoadLbl = perf.avgMcrTimeWeighted!=null ? `Ref. @ ${fmt(perf.avgMcrTimeWeighted,0)}% MCR` : 'Ref. @ avg load';
+  const avgLoadLbl = perf.avgMcrTimeWeighted!=null ? `Ref. @ ${fmt(perf.avgMcrTimeWeighted,2)}% MCR` : 'Ref. @ avg load';
   document.getElementById('sfocStrip').innerHTML = `
-    <div class="stat"><div class="num">${sfoc100==null?'—':fmt(sfoc100,1)}</div><div class="lbl">SFOC @ 100% MCR (setup)</div></div>
-    <div class="stat"><div class="num">${refAtAvgLoad===null?'—':fmt(refAtAvgLoad,1)}</div><div class="lbl">${avgLoadLbl}</div></div>
-    <div class="stat"><div class="num">${perf.avgSfocActual===null?'—':fmt(perf.avgSfocActual,1)}</div><div class="lbl">Actual SFOC (g/kWh)${lcvCorrectionFactor()!==1?' ISO':''}</div></div>
-    <div class="stat"><div class="num">${perf.avgSfocDelta===null?'—':((perf.avgSfocDelta>0?'+':'')+fmt(perf.avgSfocDelta,1))}</div><div class="lbl">Δ vs reference %</div></div>
-    <div class="stat"><div class="num">${perf.avgMcrTimeWeighted===null?'—':fmt(perf.avgMcrTimeWeighted,1)}</div><div class="lbl">Avg %MCR (hrs-wtd)</div></div>
+    <div class="stat"><div class="num">${sfoc100==null?'—':fmt(sfoc100,2)}</div><div class="lbl">SFOC @ 100% MCR (setup)</div></div>
+    <div class="stat"><div class="num">${refAtAvgLoad===null?'—':fmt(refAtAvgLoad,2)}</div><div class="lbl">${avgLoadLbl}</div></div>
+    <div class="stat"><div class="num">${perf.avgSfocActual===null?'—':fmt(perf.avgSfocActual,2)}</div><div class="lbl">Actual SFOC (g/kWh)${lcvCorrectionFactor()!==1?' ISO':''}</div></div>
+    <div class="stat"><div class="num">${perf.avgSfocDelta===null?'—':((perf.avgSfocDelta>0?'+':'')+fmt(perf.avgSfocDelta,2))}</div><div class="lbl">Δ vs reference %</div></div>
+    <div class="stat"><div class="num">${perf.avgMcrTimeWeighted===null?'—':fmt(perf.avgMcrTimeWeighted,2)}</div><div class="lbl">Avg %MCR (hrs-wtd)</div></div>
   `;
   const sfocHint = document.getElementById('sfocSetupHint');
   if (sfocHint){
     const lcvNote = lcvCorrectionFactor()!==1
-      ? ` LCV correction ×${fmt(lcvCorrectionFactor(),4)} applied (ref ${state.setup.lcvRef||DEFAULT_LCV_REF} / bunker ${state.setup.lcvActual}).`
+      ? ` LCV correction ×${fmt(lcvCorrectionFactor(),2)} applied (ref ${state.setup.lcvRef||DEFAULT_LCV_REF} / bunker ${state.setup.lcvActual}).`
       : ' Set bunker LCV in Setup to ISO-correct actual SFOC.';
     if (sfoc100==null || isNaN(sfoc100)){
       sfocHint.textContent = 'Reference SFOC at any load: SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²). Enter SFOC @ 100% MCR (shop trial). Optional SFOC @ 85% calibrates the curve; otherwise a = 0.25, b = 0.75.' + lcvNote;
     } else if (coeffs?.calibrated){
-      sfocHint.textContent = `Curve calibrated through shop trial: SFOC(100%) = ${fmt(sfoc100,1)}, SFOC(85%) = ${fmt(state.setup.sfoc85,1)} g/kWh → a = ${fmt(coeffs.a,3)}, b = ${fmt(coeffs.b,3)}. At 50% MCR reference = ${fmt(referenceSfocAtLoad(50),1)} g/kWh.` + lcvNote;
+      sfocHint.textContent = `Curve calibrated through shop trial: SFOC(100%) = ${fmt(sfoc100,2)}, SFOC(85%) = ${fmt(state.setup.sfoc85,2)} g/kWh → a = ${fmt(coeffs.a,2)}, b = ${fmt(coeffs.b,2)}. At 50% MCR reference = ${fmt(referenceSfocAtLoad(50),2)} g/kWh.` + lcvNote;
     } else {
-      sfocHint.textContent = `Using standard curve a = 0.25, b = 0.75 with SFOC₁₀₀ = ${fmt(sfoc100,1)} g/kWh from setup. At 85% MCR → ${fmt(referenceSfocAtLoad(85),1)} g/kWh; at 50% MCR → ${fmt(referenceSfocAtLoad(50),1)} g/kWh.` + lcvNote;
+      sfocHint.textContent = `Using standard curve a = 0.25, b = 0.75 with SFOC₁₀₀ = ${fmt(sfoc100,2)} g/kWh from setup. At 85% MCR → ${fmt(referenceSfocAtLoad(85),2)} g/kWh; at 50% MCR → ${fmt(referenceSfocAtLoad(50),2)} g/kWh.` + lcvNote;
     }
   }
 
@@ -3257,10 +3268,10 @@ function render(){
 
   document.getElementById('voyageTimeAvgStrip').innerHTML = `
     <div class="stat"><div class="num">${fmt(perf.totalHrs/24,2)}</div><div class="lbl">Days at sea</div></div>
-    <div class="stat"><div class="num">${perf.avgMcrTimeWeighted===null?'—':fmt(perf.avgMcrTimeWeighted,1)}</div><div class="lbl">%MCR (hrs-wtd)</div></div>
-    <div class="stat"><div class="num">${perf.avgGeLoadPct===null?'—':fmt(perf.avgGeLoadPct,1)}</div><div class="lbl">Gen load % (hrs-wtd)</div></div>
-    <div class="stat"><div class="num">${perf.avgGeKwTimeWeighted===null?'—':fmt(perf.avgGeKwTimeWeighted,0)}</div><div class="lbl">Gen kW (hrs-wtd)</div></div>
-    <div class="stat"><div class="num">${fmt(perf.totalGeHrs,1)}</div><div class="lbl">Total gen hours</div></div>
+    <div class="stat"><div class="num">${perf.avgMcrTimeWeighted===null?'—':fmt(perf.avgMcrTimeWeighted,2)}</div><div class="lbl">%MCR (hrs-wtd)</div></div>
+    <div class="stat"><div class="num">${perf.avgGeLoadPct===null?'—':fmt(perf.avgGeLoadPct,2)}</div><div class="lbl">Gen load % (hrs-wtd)</div></div>
+    <div class="stat"><div class="num">${perf.avgGeKwTimeWeighted===null?'—':fmt(perf.avgGeKwTimeWeighted,2)}</div><div class="lbl">Gen kW (hrs-wtd)</div></div>
+    <div class="stat"><div class="num">${fmt(perf.totalGeHrs,2)}</div><div class="lbl">Total gen hours</div></div>
   `;
   const geHint = document.getElementById('geHoursHint');
   if (geHint){
@@ -3287,10 +3298,10 @@ function renderCiiStrip(consByFuel, perf){
   const card = (val, label, unit='') =>
     `<div class="cii-card"><div class="val">${val==null?'—':val}${unit?`<span style="font-size:11px;color:var(--paper-dim)"> ${unit}</span>`:''}</div><div class="lbl">${label}</div></div>`;
   strip.innerHTML =
-    card(fmt(totalFuel,2), 'Total fuel', 'MT') +
+    card(fmtFuel(totalFuel), 'Total fuel', 'MT') +
     card(fmt(co2,2), 'Total CO₂', 't') +
-    card(perf.totalDistShip?fmt(perf.totalDistShip,1):null, 'Distance run', 'nm') +
-    card(dwt?fmt(dwt,0):null, 'Capacity DWT', 't') +
+    card(perf.totalDistShip?fmt(perf.totalDistShip,2):null, 'Distance run', 'nm') +
+    card(dwt?fmt(dwt,2):null, 'Capacity DWT', 't') +
     card(cii!=null?fmt(cii,2):null, 'Attained CII', 'g/DWT·nm');
   if (hint){
     const parts = [];
@@ -3477,7 +3488,7 @@ function updateKwPerfDisplays(unit, maxKw){
   };
   Object.entries(fields).forEach(([key,val])=>{
     const el = document.getElementById(`rep_pf_${key}_${unit}_disp`);
-    if (el) el.textContent = fmtP(val, 1);
+    if (el) el.textContent = fmtP(val, 2);
   });
 }
 
@@ -3494,7 +3505,7 @@ function updateAePerfDisplays(unit){
   };
   Object.entries(fields).forEach(([key,val])=>{
     const el = document.getElementById(`rep_pf_${key}_${unit}_disp`);
-    if (el) el.textContent = fmtP(val, 1);
+    if (el) el.textContent = fmtP(val, 2);
   });
 }
 
@@ -3535,7 +3546,7 @@ function renderReportGeRuntimeFields(entryId, report){
   sel.innerHTML = Array.from({length:maxN}, (_,i)=>`<option value="${i+1}"${i+1===inUse?' selected':''}>${i+1}</option>`).join('');
   const row = getComputedRow(entryId);
   const prev = previousEntryFor(entryId);
-  if (totalEl) totalEl.value = row?.geCons==null ? '—' : fmt(row.geCons, 3);
+  if (totalEl) totalEl.value = row?.geCons==null ? '—' : fmtFuel(row.geCons);
 
   const gens = report?.generators || [];
   box.innerHTML = Array.from({length:inUse}, (_,i)=>{
@@ -3548,7 +3559,7 @@ function renderReportGeRuntimeFields(entryId, report){
     return `<div class="unit-box"><h3>A/E #${n}</h3>
       <div class="field"><label>Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="rep_ge${n}_runtime" class="rep-ge-runtime" data-ge-idx="${i}" value="${runtime===null||runtime===undefined?'':runtime}"></div>
       <div class="field"><label>Avg Load (kW)</label><input type="number" step="1" id="rep_ge${n}_kw" class="rep-ge-kw" data-ge-idx="${i}" value="${avgKw===null||avgKw===undefined?'':avgKw}"></div>
-      <div class="field"><label>Period Hrs (calc)</label><input type="text" id="rep_ge${n}_period" readonly value="${periodHrs==null?'—':fmt(periodHrs,1)}"></div>
+      <div class="field"><label>Period Hrs (calc)</label><input type="text" id="rep_ge${n}_period" readonly value="${periodHrs==null?'—':fmt(periodHrs, 2)}"></div>
       <div class="field"><label>Fuel Share (MT)</label><input type="text" id="rep_ge${n}_fuel" readonly value="—"></div>
       <div class="field"><label>Load % (calc)</label><input type="text" id="rep_ge${n}_loadpct" readonly value=""></div>
     </div>`;
@@ -3595,10 +3606,10 @@ function updateReportGeSplit(entryId){
     const hrs = (!isNaN(rt) && prevRt!=null) ? runtimeDelta(rt, prevRt) : null;
     periodHrs.push(hrs);
     const periodEl = document.getElementById(`rep_ge${n}_period`);
-    if (periodEl) periodEl.value = hrs==null ? '—' : fmt(hrs, 1);
+    if (periodEl) periodEl.value = hrs==null ? '—' : fmt(hrs, 2);
     const max = geMaxKw(i);
     const loadEl = document.getElementById(`rep_ge${n}_loadpct`);
-    if (loadEl) loadEl.value = (!isNaN(kw) && max>0) ? fmt((kw/max)*100, 1)+' %' : '—';
+    if (loadEl) loadEl.value = (!isNaN(kw) && max>0) ? fmt((kw/max)*100, 2)+' %' : '—';
     // sync into perf table inputs if present
     const pfKw = document.getElementById(`rep_pf_avgPower_AE${n}`);
     if (pfKw && document.activeElement !== pfKw && !isNaN(kw)) pfKw.value = kw;
@@ -3609,13 +3620,13 @@ function updateReportGeSplit(entryId){
   const shares = splitGeConsByHours(row?.geCons, periodHrs);
   for (let i=0; i<inUse; i++){
     const fuelEl = document.getElementById(`rep_ge${i+1}_fuel`);
-    if (fuelEl) fuelEl.value = shares[i]==null ? '—' : fmt(shares[i], 3);
+    if (fuelEl) fuelEl.value = shares[i]==null ? '—' : fmtFuel(shares[i]);
   }
   const hint = document.getElementById('reportGeSplitHint');
   if (hint){
     const totalHrs = periodHrs.reduce((a,h)=>a+(h>0?h:0),0);
     hint.textContent = totalHrs>0 && row?.geCons!=null
-      ? `G/E fuel ${fmt(row.geCons,3)} MT split across ${inUse} generator(s) by ${fmt(totalHrs,1)} total running hours.`
+      ? `G/E fuel ${fmtFuel(row.geCons)} MT split across ${inUse} generator(s) by ${fmt(totalHrs,2)} total running hours.`
       : 'Select how many generators ran this period. Enter each unit\'s cumulative hour-meter and average kW — period hours and fuel share (split of total G/E consumption by running hours) calculate automatically.';
   }
 }
@@ -3669,12 +3680,12 @@ function rebuildReportPerfTable(entryId, report){
   const fuelCells = visibleUnits.map(u=>{
     if (u.startsWith('AE')){
       const idx = parseInt(u.slice(2),10)-1;
-      return `<td class="pf-computed">${shares[idx]==null?'—':fmt(shares[idx],3)}</td>`;
+      return `<td class="pf-computed">${shares[idx]==null?'—':fmtFuel(shares[idx])}</td>`;
     }
-    if (u==='BOILER') return `<td class="pf-computed">${row?.blrCons==null?'—':fmt(row.blrCons,3)}</td>`;
+    if (u==='BOILER') return `<td class="pf-computed">${row?.blrCons==null?'—':fmtFuel(row.blrCons)}</td>`;
     return `<td class="pf-computed">—</td>`;
   }).join('');
-  perfBody.insertAdjacentHTML('beforeend', `<tr><td>Fuel Cons (MT)</td><td class="pf-computed">${row?.meCons==null?'—':fmt(row.meCons,3)}</td>${fuelCells}</tr>`);
+  perfBody.insertAdjacentHTML('beforeend', `<tr><td>Fuel Cons (MT)</td><td class="pf-computed">${row?.meCons==null?'—':fmtFuel(row.meCons)}</td>${fuelCells}</tr>`);
   wireReportAeInputs();
   // keep AE avgPower/runTime inputs in sync when user edits GE section after rebuild
   document.querySelectorAll('.ae-kw-input').forEach(inp=>{
@@ -3710,7 +3721,7 @@ function renderReportPerfCell(unit, key, entryId, perfTable){
     if (key === 'runTime'){
       const v = kwPerf.runTime;
       if (isAe){
-        return `<td class="pf-computed" id="rep_pf_runTime_${unit}_disp">${fmtP(v, 1)}</td>`;
+        return `<td class="pf-computed" id="rep_pf_runTime_${unit}_disp">${fmtP(v, 2)}</td>`;
       }
       return `<td><input class="pf-input" type="number" step="0.1" id="rep_pf_runTime_${unit}" value="${v===null||v===undefined?'':v}"></td>`;
     }
@@ -3928,7 +3939,11 @@ function openReportEditor(entryId){
   };
 }
 
-function fmtP(n, d=3){ return (n===null||n===undefined||isNaN(n)) ? '—' : Number(n).toFixed(3); }
+function fmtP(n, d=2){
+  if (n===null||n===undefined||isNaN(n)) return '—';
+  const decimals = (d===null||d===undefined||isNaN(d)) ? 2 : Math.max(0, Number(d));
+  return Number(n).toFixed(decimals);
+}
 
 function escPrint(s){
   return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -4136,42 +4151,42 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
   const fuelInner = fuelTankList().map(t=>printRow(t.name, `${fmtP(asOf.rob[t.id],2)} MT`)).join('');
   const totalLube = totalLubeRob(asOf.robLube);
   const lubeInner = [
-    ...lubeTankList().map(t=>printRow(t.name, `${fmtP(asOf.robLube[t.id],0)} L`)),
-    printRow('Total Lube Oil', `${fmtP(totalLube,0)} L`)
+    ...lubeTankList().map(t=>printRow(t.name, `${fmtP(asOf.robLube[t.id], 2)} L`)),
+    printRow('Total Lube Oil', `${fmtP(totalLube, 2)} L`)
   ].join('');
 
   const primaryFw = fwTankList()[0];
   const fwRob = primaryFw ? asOf.robLube[primaryFw.id] : null;
   const fwSection = printSection('Fresh Water', [
-    printRow('FW Produced', `${row.fwProdD===null||row.fwProdD===undefined?'—':fmtP(row.fwProdD,0)} L`),
-    printRow('FW Consumed', `${row.fwConsD===null||row.fwConsD===undefined?'—':fmtP(row.fwConsD,0)} L`),
-    printRow('FW R.O.B.', `${fmtP(fwRob,0)} L`)
+    printRow('FW Produced', `${row.fwProdD===null||row.fwProdD===undefined?'—':fmtP(row.fwProdD, 2)} L`),
+    printRow('FW Consumed', `${row.fwConsD===null||row.fwConsD===undefined?'—':fmtP(row.fwConsD, 2)} L`),
+    printRow('FW R.O.B.', `${fmtP(fwRob, 2)} L`)
   ].join(''));
 
   const engineRoomSection = printSection('Engine Room &amp; Tank Readings', [
-    printRow('E.R. Temperature', `${fmtP(report.erTemp,1)} °C`),
+    printRow('E.R. Temperature', `${fmtP(report.erTemp, 2)} °C`),
     printRow('Bilge R.O.B.', `${fmtP(report.bilgeRob,2)} m³`),
     printRow('Sludge R.O.B.', `${fmtP(report.sludgeRob,2)} m³`),
-    printRow('S/T Temperature', `${fmtP(report.stTemp,1)} °C`),
-    printRow('S/W Temperature', `${fmtP(report.swTemp,1)} °C`)
+    printRow('S/T Temperature', `${fmtP(report.stTemp, 2)} °C`),
+    printRow('S/W Temperature', `${fmtP(report.swTemp, 2)} °C`)
   ].join(''));
 
   let kpiItems = [];
   let voyageSection = '', cylSection = '', turboSection = '', sfocSection = '';
   if (isSea){
     kpiItems = [
-      {label:'RPM', value:fmtP(entry.rpm,1)},
-      {label:'% MCR', value:fmtP(row.mcrPct,1)},
-      {label:'Est. kW', value:fmtP(row.kwEst,0)},
+      {label:'RPM', value:fmtP(entry.rpm, 2)},
+      {label:'% MCR', value:fmtP(row.mcrPct, 2)},
+      {label:'Est. kW', value:fmtP(row.kwEst, 2)},
       {label:'Ship Speed', value:row.speedShip==null?'—':fmtP(row.speedShip,2)+' kn'},
-      {label:'Slip %', value:fmtP(row.slip,1)},
-      {label:'Steam Hrs', value:fmtP(row.hrs,1)}
+      {label:'Slip %', value:fmtP(row.slip, 2)},
+      {label:'Steam Hrs', value:fmtP(row.hrs, 2)}
     ];
     voyageSection = printSection('Voyage / Steaming', [
-      printRow('Steam Time', `${fmtP(row.hrs,1)} hrs`),
+      printRow('Steam Time', `${fmtP(row.hrs, 2)} hrs`),
       printRow('ETA', report.eta ? escPrint(new Date(report.eta).toLocaleString()) : '—'),
-      printRow('Rev. Counter', fmtP(entry.revCounter,0)),
-      printRow('Daily Revs.', fmtP(row.dailyRevs,0)),
+      printRow('Rev. Counter', fmtP(entry.revCounter, 2)),
+      printRow('Daily Revs.', fmtP(row.dailyRevs, 2)),
       printRow('Ship\'s Distance', `${fmtP(entry.distanceShip,2)} nm`),
       printRow('Engine Distance', `${fmtP(row.distEngine,2)} nm`),
       printRow('Engine Speed', row.speedEngine==null?'—':`${fmtP(row.speedEngine,2)} kn`)
@@ -4181,35 +4196,35 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
     cylSection = printSection('Pump Rack &amp; M/E Exhaust', `
       <table class="pr-table">
         <tr><th></th>${Array.from({length:cylN},(_,i)=>`<th>Cyl ${i+1}</th>`).join('')}</tr>
-        <tr><td class="row-lbl">Pump Rack</td>${Array.from({length:cylN},(_,i)=>`<td>${fmtP(pr[i],1)}</td>`).join('')}</tr>
-        <tr><td class="row-lbl">Exhaust °C</td>${Array.from({length:cylN},(_,i)=>`<td>${fmtP(ex[i],0)}</td>`).join('')}</tr>
+        <tr><td class="row-lbl">Pump Rack</td>${Array.from({length:cylN},(_,i)=>`<td>${fmtP(pr[i], 2)}</td>`).join('')}</tr>
+        <tr><td class="row-lbl">Exhaust °C</td>${Array.from({length:cylN},(_,i)=>`<td>${fmtP(ex[i], 2)}</td>`).join('')}</tr>
       </table>`);
     const turbos = report.turbos || [report.turbo1, report.turbo2].filter(Boolean);
     const turboRows = Array.from({length:turboCount()}, (_,i)=>{
       const t = turbos[i] || {};
-      return printRow(`T/C #${i+1} In / Out / RPM`, `${fmtP(t.in,0)} / ${fmtP(t.out,0)} / ${fmtP(t.rpm,0)}`);
+      return printRow(`T/C #${i+1} In / Out / RPM`, `${fmtP(t.in, 2)} / ${fmtP(t.out, 2)} / ${fmtP(t.rpm, 2)}`);
     }).join('');
     turboSection = printSection('Turbochargers &amp; Scavenge', [
       turboRows,
-      printRow('Scav. Temperature', `${fmtP(report.scavTemp,1)} °C`),
+      printRow('Scav. Temperature', `${fmtP(report.scavTemp, 2)} °C`),
       printRow('Scav. Pressure', `${fmtP(report.scavPress,2)} bar`),
-      printRow('Fuel Temperature', `${fmtP(report.fuelTemp,1)} °C`),
-      printRow('Pump Mark', fmtP(report.pumpMark,1)),
+      printRow('Fuel Temperature', `${fmtP(report.fuelTemp, 2)} °C`),
+      printRow('Pump Mark', fmtP(report.pumpMark, 2)),
       printRow('Press. Differential', `${fmtP(report.pressDiff,2)} bar`)
     ].join(''));
     const deltaCls = sfocDeltaClass(row.sfocDelta);
-    const deltaStr = row.sfocDelta==null ? '—' : `${row.sfocDelta>0?'+':''}${fmtP(row.sfocDelta,1)}%`;
+    const deltaStr = row.sfocDelta==null ? '—' : `${row.sfocDelta>0?'+':''}${fmtP(row.sfocDelta, 2)}%`;
     sfocSection = printSection('Fuel Efficiency (SFOC)', [
-      printRow('SFOC @ 100% MCR (setup)', state.setup.sfoc100==null?'—':`${fmtP(state.setup.sfoc100,1)} g/kWh`),
-      printRow(`Ref. SFOC @ ${fmtP(row.mcrPct,0)}% MCR`, `${fmtP(row.sfocRef,1)} g/kWh`),
-      printRow('Actual SFOC', `${fmtP(row.sfocActual,1)} g/kWh`),
+      printRow('SFOC @ 100% MCR (setup)', state.setup.sfoc100==null?'—':`${fmtP(state.setup.sfoc100, 2)} g/kWh`),
+      printRow(`Ref. SFOC @ ${fmtP(row.mcrPct, 2)}% MCR`, `${fmtP(row.sfocRef, 2)} g/kWh`),
+      printRow('Actual SFOC', `${fmtP(row.sfocActual, 2)} g/kWh`),
       printRow('Deviation vs Reference', deltaStr, deltaCls)
     ].join(''));
   } else {
     kpiItems = [
       {label:'Operation', value:escPrint(entry.operation).slice(0,18)},
       {label:'Condition', value:entry.condition},
-      {label:'Period Hrs', value:fmtP(row.hrs,1)},
+      {label:'Period Hrs', value:fmtP(row.hrs, 2)},
       {label:'Total Fuel', value:row.total==null?'—':`${fmtP(row.total,3)} MT`}
     ];
   }
@@ -4224,7 +4239,7 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
     <table class="pr-table">
       <tr><th></th>${PERF_UNITS.map(u=>`<th>${PERF_UNIT_LABELS[u]}</th>`).join('')}</tr>
       ${PERF_ROWS.map(([key,label])=>
-        `<tr><td class="row-lbl">${label}</td>${PERF_UNITS.map(u=>`<td>${fmtP(perfTable[u]?perfTable[u][key]:null,1)}</td>`).join('')}</tr>`
+        `<tr><td class="row-lbl">${label}</td>${PERF_UNITS.map(u=>`<td>${fmtP(perfTable[u]?perfTable[u][key]:null, 2)}</td>`).join('')}</tr>`
       ).join('')}
     </table>`);
 
@@ -4237,9 +4252,9 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
       <tr><td class="row-lbl">LSMGO</td><td>${entry.me.type==='LSMGO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='LSMGO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='LSMGO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='LSMGO'?row.meCons:0)+(entry.ge.type==='LSMGO'?row.geCons:0)+(entry.blr.type==='LSMGO'?row.blrCons:0),3)}</td></tr>
     </table>
     ${printRow('Total Fuel Consumption', `${fmtP(row.total,3)} MT`)}
-    ${printRow(`Cyl. Oil (${entry.tbn})`, `${fmtP(row.cylCons,1)} L`)}
-    ${printRow('M/E Sys. Oil', `${fmtP(row.meLoCons,1)} L`)}
-    ${printRow('A/E Sys. Oil', `${fmtP(row.geLoCons,1)} L`)}`);
+    ${printRow(`Cyl. Oil (${entry.tbn})`, `${fmtP(row.cylCons, 2)} L`)}
+    ${printRow('M/E Sys. Oil', `${fmtP(row.meLoCons, 2)} L`)}
+    ${printRow('A/E Sys. Oil', `${fmtP(row.geLoCons, 2)} L`)}`);
 
   const routeStr = `${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}`;
 
@@ -4738,8 +4753,8 @@ function openRobSnapshot(entryId){
     const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
     const consVal = robRowCons(row, r);
     const nowVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
-    const dec = r.cat==='fuel' ? 2 : 0;
-    return { label:r.label, prevVal, consVal, nowVal, dec, consDec: r.cat==='fuel'?3:1 };
+    const dec = r.cat==='fuel' ? 3 : 0;
+    return { label:r.label, prevVal, consVal, nowVal, dec, consDec: r.cat==='fuel'?3:0 };
   });
 
   document.getElementById('robSnapshotBody').innerHTML = rowsForPrint.map(r=>`<tr>
@@ -4805,27 +4820,27 @@ function openVoyageSummary(entryId){
 
   const stat = (label,val) => `<div class="stat"><div class="num">${val}</div><div class="lbl">${label}</div></div>`;
   const etaStr = eta ? eta.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
-  const sfocDeltaStr = row.sfocDelta==null ? '—' : ((row.sfocDelta>0?'+':'')+fmt(row.sfocDelta,1));
+  const sfocDeltaStr = row.sfocDelta==null ? '—' : ((row.sfocDelta>0?'+':'')+fmt(row.sfocDelta, 2));
   document.getElementById('vsTopStrip').innerHTML = `
     ${stat('Voyage', state.setup.voyageNumber||'—')}
     ${stat('Date', dtStr)}
-    ${stat('Ship Distance', fmt(entry.distanceShip,1))}
+    ${stat('Ship Distance', fmt(entry.distanceShip, 2))}
     ${stat('Ship Speed', row.speedShip==null?'—':fmt(row.speedShip,2)+' kn')}
-    ${stat('Run Time (hrs)', fmt(row.hrs,1))}
-    ${stat('Load (kW)', fmt(row.kwEst,0))}
-    ${stat('Distance To Go', distanceToGo!=null? fmt(distanceToGo,1):'—')}
+    ${stat('Run Time (hrs)', fmt(row.hrs, 2))}
+    ${stat('Load (kW)', fmt(row.kwEst, 2))}
+    ${stat('Distance To Go', distanceToGo!=null? fmt(distanceToGo, 2):'—')}
     ${stat('Days To Go', daysToGoVal!=null? fmt(daysToGoVal,2):'—')}
-    ${stat('Total Rev.', fmt(row.dailyRevs,0))}
+    ${stat('Total Rev.', fmt(row.dailyRevs, 2))}
     ${stat('Load %', fmt(row.mcrPct,2))}
     ${stat('Engine Distance', fmt(row.distEngine,2))}
     ${stat('Engine Speed', row.speedEngine==null?'—':fmt(row.speedEngine,2)+' kn')}
     ${stat('RPM', fmt(entry.rpm,2))}
-    ${stat('Ave. kW', fmt(perf.avgKw,0))}
+    ${stat('Ave. kW', fmt(perf.avgKw, 2))}
     ${stat('Slip %', fmt(row.slip,2))}
     ${stat('ETA', etaStr)}
-    ${stat('SFOC @ 100%', state.setup.sfoc100==null?'—':fmt(state.setup.sfoc100,1))}
-    ${stat('Ref. SFOC', fmt(row.sfocRef,1))}
-    ${stat('Actual SFOC', fmt(row.sfocActual,1))}
+    ${stat('SFOC @ 100%', state.setup.sfoc100==null?'—':fmt(state.setup.sfoc100, 2))}
+    ${stat('Ref. SFOC', fmt(row.sfocRef, 2))}
+    ${stat('Actual SFOC', fmt(row.sfocActual, 2))}
     ${stat('SFOC Δ %', sfocDeltaStr)}
   `;
 
@@ -4904,42 +4919,42 @@ function openVoyageSummary(entryId){
     const totLoad = perf.geTotals.maxKwHrs[i]>0 ? (perf.geTotals.kwHrs[i]/perf.geTotals.maxKwHrs[i])*100 : null;
     return `<tr>
       <td>A/E #${i+1} <span class="badge">${fmt(geMaxKw(i),0)} kW max</span></td>
-      <td>${p.hrs==null?'—':fmt(p.hrs,1)}</td>
-      <td>${p.kw==null?'—':fmt(p.kw,0)}</td>
-      <td>${p.loadPct==null?'—':fmt(p.loadPct,1)}</td>
-      <td>${p.fuelCons==null?'—':fmt(p.fuelCons,3)}</td>
-      <td>${fmt(totH,1)}</td>
-      <td>${totKw==null?'—':fmt(totKw,0)}</td>
-      <td>${totLoad==null?'—':fmt(totLoad,1)}</td>
+      <td>${p.hrs==null?'—':fmt(p.hrs, 2)}</td>
+      <td>${p.kw==null?'—':fmt(p.kw, 2)}</td>
+      <td>${p.loadPct==null?'—':fmt(p.loadPct, 2)}</td>
+      <td>${p.fuelCons==null?'—':fmtFuel(p.fuelCons)}</td>
+      <td>${fmt(totH, 2)}</td>
+      <td>${totKw==null?'—':fmt(totKw, 2)}</td>
+      <td>${totLoad==null?'—':fmt(totLoad, 2)}</td>
     </tr>`;
   }).join('');
 
   const meVoyageStrip = document.getElementById('vsMeVoyageStrip');
   if (meVoyageStrip){
     meVoyageStrip.innerHTML = `
-      ${stat('Voyage Hours', fmt(perf.totalHrs,1))}
-      ${stat('M/E Cons (MT)', fmt(row.meCons,3))}
+      ${stat('Voyage Hours', fmt(perf.totalHrs, 2))}
+      ${stat('M/E Cons (MT)', fmtFuel(row.meCons))}
       ${stat('Engine Dist (nm)', fmt(row.distEngine,2))}
       ${stat('Slip %', fmt(row.slip,2))}
-      ${stat('Avg RPM', fmt(perf.avgRpm,1))}
-      ${stat('Avg %MCR (hrs-wtd)', perf.avgMcrTimeWeighted==null?'—':fmt(perf.avgMcrTimeWeighted,1))}
-      ${stat('Avg kW', fmt(perf.avgKw,0))}
+      ${stat('Avg RPM', fmt(perf.avgRpm, 2))}
+      ${stat('Avg %MCR (hrs-wtd)', perf.avgMcrTimeWeighted==null?'—':fmt(perf.avgMcrTimeWeighted, 2))}
+      ${stat('Avg kW', fmt(perf.avgKw, 2))}
       ${stat('Avg Slip %', perf.avgSlip==null?'—':fmt(perf.avgSlip,2))}
-      ${stat('SFOC @ 100%', state.setup.sfoc100==null?'—':fmt(state.setup.sfoc100,1))}
-      ${stat('Avg Ref. SFOC', perf.avgSfocRef==null?'—':fmt(perf.avgSfocRef,1))}
-      ${stat('Avg Actual SFOC', perf.avgSfocActual==null?'—':fmt(perf.avgSfocActual,1))}
-      ${stat('Avg SFOC Δ %', perf.avgSfocDelta==null?'—':((perf.avgSfocDelta>0?'+':'')+fmt(perf.avgSfocDelta,1)))}
-      ${stat('Cum. Engine Dist', fmt(perf.totalDistEngine,1))}
-      ${stat('Cum. Ship Dist', fmt(perf.totalDistShip,1))}
+      ${stat('SFOC @ 100%', state.setup.sfoc100==null?'—':fmt(state.setup.sfoc100, 2))}
+      ${stat('Avg Ref. SFOC', perf.avgSfocRef==null?'—':fmt(perf.avgSfocRef, 2))}
+      ${stat('Avg Actual SFOC', perf.avgSfocActual==null?'—':fmt(perf.avgSfocActual, 2))}
+      ${stat('Avg SFOC Δ %', perf.avgSfocDelta==null?'—':((perf.avgSfocDelta>0?'+':'')+fmt(perf.avgSfocDelta, 2)))}
+      ${stat('Cum. Engine Dist', fmt(perf.totalDistEngine, 2))}
+      ${stat('Cum. Ship Dist', fmt(perf.totalDistShip, 2))}
       ${stat('Avg Ship Speed', perf.avgSpeedShip==null?'—':fmt(perf.avgSpeedShip,2)+' kn')}
-      ${stat('Load (kW)', fmt(row.kwEst,0))}
+      ${stat('Load (kW)', fmt(row.kwEst, 2))}
     `;
   }
   document.getElementById('vsVoyageAvgStrip').innerHTML = `
-    ${stat('Voyage Hours', fmt(perf.totalHrs,1))}
-    ${stat('Generator Hours', fmt(perf.totalGeHrs,1))}
-    ${stat('Avg Gen Load %', perf.avgGeLoadPct==null?'—':fmt(perf.avgGeLoadPct,1))}
-    ${stat('Avg Gen kW (hrs-wtd)', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted,0))}
+    ${stat('Voyage Hours', fmt(perf.totalHrs, 2))}
+    ${stat('Generator Hours', fmt(perf.totalGeHrs, 2))}
+    ${stat('Avg Gen Load %', perf.avgGeLoadPct==null?'—':fmt(perf.avgGeLoadPct, 2))}
+    ${stat('Avg Gen kW (hrs-wtd)', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted, 2))}
   `;
 
   // Generators / Boiler / Incinerator (same fields as Reports tab)
@@ -4948,9 +4963,9 @@ function openVoyageSummary(entryId){
   const curBlr = entryBlrRuntime(entry);
   const blrPeriod = (curBlr!=null && prevBlr!=null) ? runtimeDelta(curBlr, prevBlr) : null;
   document.getElementById('vs_blrRuntime').value = curBlr ?? '';
-  document.getElementById('vs_blrPeriod').value = blrPeriod==null ? '—' : fmt(blrPeriod, 1);
-  document.getElementById('vs_blrCons').value = row.blrCons==null ? '—' : fmt(row.blrCons, 3);
-  document.getElementById('vs_geTotalCons').value = row.geCons==null ? '—' : fmt(row.geCons, 3);
+  document.getElementById('vs_blrPeriod').value = blrPeriod==null ? '—' : fmt(blrPeriod, 2);
+  document.getElementById('vs_blrCons').value = row.blrCons==null ? '—' : fmtFuel(row.blrCons);
+  document.getElementById('vs_geTotalCons').value = row.geCons==null ? '—' : fmtFuel(row.geCons);
   document.getElementById('vs_blrKw').value = entry?.report?.perfTable?.BOILER?.avgPower ?? '';
   syncBoilerLoadPctDisplay('vs_blrKw', 'vs_blrLoadPct');
   document.getElementById('vs_incRuntime').value = entryIncineratorRunTime(entry) ?? '';
@@ -4961,7 +4976,7 @@ function openVoyageSummary(entryId){
   document.getElementById('vs_blrRuntime').oninput = ()=>{
     const cur = parseFloat(document.getElementById('vs_blrRuntime').value);
     const period = (!isNaN(cur) && prevBlr!=null) ? runtimeDelta(cur, prevBlr) : null;
-    document.getElementById('vs_blrPeriod').value = period==null ? '—' : fmt(period, 1);
+    document.getElementById('vs_blrPeriod').value = period==null ? '—' : fmt(period, 2);
     renderVsPerfTable(entryId);
   };
   document.getElementById('vs_blrKw').oninput = ()=>{
@@ -4983,14 +4998,14 @@ function openVoyageSummary(entryId){
     <div class="field"><label>M/E (MT)</label><input class="pf-input" type="number" step="0.001" id="vs_unit_me" value="${meConsVal==null?'':meConsVal}"></div>
     <div class="field"><label>D/G (MT)</label><input class="pf-input" type="number" step="0.001" id="vs_unit_ge" value="${geConsVal==null?'':geConsVal}"></div>
     <div class="field"><label>Boiler (MT)</label><input class="pf-input" type="number" step="0.001" id="vs_unit_blr" value="${blrConsVal==null?'':blrConsVal}"></div>
-    <div class="field"><label>TOTAL (MT)</label><input type="text" id="vs_unit_total" value="${fmt((meConsVal||0)+(geConsVal||0)+(blrConsVal||0),3)}" readonly></div>
+    <div class="field"><label>TOTAL (MT)</label><input type="text" id="vs_unit_total" value="${fmtFuel((meConsVal||0)+(geConsVal||0)+(blrConsVal||0))}" readonly></div>
   `;
   const refreshVsUnitTotal = ()=>{
     const a = parseFloat(document.getElementById('vs_unit_me')?.value)||0;
     const b = parseFloat(document.getElementById('vs_unit_ge')?.value)||0;
     const c = parseFloat(document.getElementById('vs_unit_blr')?.value)||0;
     const tot = document.getElementById('vs_unit_total');
-    if (tot) tot.value = fmt(a+b+c, 3);
+    if (tot) tot.value = fmtFuel(a+b+c);
   };
   ['vs_unit_me','vs_unit_ge','vs_unit_blr'].forEach(id=>{
     document.getElementById(id)?.addEventListener('input', refreshVsUnitTotal);
@@ -4998,8 +5013,8 @@ function openVoyageSummary(entryId){
 
   document.getElementById('vs_fwProdMeter').value = entry.fwProd ?? '';
   document.getElementById('vs_fwRob').value = entry.fwRob ?? '';
-  document.getElementById('vs_fwProduced').value = row.fwProdD==null?'—':fmt(row.fwProdD,0);
-  document.getElementById('vs_fwConsumed').value = row.fwConsD==null?'—':fmt(row.fwConsD,0);
+  document.getElementById('vs_fwProduced').value = row.fwProdD==null?'—':fmtLube(row.fwProdD);
+  document.getElementById('vs_fwConsumed').value = row.fwConsD==null?'—':fmtLube(row.fwConsD);
   updateVsFwDisplays();
 
   const misc = entry.miscCons || {"MDO/MGO":0,"LSMGO":0};
@@ -5013,9 +5028,9 @@ function openVoyageSummary(entryId){
     const robVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
     return `<tr>
       <td>${r.label}</td>
-      <td>${fmt(prevVal, r.cat==='fuel'?2:0)}</td>
+      <td>${fmt(prevVal, r.cat==='fuel'?3:0)}</td>
       <td><input class="pf-input" style="width:80px;" type="number" step="0.001" id="vs_cons_${slugKey(r.key)}" value="${consVal!=null?consVal:0}" data-prev="${prevVal||0}" data-cat="${r.cat}" data-key="${r.key}"></td>
-      <td id="vs_rob_${slugKey(r.key)}">${fmt(robVal, r.cat==='fuel'?2:0)}</td>
+      <td id="vs_rob_${slugKey(r.key)}">${fmt(robVal, r.cat==='fuel'?3:0)}</td>
     </tr>`;
   }).join('');
 
@@ -5024,7 +5039,7 @@ function openVoyageSummary(entryId){
       const prevVal = parseFloat(inp.dataset.prev)||0;
       const consVal = parseFloat(inp.value)||0;
       const cat = inp.dataset.cat;
-      document.getElementById(`vs_rob_${slugKey(inp.dataset.key)}`).textContent = fmt(prevVal - consVal, cat==='fuel'?2:0);
+      document.getElementById(`vs_rob_${slugKey(inp.dataset.key)}`).textContent = fmt(prevVal - consVal, cat==='fuel'?3:0);
     });
   });
 
@@ -5058,15 +5073,15 @@ function updateVsGeSplit(entryId){
     const hrs = (!isNaN(rt) && prevRt!=null) ? runtimeDelta(rt, prevRt) : null;
     periodHrs.push(hrs);
     const periodEl = document.getElementById(`vs_ge${n}_period`);
-    if (periodEl) periodEl.value = hrs==null ? '—' : fmt(hrs, 1);
+    if (periodEl) periodEl.value = hrs==null ? '—' : fmt(hrs, 2);
     const max = geMaxKw(i);
     const loadEl = document.getElementById(`vs_ge${n}_loadpct`);
-    if (loadEl) loadEl.value = (!isNaN(kw) && max>0) ? fmt((kw/max)*100, 1)+' %' : '—';
+    if (loadEl) loadEl.value = (!isNaN(kw) && max>0) ? fmt((kw/max)*100, 2)+' %' : '—';
   }
   const shares = splitGeConsByHours(row?.geCons, periodHrs);
   for (let i=0; i<inUse; i++){
     const fuelEl = document.getElementById(`vs_ge${i+1}_fuel`);
-    if (fuelEl) fuelEl.value = shares[i]==null ? '—' : fmt(shares[i], 3);
+    if (fuelEl) fuelEl.value = shares[i]==null ? '—' : fmtFuel(shares[i]);
   }
   renderVsPerfTable(entryId);
 }
@@ -5091,7 +5106,7 @@ function renderVsGeRuntimeFields(entryId, report){
     return `<div class="unit-box"><h3>A/E #${n}</h3>
       <div class="field"><label>Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="vs_ge${n}_runtime" class="vs-ge-runtime" value="${runtime===null||runtime===undefined?'':runtime}"></div>
       <div class="field"><label>Avg Load (kW)</label><input type="number" step="1" id="vs_ge${n}_kw" class="vs-ge-kw" value="${avgKw===null||avgKw===undefined?'':avgKw}"></div>
-      <div class="field"><label>Period Hrs (calc)</label><input type="text" id="vs_ge${n}_period" readonly value="${periodHrs==null?'—':fmt(periodHrs,1)}"></div>
+      <div class="field"><label>Period Hrs (calc)</label><input type="text" id="vs_ge${n}_period" readonly value="${periodHrs==null?'—':fmt(periodHrs, 2)}"></div>
       <div class="field"><label>Fuel Share (MT)</label><input type="text" id="vs_ge${n}_fuel" readonly value="—"></div>
       <div class="field"><label>Load % (calc)</label><input type="text" id="vs_ge${n}_loadpct" readonly value=""></div>
     </div>`;
@@ -5165,12 +5180,12 @@ function renderVsPerfTable(entryId){
   body.innerHTML = PERF_ROWS.map(([key,label])=>{
     const dec = (key==='avgPower'||key==='runTime') ? (key==='runTime'?1:0) : 1;
     return `<tr><td>${label}</td><td>${fmtP(mePerf[key], dec)}</td>${units.map(u=>`<td>${fmtP(unitPerf[u]?.[key], dec)}</td>`).join('')}</tr>`;
-  }).join('') + `<tr><td>Fuel Cons (MT)</td><td>${row?.meCons==null?'—':fmt(row.meCons,3)}</td>${units.map(u=>{
+  }).join('') + `<tr><td>Fuel Cons (MT)</td><td>${row?.meCons==null?'—':fmtFuel(row.meCons)}</td>${units.map(u=>{
     if (u.startsWith('AE')){
       const fc = unitPerf[u]?.fuelCons;
-      return `<td>${fc==null?'—':fmt(fc,3)}</td>`;
+      return `<td>${fc==null?'—':fmtFuel(fc)}</td>`;
     }
-    if (u==='BOILER') return `<td>${row?.blrCons==null?'—':fmt(row.blrCons,3)}</td>`;
+    if (u==='BOILER') return `<td>${row?.blrCons==null?'—':fmtFuel(row.blrCons)}</td>`;
     return `<td>—</td>`;
   }).join('')}</tr>`;
 }
@@ -5384,48 +5399,48 @@ function printVoyageSummary(entryId){
   const etaStr = eta ? eta.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
 
   const kpiItems = [
-    {label:'Run Hrs', value:fmt(row.hrs,1)},
-    {label:'Ship Dist (nm)', value:fmt(entry.distanceShip,1)},
-    {label:'RPM', value:fmt(entry.rpm,1)},
+    {label:'Run Hrs', value:fmt(row.hrs, 2)},
+    {label:'Ship Dist (nm)', value:fmt(entry.distanceShip, 2)},
+    {label:'RPM', value:fmt(entry.rpm, 2)},
     {label:'Speed (kn)', value:fmt(row.speedShip,2)},
-    {label:'% MCR', value:fmt(row.mcrPct,1)},
-    {label:'Est. kW', value:fmt(row.kwEst,0)}
+    {label:'% MCR', value:fmt(row.mcrPct, 2)},
+    {label:'Est. kW', value:fmt(row.kwEst, 2)}
   ];
 
   const voyageSection = printSection('Voyage Progress', [
     printRow('Engine Distance', `${fmt(row.distEngine,2)} nm`),
-    printRow('Distance To Go', distanceToGo!=null?`${fmt(distanceToGo,1)} nm`:'—'),
+    printRow('Distance To Go', distanceToGo!=null?`${fmt(distanceToGo, 2)} nm`:'—'),
     printRow('Days To Go', daysToGoVal!=null?fmt(daysToGoVal,2):'—'),
     printRow('ETA', etaStr),
     printRow('Slip %', fmt(row.slip,2)),
-    printRow('Daily Revs.', fmt(row.dailyRevs,0))
+    printRow('Daily Revs.', fmt(row.dailyRevs, 2))
   ].join(''));
 
   const fuelSection = printSection('Fuel Consumption (MT)', [
-    printRow('Main Engine', fmt(row.meCons,3)),
-    printRow('Diesel Generator', fmt(row.geCons,3)),
-    printRow('Boiler', fmt(row.blrCons,3)),
-    printRow('Total', fmt(row.total,3))
+    printRow('Main Engine', fmtFuel(row.meCons)),
+    printRow('Diesel Generator', fmtFuel(row.geCons)),
+    printRow('Boiler', fmtFuel(row.blrCons)),
+    printRow('Total', fmtFuel(row.total))
   ].join(''));
 
   const fwSection = printSection('Fresh Water', [
-    printRow('Produced', row.fwProdD==null?'—':`${fmt(row.fwProdD,0)} L`),
-    printRow('Consumed', row.fwConsD==null?'—':`${fmt(row.fwConsD,0)} L`),
-    printRow('R.O.B.', entry.fwRob==null?'—':`${fmt(entry.fwRob,0)} L`)
+    printRow('Produced', row.fwProdD==null?'—':`${fmt(row.fwProdD, 2)} L`),
+    printRow('Consumed', row.fwConsD==null?'—':`${fmtLube(row.fwConsD)} L`),
+    printRow('R.O.B.', entry.fwRob==null?'—':`${fmt(entry.fwRob, 2)} L`)
   ].join(''));
 
   const deltaCls = sfocDeltaClass(row.sfocDelta);
-  const deltaStr = row.sfocDelta==null ? '—' : `${row.sfocDelta>0?'+':''}${fmt(row.sfocDelta,1)}%`;
+  const deltaStr = row.sfocDelta==null ? '—' : `${row.sfocDelta>0?'+':''}${fmt(row.sfocDelta, 2)}%`;
   const meSection = printSection('M/E Performance', [
-    printRow('RPM', fmt(entry.rpm,1)),
-    printRow('% MCR', fmt(row.mcrPct,1)),
-    printRow('Est. kW', fmt(row.kwEst,0)),
+    printRow('RPM', fmt(entry.rpm, 2)),
+    printRow('% MCR', fmt(row.mcrPct, 2)),
+    printRow('Est. kW', fmt(row.kwEst, 2)),
     printRow('Engine Speed', row.speedEngine==null?'—':`${fmt(row.speedEngine,2)} kn`),
     printRow('Ship Speed', row.speedShip==null?'—':`${fmt(row.speedShip,2)} kn`),
     printRow('Slip %', fmt(row.slip,2)),
-    printRow('SFOC @ 100% MCR', state.setup.sfoc100==null?'—':`${fmt(state.setup.sfoc100,1)} g/kWh`),
-    printRow('Ref. SFOC', `${fmt(row.sfocRef,1)} g/kWh`),
-    printRow('Actual SFOC', `${fmt(row.sfocActual,1)} g/kWh`),
+    printRow('SFOC @ 100% MCR', state.setup.sfoc100==null?'—':`${fmt(state.setup.sfoc100, 2)} g/kWh`),
+    printRow('Ref. SFOC', `${fmt(row.sfocRef, 2)} g/kWh`),
+    printRow('Actual SFOC', `${fmt(row.sfocActual, 2)} g/kWh`),
     printRow('SFOC Deviation', deltaStr, deltaCls)
   ].join(''));
 
@@ -5437,13 +5452,13 @@ function printVoyageSummary(entryId){
     const totLoad = perf.geTotals.maxKwHrs[i]>0 ? (perf.geTotals.kwHrs[i]/perf.geTotals.maxKwHrs[i])*100 : null;
     return `<tr>
       <td class="row-lbl">A/E #${i+1}</td>
-      <td>${p.hrs==null?'—':fmt(p.hrs,1)}</td>
-      <td>${p.kw==null?'—':fmt(p.kw,0)}</td>
-      <td>${p.loadPct==null?'—':fmt(p.loadPct,1)}</td>
-      <td>${p.fuelCons==null?'—':fmt(p.fuelCons,3)}</td>
-      <td>${fmt(totH,1)}</td>
-      <td>${totKw==null?'—':fmt(totKw,0)}</td>
-      <td>${totLoad==null?'—':fmt(totLoad,1)}</td>
+      <td>${p.hrs==null?'—':fmt(p.hrs, 2)}</td>
+      <td>${p.kw==null?'—':fmt(p.kw, 2)}</td>
+      <td>${p.loadPct==null?'—':fmt(p.loadPct, 2)}</td>
+      <td>${p.fuelCons==null?'—':fmtFuel(p.fuelCons)}</td>
+      <td>${fmt(totH, 2)}</td>
+      <td>${totKw==null?'—':fmt(totKw, 2)}</td>
+      <td>${totLoad==null?'—':fmt(totLoad, 2)}</td>
     </tr>`;
   }).join('');
   const geSection = geN>0 ? printSection(`Generators — ${GE_ARR_LABELS[state.setup.geArrangement || 'SINGLE']}`, `
@@ -5451,8 +5466,8 @@ function printVoyageSummary(entryId){
       <tr><th>Unit</th><th>Period Hrs</th><th>kW</th><th>Load %</th><th>Fuel MT</th><th>Voy Hrs</th><th>Voy Avg kW</th><th>Voy Load %</th></tr>
       ${geRows}
     </table>
-    ${printRow('Voyage Avg Gen Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct,1)}%`)}
-    ${printRow('Voyage Avg Gen kW', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted,0))}`) : '';
+    ${printRow('Voyage Avg Gen Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct, 2)}%`)}
+    ${printRow('Voyage Avg Gen kW', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted, 2))}`) : '';
 
   const blrPrev = entryBlrRuntime(previousEntryFor(entryId));
   const blrCur = entryBlrRuntime(entry);
@@ -5461,20 +5476,20 @@ function printVoyageSummary(entryId){
   const incKwPrint = entryIncineratorKw(entry);
   const incLoadPrint = incineratorLoadPct(incKwPrint);
   const blrIncSection = printSection('Boiler & Incinerator', [
-    printRow('Boiler Runtime (cum.)', blrCur==null?'—':`${fmt(blrCur,1)} hrs`),
-    printRow('Boiler Period Hrs', blrPeriodPrint==null?'—':fmt(blrPeriodPrint,1)),
-    printRow('Boiler Fuel Cons', row.blrCons==null?'—':`${fmt(row.blrCons,3)} MT`),
-    printRow('Incinerator Run Time', incRtPrint==null?'—':`${fmt(incRtPrint,1)} hrs`),
-    printRow('Incinerator Avg kW', incKwPrint==null?'—':fmt(incKwPrint,0)),
-    printRow('Incinerator Load %', incLoadPrint==null?'—':`${fmt(incLoadPrint,1)}%`)
+    printRow('Boiler Runtime (cum.)', blrCur==null?'—':`${fmt(blrCur, 2)} hrs`),
+    printRow('Boiler Period Hrs', blrPeriodPrint==null?'—':fmt(blrPeriodPrint, 2)),
+    printRow('Boiler Fuel Cons', row.blrCons==null?'—':`${fmtFuel(row.blrCons)} MT`),
+    printRow('Incinerator Run Time', incRtPrint==null?'—':`${fmt(incRtPrint, 2)} hrs`),
+    printRow('Incinerator Avg kW', incKwPrint==null?'—':fmt(incKwPrint, 2)),
+    printRow('Incinerator Load %', incLoadPrint==null?'—':`${fmt(incLoadPrint, 2)}%`)
   ].join(''));
 
   const voyageAvgSection = printSection('Voyage Time Averages', [
-    printRow('Total Voyage Hours', fmt(perf.totalHrs,1)),
-    printRow('Total Generator Hours', fmt(perf.totalGeHrs,1)),
-    printRow('Avg %MCR (hrs-wtd)', perf.avgMcrTimeWeighted==null?'—':fmt(perf.avgMcrTimeWeighted,1)),
+    printRow('Total Voyage Hours', fmt(perf.totalHrs,2)),
+    printRow('Total Generator Hours', fmt(perf.totalGeHrs,2)),
+    printRow('Avg %MCR (hrs-wtd)', perf.avgMcrTimeWeighted==null?'—':fmt(perf.avgMcrTimeWeighted,2)),
     printRow('Avg Ship Speed', perf.avgSpeedShip==null?'—':`${fmt(perf.avgSpeedShip,2)} kn`),
-    printRow('Avg Voyage kW', perf.avgKw==null?'—':fmt(perf.avgKw,0))
+    printRow('Avg Voyage kW', perf.avgKw==null?'—':fmt(perf.avgKw,2))
   ].join(''));
 
   const robTable = printSection('Remaining On Board', `
@@ -5484,8 +5499,8 @@ function printVoyageSummary(entryId){
         const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
         const consVal = robRowCons(row, r);
         const nowVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
-        const dec = r.cat==='fuel' ? 2 : 0;
-        return `<tr><td class="row-lbl">${r.label}</td><td>${fmt(prevVal,dec)}</td><td>${consVal===null||consVal===undefined?'—':fmt(consVal,r.cat==='fuel'?3:1)}</td><td>${fmt(nowVal,dec)}</td></tr>`;
+        const dec = r.cat==='fuel' ? 3 : 0;
+        return `<tr><td class="row-lbl">${r.label}</td><td>${fmt(prevVal,dec)}</td><td>${consVal===null||consVal===undefined?'—':fmt(consVal,r.cat==='fuel'?3:0)}</td><td>${fmt(nowVal,dec)}</td></tr>`;
       }).join('')}
     </table>`);
 
@@ -5570,8 +5585,8 @@ function periodRunHours(prevRef, curDt, curMeRuntime){
 
 let rpmSyncGuard = false;
 function setLinkedRpmFields(rpm, revCounter){
-  const rpmStr = rpm==null || isNaN(rpm) ? '' : Number(rpm).toFixed(3);
-  const rcStr = revCounter==null || isNaN(revCounter) ? '' : Number(revCounter).toFixed(3);
+  const rpmStr = rpm==null || isNaN(rpm) ? '' : Number(rpm).toFixed(2);
+  const rcStr = revCounter==null || isNaN(revCounter) ? '' : Number(revCounter).toFixed(2);
   const set = (id, val)=>{ const el = document.getElementById(id); if (el && document.activeElement!==el) el.value = val; };
   set('in_rpm', rpmStr);
   set('vs_rpm', rpmStr);
@@ -5660,7 +5675,7 @@ function updateVsFwDisplays(){
   if (prev && prev.fwRob!=null && fwRob!=null && fwProdD!=null){
     fwCons = prev.fwRob + fwProdD - fwRob;
   }
-  const set = (id, val)=>{ const el=document.getElementById(id); if (el) el.value = val==null?'—':fmt(val,0); };
+  const set = (id, val)=>{ const el=document.getElementById(id); if (el) el.value = val==null?'—':fmtLube(val); };
   set('vs_fwProduced', fwProdD);
   set('vs_fwConsumed', fwCons);
 }
@@ -5781,21 +5796,21 @@ function updateLivePreview(){
   const stat = (label,val) => `<div class="stat"><div class="num">${val}</div><div class="lbl">${label}</div></div>`;
   box.className = 'stat-strip cols4';
   box.innerHTML =
-    stat('Daily Revs', dailyRevs==null?'—':fmt(dailyRevs,0)) +
+    stat('Daily Revs', dailyRevs==null?'—':fmt(dailyRevs, 2)) +
     stat('Engine Speed', speedEngine==null?'—':fmt(speedEngine,2)) +
-    stat('Actual SFOC', sfocAct==null?'—':fmt(sfocAct,1)) +
-    stat('M/E Cons (MT)', meCons==null?'—':fmt(meCons,3)) +
+    stat('Actual SFOC', sfocAct==null?'—':fmt(sfocAct, 2)) +
+    stat('M/E Cons (MT)', meCons==null?'—':fmtFuel(meCons)) +
     stat('RPM', rpmEff==null?'—':fmt(rpmEff,2)) +
     stat('Engine Dist', distEngine==null?'—':fmt(distEngine,2)) +
-    stat('SFOC @ 100%', sfoc100==null?'—':fmt(sfoc100,1)) +
-    stat('G/E Cons (MT)', geCons==null?'—':fmt(geCons,3)) +
-    stat('M/E Load (kW)', kwEst==null?'—':fmt(kwEst,0)) +
+    stat('SFOC @ 100%', sfoc100==null?'—':fmt(sfoc100, 2)) +
+    stat('G/E Cons (MT)', geCons==null?'—':fmtFuel(geCons)) +
+    stat('M/E Load (kW)', kwEst==null?'—':fmt(kwEst, 2)) +
     stat('Slip %', slip==null?'—':fmt(slip,2)) +
-    stat('Ref. SFOC', sfocRef==null?'—':fmt(sfocRef,1)) +
-    stat('Boiler Cons (MT)', blrCons==null?'—':fmt(blrCons,3)) +
-    stat('Total Cons (MT)', total==null?'—':fmt(total,3)) +
-    stat('M/E Load %', mcrPct==null?'—':fmt(mcrPct,1)) +
-    stat('SFOC Δ %', sfocDelta==null?'—':((sfocDelta>0?'+':'')+fmt(sfocDelta,1)));
+    stat('Ref. SFOC', sfocRef==null?'—':fmt(sfocRef, 2)) +
+    stat('Boiler Cons (MT)', blrCons==null?'—':fmtFuel(blrCons)) +
+    stat('Total Cons (MT)', total==null?'—':fmtFuel(total)) +
+    stat('M/E Load %', mcrPct==null?'—':fmt(mcrPct, 2)) +
+    stat('SFOC Δ %', sfocDelta==null?'—':((sfocDelta>0?'+':'')+fmt(sfocDelta, 2)));
 }
 /* ---------------- editable consumption helpers (Voyage Summary) ---------------- */
 function computeRawUnitCons(curEntry, prevRef, rolls){
@@ -5826,7 +5841,7 @@ function renderEntryUnitFields(){
   set('vs_unit_ge', geCons);
   set('vs_unit_blr', blrCons);
   const tot = document.getElementById('vs_unit_total');
-  if (tot && document.activeElement!==tot) tot.value = fmt((meCons||0)+(geCons||0)+(blrCons||0), 3);
+  if (tot && document.activeElement!==tot) tot.value = fmtFuel((meCons||0)+(geCons||0)+(blrCons||0));
 }
 
 function renderVoyageProgress(animateShip){
@@ -5926,7 +5941,7 @@ function renderVoyageProgress(animateShip){
       <text x="${x0}" y="${y-46}" text-anchor="start" fill="var(--paper)" font-family="Oswald, sans-serif" font-size="15" font-weight="600">${depPort}</text>
       <text x="${x0}" y="${y-28}" text-anchor="start" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">0 nm</text>
       <text x="${x1}" y="${y-46}" text-anchor="end" fill="var(--paper)" font-family="Oswald, sans-serif" font-size="15" font-weight="600">${arrPort}</text>
-      <text x="${x1}" y="${y-28}" text-anchor="end" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(totalDistance,0)} nm</text>
+      <text x="${x1}" y="${y-28}" text-anchor="end" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(totalDistance, 2)} nm</text>
 
       <g class="${shipAnimClass}">
         ${isUnderway ? `<path class="voyage-wake" d="M ${shipX-44} ${y+14} q -10 4 -22 2" fill="none" stroke="var(--paper-dim)" stroke-width="1.5"/>` : ''}
@@ -5941,7 +5956,7 @@ function renderVoyageProgress(animateShip){
       </g>
 
       ${isUnderway ? `
-      <text x="${shipX}" y="${y-70}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentRpm!=null ? fmt(currentRpm,1)+' RPM' : '—'}</text>
+      <text x="${shipX}" y="${y-70}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentRpm!=null ? fmt(currentRpm, 2)+' RPM' : '—'}</text>
       <text x="${shipX}" y="${y-58}" text-anchor="middle" fill="var(--teal)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentSpeed!=null ? fmt(currentSpeed,2)+' kn' : '—'}</text>
       <text x="${shipX}" y="${y-46}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">Slip ${currentSlip!=null ? fmt(currentSlip,2)+'%' : '—'}</text>
       ` : `
@@ -5949,15 +5964,15 @@ function renderVoyageProgress(animateShip){
       `}
 
       ${isUnderway ? `
-      <text x="${shipX}" y="${y+38}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentKw!=null ? fmt(currentKw,0)+' KW' : '—'}</text>
-      <text x="${shipX}" y="${y+52}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentMcr!=null ? fmt(currentMcr,1)+'% MCR' : '—'}</text>
+      <text x="${shipX}" y="${y+38}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentKw!=null ? fmt(currentKw, 2)+' KW' : '—'}</text>
+      <text x="${shipX}" y="${y+52}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentMcr!=null ? fmt(currentMcr, 2)+'% MCR' : '—'}</text>
       ` : `
       <text x="${shipX}" y="${y+48}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">Engine idle</text>
       `}
-      <text x="${shipX}" y="${y+70}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="13" font-weight="600">${fmt(traveled,1)} nm</text>
-      <text x="${shipX}" y="${y+86}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${fmt(pct*100,1)}% complete</text>
+      <text x="${shipX}" y="${y+70}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="13" font-weight="600">${fmt(traveled, 2)} nm</text>
+      <text x="${shipX}" y="${y+86}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${fmt(pct*100, 2)}% complete</text>
 
-      <text x="${(shipX+x1)/2}" y="${y-8}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(togo,1)} nm to go</text>
+      <text x="${(shipX+x1)/2}" y="${y-8}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(togo, 2)} nm to go</text>
       <text x="${(x0+x1)/2}" y="${y+106}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">Average Speed: ${avgSpeed!=null ? fmt(avgSpeed,2)+' kn' : '—'}</text>
     </svg>
   `;
@@ -6045,7 +6060,7 @@ document.getElementById('btnVsResetUnitCons')?.addEventListener('click', ()=>{
   set('vs_unit_ge', row?.geCons);
   set('vs_unit_blr', row?.blrCons);
   const tot = document.getElementById('vs_unit_total');
-  if (tot) tot.value = fmt((row?.meCons||0)+(row?.geCons||0)+(row?.blrCons||0), 3);
+  if (tot) tot.value = fmtFuel((row?.meCons||0)+(row?.geCons||0)+(row?.blrCons||0));
 });
 document.getElementById('btnVsResetConsOverride')?.addEventListener('click', ()=>{
   if (!currentVsEntryId) return;
@@ -6949,13 +6964,13 @@ function downloadCSV(filename, header, lines){
 document.getElementById('btnExportCSVLog').addEventListener('click', ()=>{
   const {rows} = computeDerived();
   const header = ["DateTime","Operation","Condition","Hours","DistShip","RPM","RevCounter","DailyRevs","MECons","GECons","BlrCons","Total","CylCons","CylGrade","MELo","GELo","FWMeter","FWProduced","FWRob","FWCons"];
-  const lines = rows.map(r=>[r.datetime,r.operation,r.condition,fmtNum(r.hrs),fmtNum(r.distanceShip),fmtNum(r.rpm),fmtNum(r.revCounter),fmtNum(r.dailyRevs),fmtNum(r.meCons),fmtNum(r.geCons),fmtNum(r.blrCons),fmtNum(r.total),fmtNum(r.cylCons),r.tbn,fmtNum(r.meLoCons),fmtNum(r.geLoCons),fmtNum(r.fwProd),fmtNum(r.fwProdD),fmtNum(r.fwRob),fmtNum(r.fwConsD)]);
+  const lines = rows.map(r=>[r.datetime,r.operation,r.condition,fmtNum(r.hrs,2),fmtNum(r.distanceShip,2),fmtNum(r.rpm,2),fmtNum(r.revCounter,2),fmtNum(r.dailyRevs,2),fmtNum(r.meCons,3),fmtNum(r.geCons,3),fmtNum(r.blrCons,3),fmtNum(r.total,3),fmtNum(r.cylCons,0),r.tbn,fmtNum(r.meLoCons,0),fmtNum(r.geLoCons,0),fmtNum(r.fwProd,0),fmtNum(r.fwProdD,0),fmtNum(r.fwRob,0),fmtNum(r.fwConsD,0)]);
   downloadCSV('voyage-log.csv', header, lines);
 });
 document.getElementById('btnExportCSVCons').addEventListener('click', ()=>{
   const {rows} = computeDerived();
   const header = ["DateTime","Operation","METype","MECons","GEType","GECons","BlrType","BlrCons","Total","FWCons"];
-  const lines = rows.map(r=>[r.datetime,r.operation,r.me.type,fmtNum(r.meCons),r.ge.type,fmtNum(r.geCons),r.blr.type,fmtNum(r.blrCons),fmtNum(r.total),fmtNum(r.fwConsD)]);
+  const lines = rows.map(r=>[r.datetime,r.operation,r.me.type,fmtNum(r.meCons,3),r.ge.type,fmtNum(r.geCons,3),r.blr.type,fmtNum(r.blrCons,3),fmtNum(r.total,3),fmtNum(r.fwConsD,0)]);
   downloadCSV('consumption.csv', header, lines);
 });
 
