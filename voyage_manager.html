@@ -899,10 +899,10 @@
         <div class="form-grid cols3">
           <div class="field"><label>Distance Run — Ship/GPS (nm)</label><input type="number" step="0.1" id="vs_distanceShip" value="0"></div>
           <div class="field"><label>M/E Avg RPM</label><input type="number" step="0.1" id="vs_rpm"></div>
-          <div class="field"><label>M/E Rev. Counter (linked)</label><input type="number" step="1" id="vs_revCounter"></div>
-          <div class="field"><label>Engine Distance (nm, calc)</label><input type="text" id="vs_engineDist" readonly></div>
-          <div class="field"><label>Engine Speed (kn, calc)</label><input type="text" id="vs_engineSpeed" readonly></div>
           <div class="field"><label>Ship Speed (kn, calc)</label><input type="text" id="vs_shipSpeed" readonly></div>
+          <div class="field"><label>Engine Distance (nm, calc)</label><input type="text" id="vs_engineDist" readonly></div>
+          <div class="field"><label>M/E Rev. Counter (linked)</label><input type="number" step="1" id="vs_revCounter"></div>
+          <div class="field"><label>Engine Speed (kn, calc)</label><input type="text" id="vs_engineSpeed" readonly></div>
           <div class="field"><label>Slip % (calc)</label><input type="text" id="vs_slip" readonly></div>
         </div>
         <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous) ÷ (Run Hours × 60). Engine distance prefers Pitch × Δrevs ÷ 1852 (standard noon-report practice); falls back to RPM × pitch × hours. Slip % = (Engine Dist − Ship Dist) ÷ Engine Dist × 100.</div>
