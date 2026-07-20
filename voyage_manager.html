@@ -3667,7 +3667,7 @@ function rebuildReportPerfTable(entryId, report){
     ));
   }
   perfBody.innerHTML = PERF_ROWS.map(([key,label])=>{
-    const meVal = fmtP(mePerf[key], key==='avgPower'||key==='runTime'?0:1);
+    const meVal = fmtP(mePerf[key], 2);
     return `<tr><td>${label}</td><td class="pf-computed">${meVal}</td>${visibleUnits.map(u=>renderReportPerfCell(u, key, entryId, perfTable)).join('')}</tr>`;
   }).join('');
   // add fuel cons row
@@ -3709,7 +3709,6 @@ function renderReportPerfCell(unit, key, entryId, perfTable){
   const blrPerf = isBoiler ? computeKwPerf(perfTable[unit], boilerMaxKw()) : null;
   const incPerf = isInc ? computeKwPerf(perfTable[unit], incineratorMaxKw()) : null;
   const kwPerf = aePerf || blrPerf || incPerf;
-  const dec = (key==='avgPower'||key==='runTime') ? 0 : 1;
 
   if (isKwUnit){
     if (key === 'avgPower'){
@@ -3725,7 +3724,7 @@ function renderReportPerfCell(unit, key, entryId, perfTable){
       }
       return `<td><input class="pf-input" type="number" step="0.1" id="rep_pf_runTime_${unit}" value="${v===null||v===undefined?'':v}"></td>`;
     }
-    return `<td class="pf-computed" id="rep_pf_${key}_${unit}_disp">${fmtP(kwPerf[key], dec)}</td>`;
+    return `<td class="pf-computed" id="rep_pf_${key}_${unit}_disp">${fmtP(kwPerf[key], 2)}</td>`;
   }
 
   const v = perfTable[unit]?.[key];
@@ -4148,19 +4147,19 @@ function sfocDeltaClass(delta){
 }
 
 function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
-  const fuelInner = fuelTankList().map(t=>printRow(t.name, `${fmtP(asOf.rob[t.id],2)} MT`)).join('');
+  const fuelInner = fuelTankList().map(t=>printRow(t.name, `${fmtFuel(asOf.rob[t.id])} MT`)).join('');
   const totalLube = totalLubeRob(asOf.robLube);
   const lubeInner = [
-    ...lubeTankList().map(t=>printRow(t.name, `${fmtP(asOf.robLube[t.id], 2)} L`)),
-    printRow('Total Lube Oil', `${fmtP(totalLube, 2)} L`)
+    ...lubeTankList().map(t=>printRow(t.name, `${fmtLube(asOf.robLube[t.id])} L`)),
+    printRow('Total Lube Oil', `${fmtLube(totalLube)} L`)
   ].join('');
 
   const primaryFw = fwTankList()[0];
   const fwRob = primaryFw ? asOf.robLube[primaryFw.id] : null;
   const fwSection = printSection('Fresh Water', [
-    printRow('FW Produced', `${row.fwProdD===null||row.fwProdD===undefined?'—':fmtP(row.fwProdD, 2)} L`),
-    printRow('FW Consumed', `${row.fwConsD===null||row.fwConsD===undefined?'—':fmtP(row.fwConsD, 2)} L`),
-    printRow('FW R.O.B.', `${fmtP(fwRob, 2)} L`)
+    printRow('FW Produced', `${row.fwProdD===null||row.fwProdD===undefined?'—':fmtLube(row.fwProdD)} L`),
+    printRow('FW Consumed', `${row.fwConsD===null||row.fwConsD===undefined?'—':fmtLube(row.fwConsD)} L`),
+    printRow('FW R.O.B.', `${fmtLube(fwRob)} L`)
   ].join(''));
 
   const engineRoomSection = printSection('Engine Room &amp; Tank Readings', [
@@ -4225,7 +4224,7 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
       {label:'Operation', value:escPrint(entry.operation).slice(0,18)},
       {label:'Condition', value:entry.condition},
       {label:'Period Hrs', value:fmtP(row.hrs, 2)},
-      {label:'Total Fuel', value:row.total==null?'—':`${fmtP(row.total,3)} MT`}
+      {label:'Total Fuel', value:row.total==null?'—':`${fmtFuel(row.total)} MT`}
     ];
   }
 
@@ -4246,15 +4245,15 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
   const consSection = printSection('Consumption', `
     <table class="pr-table">
       <tr><th></th><th>M/E</th><th>Generator</th><th>Boiler</th><th>Total</th></tr>
-      <tr><td class="row-lbl">HFO</td><td>${entry.me.type==='HFO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='HFO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='HFO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='HFO'?row.meCons:0)+(entry.ge.type==='HFO'?row.geCons:0)+(entry.blr.type==='HFO'?row.blrCons:0),3)}</td></tr>
-      <tr><td class="row-lbl">LSFO</td><td>${entry.me.type==='LSFO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='LSFO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='LSFO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='LSFO'?row.meCons:0)+(entry.ge.type==='LSFO'?row.geCons:0)+(entry.blr.type==='LSFO'?row.blrCons:0),3)}</td></tr>
-      <tr><td class="row-lbl">MDO/MGO</td><td>${entry.me.type==='MDO/MGO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='MDO/MGO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='MDO/MGO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='MDO/MGO'?row.meCons:0)+(entry.ge.type==='MDO/MGO'?row.geCons:0)+(entry.blr.type==='MDO/MGO'?row.blrCons:0),3)}</td></tr>
-      <tr><td class="row-lbl">LSMGO</td><td>${entry.me.type==='LSMGO'?fmtP(row.meCons,3):'—'}</td><td>${entry.ge.type==='LSMGO'?fmtP(row.geCons,3):'—'}</td><td>${entry.blr.type==='LSMGO'?fmtP(row.blrCons,3):'—'}</td><td>${fmtP((entry.me.type==='LSMGO'?row.meCons:0)+(entry.ge.type==='LSMGO'?row.geCons:0)+(entry.blr.type==='LSMGO'?row.blrCons:0),3)}</td></tr>
+      <tr><td class="row-lbl">HFO</td><td>${entry.me.type==='HFO'?fmtFuel(row.meCons):'—'}</td><td>${entry.ge.type==='HFO'?fmtFuel(row.geCons):'—'}</td><td>${entry.blr.type==='HFO'?fmtFuel(row.blrCons):'—'}</td><td>${fmtFuel((entry.me.type==='HFO'?row.meCons:0)+(entry.ge.type==='HFO'?row.geCons:0)+(entry.blr.type==='HFO'?row.blrCons:0))}</td></tr>
+      <tr><td class="row-lbl">LSFO</td><td>${entry.me.type==='LSFO'?fmtFuel(row.meCons):'—'}</td><td>${entry.ge.type==='LSFO'?fmtFuel(row.geCons):'—'}</td><td>${entry.blr.type==='LSFO'?fmtFuel(row.blrCons):'—'}</td><td>${fmtFuel((entry.me.type==='LSFO'?row.meCons:0)+(entry.ge.type==='LSFO'?row.geCons:0)+(entry.blr.type==='LSFO'?row.blrCons:0))}</td></tr>
+      <tr><td class="row-lbl">MDO/MGO</td><td>${entry.me.type==='MDO/MGO'?fmtFuel(row.meCons):'—'}</td><td>${entry.ge.type==='MDO/MGO'?fmtFuel(row.geCons):'—'}</td><td>${entry.blr.type==='MDO/MGO'?fmtFuel(row.blrCons):'—'}</td><td>${fmtFuel((entry.me.type==='MDO/MGO'?row.meCons:0)+(entry.ge.type==='MDO/MGO'?row.geCons:0)+(entry.blr.type==='MDO/MGO'?row.blrCons:0))}</td></tr>
+      <tr><td class="row-lbl">LSMGO</td><td>${entry.me.type==='LSMGO'?fmtFuel(row.meCons):'—'}</td><td>${entry.ge.type==='LSMGO'?fmtFuel(row.geCons):'—'}</td><td>${entry.blr.type==='LSMGO'?fmtFuel(row.blrCons):'—'}</td><td>${fmtFuel((entry.me.type==='LSMGO'?row.meCons:0)+(entry.ge.type==='LSMGO'?row.geCons:0)+(entry.blr.type==='LSMGO'?row.blrCons:0))}</td></tr>
     </table>
-    ${printRow('Total Fuel Consumption', `${fmtP(row.total,3)} MT`)}
-    ${printRow(`Cyl. Oil (${entry.tbn})`, `${fmtP(row.cylCons, 2)} L`)}
-    ${printRow('M/E Sys. Oil', `${fmtP(row.meLoCons, 2)} L`)}
-    ${printRow('A/E Sys. Oil', `${fmtP(row.geLoCons, 2)} L`)}`);
+    ${printRow('Total Fuel Consumption', `${fmtFuel(row.total)} MT`)}
+    ${printRow(`Cyl. Oil (${entry.tbn})`, `${fmtLube(row.cylCons)} L`)}
+    ${printRow('M/E Sys. Oil', `${fmtLube(row.meLoCons)} L`)}
+    ${printRow('A/E Sys. Oil', `${fmtLube(row.geLoCons)} L`)}`);
 
   const routeStr = `${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}`;
 
@@ -5178,8 +5177,7 @@ function renderVsPerfTable(entryId){
   unitPerf.INCINERATOR = buildIncineratorPerf(incRt, incKw);
 
   body.innerHTML = PERF_ROWS.map(([key,label])=>{
-    const dec = (key==='avgPower'||key==='runTime') ? (key==='runTime'?1:0) : 1;
-    return `<tr><td>${label}</td><td>${fmtP(mePerf[key], dec)}</td>${units.map(u=>`<td>${fmtP(unitPerf[u]?.[key], dec)}</td>`).join('')}</tr>`;
+    return `<tr><td>${label}</td><td>${fmtP(mePerf[key], 2)}</td>${units.map(u=>`<td>${fmtP(unitPerf[u]?.[key], 2)}</td>`).join('')}</tr>`;
   }).join('') + `<tr><td>Fuel Cons (MT)</td><td>${row?.meCons==null?'—':fmtFuel(row.meCons)}</td>${units.map(u=>{
     if (u.startsWith('AE')){
       const fc = unitPerf[u]?.fuelCons;
