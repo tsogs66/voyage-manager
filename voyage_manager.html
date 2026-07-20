@@ -6868,7 +6868,7 @@ function updateLivePreview(){
   const pitch = state.setup.pitch||0, mcrRpm = state.setup.mcrRpm||1, mcrKw = state.setup.mcrKw||0;
   const propConstant = pitch*60/NM_METERS;
 
-  let hrs=null, meCons=null, geCons=null, blrCons=null, total=null, distEngine=null, slip=null, kwEst=null, mcrPct=null, dailyRevs=null, speedEngine=null;
+  let hrs=null, meCons=null, geCons=null, blrCons=null, distEngine=null, slip=null, kwEst=null, mcrPct=null, dailyRevs=null, speedEngine=null;
   let rpmEff = curEntry.rpm;
 
   if (prevRef && curEntry.datetime){
@@ -6891,7 +6891,6 @@ function updateLivePreview(){
       if (unitMe && unitMe.value!=='') meCons = parseFloat(unitMe.value);
       if (unitGe && unitGe.value!=='') geCons = parseFloat(unitGe.value);
       if (unitBlr && unitBlr.value!=='') blrCons = parseFloat(unitBlr.value);
-      total = (meCons||0)+(geCons||0)+(blrCons||0);
       distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
       if (distEngine!=null && distEngine>0 && curEntry.distanceShip!=null){
         slip = ((distEngine - curEntry.distanceShip)/distEngine)*100;
