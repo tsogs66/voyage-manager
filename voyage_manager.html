@@ -7636,12 +7636,14 @@ function renderSyncUi(){
       banner.textContent = 'You are offline. Local changes are saved and will sync automatically when connectivity returns.';
     } else {
       banner.className = 'sync-banner ok';
-      banner.textContent = 'Sync configured for ' + vesselSyncSlug() + ' / ' + voyageSyncKey() + (navigator.onLine ? ' — online' : ' — offline');
+      banner.textContent = 'Sync configured for ' + vesselSyncSlug() + ' / ' + voyageSyncKey() + ' / ' + voyageConditionKey() + (navigator.onLine ? ' — online' : ' — offline');
     }
   }
   if (meta){
     const parts = [];
     parts.push('Last sync: ' + (sync.lastSyncedAt ? new Date(sync.lastSyncedAt).toLocaleString() : 'never'));
+    parts.push(`active ${voyageSyncKey()}/${voyageConditionKey()}`);
+    parts.push(`data/${vesselSyncSlug()}/${voyageSyncKey()}/${voyageConditionKey()}.json`);
     if (sync.pendingChanges) parts.push('unsynced local changes');
     if (sync.lastSyncError) parts.push('error: ' + sync.lastSyncError);
     meta.textContent = parts.join(' · ');
