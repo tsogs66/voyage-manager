@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
 """Self-hosted sync server for Noon Report / Voyage Manager.
 
-Stores voyage snapshots as JSON files. Designed to run behind Cloudflare Tunnel
-or nginx on a Linux server. Can optionally serve the static PWA files from the
-same process (set SYNC_STATIC_DIR to the app root).
+Stores voyage snapshots as JSON files under:
+  <DATA_DIR>/<vessel>/<voyageNo>/<CONDITION>.json
+
+Each voyage number is a folder; BALLAST and LADEN legs are separate files
+so records stay short and can be pulled independently.
+
+Designed to run behind Cloudflare Tunnel or nginx on a Linux server.
+Can optionally serve the static PWA files from the same process
+(set SYNC_STATIC_DIR to the app root).
 
 API:
   GET  /api/health
-  GET  /api/voyage/<vessel>                 — list voyages for a vessel
-  GET  /api/voyage/<vessel>/<voyage>        — pull snapshot
-  PUT  /api/voyage/<vessel>/<voyage>        — push / merge snapshot
+  GET  /api/voyage/<vessel>                              — list voyage folders + conditions
+  GET  /api/voyage/<vessel>/<voyage>                     — list conditions for one voyage
+  GET  /api/voyage/<vessel>/<voyage>/<condition>         — pull leg snapshot
+  PUT  /api/voyage/<vessel>/<voyage>/<condition>         — push / merge leg snapshot
+
+Legacy flat files <voyage>-<CONDITION>.json are still readable and listed.
 
 Auth: Authorization: Bearer <SYNC_API_TOKEN>
 """
@@ -38,7 +47,9 @@ ALLOWED_ORIGINS = [
 STATIC_DIR = Path(os.environ["SYNC_STATIC_DIR"]).resolve() if os.environ.get("SYNC_STATIC_DIR") else None
 
 SLUG_RE = re.compile(r"^[a-zA-Z0-9._-]{1,64}$")
+COND_RE = re.compile(r"^(BALLAST|LADEN)$", re.IGNORECASE)
 LIST_KEYS = ("entries", "receipts", "documents", "abstracts", "printHistory")
+LEGACY_COND_SUFFIX = re.compile(r"^(?P<voyage>.+)-(?P<cond>BALLAST|LADEN)$", re.IGNORECASE)
 
 
 def utc_now() -> str:
@@ -52,14 +63,39 @@ def safe_slug(value: str) -> str:
     return value
 
 
-def voyage_path(vessel: str, voyage: str) -> Path:
-    vessel = safe_slug(vessel)
-    voyage = safe_slug(voyage)
-    return DATA_DIR / vessel / f"{voyage}.json"
+def safe_condition(value: str) -> str:
+    value = unquote(value or "").strip().upper()
+    if not COND_RE.match(value):
+        raise ValueError("invalid condition")
+    return value
 
 
 def vessel_dir(vessel: str) -> Path:
     return DATA_DIR / safe_slug(vessel)
+
+
+def voyage_dir(vessel: str, voyage: str) -> Path:
+    return vessel_dir(vessel) / safe_slug(voyage)
+
+
+def voyage_leg_path(vessel: str, voyage: str, condition: str) -> Path:
+    return voyage_dir(vessel, voyage) / f"{safe_condition(condition)}.json"
+
+
+def legacy_flat_path(vessel: str, voyage: str, condition: str) -> Path:
+    """Old layout: <vessel>/<voyage>-<CONDITION>.json"""
+    return vessel_dir(vessel) / f"{safe_slug(voyage)}-{safe_condition(condition)}.json"
+
+
+def resolve_leg_path(vessel: str, voyage: str, condition: str) -> Path:
+    """Prefer folder layout; fall back to legacy flat file for reads."""
+    folder = voyage_leg_path(vessel, voyage, condition)
+    if folder.exists():
+        return folder
+    legacy = legacy_flat_path(vessel, voyage, condition)
+    if legacy.exists():
+        return legacy
+    return folder
 
 
 def json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict) -> None:
@@ -87,30 +123,108 @@ def send_cors(handler: BaseHTTPRequestHandler) -> None:
     handler.send_header("Access-Control-Max-Age", "86400")
 
 
+def read_leg_meta(path: Path, voyage_number: str, condition: str) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {
+            "voyageNumber": voyage_number,
+            "condition": condition,
+            "voyageKey": f"{voyage_number}-{condition}",
+            "updatedAt": None,
+            "entryCount": 0,
+        }
+    entries = ((data.get("data") or data).get("entries")) or []
+    return {
+        "voyageNumber": data.get("voyageNumber") or voyage_number,
+        "condition": (data.get("condition") or condition).upper(),
+        "voyageKey": data.get("voyageKey") or f"{voyage_number}-{condition}",
+        "updatedAt": data.get("updatedAt") or data.get("serverUpdatedAt"),
+        "deviceId": data.get("deviceId"),
+        "deviceName": data.get("deviceName"),
+        "serverUpdatedAt": data.get("serverUpdatedAt"),
+        "entryCount": len(entries) if isinstance(entries, list) else 0,
+    }
+
+
 def list_voyages(vessel: str) -> list[dict]:
+    """Return voyage folders with available BALLAST/LADEN legs."""
     root = vessel_dir(vessel)
     if not root.exists():
         return []
+
+    by_voyage: dict[str, dict] = {}
+
+    def add_leg(voyage_number: str, condition: str, path: Path) -> None:
+        voyage_number = safe_slug(voyage_number)
+        condition = safe_condition(condition)
+        bucket = by_voyage.setdefault(
+            voyage_number,
+            {"voyageNumber": voyage_number, "conditions": {}},
+        )
+        meta = read_leg_meta(path, voyage_number, condition)
+        bucket["conditions"][condition] = meta
+
+    for path in sorted(root.iterdir()):
+        if path.is_dir():
+            voyage_number = path.name
+            if not SLUG_RE.match(voyage_number):
+                continue
+            for cond_file in sorted(path.glob("*.json")):
+                cond = cond_file.stem.upper()
+                if COND_RE.match(cond):
+                    add_leg(voyage_number, cond, cond_file)
+        elif path.suffix == ".json":
+            # Legacy flat: voyageNo-CONDITION.json or bare voyageKey.json
+            m = LEGACY_COND_SUFFIX.match(path.stem)
+            if m:
+                add_leg(m.group("voyage"), m.group("cond"), path)
+            else:
+                # Unknown legacy key — expose as voyage with UNKNOWN skipped;
+                # try to parse trailing condition from voyageSyncKey style.
+                stem = path.stem
+                for cond in ("BALLAST", "LADEN"):
+                    suffix = f"-{cond}"
+                    if stem.upper().endswith(suffix):
+                        add_leg(stem[: -len(suffix)], cond, path)
+                        break
+
     out: list[dict] = []
-    for path in sorted(root.glob("*.json")):
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
+    for voyage_number in sorted(by_voyage.keys()):
+        bucket = by_voyage[voyage_number]
+        conditions = [
+            bucket["conditions"][c]
+            for c in ("BALLAST", "LADEN")
+            if c in bucket["conditions"]
+        ]
+        # include any other unexpected conditions last
+        for c, meta in bucket["conditions"].items():
+            if c not in ("BALLAST", "LADEN"):
+                conditions.append(meta)
+        latest = max((c.get("updatedAt") or "" for c in conditions), default="")
         out.append(
             {
-                "voyageKey": data.get("voyageKey") or path.stem,
-                "updatedAt": data.get("updatedAt") or data.get("serverUpdatedAt"),
-                "deviceId": data.get("deviceId"),
-                "deviceName": data.get("deviceName"),
-                "serverUpdatedAt": data.get("serverUpdatedAt"),
+                "voyageNumber": voyage_number,
+                "voyageKey": voyage_number,
+                "conditions": conditions,
+                "hasBallast": any(c["condition"] == "BALLAST" for c in conditions),
+                "hasLaden": any(c["condition"] == "LADEN" for c in conditions),
+                "updatedAt": latest or None,
             }
         )
     return out
 
 
+def list_conditions(vessel: str, voyage: str) -> list[dict]:
+    voyages = {v["voyageNumber"]: v for v in list_voyages(vessel)}
+    voyage = safe_slug(voyage)
+    if voyage not in voyages:
+        return []
+    return voyages[voyage]["conditions"]
+
+
 class SyncHandler(BaseHTTPRequestHandler):
-    server_version = "NoonReportSync/1.2"
+    server_version = "NoonReportSync/1.3"
 
     def log_message(self, fmt: str, *args) -> None:
         print(f"[{utc_now()}] {self.address_string()} {fmt % args}")
@@ -164,9 +278,10 @@ class SyncHandler(BaseHTTPRequestHandler):
                 {
                     "ok": True,
                     "service": "noon-report-sync",
-                    "version": "1.2",
+                    "version": "1.3",
                     "time": utc_now(),
                     "static": bool(STATIC_DIR),
+                    "layout": "vessel/voyageNo/CONDITION.json",
                 },
             )
             return
@@ -186,27 +301,29 @@ class SyncHandler(BaseHTTPRequestHandler):
                     )
                     return
                 if len(parts) == 4:
-                    path = voyage_path(parts[2], parts[3])
-                    if not path.exists():
-                        json_response(self, HTTPStatus.NOT_FOUND, {"error": "not found"})
-                        return
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                    etag = data.get("serverUpdatedAt") or data.get("updatedAt") or ""
-                    if etag and self.headers.get("If-None-Match") == etag:
-                        self.send_response(HTTPStatus.NOT_MODIFIED)
-                        send_cors(self)
-                        self.end_headers()
-                        return
-                    body = json.dumps(data, indent=2).encode("utf-8")
-                    self.send_response(HTTPStatus.OK)
-                    self.send_header("Content-Type", "application/json; charset=utf-8")
-                    self.send_header("Content-Length", str(len(body)))
-                    if etag:
-                        self.send_header("ETag", etag)
-                    send_cors(self)
-                    self.end_headers()
-                    self.wfile.write(body)
+                    vessel = safe_slug(parts[2])
+                    voyage = safe_slug(parts[3])
+                    # Could be legacy pull of voyageKey "22-F-BALLAST" OR list conditions
+                    legacy = LEGACY_COND_SUFFIX.match(voyage)
+                    if legacy:
+                        path = resolve_leg_path(
+                            vessel, legacy.group("voyage"), legacy.group("cond")
+                        )
+                        return self._send_leg_file(path)
+                    json_response(
+                        self,
+                        HTTPStatus.OK,
+                        {
+                            "ok": True,
+                            "vesselId": vessel,
+                            "voyageNumber": voyage,
+                            "conditions": list_conditions(vessel, voyage),
+                        },
+                    )
                     return
+                if len(parts) == 5:
+                    path = resolve_leg_path(parts[2], parts[3], parts[4])
+                    return self._send_leg_file(path)
             except ValueError:
                 json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid path"})
                 return
@@ -216,17 +333,62 @@ class SyncHandler(BaseHTTPRequestHandler):
 
         json_response(self, HTTPStatus.NOT_FOUND, {"error": "not found"})
 
+    def _send_leg_file(self, path: Path) -> None:
+        if not path.exists():
+            json_response(self, HTTPStatus.NOT_FOUND, {"error": "not found"})
+            return
+        data = json.loads(path.read_text(encoding="utf-8"))
+        etag = data.get("serverUpdatedAt") or data.get("updatedAt") or ""
+        if etag and self.headers.get("If-None-Match") == etag:
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            send_cors(self)
+            self.end_headers()
+            return
+        body = json.dumps(data, indent=2).encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        if etag:
+            self.send_header("ETag", etag)
+        send_cors(self)
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_PUT(self) -> None:
         parsed = urlparse(self.path)
         parts = [p for p in parsed.path.strip("/").split("/") if p]
-        if not (len(parts) == 4 and parts[0] == "api" and parts[1] == "voyage"):
+        if not (parts and parts[0] == "api" and parts[1] == "voyage"):
             json_response(self, HTTPStatus.NOT_FOUND, {"error": "not found"})
             return
         if not self._authorized():
             json_response(self, HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
             return
+
         try:
-            path = voyage_path(parts[2], parts[3])
+            if len(parts) == 5:
+                vessel, voyage, condition = parts[2], parts[3], parts[4]
+                path = voyage_leg_path(vessel, voyage, condition)
+            elif len(parts) == 4:
+                # Legacy: /api/voyage/<vessel>/<voyageNo-CONDITION>
+                vessel = parts[2]
+                legacy = LEGACY_COND_SUFFIX.match(parts[3])
+                if not legacy:
+                    json_response(
+                        self,
+                        HTTPStatus.BAD_REQUEST,
+                        {
+                            "error": "use /api/voyage/<vessel>/<voyageNo>/<BALLAST|LADEN>"
+                        },
+                    )
+                    return
+                voyage = legacy.group("voyage")
+                condition = legacy.group("cond")
+                path = voyage_leg_path(vessel, voyage, condition)
+            else:
+                json_response(self, HTTPStatus.NOT_FOUND, {"error": "not found"})
+                return
+            condition = safe_condition(condition)
+            voyage = safe_slug(voyage)
         except ValueError:
             json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid path"})
             return
@@ -238,8 +400,10 @@ class SyncHandler(BaseHTTPRequestHandler):
             return
 
         existing = None
-        if path.exists():
-            existing = json.loads(path.read_text(encoding="utf-8"))
+        # Prefer folder file; also merge from legacy flat if only that exists
+        read_path = resolve_leg_path(parts[2] if len(parts) >= 3 else vessel, voyage, condition)
+        if read_path.exists():
+            existing = json.loads(read_path.read_text(encoding="utf-8"))
 
         device_name = self.headers.get("X-Device-Name") or incoming.get("deviceName")
         if device_name:
@@ -248,7 +412,14 @@ class SyncHandler(BaseHTTPRequestHandler):
         if device_id:
             incoming["deviceId"] = str(device_id)[:64]
 
+        incoming["voyageNumber"] = voyage
+        incoming["condition"] = condition
+        incoming["voyageKey"] = f"{voyage}-{condition}"
+
         merged = merge_snapshots(existing, incoming)
+        merged["voyageNumber"] = voyage
+        merged["condition"] = condition
+        merged["voyageKey"] = f"{voyage}-{condition}"
         merged["serverUpdatedAt"] = utc_now()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(merged, indent=2), encoding="utf-8")
@@ -270,6 +441,8 @@ def merge_snapshots(server: dict | None, client: dict) -> dict:
 
     merged = {
         "vesselId": client.get("vesselId") or server.get("vesselId"),
+        "voyageNumber": client.get("voyageNumber") or server.get("voyageNumber"),
+        "condition": client.get("condition") or server.get("condition"),
         "voyageKey": client.get("voyageKey") or server.get("voyageKey"),
         "updatedAt": max(
             server.get("updatedAt") or "",
@@ -310,7 +483,6 @@ def merge_deleted_maps(a: dict | None, b: dict | None) -> dict:
             if isinstance(vals, list):
                 out[key].extend(str(v) for v in vals if v)
     for key in LIST_KEYS:
-        # keep newest unique ids, capped
         seen: list[str] = []
         for v in out[key]:
             if v not in seen:
@@ -356,6 +528,7 @@ def main() -> None:
     httpd = ThreadingHTTPServer((HOST, PORT), SyncHandler)
     print(f"Noon Report sync server listening on http://{HOST}:{PORT}")
     print(f"Data directory: {DATA_DIR.resolve()}")
+    print("Layout: <data>/<vessel>/<voyageNo>/<BALLAST|LADEN>.json")
     if STATIC_DIR:
         print(f"Serving static PWA from: {STATIC_DIR}")
     if API_TOKEN == "change-me-in-production":

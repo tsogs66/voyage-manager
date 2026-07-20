@@ -620,7 +620,29 @@
         <div class="field"><label>Arrival</label><input id="s_arrivePort"></div>
         <div class="field"><label>Voyage Distance (nm)</label><input type="number" step="0.1" id="s_voyageDistance"></div>
       </div>
-      <div class="hint">Voyage Distance is the planned distance for this leg — used to calculate Distance To Go and Days To Go on the Voyage Summary shown after each Log Entry.</div>
+      <div class="hint">Each voyage number <strong>starts in BALLAST</strong> and <strong>ends in LADEN</strong>. Ballast and laden legs are stored separately (local library + server folders) so the active log stays short — pick a voyage and condition below to load only that leg.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Voyage Library — Ballast / Laden Legs</h2>
+      <div class="form-grid cols3">
+        <div class="field"><label>Voyage No. (library)</label><select id="s_voyageSelect"></select></div>
+        <div class="field"><label>Condition leg</label><select id="s_legCondition"><option>BALLAST</option><option>LADEN</option></select></div>
+        <div class="field" style="display:flex; align-items:flex-end; gap:8px;">
+          <button class="primary" id="btnLoadVoyageLeg" style="width:100%;">Load Selected Leg</button>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="ghost small" id="btnSaveVoyageLeg">Save Current Leg to Library</button>
+        <button class="ghost small" id="btnRefreshVoyageLibrary">Refresh List</button>
+      </div>
+      <div class="table-scroll" style="margin-top:10px;">
+        <table>
+          <thead><tr><th>Voyage No.</th><th>Ballast</th><th>Laden</th><th>Updated</th></tr></thead>
+          <tbody id="voyageLibraryBody"><tr class="empty-row"><td colspan="4">No archived voyage legs yet.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="hint" id="voyageLibraryHint">Active leg entries are the only ones shown in Log / Abstract / Reports. Switch legs here without mixing ballast and laden into one long list.</div>
     </div>
 
     <div class="panel">
@@ -1417,15 +1439,22 @@
       <div class="btn-row">
         <button class="primary small" id="btnSaveSyncSettings">Save Sync Settings</button>
         <button class="ghost small" id="btnTestSync">Test Connection</button>
-        <button class="ghost small" id="btnSyncNow">Sync Now</button>
-        <button class="ghost small" id="btnPullRemote">Pull from Server</button>
+        <button class="ghost small" id="btnSyncNow">Sync Now (active leg)</button>
+        <button class="ghost small" id="btnPullRemote">Pull Active Leg</button>
         <button class="ghost small" id="btnListRemoteVoyages">List Remote Voyages</button>
         <button class="ghost small" id="btnInstallApp" style="display:none;">Install App</button>
         <button class="ghost small" id="btnRequestPersist">Keep Data Persistent</button>
       </div>
+      <div class="form-grid cols3" style="margin-top:10px;">
+        <div class="field"><label>Pull voyage no.</label><select id="sync_pullVoyage"></select></div>
+        <div class="field"><label>Pull condition</label><select id="sync_pullCondition"><option>BALLAST</option><option>LADEN</option></select></div>
+        <div class="field" style="display:flex; align-items:flex-end;">
+          <button class="ghost small" id="btnPullVoyageLeg" style="width:100%;">Pull Selected Voyage Leg</button>
+        </div>
+      </div>
       <div class="hint" id="syncMetaLine">Last sync: never</div>
       <div id="remoteVoyageList" class="hint" style="display:none; margin-top:8px;"></div>
-      <div class="hint">Works fully offline on Android/PC (PWA + IndexedDB). When internet returns — including via Cloudflare Tunnel to your Linux host — changes merge by record <code>id</code> using newest <code>updatedAt</code>. Point the URL at <code>sync-server/server.py</code> (see README). One process can also serve the app files.</div>
+      <div class="hint">Server folders: <code>data/&lt;vessel&gt;/&lt;voyageNo&gt;/BALLAST.json</code> and <code>…/LADEN.json</code>. Sync Now pushes the active voyage + condition only.</div>
     </div>
     <div class="panel">
       <h2>Local Database</h2>
@@ -1641,7 +1670,7 @@ let dbOpenPromise = null;
 function openDB(){
   if (dbOpenPromise) return dbOpenPromise;
   dbOpenPromise = new Promise((resolve,reject)=>{
-    const req = indexedDB.open('noonReportDB', 4);
+    const req = indexedDB.open('noonReportDB', 5);
     req.onupgradeneeded = (e)=>{
       const d = e.target.result;
       if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta', {keyPath:'key'});
@@ -1650,6 +1679,8 @@ function openDB(){
       if (!d.objectStoreNames.contains('documents')) d.createObjectStore('documents', {keyPath:'id'});
       if (!d.objectStoreNames.contains('abstracts')) d.createObjectStore('abstracts', {keyPath:'id'});
       if (!d.objectStoreNames.contains('printHistory')) d.createObjectStore('printHistory', {keyPath:'id'});
+      /* One archived leg per vessel + voyage number + BALLAST|LADEN — keeps active lists short. */
+      if (!d.objectStoreNames.contains('voyageLegs')) d.createObjectStore('voyageLegs', {keyPath:'id'});
     };
     req.onsuccess = (e)=>{ db = e.target.result; db.onversionchange = ()=>{ db.close(); db = null; dbOpenPromise = null; }; resolve(db); };
     req.onerror = (e)=>{ dbOpenPromise = null; reject(req.error || new Error('IndexedDB failed to open')); };
@@ -1872,7 +1903,7 @@ function entryFromSnap(id, datetime, operation, condition, snap, extra){
 function buildDemoPackHarbourKey(){
   /* Port-stay vessel: cargo, bunkering, shifting, idle — M/E stopped, A/E + boiler active. */
   const setup = defaultSetupTemplate({
-    vesselName:'M/V HARBOUR KEY', chEng:'Chief Engr. Ana Ruiz', voyageNumber:'08-P', shipCondition:'LADEN',
+    vesselName:'M/V HARBOUR KEY', chEng:'Chief Engr. Ana Ruiz', voyageNumber:'08-P', shipCondition:'BALLAST',
     departPort:'SINGAPORE', arrivePort:'SINGAPORE', voyageDistance:0,
     initDateTime:'2026-07-01T06:00', pitch:5.40, mcrRpm:105, mcrKw:12200,
     sfoc100:175.0, sfoc85:172.0, lcvRef:42700, lcvActual:42100,
@@ -2046,13 +2077,26 @@ function buildDemoPackHarbourKey(){
     { id:'r-hk3', date:'2026-07-05', category:'lube', type:'CYL HIGH', tankId:'cylhigh', qty:2000, bdnNo:'BDN-SG-7105-C', company:'TotalEnergies', location:'Singapore' },
     { id:'r-hk4', date:'2026-07-06', category:'fw', type:'FRESH WATER', tankId:'freshwater', qty:15000, bdnNo:'FW-SG-0607', company:'PSA Water', location:'Singapore' }
   ];
-  return { setup, entries: entries.map(normalizeEntry), receipts, documents:[], abstracts:[], printHistory:[] };
+  const all = entries.map(normalizeEntry);
+  const ballastEntries = all.filter(e => e.condition === 'BALLAST');
+  const ladenEntries = all.filter(e => e.condition === 'LADEN');
+  /* Ensure both legs exist for simulation even if split is uneven. */
+  const ballast = ballastEntries.length ? ballastEntries : all.slice(0, Math.ceil(all.length/2)).map(e=>({...e, condition:'BALLAST'}));
+  const laden = ladenEntries.length ? ladenEntries : all.slice(Math.ceil(all.length/2)).map(e=>({...e, condition:'LADEN'}));
+  setup.shipCondition = 'BALLAST';
+  return {
+    setup,
+    legs: [
+      { condition:'BALLAST', entries: ballast, receipts: receipts.filter(r=>r.date <= '2026-07-05'), documents:[], abstracts:[], printHistory:[] },
+      { condition:'LADEN', entries: laden, receipts: receipts.filter(r=>r.date > '2026-07-05'), documents:[], abstracts:[], printHistory:[] }
+    ]
+  };
 }
 
 function buildDemoPackRoadstead(){
   /* Anchorage / drifting vessel waiting berth — M/E secured, A/E hotel load, weather. */
   const setup = defaultSetupTemplate({
-    vesselName:'M/V ROADSTEAD', chEng:'Chief Engr. Henrik Berg', voyageNumber:'15-A', shipCondition:'LADEN',
+    vesselName:'M/V ROADSTEAD', chEng:'Chief Engr. Henrik Berg', voyageNumber:'15-A', shipCondition:'BALLAST',
     departPort:'ROTTERDAM, NL', arrivePort:'HAMBURG, DE', voyageDistance:320,
     initDateTime:'2026-07-10T04:00', pitch:4.80, mcrRpm:112, mcrKw:9600,
     sfoc100:171.0, sfoc85:168.5, lcvRef:42700, lcvActual:41950,
@@ -2077,9 +2121,35 @@ function buildDemoPackRoadstead(){
   });
   const ft = { meType:'LSFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.965, geSg:0.87, blrSg:0.87 };
   const entries = [];
+  const ballastEntries = [];
 
-  // 1. EOSP — end sea passage, arrive roads
+  // --- BALLAST outbound (voyage starts ballast) ---
   let snap = tr.snapshot(ft);
+  ballastEntries.push(entryFromSnap('e-rd-b1','2026-07-08T10:00','LAST LINE - DEPARTURE','BALLAST', snap, {
+    tbn:'LOW', ge1Kw:300, ge2Kw:280, generatorsInUse:2,
+    report: portReport({ port:'Rotterdam', cargoOp:'Ballast departure', remarks:'Last line. Ballast condition.' })
+  }));
+  snap = tr.apply({
+    ...ft, me:48000, ge:1500, blr:200, cyl:180, meLo:40, geLo:25,
+    fwProd:1400, fwRob:40200, rev:100800, meRt:24, blrRt:6, ge1:24, ge2:20
+  });
+  ballastEntries.push(entryFromSnap('e-rd-b2','2026-07-09T10:00','AT SEA - NOON','BALLAST', snap, {
+    distanceShip:248, rpm:70, tbn:'LOW', ge1Kw:340, ge2Kw:320, generatorsInUse:2,
+    weather: weather({ windDir:'W', windBft:4, seaState:3, airTemp:15, seaTemp:14 }),
+    report: seaReport({ remarks:'Ballast passage toward Hamburg.', generatorsInUse:2 })
+  }));
+  snap = tr.apply({
+    ...ft, me:12000, ge:600, blr:80, cyl:40, meLo:10, geLo:8,
+    fwProd:300, fwRob:39900, rev:25200, meRt:6, blrRt:2, ge1:6, ge2:4
+  });
+  ballastEntries.push(entryFromSnap('e-rd-b3','2026-07-09T16:00','END - PASSAGE','BALLAST', snap, {
+    distanceShip:62, rpm:70, tbn:'LOW', ge1Kw:320, generatorsInUse:1,
+    report: seaReport({ remarks:'Approaching Elbe. End ballast sea passage.', generatorsInUse:1 })
+  }));
+
+  // Reset tracker continuity into laden arrival scenario (laden ROB/meters continue from ballast end)
+  // --- LADEN arrival / anchorage wait ---
+  snap = tr.snapshot(ft);
   entries.push(entryFromSnap('e-rd1','2026-07-10T04:00','EOSP - END OF SEA PASSAGE','LADEN', snap, {
     distanceShip:0, rpm:null, tbn:'LOW', ge1Kw:300, ge2Kw:0, generatorsInUse:1,
     weather: weather({ windDir:'NW', windBft:4, seaState:3, swellDir:'NW', airTemp:16, seaTemp:14 }),
@@ -2212,7 +2282,14 @@ function buildDemoPackRoadstead(){
     { id:'r-rd1', date:'2026-07-09', category:'fuel', type:'LSFO', tankId:'lsfo', qty:120, bdnNo:'BDN-RTM-0907', company:'TFG Marine', location:'Rotterdam' },
     { id:'r-rd2', date:'2026-07-09', category:'lube', type:'GE SYS OIL', tankId:'gesysoil', qty:400, bdnNo:'BDN-RTM-LO', company:'Shell Marine', location:'Rotterdam' }
   ];
-  return { setup, entries: entries.map(normalizeEntry), receipts, documents:[], abstracts:[], printHistory:[] };
+  setup.shipCondition = 'BALLAST';
+  return {
+    setup,
+    legs: [
+      { condition:'BALLAST', entries: ballastEntries.map(normalizeEntry), receipts, documents:[], abstracts:[], printHistory:[] },
+      { condition:'LADEN', entries: entries.map(normalizeEntry), receipts:[], documents:[], abstracts:[], printHistory:[] }
+    ]
+  };
 }
 
 function buildDemoPackCircumnav(){
@@ -2477,7 +2554,64 @@ function buildDemoPackCircumnav(){
     { id:'r-cn3', date:'2026-05-30', category:'lube', type:'CYL HIGH', tankId:'cylhigh', qty:3000, bdnNo:'BDN-RTM-CN-C', company:'Castrol Marine', location:'Rotterdam' },
     { id:'r-cn4', date:'2026-05-30', category:'lube', type:'ME SYS OIL', tankId:'mesysoil', qty:800, bdnNo:'BDN-RTM-CN-M', company:'Castrol Marine', location:'Rotterdam' }
   ];
-  return { setup, entries: entries.map(normalizeEntry), receipts, documents:[], abstracts:[], printHistory:[] };
+
+  /* LADEN return leg — shorter record so lists stay focused when selected. */
+  const ladenSetup = migrateSetup({
+    ...setup,
+    shipCondition:'LADEN',
+    departPort:'SINGAPORE',
+    arrivePort:'ROTTERDAM, NL',
+    voyageDistance:8350,
+    initDateTime:'2026-07-05T08:00',
+    rob:{ hfo:980, lsfo:120, mdomgo:90, lsmgo:70 },
+    robLube:{ cylhigh:8200, cyllow:600, mesysoil:5400, gesysoil:2100, freshwater:58000 }
+  });
+  const trL = createMeterTracker({
+    me: tr.state.me, ge: tr.state.ge, blr: tr.state.blr, cyl: tr.state.cyl, meLo: tr.state.meLo, geLo: tr.state.geLo,
+    fwProd: tr.state.fwProd, fwRob: 58000, rev: tr.state.rev,
+    meRt: tr.state.meRt, blrRt: tr.state.blrRt, ge1: tr.state.ge1, ge2: tr.state.ge2, ge3:0
+  });
+  const ladenEntries = [];
+  let ls = trL.snapshot(hfo);
+  ladenEntries.push(entryFromSnap('e-cn-l1','2026-07-05T08:00','LAST LINE - DEPARTURE','LADEN', ls, {
+    ge1Kw:420, ge2Kw:400, generatorsInUse:2,
+    report: portReport({ port:'Singapore', cargoOp:'Laden departure', remarks:'Laden sailing for Rotterdam.' })
+  }));
+  ls = trL.apply({
+    ...hfo, me:52000, ge:1700, blr:240, cyl:200, meLo:45, geLo:28,
+    fwProd:1500, fwRob:56800, rev:115200, meRt:24, blrRt:6, ge1:24, ge2:24
+  });
+  ladenEntries.push(entryFromSnap('e-cn-l2','2026-07-06T08:00','AT SEA - NOON','LADEN', ls, {
+    distanceShip:345, rpm:80, ge1Kw:380, ge2Kw:360, generatorsInUse:2,
+    weather: weather({ windDir:'NE', windBft:3, seaState:2, airTemp:28, seaTemp:27 }),
+    report: seaReport({ remarks:'Laden noon. Steady passage.', generatorsInUse:2 })
+  }));
+  ls = trL.apply({
+    ...hfo, me:50000, ge:1650, blr:220, cyl:190, meLo:42, geLo:26,
+    fwProd:1400, fwRob:55600, rev:112320, meRt:24, blrRt:5, ge1:24, ge2:24
+  });
+  ladenEntries.push(entryFromSnap('e-cn-l3','2026-07-07T08:00','AT SEA - NOON','LADEN', ls, {
+    distanceShip:338, rpm:78, ge1Kw:370, ge2Kw:350, generatorsInUse:2,
+    weather: weather({ windDir:'N', windBft:4, seaState:3, airTemp:27, seaTemp:26 }),
+    report: seaReport({ remarks:'Laden noon continued.', generatorsInUse:2 })
+  }));
+  ls = trL.apply({
+    ...hfo, me:9000, ge:800, blr:100, cyl:35, meLo:10, geLo:10,
+    fwProd:200, fwRob:55200, rev:20160, meRt:6, blrRt:2, ge1:6, ge2:6
+  });
+  ladenEntries.push(entryFromSnap('e-cn-l4','2026-07-07T14:00','EOSP - END OF SEA PASSAGE','LADEN', ls, {
+    distanceShip:55, rpm:56, ge1Kw:400, ge2Kw:380, generatorsInUse:2,
+    report: portReport({ port:'Approaches', remarks:'EOSP laden leg (compressed demo).' })
+  }));
+
+  setup.shipCondition = 'BALLAST';
+  return {
+    setup,
+    legs: [
+      { condition:'BALLAST', entries: entries.map(normalizeEntry), receipts, documents:[], abstracts:[], printHistory:[] },
+      { condition:'LADEN', entries: ladenEntries.map(normalizeEntry), receipts:[], documents:[], abstracts:[], printHistory:[], setup: ladenSetup }
+    ]
+  };
 }
 
 /** Compatibility aliases — old names redirect to new packs during migration. */
@@ -2543,6 +2677,190 @@ function belongsToActiveVessel(item){
   return vid === (state.activeVesselId || LEGACY_VESSEL_ID);
 }
 
+function voyageLegId(vesselId, voyageNumber, condition){
+  const vn = slugVoyageNo(voyageNumber);
+  const cond = normalizeCondition(condition);
+  return `${vesselId || LEGACY_VESSEL_ID}::${vn}::${cond}`;
+}
+
+function slugVoyageNo(voyageNumber){
+  return ((voyageNumber || 'voyage').trim() || 'voyage').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64);
+}
+
+function normalizeCondition(condition){
+  const c = String(condition || 'BALLAST').trim().toUpperCase();
+  return c === 'LADEN' ? 'LADEN' : 'BALLAST';
+}
+
+function captureActiveLegPack(){
+  return {
+    setup: JSON.parse(JSON.stringify(state.setup)),
+    entries: state.entries.map(e => JSON.parse(JSON.stringify(e))),
+    receipts: state.receipts.map(r => JSON.parse(JSON.stringify(r))),
+    documents: state.documents.map(d => JSON.parse(JSON.stringify(d))),
+    abstracts: state.abstracts.map(a => JSON.parse(JSON.stringify(a))),
+    printHistory: state.printHistory.map(p => JSON.parse(JSON.stringify(p)))
+  };
+}
+
+async function saveVoyageLegToLibrary(vesselId, voyageNumber, condition, pack){
+  const vid = vesselId || state.activeVesselId || LEGACY_VESSEL_ID;
+  const vn = (voyageNumber || '').trim();
+  if (!vn) return null;
+  const cond = normalizeCondition(condition);
+  const id = voyageLegId(vid, vn, cond);
+  const setup = migrateSetup(pack.setup || {});
+  setup.voyageNumber = vn;
+  setup.shipCondition = cond;
+  const leg = {
+    id,
+    vesselId: vid,
+    voyageNumber: vn,
+    condition: cond,
+    updatedAt: new Date().toISOString(),
+    entryCount: (pack.entries || []).length,
+    setup,
+    entries: (pack.entries || []).map(e => {
+      const x = normalizeEntry({ ...e, vesselId: vid, voyageNumber: vn });
+      x.condition = x.condition || cond;
+      return x;
+    }),
+    receipts: (pack.receipts || []).map(r => ({ ...r, vesselId: vid, voyageNumber: vn })),
+    documents: (pack.documents || []).map(d => ({ ...d, vesselId: vid, voyageNumber: vn })),
+    abstracts: (pack.abstracts || []).map(a => ({ ...a, vesselId: vid, voyageNumber: vn })),
+    printHistory: (pack.printHistory || []).map(p => ({ ...p, vesselId: vid, voyageNumber: vn }))
+  };
+  await dbPut('voyageLegs', leg);
+  return leg;
+}
+
+async function archiveActiveVoyageLeg(){
+  const vn = (state.setup.voyageNumber || '').trim();
+  if (!vn || !state.activeVesselId) return null;
+  return saveVoyageLegToLibrary(
+    state.activeVesselId,
+    vn,
+    state.setup.shipCondition,
+    captureActiveLegPack()
+  );
+}
+
+async function listVoyageLegsForVessel(vesselId){
+  const vid = vesselId || state.activeVesselId || LEGACY_VESSEL_ID;
+  const all = await dbGetAll('voyageLegs');
+  return all.filter(l => (l.vesselId || LEGACY_VESSEL_ID) === vid);
+}
+
+async function getVoyageLibraryIndex(vesselId){
+  const legs = await listVoyageLegsForVessel(vesselId);
+  const byVoyage = new Map();
+  for (const leg of legs){
+    const vn = leg.voyageNumber || '—';
+    const row = byVoyage.get(vn) || { voyageNumber: vn, BALLAST: null, LADEN: null };
+    row[normalizeCondition(leg.condition)] = leg;
+    byVoyage.set(vn, row);
+  }
+  return [...byVoyage.values()].sort((a,b)=> String(a.voyageNumber).localeCompare(String(b.voyageNumber)));
+}
+
+async function clearActiveVesselWorkingData(vesselId){
+  const vid = vesselId || state.activeVesselId;
+  for (const store of ['entries','receipts','documents','abstracts','printHistory']){
+    await clearVesselStore(store, vid);
+  }
+}
+
+async function activateVoyageLeg(vesselId, voyageNumber, condition){
+  const vid = vesselId || state.activeVesselId;
+  const vn = (voyageNumber || '').trim();
+  const cond = normalizeCondition(condition);
+  if (!vid || !vn) throw new Error('Voyage number required');
+
+  /* Persist whatever is on screen first so switching never loses work. */
+  if (state.activeVesselId === vid && (state.setup.voyageNumber || '').trim()){
+    await archiveActiveVoyageLeg();
+    await saveSetup();
+  }
+
+  const id = voyageLegId(vid, vn, cond);
+  const all = await dbGetAll('voyageLegs');
+  const leg = all.find(l => l.id === id);
+  if (!leg) throw new Error(`No ${cond} records for voyage ${vn}`);
+
+  await clearActiveVesselWorkingData(vid);
+
+  const setup = migrateSetup(leg.setup || state.setup);
+  setup.voyageNumber = vn;
+  setup.shipCondition = cond;
+  /* Keep live sync credentials from current session. */
+  const liveSync = ensureSyncConfig();
+  setup.sync = { ...(setup.sync || {}), ...liveSync, vesselId: liveSync.vesselId || setup.sync?.vesselId };
+  state.setup = setup;
+  ensureTankStores();
+  state.entries = (leg.entries || []).map(normalizeEntry);
+  state.receipts = leg.receipts || [];
+  state.documents = leg.documents || [];
+  state.abstracts = leg.abstracts || [];
+  state.printHistory = leg.printHistory || [];
+
+  await dbPut('meta', { key:`setup:${vid}`, value: state.setup });
+  for (const e of state.entries) await dbPut('entries', tagVesselId(e));
+  for (const r of state.receipts) await dbPut('receipts', tagVesselId(r));
+  for (const d of state.documents) await dbPut('documents', tagVesselId(d));
+  for (const a of state.abstracts) await dbPut('abstracts', tagVesselId(a));
+  for (const p of state.printHistory) await dbPut('printHistory', tagVesselId(p));
+  exitEditMode();
+  return leg;
+}
+
+async function renderVoyageLibrary(){
+  const body = document.getElementById('voyageLibraryBody');
+  const sel = document.getElementById('s_voyageSelect');
+  const hint = document.getElementById('voyageLibraryHint');
+  if (!body) return;
+  const index = await getVoyageLibraryIndex(state.activeVesselId);
+  const activeVn = (state.setup.voyageNumber || '').trim();
+  const activeCond = normalizeCondition(state.setup.shipCondition);
+
+  if (!index.length){
+    body.innerHTML = `<tr class="empty-row"><td colspan="4">No archived voyage legs yet — save the current leg or install the test fleet.</td></tr>`;
+  } else {
+    body.innerHTML = index.map(row=>{
+      const b = row.BALLAST;
+      const l = row.LADEN;
+      const bTxt = b ? `${b.entryCount||0} entries` : '—';
+      const lTxt = l ? `${l.entryCount||0} entries` : '—';
+      const updated = [b?.updatedAt, l?.updatedAt].filter(Boolean).sort().slice(-1)[0] || '—';
+      const active = row.voyageNumber === activeVn ? ` style="background:rgba(63,200,220,0.08)"` : '';
+      return `<tr${active}><td>${row.voyageNumber}${row.voyageNumber===activeVn?' ★':''}</td><td>${bTxt}</td><td>${lTxt}</td><td>${updated=== '—' ? '—' : new Date(updated).toLocaleString()}</td></tr>`;
+    }).join('');
+  }
+
+  if (sel){
+    const cur = sel.value;
+    sel.innerHTML = index.length
+      ? index.map(r=>`<option value="${r.voyageNumber}">${r.voyageNumber}</option>`).join('')
+      : `<option value="">—</option>`;
+    if (activeVn && [...sel.options].some(o=>o.value===activeVn)) sel.value = activeVn;
+    else if (cur && [...sel.options].some(o=>o.value===cur)) sel.value = cur;
+  }
+  const legSel = document.getElementById('s_legCondition');
+  if (legSel) legSel.value = activeCond;
+  if (hint){
+    hint.textContent = `Active: voyage ${activeVn || '—'} · ${activeCond} · ${state.entries.length} log entries. Voyages start BALLAST and finish LADEN; each condition is a separate short record.`;
+  }
+
+  const pullSel = document.getElementById('sync_pullVoyage');
+  if (pullSel){
+    const keep = pullSel.value;
+    pullSel.innerHTML = index.length
+      ? index.map(r=>`<option value="${r.voyageNumber}">${r.voyageNumber}</option>`).join('')
+      : `<option value="${activeVn || ''}">${activeVn || '—'}</option>`;
+    if (keep && [...pullSel.options].some(o=>o.value===keep)) pullSel.value = keep;
+    else if (activeVn) pullSel.value = activeVn;
+  }
+}
+
 async function saveVesselPack(vesselId, pack){
   const setup = migrateSetup(pack.setup || {});
   setup.sync = setup.sync || {};
@@ -2551,26 +2869,50 @@ async function saveVesselPack(vesselId, pack){
     setup.sync.vesselId = v?.slug || vesselSlugFromName(setup.vesselName);
   }
   await dbPut('meta', { key:`setup:${vesselId}`, value: setup });
-  for (const e of (pack.entries || []).map(normalizeEntry)){
-    e.vesselId = vesselId;
-    await dbPut('entries', e);
+
+  /* Clear prior working + leg data for this vessel when installing a pack. */
+  await clearActiveVesselWorkingData(vesselId);
+  const existingLegs = await listVoyageLegsForVessel(vesselId);
+  for (const leg of existingLegs) await dbDelete('voyageLegs', leg.id);
+
+  const voyageNumber = (setup.voyageNumber || 'VOYAGE').trim();
+  const legs = Array.isArray(pack.legs) && pack.legs.length
+    ? pack.legs
+    : [{
+        condition: setup.shipCondition || 'BALLAST',
+        entries: pack.entries || [],
+        receipts: pack.receipts || [],
+        documents: pack.documents || [],
+        abstracts: pack.abstracts || [],
+        printHistory: pack.printHistory || [],
+        setup
+      }];
+
+  let prefer = null;
+  for (const leg of legs){
+    const cond = normalizeCondition(leg.condition || setup.shipCondition);
+    const legSetup = migrateSetup({ ...(leg.setup || setup), voyageNumber, shipCondition: cond, sync: setup.sync });
+    const saved = await saveVoyageLegToLibrary(vesselId, voyageNumber, cond, {
+      setup: legSetup,
+      entries: leg.entries || [],
+      receipts: leg.receipts || [],
+      documents: leg.documents || [],
+      abstracts: leg.abstracts || [],
+      printHistory: leg.printHistory || []
+    });
+    if (!prefer || cond === 'BALLAST') prefer = saved;
   }
-  for (const r of (pack.receipts || [])){
-    r.vesselId = vesselId;
-    await dbPut('receipts', r);
-  }
-  for (const d of (pack.documents || [])){
-    d.vesselId = vesselId;
-    await dbPut('documents', d);
-  }
-  for (const a of (pack.abstracts || [])){
-    a.vesselId = vesselId;
-    await dbPut('abstracts', a);
-  }
-  for (const p of (pack.printHistory || [])){
-    p.vesselId = vesselId;
-    await dbPut('printHistory', p);
-  }
+  if (!prefer) return null;
+
+  /* Activate BALLAST first when present (voyage starts ballast). */
+  const activeSetup = migrateSetup(prefer.setup);
+  await dbPut('meta', { key:`setup:${vesselId}`, value: activeSetup });
+  for (const e of (prefer.entries || [])) await dbPut('entries', e);
+  for (const r of (prefer.receipts || [])) await dbPut('receipts', r);
+  for (const d of (prefer.documents || [])) await dbPut('documents', d);
+  for (const a of (prefer.abstracts || [])) await dbPut('abstracts', a);
+  for (const p of (prefer.printHistory || [])) await dbPut('printHistory', p);
+  return prefer;
 }
 
 async function loadVesselFromDb(vesselId){
@@ -2588,13 +2930,38 @@ async function loadVesselFromDb(vesselId){
   state.documents = allDocs.filter(match);
   state.abstracts = allAbstracts.filter(match);
   state.printHistory = allPrint.filter(match);
+
+  /* If working set is empty but a library leg exists, load the preferred leg. */
+  if (!state.entries.length){
+    const index = await getVoyageLibraryIndex(vesselId);
+    const vn = (state.setup.voyageNumber || '').trim() || index[0]?.voyageNumber;
+    if (vn){
+      const row = index.find(r => r.voyageNumber === vn) || index[0];
+      const cond = row?.BALLAST ? 'BALLAST' : (row?.LADEN ? 'LADEN' : normalizeCondition(state.setup.shipCondition));
+      try {
+        await activateVoyageLeg(vesselId, row.voyageNumber, cond);
+      } catch (_){ /* leave empty */ }
+    }
+  } else {
+    /* One-time archive of legacy unsplit vessel data into the active leg. */
+    const vn = (state.setup.voyageNumber || '').trim();
+    if (vn){
+      const id = voyageLegId(vesselId, vn, state.setup.shipCondition);
+      const legs = await dbGetAll('voyageLegs');
+      if (!legs.find(l => l.id === id)){
+        await archiveActiveVoyageLeg();
+      }
+    }
+  }
   exitEditMode();
+  await renderVoyageLibrary();
 }
 
 async function saveCurrentVesselState(){
   if (!state.activeVesselId) return;
   const v = activeVessel();
   if (v && state.setup.vesselName) v.name = state.setup.vesselName;
+  await archiveActiveVoyageLeg();
   await saveSetup();
   await saveVesselRegistry();
   for (const e of state.entries) await dbPut('entries', tagVesselId(e));
@@ -2602,6 +2969,7 @@ async function saveCurrentVesselState(){
   for (const d of state.documents) await dbPut('documents', tagVesselId(d));
   for (const a of state.abstracts) await dbPut('abstracts', tagVesselId(a));
   for (const p of state.printHistory) await dbPut('printHistory', tagVesselId(p));
+  await renderVoyageLibrary();
 }
 
 async function switchVessel(vesselId){
@@ -3692,6 +4060,7 @@ function csvEscape(v){
 function render(){
   _gaugeUid = 0;
   renderVesselSelector();
+  renderVoyageLibrary().catch(()=>{});
   const {rows, consByFuel, consByLube, perf} = computeDerived();
   const {rob, robLube} = currentROB(consByFuel, consByLube);
   renderLastEntryRef();
@@ -5283,20 +5652,32 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
     alert('Cannot create a new voyage: Voyage No. and Ships Condition are both unchanged. Change at least one of them before proceeding.');
     return;
   }
+  /* Guidance: same voyage number progresses BALLAST → LADEN; a new voyage number should start BALLAST. */
+  if (newVoyageNo === oldVoyageNo && normalizeCondition(oldCondition) === 'LADEN' && normalizeCondition(newCondition) === 'BALLAST'){
+    alert('This voyage number already ended in LADEN. Start a new Voyage No. in BALLAST, or load an existing leg from the Voyage Library.');
+    return;
+  }
+  if (newVoyageNo !== oldVoyageNo && normalizeCondition(newCondition) !== 'BALLAST'){
+    if (!confirm('New voyage numbers normally start in BALLAST. Continue with LADEN anyway?')) return;
+  } else if (newVoyageNo === oldVoyageNo && normalizeCondition(oldCondition) === 'BALLAST' && normalizeCondition(newCondition) !== 'LADEN'){
+    alert('To finish this voyage number, switch Ships Condition to LADEN (voyages end laden).');
+    return;
+  }
 
   const ok = confirm(
-    'Create New Voyage?\n\n' +
-    'A full backup of the current voyage (entries, receipts, documents, setup) and a Voyage Abstract CSV will be downloaded automatically before anything is cleared — the abstract is also saved to the Voyage Abstract tab\'s local library.\n\n' +
-    'This will then permanently delete all log entries and receipts for the CURRENT voyage.\n\n' +
-    "Your last entry's meter readings will be kept as the opening reference for the next entry, " +
-    'current ROB will become the new opening ROB, and Port of Departure will be set to this voyage\'s Port of Arrival.\n\n' +
-    'This cannot be undone. Continue?'
+    'Create New Voyage leg?\n\n' +
+    `Current leg ${oldVoyageNo || '—'} / ${oldCondition} will be kept in the Voyage Library ` +
+    `(and synced folder data/<vessel>/${slugVoyageNo(oldVoyageNo)}/${normalizeCondition(oldCondition)}.json).\n\n` +
+    `Next active leg: ${newVoyageNo} / ${newCondition}.\n\n` +
+    'A backup JSON + Voyage Abstract CSV will download. Opening ROB and meter carryover are kept.\n\nContinue?'
   );
   if (!ok) return;
 
   const {rows, consByFuel, consByLube} = computeDerived();
   const {rob, robLube} = currentROB(consByFuel, consByLube);
   const last = sortedEntries()[sortedEntries().length-1];
+
+  await archiveActiveVoyageLeg();
 
   // Auto-export a full backup of everything before this voyage is cleared, named with
   // voyage no. + condition + execution timestamp (browsers can only save via a download
@@ -5341,9 +5722,10 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
   await clearVesselStore('entries', state.activeVesselId);
   await clearVesselStore('receipts', state.activeVesselId);
   await saveSetup();
+  await renderVoyageLibrary();
   render();
   switchTab('setup');
-  alert(`New voyage started. Downloaded "${backupName}" and "${abstractName}". Opening ROB and reference meter readings carried over — set the new Port of Arrival when known.`);
+  alert(`Started ${newVoyageNo} / ${newCondition}. Previous leg kept in Voyage Library. Downloaded "${backupName}" and "${abstractName}".`);
 });
 
 function getRobRows(){
@@ -7178,9 +7560,12 @@ function ensureSyncConfig(){
 }
 
 function voyageSyncKey(){
-  const vn = (state.setup.voyageNumber || 'voyage').trim();
-  const cond = (state.setup.shipCondition || 'UNKNOWN').trim();
-  return `${vn}-${cond}`.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64);
+  /* Folder name on server: voyage number only (condition is a separate path segment). */
+  return slugVoyageNo(state.setup.voyageNumber);
+}
+
+function voyageConditionKey(){
+  return normalizeCondition(state.setup.shipCondition);
 }
 
 function vesselSyncSlug(){
@@ -7265,9 +7650,13 @@ function renderSyncUi(){
 
 function buildSyncPayload(){
   const sync = ensureSyncConfig();
+  const voyage = voyageSyncKey();
+  const condition = voyageConditionKey();
   return {
     vesselId: vesselSyncSlug(),
-    voyageKey: voyageSyncKey(),
+    voyageNumber: voyage,
+    condition,
+    voyageKey: `${voyage}-${condition}`,
     updatedAt: new Date().toISOString(),
     deviceId: sync.deviceId,
     deviceName: sync.deviceName || '',
@@ -7375,14 +7764,16 @@ async function syncNow(options = {}){
   syncInFlight = (async ()=>{
     const vessel = vesselSyncSlug();
     const voyage = voyageSyncKey();
+    const condition = voyageConditionKey();
     const headers = { 'Content-Type': 'application/json' };
     if (sync.apiToken) headers.Authorization = 'Bearer ' + sync.apiToken;
     if (sync.deviceId) headers['X-Device-Id'] = sync.deviceId;
     if (sync.deviceName) headers['X-Device-Name'] = sync.deviceName;
+    const legUrl = `${base}/api/voyage/${encodeURIComponent(vessel)}/${encodeURIComponent(voyage)}/${encodeURIComponent(condition)}`;
 
     let remote = null;
     try {
-      const res = await fetch(`${base}/api/voyage/${encodeURIComponent(vessel)}/${encodeURIComponent(voyage)}`, { headers, cache: 'no-store' });
+      const res = await fetch(legUrl, { headers, cache: 'no-store' });
       if (res.status === 404) remote = null;
       else if (!res.ok) throw new Error('Server responded ' + res.status);
       else remote = await res.json();
@@ -7408,7 +7799,7 @@ async function syncNow(options = {}){
 
     if (!pullOnly){
       const payload = buildSyncPayload();
-      const putRes = await fetch(`${base}/api/voyage/${encodeURIComponent(vessel)}/${encodeURIComponent(voyage)}`, {
+      const putRes = await fetch(legUrl, {
         method: 'PUT', headers, body: JSON.stringify(payload)
       });
       if (!putRes.ok) throw new Error('Upload failed with status ' + putRes.status);
@@ -7419,11 +7810,13 @@ async function syncNow(options = {}){
       }
     }
 
+    await archiveActiveVoyageLeg();
     sync.lastSyncedAt = new Date().toISOString();
     sync.pendingChanges = false;
     sync.lastSyncError = null;
     await saveSetup();
     renderSyncUi();
+    await renderVoyageLibrary();
     render();
   })().catch(err=>{
     sync.lastSyncError = err.message || String(err);
@@ -7504,12 +7897,21 @@ document.getElementById('btnListRemoteVoyages')?.addEventListener('click', async
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const body = await res.json();
     const voyages = body.voyages || [];
+    const pullSel = document.getElementById('sync_pullVoyage');
+    if (pullSel){
+      pullSel.innerHTML = voyages.length
+        ? voyages.map(v=>`<option value="${v.voyageNumber || v.voyageKey}">${v.voyageNumber || v.voyageKey}</option>`).join('')
+        : '<option value="">—</option>';
+    }
     if (box){
       box.style.display = '';
       box.innerHTML = voyages.length
-        ? `<strong>Remote voyages for ${vessel}:</strong><br>` + voyages.map(v =>
-            `${v.voyageKey} · updated ${v.updatedAt || '—'} · device ${v.deviceName || v.deviceId || '—'}`
-          ).join('<br>')
+        ? `<strong>Remote voyages for ${vessel}</strong> (folders under data/${vessel}/):<br>` + voyages.map(v=>{
+            const conds = (v.conditions || []).map(c =>
+              `${c.condition} (${c.entryCount||0} entries, ${c.updatedAt ? new Date(c.updatedAt).toLocaleString() : '—'})`
+            ).join(' · ') || 'no legs';
+            return `<div style="margin:6px 0;"><code>${v.voyageNumber || v.voyageKey}</code> — ${conds}</div>`;
+          }).join('')
         : `No remote voyages found for vessel slug "${vessel}".`;
     } else {
       alert(JSON.stringify(body, null, 2));
@@ -7518,6 +7920,61 @@ document.getElementById('btnListRemoteVoyages')?.addEventListener('click', async
     if (box){ box.style.display = ''; box.textContent = 'List failed: ' + e.message; }
     else alert('List failed: ' + e.message);
   }
+});
+
+document.getElementById('btnPullVoyageLeg')?.addEventListener('click', async ()=>{
+  const voyage = (document.getElementById('sync_pullVoyage')?.value || '').trim();
+  const condition = normalizeCondition(document.getElementById('sync_pullCondition')?.value);
+  if (!voyage){ alert('Select a voyage number first (List Remote Voyages refreshes the list).'); return; }
+  if (!confirm(`Pull ${voyage} / ${condition} from the server and make it the active leg?`)) return;
+  const prevVn = state.setup.voyageNumber;
+  const prevCond = state.setup.shipCondition;
+  try {
+    await archiveActiveVoyageLeg();
+    state.setup.voyageNumber = voyage;
+    state.setup.shipCondition = condition;
+    await syncNow({ pullOnly: true, policy: 'remote' });
+    await archiveActiveVoyageLeg();
+    await renderVoyageLibrary();
+    alert(`Pulled voyage ${voyage} (${condition}) — ${state.entries.length} log entries.`);
+  } catch (e){
+    state.setup.voyageNumber = prevVn;
+    state.setup.shipCondition = prevCond;
+    alert('Pull failed: ' + e.message);
+  }
+});
+
+document.getElementById('btnLoadVoyageLeg')?.addEventListener('click', async ()=>{
+  const vn = (document.getElementById('s_voyageSelect')?.value || '').trim();
+  const cond = normalizeCondition(document.getElementById('s_legCondition')?.value);
+  if (!vn){ alert('Select a voyage number from the library list.'); return; }
+  try {
+    await activateVoyageLeg(state.activeVesselId, vn, cond);
+    render();
+    applyEntryDefaults();
+    prefillFromLastEntry();
+    renderSyncUi();
+    await renderVoyageLibrary();
+    alert(`Loaded voyage ${vn} · ${cond} (${state.entries.length} entries).`);
+  } catch (e){
+    alert('Load failed: ' + e.message);
+  }
+});
+
+document.getElementById('btnSaveVoyageLeg')?.addEventListener('click', async ()=>{
+  try {
+    const leg = await archiveActiveVoyageLeg();
+    if (!leg){ alert('Set a Voyage No. before saving a leg.'); return; }
+    await saveSetup();
+    await renderVoyageLibrary();
+    alert(`Saved ${leg.voyageNumber} / ${leg.condition} (${leg.entryCount} entries) to the voyage library.`);
+  } catch (e){
+    alert('Save failed: ' + e.message);
+  }
+});
+
+document.getElementById('btnRefreshVoyageLibrary')?.addEventListener('click', async ()=>{
+  await renderVoyageLibrary();
 });
 
 document.getElementById('btnRequestPersist')?.addEventListener('click', async ()=>{
