@@ -614,20 +614,20 @@
       <h2>Voyage Specifics</h2>
       <div class="form-grid cols3">
         <div class="field"><label>Voyage No.</label><input id="s_voyageNumber"></div>
-        <div class="field"><label>Ships Condition</label><select id="s_shipCondition"><option>BALLAST</option><option>LADEN</option></select></div>
+        <div class="field"><label>Ships Condition</label><select id="s_shipCondition"><option value="B">B — Ballast</option><option value="L">L — Laden</option></select></div>
         <div class="field"><label>Date &amp; Time (initial)</label><input type="datetime-local" id="s_initDateTime"></div>
         <div class="field"><label>Departure</label><input id="s_departPort"></div>
         <div class="field"><label>Arrival</label><input id="s_arrivePort"></div>
         <div class="field"><label>Voyage Distance (nm)</label><input type="number" step="0.1" id="s_voyageDistance"></div>
       </div>
-      <div class="hint">Each voyage number <strong>starts in BALLAST</strong> and <strong>ends in LADEN</strong>. Ballast and laden legs are stored separately (local library + server folders) so the active log stays short — pick a voyage and condition below to load only that leg.</div>
+      <div class="hint">Each voyage number <strong>starts as B (ballast)</strong> and <strong>ends as L (laden)</strong>. Only these two letters mark voyage condition — never any other. Legs are stored separately so the active log stays short.</div>
     </div>
 
     <div class="panel">
-      <h2>Voyage Library — Ballast / Laden Legs</h2>
+      <h2>Voyage Library — B / L Legs</h2>
       <div class="form-grid cols3">
         <div class="field"><label>Voyage No. (library)</label><select id="s_voyageSelect"></select></div>
-        <div class="field"><label>Condition leg</label><select id="s_legCondition"><option>BALLAST</option><option>LADEN</option></select></div>
+        <div class="field"><label>Condition leg</label><select id="s_legCondition"><option value="B">B — Ballast</option><option value="L">L — Laden</option></select></div>
         <div class="field" style="display:flex; align-items:flex-end; gap:8px;">
           <button class="primary" id="btnLoadVoyageLeg" style="width:100%;">Load Selected Leg</button>
         </div>
@@ -638,7 +638,7 @@
       </div>
       <div class="table-scroll" style="margin-top:10px;">
         <table>
-          <thead><tr><th>Voyage No.</th><th>Ballast</th><th>Laden</th><th>Updated</th></tr></thead>
+          <thead><tr><th>Voyage No.</th><th>B</th><th>L</th><th>Updated</th></tr></thead>
           <tbody id="voyageLibraryBody"><tr class="empty-row"><td colspan="4">No archived voyage legs yet.</td></tr></tbody>
         </table>
       </div>
@@ -830,7 +830,7 @@
             </optgroup>
           </select>
         </div>
-        <div class="field"><label>Condition</label><select id="in_condition"><option>BALLAST</option><option>LADEN</option></select></div>
+        <div class="field"><label>Condition</label><select id="in_condition"><option value="B">B — Ballast</option><option value="L">L — Laden</option></select></div>
       </div>
       <div class="hint">Distance run, M/E avg RPM, slip, engine distance/speed, and consumption review are on the Voyage Summary after you save or open an entry.</div>
 
@@ -1447,14 +1447,14 @@
       </div>
       <div class="form-grid cols3" style="margin-top:10px;">
         <div class="field"><label>Pull voyage no.</label><select id="sync_pullVoyage"></select></div>
-        <div class="field"><label>Pull condition</label><select id="sync_pullCondition"><option>BALLAST</option><option>LADEN</option></select></div>
+        <div class="field"><label>Pull condition</label><select id="sync_pullCondition"><option value="B">B — Ballast</option><option value="L">L — Laden</option></select></div>
         <div class="field" style="display:flex; align-items:flex-end;">
           <button class="ghost small" id="btnPullVoyageLeg" style="width:100%;">Pull Selected Voyage Leg</button>
         </div>
       </div>
       <div class="hint" id="syncMetaLine">Last sync: never</div>
       <div id="remoteVoyageList" class="hint" style="display:none; margin-top:8px;"></div>
-      <div class="hint">Server folders: <code>data/&lt;vessel&gt;/&lt;voyageNo&gt;/BALLAST.json</code> and <code>…/LADEN.json</code>. Sync Now pushes the active voyage + condition only.</div>
+      <div class="hint">Server folders: <code>data/&lt;vessel&gt;/&lt;voyageNo&gt;/B.json</code> and <code>…/L.json</code> (B = ballast, L = laden). Sync Now pushes the active voyage + condition only.</div>
     </div>
     <div class="panel">
       <h2>Local Database</h2>
@@ -1679,7 +1679,7 @@ function openDB(){
       if (!d.objectStoreNames.contains('documents')) d.createObjectStore('documents', {keyPath:'id'});
       if (!d.objectStoreNames.contains('abstracts')) d.createObjectStore('abstracts', {keyPath:'id'});
       if (!d.objectStoreNames.contains('printHistory')) d.createObjectStore('printHistory', {keyPath:'id'});
-      /* One archived leg per vessel + voyage number + BALLAST|LADEN — keeps active lists short. */
+      /* One archived leg per vessel + voyage number + B|L — keeps active lists short. */
       if (!d.objectStoreNames.contains('voyageLegs')) d.createObjectStore('voyageLegs', {keyPath:'id'});
     };
     req.onsuccess = (e)=>{ db = e.target.result; db.onversionchange = ()=>{ db.close(); db = null; dbOpenPromise = null; }; resolve(db); };
@@ -1702,7 +1702,7 @@ async function dbClear(store){ const s = await txStore(store,'readwrite'); retur
 /* ---------------- state ---------------- */
 const state = {
   setup: {
-    vesselName:'M/V FANGCHENG', chEng:'', voyageNumber:'11-B', shipCondition:'BALLAST',
+    vesselName:'M/V FANGCHENG', chEng:'', voyageNumber:'11', shipCondition:'B',
     departPort:'CHINA', arrivePort:'BRAZIL', place:'', flowArr:'SINGLE',
     initDateTime:'', initRuntime:null,
     pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
@@ -1760,7 +1760,7 @@ function activeVessel(){
 
 function defaultSetupTemplate(overrides){
   const base = {
-    vesselName:'New Vessel', chEng:'', voyageNumber:'', shipCondition:'BALLAST',
+    vesselName:'New Vessel', chEng:'', voyageNumber:'', shipCondition:'B',
     departPort:'', arrivePort:'', place:'', flowArr:'SINGLE',
     initDateTime:'', initRuntime:null,
     pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
@@ -1903,7 +1903,7 @@ function entryFromSnap(id, datetime, operation, condition, snap, extra){
 function buildDemoPackHarbourKey(){
   /* Port-stay vessel: cargo, bunkering, shifting, idle — M/E stopped, A/E + boiler active. */
   const setup = defaultSetupTemplate({
-    vesselName:'M/V HARBOUR KEY', chEng:'Chief Engr. Ana Ruiz', voyageNumber:'08-P', shipCondition:'BALLAST',
+    vesselName:'M/V HARBOUR KEY', chEng:'Chief Engr. Ana Ruiz', voyageNumber:'08', shipCondition:'B',
     departPort:'SINGAPORE', arrivePort:'SINGAPORE', voyageDistance:0,
     initDateTime:'2026-07-01T06:00', pitch:5.40, mcrRpm:105, mcrKw:12200,
     sfoc100:175.0, sfoc85:172.0, lcvRef:42700, lcvActual:42100,
@@ -1934,7 +1934,7 @@ function buildDemoPackHarbourKey(){
 
   // 1. Alongside — opening reference
   let snap = tr.snapshot(fuelTypes);
-  entries.push(entryFromSnap('e-hk1','2026-07-01T06:00','FIRST LINE - ARRIVAL','LADEN', snap, {
+  entries.push(entryFromSnap('e-hk1','2026-07-01T06:00','FIRST LINE - ARRIVAL','L', snap, {
     ge1Kw:380, ge2Kw:360, generatorsInUse:2,
     report: portReport({
       port:'Singapore PSA T3', cargoOp:'Awaiting discharge',
@@ -1956,7 +1956,7 @@ function buildDemoPackHarbourKey(){
     ...fuelTypes, me:0, ge:1850, blr:620, cyl:0, meLo:0, geLo:28,
     fwProd:0, fwRob:61250, rev:0, meRt:0, blrRt:18, ge1:18, ge2:18
   });
-  entries.push(entryFromSnap('e-hk2','2026-07-02T12:00','IN PORT - NOON','LADEN', snap, {
+  entries.push(entryFromSnap('e-hk2','2026-07-02T12:00','IN PORT - NOON','L', snap, {
     ge1Kw:310, ge2Kw:295, generatorsInUse:2,
     weather: weather({ windDir:'SW', windBft:3, seaState:2, airTemp:31, seaTemp:29 }),
     report: portReport({
@@ -1976,7 +1976,7 @@ function buildDemoPackHarbourKey(){
     ...fuelTypes, me:0, ge:4200, blr:900, cyl:0, meLo:0, geLo:55,
     fwProd:0, fwRob:59800, rev:0, meRt:0, blrRt:24, ge1:24, ge2:24
   });
-  entries.push(entryFromSnap('e-hk3','2026-07-03T12:00','CARGO - DISCHARGING','LADEN', snap, {
+  entries.push(entryFromSnap('e-hk3','2026-07-03T12:00','CARGO - DISCHARGING','L', snap, {
     ge1Kw:540, ge2Kw:520, generatorsInUse:2,
     miscCons:{ 'MDO/MGO':0.15, 'LSMGO':0.42 },
     report: portReport({
@@ -1993,11 +1993,11 @@ function buildDemoPackHarbourKey(){
     ...fuelTypes, me:0, ge:1100, blr:400, cyl:0, meLo:0, geLo:18,
     fwProd:0, fwRob:59100, rev:0, meRt:0, blrRt:12, ge1:12, ge2:0
   });
-  entries.push(entryFromSnap('e-hk4','2026-07-04T12:00','IDLE IN PORT','BALLAST', snap, {
+  entries.push(entryFromSnap('e-hk4','2026-07-04T12:00','IDLE IN PORT','B', snap, {
     ge1Kw:280, ge2Kw:null, generatorsInUse:1,
     report: portReport({
       port:'Singapore PSA T3', cargoOp:'Discharge complete — ballast',
-      remarks:'Single A/E. Holds empty. Condition changed to BALLAST.',
+      remarks:'Single A/E. Holds empty. Condition changed to B (ballast).',
       blrRuntime:694,
       generators:[{runtime:15474, avgKw:280},{runtime:14922, avgKw:null}],
       perfTable:{ BOILER:{ avgPower:320, runTime:12 }, INCINERATOR:{ avgPower:0, runTime:0 } }
@@ -2010,7 +2010,7 @@ function buildDemoPackHarbourKey(){
     me:0, ge:1600, blr:350, cyl:0, meLo:0, geLo:22,
     fwProd:0, fwRob:58600, rev:0, meRt:0, blrRt:10, ge1:10, ge2:10
   });
-  entries.push(entryFromSnap('e-hk5','2026-07-05T12:00','BUNKERING','BALLAST', snap, {
+  entries.push(entryFromSnap('e-hk5','2026-07-05T12:00','BUNKERING','B', snap, {
     ge1Kw:300, ge2Kw:280, generatorsInUse:2,
     report: portReport({
       port:'Singapore — bunker barge alongside', cargoOp:'Bunkering HFO + LSMGO',
@@ -2026,12 +2026,12 @@ function buildDemoPackHarbourKey(){
     ...fuelTypes, me:0, ge:3900, blr:850, cyl:0, meLo:0, geLo:48,
     fwProd:0, fwRob:57200, rev:0, meRt:0, blrRt:22, ge1:22, ge2:22
   });
-  entries.push(entryFromSnap('e-hk6','2026-07-06T12:00','CARGO - LOADING','LADEN', snap, {
+  entries.push(entryFromSnap('e-hk6','2026-07-06T12:00','CARGO - LOADING','L', snap, {
     ge1Kw:560, ge2Kw:545, generatorsInUse:2,
     miscCons:{ 'MDO/MGO':0.08, 'LSMGO':0.25 },
     report: portReport({
       port:'Singapore PSA T3', cargoOp:'Loading bulk cargo',
-      remarks:'Loading. Condition LADEN. Dual A/E parallel.',
+      remarks:'Loading. Condition L (laden). Dual A/E parallel.',
       blrRuntime:726,
       generators:[{runtime:15506, avgKw:560},{runtime:14954, avgKw:545}],
       perfTable:{ BOILER:{ avgPower:480, runTime:22 }, INCINERATOR:{ avgPower:42, runTime:5 } }
@@ -2043,7 +2043,7 @@ function buildDemoPackHarbourKey(){
     ...fuelTypes, me:420, ge:900, blr:180, cyl:8, meLo:5, geLo:12,
     fwProd:0, fwRob:56950, rev:3780, meRt:1.5, blrRt:2, ge1:3, ge2:3
   });
-  entries.push(entryFromSnap('e-hk7','2026-07-06T13:30','SHIFTING','LADEN', snap, {
+  entries.push(entryFromSnap('e-hk7','2026-07-06T13:30','SHIFTING','L', snap, {
     distanceShip:10.5, rpm:42, ge1Kw:400, ge2Kw:380, generatorsInUse:2, tbn:'HIGH',
     weather: weather({ windDir:'SE', windBft:2, seaState:1, airTemp:30, seaTemp:29 }),
     report: portReport({
@@ -2060,7 +2060,7 @@ function buildDemoPackHarbourKey(){
     ...fuelTypes, me:0, ge:1400, blr:480, cyl:0, meLo:0, geLo:20,
     fwProd:0, fwRob:56200, rev:0, meRt:0, blrRt:14, ge1:14, ge2:14
   });
-  entries.push(entryFromSnap('e-hk8','2026-07-08T12:00','IN PORT - NOON','LADEN', snap, {
+  entries.push(entryFromSnap('e-hk8','2026-07-08T12:00','IN PORT - NOON','L', snap, {
     ge1Kw:320, ge2Kw:300, generatorsInUse:2,
     report: portReport({
       port:'Singapore PSA T5', cargoOp:'Ready for departure',
@@ -2078,17 +2078,17 @@ function buildDemoPackHarbourKey(){
     { id:'r-hk4', date:'2026-07-06', category:'fw', type:'FRESH WATER', tankId:'freshwater', qty:15000, bdnNo:'FW-SG-0607', company:'PSA Water', location:'Singapore' }
   ];
   const all = entries.map(normalizeEntry);
-  const ballastEntries = all.filter(e => e.condition === 'BALLAST');
-  const ladenEntries = all.filter(e => e.condition === 'LADEN');
+  const ballastEntries = all.filter(e => e.condition === 'B');
+  const ladenEntries = all.filter(e => e.condition === 'L');
   /* Ensure both legs exist for simulation even if split is uneven. */
-  const ballast = ballastEntries.length ? ballastEntries : all.slice(0, Math.ceil(all.length/2)).map(e=>({...e, condition:'BALLAST'}));
-  const laden = ladenEntries.length ? ladenEntries : all.slice(Math.ceil(all.length/2)).map(e=>({...e, condition:'LADEN'}));
-  setup.shipCondition = 'BALLAST';
+  const ballast = ballastEntries.length ? ballastEntries : all.slice(0, Math.ceil(all.length/2)).map(e=>({...e, condition:'B'}));
+  const laden = ladenEntries.length ? ladenEntries : all.slice(Math.ceil(all.length/2)).map(e=>({...e, condition:'L'}));
+  setup.shipCondition = 'B';
   return {
     setup,
     legs: [
-      { condition:'BALLAST', entries: ballast, receipts: receipts.filter(r=>r.date <= '2026-07-05'), documents:[], abstracts:[], printHistory:[] },
-      { condition:'LADEN', entries: laden, receipts: receipts.filter(r=>r.date > '2026-07-05'), documents:[], abstracts:[], printHistory:[] }
+      { condition:'B', entries: ballast, receipts: receipts.filter(r=>r.date <= '2026-07-05'), documents:[], abstracts:[], printHistory:[] },
+      { condition:'L', entries: laden, receipts: receipts.filter(r=>r.date > '2026-07-05'), documents:[], abstracts:[], printHistory:[] }
     ]
   };
 }
@@ -2096,7 +2096,7 @@ function buildDemoPackHarbourKey(){
 function buildDemoPackRoadstead(){
   /* Anchorage / drifting vessel waiting berth — M/E secured, A/E hotel load, weather. */
   const setup = defaultSetupTemplate({
-    vesselName:'M/V ROADSTEAD', chEng:'Chief Engr. Henrik Berg', voyageNumber:'15-A', shipCondition:'BALLAST',
+    vesselName:'M/V ROADSTEAD', chEng:'Chief Engr. Henrik Berg', voyageNumber:'15', shipCondition:'B',
     departPort:'ROTTERDAM, NL', arrivePort:'HAMBURG, DE', voyageDistance:320,
     initDateTime:'2026-07-10T04:00', pitch:4.80, mcrRpm:112, mcrKw:9600,
     sfoc100:171.0, sfoc85:168.5, lcvRef:42700, lcvActual:41950,
@@ -2123,9 +2123,9 @@ function buildDemoPackRoadstead(){
   const entries = [];
   const ballastEntries = [];
 
-  // --- BALLAST outbound (voyage starts ballast) ---
+  // --- B outbound (voyage starts ballast) ---
   let snap = tr.snapshot(ft);
-  ballastEntries.push(entryFromSnap('e-rd-b1','2026-07-08T10:00','LAST LINE - DEPARTURE','BALLAST', snap, {
+  ballastEntries.push(entryFromSnap('e-rd-b1','2026-07-08T10:00','LAST LINE - DEPARTURE','B', snap, {
     tbn:'LOW', ge1Kw:300, ge2Kw:280, generatorsInUse:2,
     report: portReport({ port:'Rotterdam', cargoOp:'Ballast departure', remarks:'Last line. Ballast condition.' })
   }));
@@ -2133,7 +2133,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:48000, ge:1500, blr:200, cyl:180, meLo:40, geLo:25,
     fwProd:1400, fwRob:40200, rev:100800, meRt:24, blrRt:6, ge1:24, ge2:20
   });
-  ballastEntries.push(entryFromSnap('e-rd-b2','2026-07-09T10:00','AT SEA - NOON','BALLAST', snap, {
+  ballastEntries.push(entryFromSnap('e-rd-b2','2026-07-09T10:00','AT SEA - NOON','B', snap, {
     distanceShip:248, rpm:70, tbn:'LOW', ge1Kw:340, ge2Kw:320, generatorsInUse:2,
     weather: weather({ windDir:'W', windBft:4, seaState:3, airTemp:15, seaTemp:14 }),
     report: seaReport({ remarks:'Ballast passage toward Hamburg.', generatorsInUse:2 })
@@ -2142,15 +2142,15 @@ function buildDemoPackRoadstead(){
     ...ft, me:12000, ge:600, blr:80, cyl:40, meLo:10, geLo:8,
     fwProd:300, fwRob:39900, rev:25200, meRt:6, blrRt:2, ge1:6, ge2:4
   });
-  ballastEntries.push(entryFromSnap('e-rd-b3','2026-07-09T16:00','END - PASSAGE','BALLAST', snap, {
+  ballastEntries.push(entryFromSnap('e-rd-b3','2026-07-09T16:00','END - PASSAGE','B', snap, {
     distanceShip:62, rpm:70, tbn:'LOW', ge1Kw:320, generatorsInUse:1,
     report: seaReport({ remarks:'Approaching Elbe. End ballast sea passage.', generatorsInUse:1 })
   }));
 
   // Reset tracker continuity into laden arrival scenario (laden ROB/meters continue from ballast end)
-  // --- LADEN arrival / anchorage wait ---
+  // --- L arrival / anchorage wait ---
   snap = tr.snapshot(ft);
-  entries.push(entryFromSnap('e-rd1','2026-07-10T04:00','EOSP - END OF SEA PASSAGE','LADEN', snap, {
+  entries.push(entryFromSnap('e-rd1','2026-07-10T04:00','EOSP - END OF SEA PASSAGE','L', snap, {
     distanceShip:0, rpm:null, tbn:'LOW', ge1Kw:300, ge2Kw:0, generatorsInUse:1,
     weather: weather({ windDir:'NW', windBft:4, seaState:3, swellDir:'NW', airTemp:16, seaTemp:14 }),
     report: portReport({
@@ -2167,7 +2167,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:0, ge:980, blr:280, cyl:0, meLo:0, geLo:14,
     fwProd:0, fwRob:40450, rev:0, meRt:0, blrRt:12, ge1:12, ge2:0
   });
-  entries.push(entryFromSnap('e-rd2','2026-07-11T12:00','AT ANCHOR - NOON','LADEN', snap, {
+  entries.push(entryFromSnap('e-rd2','2026-07-11T12:00','AT ANCHOR - NOON','L', snap, {
     tbn:'LOW', ge1Kw:265, generatorsInUse:1,
     weather: weather({ windDir:'W', windBft:5, seaState:4, swellDir:'W', airTemp:15, seaTemp:14 }),
     report: portReport({
@@ -2184,7 +2184,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:0, ge:2100, blr:320, cyl:0, meLo:0, geLo:30,
     fwProd:0, fwRob:39700, rev:0, meRt:0, blrRt:14, ge1:14, ge2:14
   });
-  entries.push(entryFromSnap('e-rd3','2026-07-12T12:00','AT ANCHOR - NOON','LADEN', snap, {
+  entries.push(entryFromSnap('e-rd3','2026-07-12T12:00','AT ANCHOR - NOON','L', snap, {
     tbn:'LOW', ge1Kw:310, ge2Kw:290, generatorsInUse:2,
     weather: weather({ windDir:'SW', windBft:6, seaState:5, swellDir:'SW', airTemp:14, seaTemp:13 }),
     report: portReport({
@@ -2201,7 +2201,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:1850, ge:720, blr:120, cyl:22, meLo:8, geLo:10,
     fwProd:0, fwRob:39400, rev:13200, meRt:4.0, blrRt:4, ge1:6, ge2:0
   });
-  entries.push(entryFromSnap('e-rd4','2026-07-12T16:00','DRIFTING','LADEN', snap, {
+  entries.push(entryFromSnap('e-rd4','2026-07-12T16:00','DRIFTING','L', snap, {
     distanceShip:32.5, rpm:55, tbn:'LOW', ge1Kw:280, generatorsInUse:1,
     weather: weather({ windDir:'W', windBft:7, seaState:6, swellDir:'W', airTemp:13, seaTemp:12 }),
     report: portReport({
@@ -2218,7 +2218,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:0, ge:1050, blr:260, cyl:0, meLo:0, geLo:15,
     fwProd:0, fwRob:38850, rev:0, meRt:0, blrRt:11, ge1:11, ge2:0
   });
-  entries.push(entryFromSnap('e-rd5','2026-07-14T12:00','AT ANCHOR - NOON','LADEN', snap, {
+  entries.push(entryFromSnap('e-rd5','2026-07-14T12:00','AT ANCHOR - NOON','L', snap, {
     tbn:'LOW', ge1Kw:270, generatorsInUse:1,
     weather: weather({ windDir:'NW', windBft:4, seaState:3, swellDir:'NW', airTemp:15, seaTemp:13 }),
     report: portReport({
@@ -2235,7 +2235,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:0, ge:480, blr:90, cyl:0, meLo:0, geLo:6,
     fwProd:0, fwRob:38680, rev:0, meRt:0, blrRt:3, ge1:4, ge2:0
   });
-  entries.push(entryFromSnap('e-rd5b','2026-07-15T04:00','AT ANCHOR - NOON','LADEN', snap, {
+  entries.push(entryFromSnap('e-rd5b','2026-07-15T04:00','AT ANCHOR - NOON','L', snap, {
     tbn:'LOW', ge1Kw:260, generatorsInUse:1,
     report: portReport({
       port:'Elbe anchorage B', cargoOp:'Awaiting pilot',
@@ -2251,7 +2251,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:620, ge:450, blr:80, cyl:6, meLo:3, geLo:6,
     fwProd:0, fwRob:38600, rev:4320, meRt:1.5, blrRt:2, ge1:1.5, ge2:1.5
   });
-  entries.push(entryFromSnap('e-rd6','2026-07-15T05:30','STAND BY - ARRIVAL','LADEN', snap, {
+  entries.push(entryFromSnap('e-rd6','2026-07-15T05:30','STAND BY - ARRIVAL','L', snap, {
     distanceShip:10.6, rpm:48, tbn:'LOW', ge1Kw:350, ge2Kw:320, generatorsInUse:2,
     report: portReport({
       port:'Hamburg approaches', cargoOp:'Pilot boarding',
@@ -2267,7 +2267,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:380, ge:520, blr:60, cyl:4, meLo:2, geLo:8,
     fwProd:0, fwRob:38400, rev:4200, meRt:2.0, blrRt:1.5, ge1:2.0, ge2:2.0
   });
-  entries.push(entryFromSnap('e-rd7','2026-07-15T07:30','FIRST LINE - ARRIVAL','LADEN', snap, {
+  entries.push(entryFromSnap('e-rd7','2026-07-15T07:30','FIRST LINE - ARRIVAL','L', snap, {
     distanceShip:10.3, rpm:35, tbn:'LOW', ge1Kw:400, ge2Kw:380, generatorsInUse:2,
     report: portReport({
       port:'Hamburg — Hansaport', cargoOp:'All fast berth 4',
@@ -2282,12 +2282,12 @@ function buildDemoPackRoadstead(){
     { id:'r-rd1', date:'2026-07-09', category:'fuel', type:'LSFO', tankId:'lsfo', qty:120, bdnNo:'BDN-RTM-0907', company:'TFG Marine', location:'Rotterdam' },
     { id:'r-rd2', date:'2026-07-09', category:'lube', type:'GE SYS OIL', tankId:'gesysoil', qty:400, bdnNo:'BDN-RTM-LO', company:'Shell Marine', location:'Rotterdam' }
   ];
-  setup.shipCondition = 'BALLAST';
+  setup.shipCondition = 'B';
   return {
     setup,
     legs: [
-      { condition:'BALLAST', entries: ballastEntries.map(normalizeEntry), receipts, documents:[], abstracts:[], printHistory:[] },
-      { condition:'LADEN', entries: entries.map(normalizeEntry), receipts:[], documents:[], abstracts:[], printHistory:[] }
+      { condition:'B', entries: ballastEntries.map(normalizeEntry), receipts, documents:[], abstracts:[], printHistory:[] },
+      { condition:'L', entries: entries.map(normalizeEntry), receipts:[], documents:[], abstracts:[], printHistory:[] }
     ]
   };
 }
@@ -2295,7 +2295,7 @@ function buildDemoPackRoadstead(){
 function buildDemoPackCircumnav(){
   /* Full voyage: departure → sea passage (all sea ops) → arrival. Tests slip/SFOC/ECA/fuel switch. */
   const setup = defaultSetupTemplate({
-    vesselName:'M/V CIRCUMNAV', chEng:'Chief Engr. Priya Nair', voyageNumber:'22-F', shipCondition:'BALLAST',
+    vesselName:'M/V CIRCUMNAV', chEng:'Chief Engr. Priya Nair', voyageNumber:'22', shipCondition:'B',
     departPort:'ROTTERDAM, NL', arrivePort:'SINGAPORE', voyageDistance:8350,
     initDateTime:'2026-06-01T10:00', pitch:5.85, mcrRpm:91, mcrKw:18630,
     sfoc100:178.5, sfoc85:175.2, lcvRef:42700, lcvActual:41200,
@@ -2370,7 +2370,7 @@ function buildDemoPackCircumnav(){
 
   // 1. Last line
   let snap = tr.snapshot(hfo);
-  entries.push(entryFromSnap('e-cn1','2026-06-01T10:00','LAST LINE - DEPARTURE','BALLAST', snap, {
+  entries.push(entryFromSnap('e-cn1','2026-06-01T10:00','LAST LINE - DEPARTURE','B', snap, {
     ge1Kw:420, ge2Kw:400, generatorsInUse:2, tbn:'HIGH',
     report: portReport({
       port:'Rotterdam Europoort', cargoOp:'Departure',
@@ -2381,7 +2381,7 @@ function buildDemoPackCircumnav(){
   }));
 
   // 2. Pilot onboard departure — manoeuvring (Δrevs = 58 RPM × 2.5 h × 60)
-  pushSea('e-cn2','2026-06-01T12:30','PILOT ONBOARD - DEPARTURE','BALLAST', {
+  pushSea('e-cn2','2026-06-01T12:30','PILOT ONBOARD - DEPARTURE','B', {
     types:hfo, me:2100, ge:900, blr:150, cyl:12, meLo:6, geLo:10,
     fwProd:0, fwRob:71600, rev:8700, meRt:2.5, blrRt:2, ge1:2.5, ge2:2.5
   }, {
@@ -2393,7 +2393,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 3. Start passage
-  pushSea('e-cn3','2026-06-01T18:00','START - PASSAGE','BALLAST', {
+  pushSea('e-cn3','2026-06-01T18:00','START - PASSAGE','B', {
     types:hfo, me:9800, ge:1100, blr:200, cyl:55, meLo:18, geLo:14,
     fwProd:400, fwRob:71200, rev:26400, meRt:5.5, blrRt:4, ge1:5.5, ge2:5.5
   }, {
@@ -2404,7 +2404,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 4. First sea noon — 18 h from start @ 80 rpm (revs auto)
-  pushSea('e-cn4','2026-06-02T12:00','AT SEA - NOON','BALLAST', {
+  pushSea('e-cn4','2026-06-02T12:00','AT SEA - NOON','B', {
     types:hfo, me:39000, ge:1240, blr:210, cyl:158, meLo:34, geLo:21,
     fwProd:1200, fwRob:70100, blrRt:6, ge1:18, ge2:18
   }, {
@@ -2415,7 +2415,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 5. Change of speed — slower for weather / schedule
-  pushSea('e-cn5','2026-06-03T12:00','CHANGE OF SPEED','BALLAST', {
+  pushSea('e-cn5','2026-06-03T12:00','CHANGE OF SPEED','B', {
     types:hfo, me:38000, ge:1580, blr:260, cyl:160, meLo:38, geLo:26,
     fwProd:1500, fwRob:69050, blrRt:6, ge1:24, ge2:20
   }, {
@@ -2426,7 +2426,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 6. Heavy weather noon
-  pushSea('e-cn6','2026-06-04T12:00','HEAVY WEATHER','BALLAST', {
+  pushSea('e-cn6','2026-06-04T12:00','HEAVY WEATHER','B', {
     types:hfo, me:41000, ge:1720, blr:400, cyl:175, meLo:42, geLo:30,
     fwProd:900, fwRob:67800, blrRt:14, ge1:24, ge2:24
   }, {
@@ -2438,7 +2438,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 7. Resume normal noon
-  pushSea('e-cn7','2026-06-05T12:00','AT SEA - NOON','BALLAST', {
+  pushSea('e-cn7','2026-06-05T12:00','AT SEA - NOON','B', {
     types:hfo, me:53500, ge:1600, blr:200, cyl:220, meLo:48, geLo:27,
     fwProd:1700, fwRob:66800, blrRt:5, ge1:24, ge2:24
   }, {
@@ -2450,7 +2450,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 8. ECA entry — switch to LSMGO (18 h @ 72 rpm)
-  pushSea('e-cn8','2026-06-06T06:00','ECA - ENTRY','BALLAST', {
+  pushSea('e-cn8','2026-06-06T06:00','ECA - ENTRY','B', {
     types:lsmgoMe, me:28000, ge:1050, blr:180, cyl:105, meLo:24, geLo:18,
     fwProd:900, fwRob:66200, blrRt:5, ge1:18, ge2:18
   }, {
@@ -2461,7 +2461,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 9. Noon inside ECA on LSMGO (30 h @ 78 rpm)
-  pushSea('e-cn9','2026-06-07T12:00','AT SEA - NOON','BALLAST', {
+  pushSea('e-cn9','2026-06-07T12:00','AT SEA - NOON','B', {
     types:lsmgoMe, me:70000, ge:2100, blr:310, cyl:250, meLo:55, geLo:35,
     fwProd:1900, fwRob:65000, blrRt:9, ge1:30, ge2:30
   }, {
@@ -2473,7 +2473,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 10. ECA exit — back to HFO (20 h @ 76 rpm)
-  pushSea('e-cn10','2026-06-08T08:00','ECA - EXIT','BALLAST', {
+  pushSea('e-cn10','2026-06-08T08:00','ECA - EXIT','B', {
     types:hfo, me:44000, ge:1600, blr:200, cyl:160, meLo:36, geLo:24,
     fwProd:1000, fwRob:64500, blrRt:6, ge1:20, ge2:20
   }, {
@@ -2484,7 +2484,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 11. Brief drifting — short 3 h stop (revs auto from 15 rpm)
-  pushSea('e-cn11','2026-06-08T11:00','DRIFTING','BALLAST', {
+  pushSea('e-cn11','2026-06-08T11:00','DRIFTING','B', {
     types:hfo, me:400, ge:320, blr:40, cyl:3, meLo:1, geLo:4,
     fwProd:0, fwRob:64350, blrRt:1, ge1:3, ge2:0
   }, {
@@ -2495,7 +2495,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 12. Long sea noon stretch (compressed mid-voyage)
-  pushSea('e-cn12','2026-06-20T12:00','AT SEA - NOON','BALLAST', {
+  pushSea('e-cn12','2026-06-20T12:00','AT SEA - NOON','B', {
     types:hfo, me:580000, ge:18500, blr:3200, cyl:2400, meLo:520, geLo:320,
     fwProd:18000, fwRob:52000, blrRt:90, ge1:272, ge2:260
   }, {
@@ -2506,7 +2506,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 13. End passage
-  pushSea('e-cn13','2026-06-27T20:00','END - PASSAGE','BALLAST', {
+  pushSea('e-cn13','2026-06-27T20:00','END - PASSAGE','B', {
     types:hfo, me:360000, ge:12000, blr:1800, cyl:1500, meLo:320, geLo:200,
     fwProd:11000, fwRob:45500, blrRt:50, ge1:176, ge2:170
   }, {
@@ -2517,7 +2517,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 14. EOSP
-  pushSea('e-cn14','2026-06-28T04:00','EOSP - END OF SEA PASSAGE','BALLAST', {
+  pushSea('e-cn14','2026-06-28T04:00','EOSP - END OF SEA PASSAGE','B', {
     types:hfo, me:8500, ge:900, blr:150, cyl:40, meLo:12, geLo:10,
     fwProd:200, fwRob:45000, blrRt:3, ge1:6, ge2:6
   }, {
@@ -2529,7 +2529,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 15. Stand by arrival
-  pushSea('e-cn15','2026-06-28T07:00','STAND BY - ARRIVAL','BALLAST', {
+  pushSea('e-cn15','2026-06-28T07:00','STAND BY - ARRIVAL','B', {
     types:hfo, me:2200, ge:700, blr:80, cyl:10, meLo:4, geLo:8,
     fwProd:0, fwRob:44800, blrRt:2, ge1:3, ge2:3
   }, {
@@ -2539,7 +2539,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 16. First line arrival
-  pushSea('e-cn16','2026-06-28T10:30','FIRST LINE - ARRIVAL','BALLAST', {
+  pushSea('e-cn16','2026-06-28T10:30','FIRST LINE - ARRIVAL','B', {
     types:hfo, me:900, ge:550, blr:50, cyl:5, meLo:2, geLo:6,
     fwProd:0, fwRob:44600, blrRt:1, ge1:2, ge2:2
   }, {
@@ -2555,10 +2555,10 @@ function buildDemoPackCircumnav(){
     { id:'r-cn4', date:'2026-05-30', category:'lube', type:'ME SYS OIL', tankId:'mesysoil', qty:800, bdnNo:'BDN-RTM-CN-M', company:'Castrol Marine', location:'Rotterdam' }
   ];
 
-  /* LADEN return leg — shorter record so lists stay focused when selected. */
+  /* L return leg — shorter record so lists stay focused when selected. */
   const ladenSetup = migrateSetup({
     ...setup,
-    shipCondition:'LADEN',
+    shipCondition:'L',
     departPort:'SINGAPORE',
     arrivePort:'ROTTERDAM, NL',
     voyageDistance:8350,
@@ -2573,7 +2573,7 @@ function buildDemoPackCircumnav(){
   });
   const ladenEntries = [];
   let ls = trL.snapshot(hfo);
-  ladenEntries.push(entryFromSnap('e-cn-l1','2026-07-05T08:00','LAST LINE - DEPARTURE','LADEN', ls, {
+  ladenEntries.push(entryFromSnap('e-cn-l1','2026-07-05T08:00','LAST LINE - DEPARTURE','L', ls, {
     ge1Kw:420, ge2Kw:400, generatorsInUse:2,
     report: portReport({ port:'Singapore', cargoOp:'Laden departure', remarks:'Laden sailing for Rotterdam.' })
   }));
@@ -2581,7 +2581,7 @@ function buildDemoPackCircumnav(){
     ...hfo, me:52000, ge:1700, blr:240, cyl:200, meLo:45, geLo:28,
     fwProd:1500, fwRob:56800, rev:115200, meRt:24, blrRt:6, ge1:24, ge2:24
   });
-  ladenEntries.push(entryFromSnap('e-cn-l2','2026-07-06T08:00','AT SEA - NOON','LADEN', ls, {
+  ladenEntries.push(entryFromSnap('e-cn-l2','2026-07-06T08:00','AT SEA - NOON','L', ls, {
     distanceShip:345, rpm:80, ge1Kw:380, ge2Kw:360, generatorsInUse:2,
     weather: weather({ windDir:'NE', windBft:3, seaState:2, airTemp:28, seaTemp:27 }),
     report: seaReport({ remarks:'Laden noon. Steady passage.', generatorsInUse:2 })
@@ -2590,7 +2590,7 @@ function buildDemoPackCircumnav(){
     ...hfo, me:50000, ge:1650, blr:220, cyl:190, meLo:42, geLo:26,
     fwProd:1400, fwRob:55600, rev:112320, meRt:24, blrRt:5, ge1:24, ge2:24
   });
-  ladenEntries.push(entryFromSnap('e-cn-l3','2026-07-07T08:00','AT SEA - NOON','LADEN', ls, {
+  ladenEntries.push(entryFromSnap('e-cn-l3','2026-07-07T08:00','AT SEA - NOON','L', ls, {
     distanceShip:338, rpm:78, ge1Kw:370, ge2Kw:350, generatorsInUse:2,
     weather: weather({ windDir:'N', windBft:4, seaState:3, airTemp:27, seaTemp:26 }),
     report: seaReport({ remarks:'Laden noon continued.', generatorsInUse:2 })
@@ -2599,17 +2599,17 @@ function buildDemoPackCircumnav(){
     ...hfo, me:9000, ge:800, blr:100, cyl:35, meLo:10, geLo:10,
     fwProd:200, fwRob:55200, rev:20160, meRt:6, blrRt:2, ge1:6, ge2:6
   });
-  ladenEntries.push(entryFromSnap('e-cn-l4','2026-07-07T14:00','EOSP - END OF SEA PASSAGE','LADEN', ls, {
+  ladenEntries.push(entryFromSnap('e-cn-l4','2026-07-07T14:00','EOSP - END OF SEA PASSAGE','L', ls, {
     distanceShip:55, rpm:56, ge1Kw:400, ge2Kw:380, generatorsInUse:2,
     report: portReport({ port:'Approaches', remarks:'EOSP laden leg (compressed demo).' })
   }));
 
-  setup.shipCondition = 'BALLAST';
+  setup.shipCondition = 'B';
   return {
     setup,
     legs: [
-      { condition:'BALLAST', entries: entries.map(normalizeEntry), receipts, documents:[], abstracts:[], printHistory:[] },
-      { condition:'LADEN', entries: ladenEntries.map(normalizeEntry), receipts:[], documents:[], abstracts:[], printHistory:[], setup: ladenSetup }
+      { condition:'B', entries: entries.map(normalizeEntry), receipts, documents:[], abstracts:[], printHistory:[] },
+      { condition:'L', entries: ladenEntries.map(normalizeEntry), receipts:[], documents:[], abstracts:[], printHistory:[], setup: ladenSetup }
     ]
   };
 }
@@ -2688,8 +2688,15 @@ function slugVoyageNo(voyageNumber){
 }
 
 function normalizeCondition(condition){
-  const c = String(condition || 'BALLAST').trim().toUpperCase();
-  return c === 'LADEN' ? 'LADEN' : 'BALLAST';
+  /* Voyage condition is only B (ballast) or L (laden/loaded) — never any other letter. */
+  const raw = String(condition == null ? '' : condition).trim().toUpperCase();
+  if (raw === 'L' || raw === 'LADEN' || raw === 'LOADED') return 'L';
+  if (raw === 'B' || raw === 'BALLAST') return 'B';
+  return 'B';
+}
+
+function conditionLabel(condition){
+  return normalizeCondition(condition) === 'L' ? 'L — Laden' : 'B — Ballast';
 }
 
 function captureActiveLegPack(){
@@ -2748,7 +2755,24 @@ async function archiveActiveVoyageLeg(){
 async function listVoyageLegsForVessel(vesselId){
   const vid = vesselId || state.activeVesselId || LEGACY_VESSEL_ID;
   const all = await dbGetAll('voyageLegs');
-  return all.filter(l => (l.vesselId || LEGACY_VESSEL_ID) === vid);
+  const mine = all.filter(l => (l.vesselId || LEGACY_VESSEL_ID) === vid);
+  /* Migrate legacy BALLAST/LADEN leg ids to B/L once. */
+  const out = [];
+  for (const leg of mine){
+    const cond = normalizeCondition(leg.condition);
+    const wantId = voyageLegId(vid, leg.voyageNumber, cond);
+    if (leg.id !== wantId || leg.condition !== cond){
+      const migrated = { ...leg, id: wantId, condition: cond };
+      if (migrated.setup) migrated.setup.shipCondition = cond;
+      (migrated.entries || []).forEach(e => { e.condition = normalizeCondition(e.condition); });
+      await dbPut('voyageLegs', migrated);
+      if (leg.id !== wantId) await dbDelete('voyageLegs', leg.id);
+      out.push(migrated);
+    } else {
+      out.push(leg);
+    }
+  }
+  return out;
 }
 
 async function getVoyageLibraryIndex(vesselId){
@@ -2756,7 +2780,7 @@ async function getVoyageLibraryIndex(vesselId){
   const byVoyage = new Map();
   for (const leg of legs){
     const vn = leg.voyageNumber || '—';
-    const row = byVoyage.get(vn) || { voyageNumber: vn, BALLAST: null, LADEN: null };
+    const row = byVoyage.get(vn) || { voyageNumber: vn, B: null, L: null };
     row[normalizeCondition(leg.condition)] = leg;
     byVoyage.set(vn, row);
   }
@@ -2826,8 +2850,8 @@ async function renderVoyageLibrary(){
     body.innerHTML = `<tr class="empty-row"><td colspan="4">No archived voyage legs yet — save the current leg or install the test fleet.</td></tr>`;
   } else {
     body.innerHTML = index.map(row=>{
-      const b = row.BALLAST;
-      const l = row.LADEN;
+      const b = row.B;
+      const l = row.L;
       const bTxt = b ? `${b.entryCount||0} entries` : '—';
       const lTxt = l ? `${l.entryCount||0} entries` : '—';
       const updated = [b?.updatedAt, l?.updatedAt].filter(Boolean).sort().slice(-1)[0] || '—';
@@ -2847,7 +2871,7 @@ async function renderVoyageLibrary(){
   const legSel = document.getElementById('s_legCondition');
   if (legSel) legSel.value = activeCond;
   if (hint){
-    hint.textContent = `Active: voyage ${activeVn || '—'} · ${activeCond} · ${state.entries.length} log entries. Voyages start BALLAST and finish LADEN; each condition is a separate short record.`;
+    hint.textContent = `Active: voyage ${activeVn || '—'} · ${activeCond} · ${state.entries.length} log entries. Voyages start B and finish L; each condition is a separate short record.`;
   }
 
   const pullSel = document.getElementById('sync_pullVoyage');
@@ -2879,7 +2903,7 @@ async function saveVesselPack(vesselId, pack){
   const legs = Array.isArray(pack.legs) && pack.legs.length
     ? pack.legs
     : [{
-        condition: setup.shipCondition || 'BALLAST',
+        condition: setup.shipCondition || 'B',
         entries: pack.entries || [],
         receipts: pack.receipts || [],
         documents: pack.documents || [],
@@ -2900,11 +2924,11 @@ async function saveVesselPack(vesselId, pack){
       abstracts: leg.abstracts || [],
       printHistory: leg.printHistory || []
     });
-    if (!prefer || cond === 'BALLAST') prefer = saved;
+    if (!prefer || cond === 'B') prefer = saved;
   }
   if (!prefer) return null;
 
-  /* Activate BALLAST first when present (voyage starts ballast). */
+  /* Activate B first when present (voyage starts ballast). */
   const activeSetup = migrateSetup(prefer.setup);
   await dbPut('meta', { key:`setup:${vesselId}`, value: activeSetup });
   for (const e of (prefer.entries || [])) await dbPut('entries', e);
@@ -2937,7 +2961,7 @@ async function loadVesselFromDb(vesselId){
     const vn = (state.setup.voyageNumber || '').trim() || index[0]?.voyageNumber;
     if (vn){
       const row = index.find(r => r.voyageNumber === vn) || index[0];
-      const cond = row?.BALLAST ? 'BALLAST' : (row?.LADEN ? 'LADEN' : normalizeCondition(state.setup.shipCondition));
+      const cond = row?.B ? 'B' : (row?.L ? 'L' : normalizeCondition(state.setup.shipCondition));
       try {
         await activateVoyageLeg(vesselId, row.voyageNumber, cond);
       } catch (_){ /* leave empty */ }
@@ -4021,7 +4045,7 @@ function renderFlowmeterCounterRows(){
 function abstractRowCells(r){
   const dt = new Date(r.datetime);
   const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-  const condClass = r.condition==='BALLAST' ? 'cond-B':'cond-L';
+  const condClass = r.condition==='B' ? 'cond-B':'cond-L';
   const cylText = r.cylCons===null||r.cylCons===undefined ? '—' : `${fmtLube(r.cylCons)} (${r.tbn})`;
   return `<td>${dtStr}</td><td>${r.operation}</td>
     <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,2)}</td><td>${r.rpm==null||r.rpm===undefined?'—':fmt(r.rpm,2)}</td>
@@ -4074,7 +4098,7 @@ function render(){
   const imoEl = document.getElementById('s_imoNo');
   if (imoEl) imoEl.value = state.setup.imoNo || '';
   document.getElementById('s_voyageNumber').value = state.setup.voyageNumber;
-  document.getElementById('s_shipCondition').value = state.setup.shipCondition;
+  document.getElementById('s_shipCondition').value = normalizeCondition(state.setup.shipCondition);
   document.getElementById('s_departPort').value = state.setup.departPort;
   document.getElementById('s_arrivePort').value = state.setup.arrivePort;
   document.getElementById('s_initDateTime').value = state.setup.initDateTime || '';
@@ -4449,7 +4473,7 @@ function showReportList(category){
   body.innerHTML = list.map(e=>{
     const dt = new Date(e.datetime);
     const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-    const condClass = e.condition==='BALLAST' ? 'cond-B':'cond-L';
+    const condClass = e.condition==='B' ? 'cond-B':'cond-L';
     const hasReport = e.report ? ' <span class="badge">has report</span>' : '';
     return `<tr>
       <td>${dtStr}</td><td>${e.operation}${hasReport}</td>
@@ -5442,7 +5466,7 @@ async function saveVoyageDetails(){
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value)||null;
   state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
   state.setup.voyageNumber = document.getElementById('s_voyageNumber').value;
-  state.setup.shipCondition = document.getElementById('s_shipCondition').value;
+  state.setup.shipCondition = normalizeCondition(document.getElementById('s_shipCondition').value);
   state.setup.departPort = document.getElementById('s_departPort').value;
   state.setup.arrivePort = document.getElementById('s_arrivePort').value;
   state.setup.initDateTime = document.getElementById('s_initDateTime').value;
@@ -5536,6 +5560,7 @@ function normalizeEntry(e){
   if (e.rpm===undefined) e.rpm = null;
   if (!e.id) e.id = uid();
   if (!e.vesselId) e.vesselId = state.activeVesselId || LEGACY_VESSEL_ID;
+  e.condition = normalizeCondition(e.condition || state.setup?.shipCondition);
   return e;
 }
 
@@ -5652,15 +5677,15 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
     alert('Cannot create a new voyage: Voyage No. and Ships Condition are both unchanged. Change at least one of them before proceeding.');
     return;
   }
-  /* Guidance: same voyage number progresses BALLAST → LADEN; a new voyage number should start BALLAST. */
-  if (newVoyageNo === oldVoyageNo && normalizeCondition(oldCondition) === 'LADEN' && normalizeCondition(newCondition) === 'BALLAST'){
-    alert('This voyage number already ended in LADEN. Start a new Voyage No. in BALLAST, or load an existing leg from the Voyage Library.');
+  /* Guidance: same voyage number progresses B → L; a new voyage number should start B. */
+  if (newVoyageNo === oldVoyageNo && normalizeCondition(oldCondition) === 'L' && normalizeCondition(newCondition) === 'B'){
+    alert('This voyage number already ended in L. Start a new Voyage No. in B, or load an existing leg from the Voyage Library.');
     return;
   }
-  if (newVoyageNo !== oldVoyageNo && normalizeCondition(newCondition) !== 'BALLAST'){
-    if (!confirm('New voyage numbers normally start in BALLAST. Continue with LADEN anyway?')) return;
-  } else if (newVoyageNo === oldVoyageNo && normalizeCondition(oldCondition) === 'BALLAST' && normalizeCondition(newCondition) !== 'LADEN'){
-    alert('To finish this voyage number, switch Ships Condition to LADEN (voyages end laden).');
+  if (newVoyageNo !== oldVoyageNo && normalizeCondition(newCondition) !== 'B'){
+    if (!confirm('New voyage numbers normally start in B. Continue with L anyway?')) return;
+  } else if (newVoyageNo === oldVoyageNo && normalizeCondition(oldCondition) === 'B' && normalizeCondition(newCondition) !== 'L'){
+    alert('To finish this voyage number, switch Ships Condition to L (voyages end laden).');
     return;
   }
 
@@ -8206,7 +8231,8 @@ function migrateSetup(setup){
   if (setup.vesselName===undefined) setup.vesselName = '';
   if (setup.chEng===undefined) setup.chEng = '';
   if (setup.voyageNumber===undefined) setup.voyageNumber = '';
-  if (setup.shipCondition===undefined) setup.shipCondition = 'BALLAST';
+  if (setup.shipCondition===undefined) setup.shipCondition = 'B';
+  setup.shipCondition = normalizeCondition(setup.shipCondition);
   if (setup.departPort===undefined) setup.departPort = '';
   if (setup.arrivePort===undefined) setup.arrivePort = '';
   if (setup.initDateTime===undefined) setup.initDateTime = '';

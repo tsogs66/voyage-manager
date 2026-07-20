@@ -4,8 +4,8 @@
 Stores voyage snapshots as JSON files under:
   <DATA_DIR>/<vessel>/<voyageNo>/<CONDITION>.json
 
-Each voyage number is a folder; BALLAST and LADEN legs are separate files
-so records stay short and can be pulled independently.
+Each voyage number is a folder; B (ballast) and L (laden) legs are separate files
+so records stay short and can be pulled independently. Voyage condition is only B or L.
 
 Designed to run behind Cloudflare Tunnel or nginx on a Linux server.
 Can optionally serve the static PWA files from the same process
@@ -15,8 +15,8 @@ API:
   GET  /api/health
   GET  /api/voyage/<vessel>                              — list voyage folders + conditions
   GET  /api/voyage/<vessel>/<voyage>                     — list conditions for one voyage
-  GET  /api/voyage/<vessel>/<voyage>/<condition>         — pull leg snapshot
-  PUT  /api/voyage/<vessel>/<voyage>/<condition>         — push / merge leg snapshot
+  GET  /api/voyage/<vessel>/<voyage>/<B|L>               — pull leg snapshot
+  PUT  /api/voyage/<vessel>/<voyage>/<B|L>               — push / merge leg snapshot
 
 Legacy flat files <voyage>-<CONDITION>.json are still readable and listed.
 
@@ -47,9 +47,11 @@ ALLOWED_ORIGINS = [
 STATIC_DIR = Path(os.environ["SYNC_STATIC_DIR"]).resolve() if os.environ.get("SYNC_STATIC_DIR") else None
 
 SLUG_RE = re.compile(r"^[a-zA-Z0-9._-]{1,64}$")
-COND_RE = re.compile(r"^(BALLAST|LADEN)$", re.IGNORECASE)
+COND_RE = re.compile(r"^(B|L|BALLAST|LADEN|LOADED)$", re.IGNORECASE)
 LIST_KEYS = ("entries", "receipts", "documents", "abstracts", "printHistory")
-LEGACY_COND_SUFFIX = re.compile(r"^(?P<voyage>.+)-(?P<cond>BALLAST|LADEN)$", re.IGNORECASE)
+LEGACY_COND_SUFFIX = re.compile(
+    r"^(?P<voyage>.+)-(?P<cond>B|L|BALLAST|LADEN|LOADED)$", re.IGNORECASE
+)
 
 
 def utc_now() -> str:
@@ -64,10 +66,13 @@ def safe_slug(value: str) -> str:
 
 
 def safe_condition(value: str) -> str:
+    """Canonical voyage condition: B (ballast) or L (laden/loaded) only."""
     value = unquote(value or "").strip().upper()
     if not COND_RE.match(value):
-        raise ValueError("invalid condition")
-    return value
+        raise ValueError("invalid condition — use B or L only")
+    if value in ("L", "LADEN", "LOADED"):
+        return "L"
+    return "B"
 
 
 def vessel_dir(vessel: str) -> Path:
@@ -88,13 +93,22 @@ def legacy_flat_path(vessel: str, voyage: str, condition: str) -> Path:
 
 
 def resolve_leg_path(vessel: str, voyage: str, condition: str) -> Path:
-    """Prefer folder layout; fall back to legacy flat file for reads."""
-    folder = voyage_leg_path(vessel, voyage, condition)
+    """Prefer B.json/L.json; fall back to legacy BALLAST/LADEN names and flat files."""
+    cond = safe_condition(condition)
+    folder = voyage_leg_path(vessel, voyage, cond)
     if folder.exists():
         return folder
-    legacy = legacy_flat_path(vessel, voyage, condition)
+    # Legacy full-word filenames inside voyage folder
+    legacy_word = {"B": "BALLAST", "L": "LADEN"}[cond]
+    word_path = voyage_dir(vessel, voyage) / f"{legacy_word}.json"
+    if word_path.exists():
+        return word_path
+    legacy = legacy_flat_path(vessel, voyage, cond)
     if legacy.exists():
         return legacy
+    legacy_flat_word = vessel_dir(vessel) / f"{safe_slug(voyage)}-{legacy_word}.json"
+    if legacy_flat_word.exists():
+        return legacy_flat_word
     return folder
 
 
@@ -137,7 +151,7 @@ def read_leg_meta(path: Path, voyage_number: str, condition: str) -> dict:
     entries = ((data.get("data") or data).get("entries")) or []
     return {
         "voyageNumber": data.get("voyageNumber") or voyage_number,
-        "condition": (data.get("condition") or condition).upper(),
+        "condition": safe_condition(data.get("condition") or condition),
         "voyageKey": data.get("voyageKey") or f"{voyage_number}-{condition}",
         "updatedAt": data.get("updatedAt") or data.get("serverUpdatedAt"),
         "deviceId": data.get("deviceId"),
@@ -173,7 +187,7 @@ def list_voyages(vessel: str) -> list[dict]:
             for cond_file in sorted(path.glob("*.json")):
                 cond = cond_file.stem.upper()
                 if COND_RE.match(cond):
-                    add_leg(voyage_number, cond, cond_file)
+                    add_leg(voyage_number, safe_condition(cond), cond_file)
         elif path.suffix == ".json":
             # Legacy flat: voyageNo-CONDITION.json or bare voyageKey.json
             m = LEGACY_COND_SUFFIX.match(path.stem)
@@ -183,7 +197,7 @@ def list_voyages(vessel: str) -> list[dict]:
                 # Unknown legacy key — expose as voyage with UNKNOWN skipped;
                 # try to parse trailing condition from voyageSyncKey style.
                 stem = path.stem
-                for cond in ("BALLAST", "LADEN"):
+                for cond in ("B", "L", "BALLAST", "LADEN"):
                     suffix = f"-{cond}"
                     if stem.upper().endswith(suffix):
                         add_leg(stem[: -len(suffix)], cond, path)
@@ -194,12 +208,12 @@ def list_voyages(vessel: str) -> list[dict]:
         bucket = by_voyage[voyage_number]
         conditions = [
             bucket["conditions"][c]
-            for c in ("BALLAST", "LADEN")
+            for c in ("B", "L")
             if c in bucket["conditions"]
         ]
         # include any other unexpected conditions last
         for c, meta in bucket["conditions"].items():
-            if c not in ("BALLAST", "LADEN"):
+            if c not in ("B", "L"):
                 conditions.append(meta)
         latest = max((c.get("updatedAt") or "" for c in conditions), default="")
         out.append(
@@ -207,8 +221,8 @@ def list_voyages(vessel: str) -> list[dict]:
                 "voyageNumber": voyage_number,
                 "voyageKey": voyage_number,
                 "conditions": conditions,
-                "hasBallast": any(c["condition"] == "BALLAST" for c in conditions),
-                "hasLaden": any(c["condition"] == "LADEN" for c in conditions),
+                "hasBallast": any(c["condition"] == "B" for c in conditions),
+                "hasLaden": any(c["condition"] == "L" for c in conditions),
                 "updatedAt": latest or None,
             }
         )
@@ -377,7 +391,7 @@ class SyncHandler(BaseHTTPRequestHandler):
                         self,
                         HTTPStatus.BAD_REQUEST,
                         {
-                            "error": "use /api/voyage/<vessel>/<voyageNo>/<BALLAST|LADEN>"
+                            "error": "use /api/voyage/<vessel>/<voyageNo>/<B|L>"
                         },
                     )
                     return
@@ -528,7 +542,7 @@ def main() -> None:
     httpd = ThreadingHTTPServer((HOST, PORT), SyncHandler)
     print(f"Noon Report sync server listening on http://{HOST}:{PORT}")
     print(f"Data directory: {DATA_DIR.resolve()}")
-    print("Layout: <data>/<vessel>/<voyageNo>/<BALLAST|LADEN>.json")
+    print("Layout: <data>/<vessel>/<voyageNo>/<B|L>.json  (B=ballast, L=laden)")
     if STATIC_DIR:
         print(f"Serving static PWA from: {STATIC_DIR}")
     if API_TOKEN == "change-me-in-production":
