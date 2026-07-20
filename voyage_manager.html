@@ -2234,7 +2234,13 @@ function updateEntryBlrIncDisplays(){
   /* Boiler / incinerator editing lives on Voyage Summary */
   syncIncineratorLoadPctDisplay('vs_incKw', 'vs_incLoadPct');
 }
-function fmt(n,d=2){ if (n===null||n===undefined||isNaN(n)) return "—"; return Number(n).toFixed(d); }
+function fmt(n,d=3){ if (n===null||n===undefined||isNaN(n)) return "—"; return Number(n).toFixed(3); }
+/* Numeric CSV / export cells — always 3 decimal places; blank when missing. */
+function fmtNum(n){
+  if (n===null||n===undefined||n==='') return '';
+  const x = Number(n);
+  return isNaN(x) ? '' : x.toFixed(3);
+}
 function meterCellText(unit){
   if (unit.meterIn!==undefined && unit.meterOut!==undefined && unit.meterIn!==null && unit.meterOut!==null){
     return `In ${fmt(unit.meterIn,0)} / Out ${fmt(unit.meterOut,0)}`;
@@ -2946,14 +2952,14 @@ function abstractRowCells(r){
   const condClass = r.condition==='BALLAST' ? 'cond-B':'cond-L';
   const cylText = r.cylCons===null||r.cylCons===undefined ? '—' : `${fmt(r.cylCons,1)} (${r.tbn})`;
   return `<td>${dtStr}</td><td>${r.operation}</td>
-    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,1)}</td><td>${r.rpm??'—'}</td>
-    <td>${r.distEngine===null||r.distEngine===undefined?'—':fmt(r.distEngine,1)}</td><td>${r.speedEngine===null||r.speedEngine===undefined?'—':fmt(r.speedEngine,2)}</td>
-    <td>${fmt(r.distanceShip,1)}</td><td>${r.speedShip===null||r.speedShip===undefined?'—':fmt(r.speedShip,2)}</td>
-    <td>${r.slip===null||r.slip===undefined?'—':fmt(r.slip,1)}</td><td>${r.mcrPct===null||r.mcrPct===undefined?'—':fmt(r.mcrPct,1)}</td><td>${r.kwEst===null||r.kwEst===undefined?'—':fmt(r.kwEst,0)}</td>
+    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs)}</td><td>${r.rpm==null||r.rpm===undefined?'—':fmt(r.rpm)}</td>
+    <td>${r.distEngine===null||r.distEngine===undefined?'—':fmt(r.distEngine)}</td><td>${r.speedEngine===null||r.speedEngine===undefined?'—':fmt(r.speedEngine)}</td>
+    <td>${fmt(r.distanceShip)}</td><td>${r.speedShip===null||r.speedShip===undefined?'—':fmt(r.speedShip)}</td>
+    <td>${r.slip===null||r.slip===undefined?'—':fmt(r.slip)}</td><td>${r.mcrPct===null||r.mcrPct===undefined?'—':fmt(r.mcrPct)}</td><td>${r.kwEst===null||r.kwEst===undefined?'—':fmt(r.kwEst)}</td>
     <td><span class="cond-tag ${condClass}">${r.condition[0]}</span></td>
-    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,1)}</td><td>${fmt(r.distanceShip,1)}</td><td>${r.rpm??'—'}</td>
-    <td>${r.revCounter??'—'}</td><td>${r.dailyRevs===null||r.dailyRevs===undefined?'—':fmt(r.dailyRevs,0)}</td>
-    <td>${meterCellText(r.me)}</td><td>${meterCellText(r.ge)}</td><td>${fmt(r.blr.meter,0)}</td>
+    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs)}</td><td>${fmt(r.distanceShip)}</td><td>${r.rpm==null||r.rpm===undefined?'—':fmt(r.rpm)}</td>
+    <td>${r.revCounter==null||r.revCounter===undefined?'—':fmt(r.revCounter)}</td><td>${r.dailyRevs===null||r.dailyRevs===undefined?'—':fmt(r.dailyRevs)}</td>
+    <td>${meterCellText(r.me)}</td><td>${meterCellText(r.ge)}</td><td>${fmt(r.blr.meter)}</td>
     <td>${r.meCons===null||r.meCons===undefined?'—':fmt(r.meCons,3)}</td><td>${r.geCons===null||r.geCons===undefined?'—':fmt(r.geCons,3)}</td>
     <td>${r.blrCons===null||r.blrCons===undefined?'—':fmt(r.blrCons,3)}</td>
     <td>${r.total===null||r.total===undefined?'—':fmt(r.total,3)}</td>
@@ -2969,10 +2975,10 @@ const ABSTRACT_CSV_HEADER = ["DateTime","Operation","RunHrs","RPM","DistEngine",
   "Cond","Hrs","DistShip2","RPM2","RevCounter","DailyRevs","MERun","GERun","BlrRun","MECons","GECons","BlrCons","TotalCons",
   "CylOilCons","CylGrade","MELO","GELO","FWMeter","FWProduced","FWRob","FWCons"];
 function abstractRowToCsv(r){
-  return [r.datetime, r.operation, r.hrs??'', r.rpm??'', r.distEngine??'', r.speedEngine??'', r.distanceShip, r.speedShip??'',
-    r.slip??'', r.mcrPct??'', r.kwEst??'', r.condition, r.hrs??'', r.distanceShip, r.rpm??'', r.revCounter??'', r.dailyRevs??'',
-    meterCellText(r.me), meterCellText(r.ge), r.blr.meter, r.meCons??'', r.geCons??'', r.blrCons??'', r.total??'',
-    r.cylCons??'', r.tbn, r.meLoCons??'', r.geLoCons??'', r.fwProd??'', r.fwProdD??'', r.fwRob??'', r.fwConsD??''];
+  return [r.datetime, r.operation, fmtNum(r.hrs), fmtNum(r.rpm), fmtNum(r.distEngine), fmtNum(r.speedEngine), fmtNum(r.distanceShip), fmtNum(r.speedShip),
+    fmtNum(r.slip), fmtNum(r.mcrPct), fmtNum(r.kwEst), r.condition, fmtNum(r.hrs), fmtNum(r.distanceShip), fmtNum(r.rpm), fmtNum(r.revCounter), fmtNum(r.dailyRevs),
+    meterCellText(r.me), meterCellText(r.ge), fmtNum(r.blr.meter), fmtNum(r.meCons), fmtNum(r.geCons), fmtNum(r.blrCons), fmtNum(r.total),
+    fmtNum(r.cylCons), r.tbn, fmtNum(r.meLoCons), fmtNum(r.geLoCons), fmtNum(r.fwProd), fmtNum(r.fwProdD), fmtNum(r.fwRob), fmtNum(r.fwConsD)];
 }
 function csvEscape(v){
   const s = (v===null||v===undefined) ? '' : String(v);
@@ -3922,7 +3928,7 @@ function openReportEditor(entryId){
   };
 }
 
-function fmtP(n, d=1){ return (n===null||n===undefined||isNaN(n)) ? '—' : Number(n).toFixed(d); }
+function fmtP(n, d=3){ return (n===null||n===undefined||isNaN(n)) ? '—' : Number(n).toFixed(3); }
 
 function escPrint(s){
   return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -5564,8 +5570,8 @@ function periodRunHours(prevRef, curDt, curMeRuntime){
 
 let rpmSyncGuard = false;
 function setLinkedRpmFields(rpm, revCounter){
-  const rpmStr = rpm==null || isNaN(rpm) ? '' : Number(rpm).toFixed(2);
-  const rcStr = revCounter==null || isNaN(revCounter) ? '' : String(Math.round(revCounter));
+  const rpmStr = rpm==null || isNaN(rpm) ? '' : Number(rpm).toFixed(3);
+  const rcStr = revCounter==null || isNaN(revCounter) ? '' : Number(revCounter).toFixed(3);
   const set = (id, val)=>{ const el = document.getElementById(id); if (el && document.activeElement!==el) el.value = val; };
   set('in_rpm', rpmStr);
   set('vs_rpm', rpmStr);
@@ -6943,13 +6949,13 @@ function downloadCSV(filename, header, lines){
 document.getElementById('btnExportCSVLog').addEventListener('click', ()=>{
   const {rows} = computeDerived();
   const header = ["DateTime","Operation","Condition","Hours","DistShip","RPM","RevCounter","DailyRevs","MECons","GECons","BlrCons","Total","CylCons","CylGrade","MELo","GELo","FWMeter","FWProduced","FWRob","FWCons"];
-  const lines = rows.map(r=>[r.datetime,r.operation,r.condition,r.hrs??'',r.distanceShip,r.rpm??'',r.revCounter??'',r.dailyRevs??'',r.meCons??'',r.geCons??'',r.blrCons??'',r.total??'',r.cylCons??'',r.tbn,r.meLoCons??'',r.geLoCons??'',r.fwProd??'',r.fwProdD??'',r.fwRob??'',r.fwConsD??'']);
+  const lines = rows.map(r=>[r.datetime,r.operation,r.condition,fmtNum(r.hrs),fmtNum(r.distanceShip),fmtNum(r.rpm),fmtNum(r.revCounter),fmtNum(r.dailyRevs),fmtNum(r.meCons),fmtNum(r.geCons),fmtNum(r.blrCons),fmtNum(r.total),fmtNum(r.cylCons),r.tbn,fmtNum(r.meLoCons),fmtNum(r.geLoCons),fmtNum(r.fwProd),fmtNum(r.fwProdD),fmtNum(r.fwRob),fmtNum(r.fwConsD)]);
   downloadCSV('voyage-log.csv', header, lines);
 });
 document.getElementById('btnExportCSVCons').addEventListener('click', ()=>{
   const {rows} = computeDerived();
   const header = ["DateTime","Operation","METype","MECons","GEType","GECons","BlrType","BlrCons","Total","FWCons"];
-  const lines = rows.map(r=>[r.datetime,r.operation,r.me.type,r.meCons??'',r.ge.type,r.geCons??'',r.blr.type,r.blrCons??'',r.total??'',r.fwConsD??'']);
+  const lines = rows.map(r=>[r.datetime,r.operation,r.me.type,fmtNum(r.meCons),r.ge.type,fmtNum(r.geCons),r.blr.type,fmtNum(r.blrCons),fmtNum(r.total),fmtNum(r.fwConsD)]);
   downloadCSV('consumption.csv', header, lines);
 });
 
