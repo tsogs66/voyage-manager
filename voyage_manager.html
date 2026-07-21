@@ -1189,8 +1189,8 @@
     <div class="panel">
       <h2>Consumption by Fuel Type &amp; Unit</h2>
       <div class="table-scroll">
-        <table>
-          <thead><tr>
+        <table id="consumptionTable">
+          <thead><tr id="consumptionHead">
             <th>Date/Time</th><th>Operation</th>
             <th>HFO M/E</th><th>HFO G/E</th><th>HFO Blr</th><th>HFO Total</th>
             <th>LSFO M/E</th><th>LSFO G/E</th><th>LSFO Blr</th><th>LSFO Total</th>
@@ -4217,6 +4217,88 @@ function renderVoyageSetupRobFields(rob, robLube){
   }
 }
 
+/** Build one consumption-table data row (fuel-by-type × unit + FW). */
+function consumptionRowValues(r){
+  const unit = (type, cons) => (r[type]?.type === cons ? r[`${type==='me'?'me':type==='ge'?'ge':'blr'}Cons`] : null);
+  // clearer:
+  const meOf = fuel => r.me.type===fuel ? r.meCons : null;
+  const geOf = fuel => r.ge.type===fuel ? r.geCons : null;
+  const blrOf = fuel => r.blr.type===fuel ? r.blrCons : null;
+  const sum = (...vals) => {
+    const parts = vals.filter(v => v!=null && !isNaN(v));
+    if (!parts.length) return null;
+    return parts.reduce((a,v)=>a+v, 0);
+  };
+  const dt = new Date(r.datetime);
+  return {
+    datetime: dt.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'2-digit'}),
+    operation: r.operation,
+    hfoMe: meOf('HFO'), hfoGe: geOf('HFO'), hfoBlr: blrOf('HFO'),
+    hfoTotal: sum(meOf('HFO'), geOf('HFO'), blrOf('HFO')),
+    lsfoMe: meOf('LSFO'), lsfoGe: geOf('LSFO'), lsfoBlr: blrOf('LSFO'),
+    lsfoTotal: sum(meOf('LSFO'), geOf('LSFO'), blrOf('LSFO')),
+    mdoMe: meOf('MDO/MGO'), mdoGe: geOf('MDO/MGO'), mdoBlr: blrOf('MDO/MGO'),
+    mdoTotal: sum(meOf('MDO/MGO'), geOf('MDO/MGO'), blrOf('MDO/MGO')),
+    lsmgoMe: meOf('LSMGO'), lsmgoGe: geOf('LSMGO'), lsmgoBlr: blrOf('LSMGO'),
+    lsmgoTotal: sum(meOf('LSMGO'), geOf('LSMGO'), blrOf('LSMGO')),
+    fwCons: r.fwConsD
+  };
+}
+
+const CONSUMPTION_COLS = [
+  { key:'datetime', label:'Date/Time', always:true, kind:'text' },
+  { key:'operation', label:'Operation', always:true, kind:'text' },
+  { key:'hfoMe', label:'HFO M/E', kind:'fuel' },
+  { key:'hfoGe', label:'HFO G/E', kind:'fuel' },
+  { key:'hfoBlr', label:'HFO Blr', kind:'fuel' },
+  { key:'hfoTotal', label:'HFO Total', kind:'fuel' },
+  { key:'lsfoMe', label:'LSFO M/E', kind:'fuel' },
+  { key:'lsfoGe', label:'LSFO G/E', kind:'fuel' },
+  { key:'lsfoBlr', label:'LSFO Blr', kind:'fuel' },
+  { key:'lsfoTotal', label:'LSFO Total', kind:'fuel' },
+  { key:'mdoMe', label:'MDO/MGO M/E', kind:'fuel' },
+  { key:'mdoGe', label:'MDO/MGO G/E', kind:'fuel' },
+  { key:'mdoBlr', label:'MDO/MGO Blr', kind:'fuel' },
+  { key:'mdoTotal', label:'MDO/MGO Total', kind:'fuel' },
+  { key:'lsmgoMe', label:'LSMGO M/E', kind:'fuel' },
+  { key:'lsmgoGe', label:'LSMGO G/E', kind:'fuel' },
+  { key:'lsmgoBlr', label:'LSMGO Blr', kind:'fuel' },
+  { key:'lsmgoTotal', label:'LSMGO Total', kind:'fuel' },
+  { key:'fwCons', label:'FW Cons', kind:'fw' }
+];
+
+function consumptionCellHasValue(v){
+  return v!=null && v!=='' && !(typeof v==='number' && isNaN(v));
+}
+
+function formatConsumptionCell(col, v){
+  if (col.kind==='text') return v ?? '—';
+  if (!consumptionCellHasValue(v)) return '—';
+  if (col.kind==='fw') return fmtRob(v, 'fw');
+  return fmtFuel(v);
+}
+
+/** Consumption tab: omit columns that are empty for every entry. */
+function renderConsumptionTable(rows){
+  const head = document.getElementById('consumptionHead');
+  const body = document.getElementById('consumptionBody');
+  if (!head || !body) return;
+  if (!rows.length){
+    head.innerHTML = CONSUMPTION_COLS.map(c=>`<th>${c.label}</th>`).join('');
+    body.innerHTML = `<tr class="empty-row"><td colspan="${CONSUMPTION_COLS.length}">No entries yet.</td></tr>`;
+    return;
+  }
+  const data = rows.map(consumptionRowValues);
+  const visible = CONSUMPTION_COLS.filter(col=>{
+    if (col.always) return true;
+    return data.some(row => consumptionCellHasValue(row[col.key]));
+  });
+  head.innerHTML = visible.map(c=>`<th>${c.label}</th>`).join('');
+  body.innerHTML = data.map(row =>
+    `<tr>${visible.map(col => `<td>${formatConsumptionCell(col, row[col.key])}</td>`).join('')}</tr>`
+  ).join('');
+}
+
 function render(){
   _gaugeUid = 0;
   renderVesselSelector();
@@ -4353,29 +4435,8 @@ function render(){
     }));
   }
 
-  // consumption table
-  const consBody = document.getElementById('consumptionBody');
-  if (rows.length===0){
-    consBody.innerHTML = `<tr class="empty-row"><td colspan="19">No entries yet.</td></tr>`;
-  } else {
-    consBody.innerHTML = rows.map(r=>{
-      const dt = new Date(r.datetime);
-      const dtStr = dt.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'2-digit'});
-      const hfoMe = r.me.type==='HFO'?r.meCons:null, hfoGe = r.ge.type==='HFO'?r.geCons:null, hfoBlr = r.blr.type==='HFO'?r.blrCons:null;
-      const lsfoMe = r.me.type==='LSFO'?r.meCons:null, lsfoGe = r.ge.type==='LSFO'?r.geCons:null, lsfoBlr = r.blr.type==='LSFO'?r.blrCons:null;
-      const mdoMe = r.me.type==='MDO/MGO'?r.meCons:null, mdoGe = r.ge.type==='MDO/MGO'?r.geCons:null, mdoBlr = r.blr.type==='MDO/MGO'?r.blrCons:null;
-      const lsmgoMe = r.me.type==='LSMGO'?r.meCons:null, lsmgoGe = r.ge.type==='LSMGO'?r.geCons:null, lsmgoBlr = r.blr.type==='LSMGO'?r.blrCons:null;
-      const sum = (...vals)=> vals.reduce((a,v)=> a+(v||0),0);
-      const c = v => v===null||v===undefined? '—': fmtFuel(v);
-      return `<tr><td>${dtStr}</td><td>${r.operation}</td>
-        <td>${c(hfoMe)}</td><td>${c(hfoGe)}</td><td>${c(hfoBlr)}</td><td>${fmtFuel(sum(hfoMe,hfoGe,hfoBlr))}</td>
-        <td>${c(lsfoMe)}</td><td>${c(lsfoGe)}</td><td>${c(lsfoBlr)}</td><td>${fmtFuel(sum(lsfoMe,lsfoGe,lsfoBlr))}</td>
-        <td>${c(mdoMe)}</td><td>${c(mdoGe)}</td><td>${c(mdoBlr)}</td><td>${fmtFuel(sum(mdoMe,mdoGe,mdoBlr))}</td>
-        <td>${c(lsmgoMe)}</td><td>${c(lsmgoGe)}</td><td>${c(lsmgoBlr)}</td><td>${fmtFuel(sum(lsmgoMe,lsmgoGe,lsmgoBlr))}</td>
-        <td>${r.fwConsD===null||r.fwConsD===undefined?'—':fmtLube(r.fwConsD)}</td>
-      </tr>`;
-    }).join('');
-  }
+  // consumption table — hide columns that are empty across every row
+  renderConsumptionTable(rows);
 
   // summary
   const totalCons = Object.values(consByFuel).reduce((a,b)=>a+b,0);
