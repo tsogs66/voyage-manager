@@ -575,7 +575,40 @@
     <div class="tab" data-page="receipts">Receipts</div>
     <div class="tab" data-page="reports">Reports</div>
     <div class="tab" data-page="data">Data</div>
+    <div class="tab" data-page="voyagesetup">Voyage Setup</div>
     <div class="tab" data-page="setup">Setup</div>
+  </div>
+
+  <!-- VOYAGE SETUP -->
+  <div class="page" id="page-voyagesetup">
+    <div class="panel">
+      <h2>Voyage Specifics</h2>
+      <div class="form-grid cols3">
+        <div class="field"><label>Voyage No.</label><input id="s_voyageNumber"></div>
+        <div class="field"><label>Ships Condition</label><select id="s_shipCondition"><option value="B">B — Ballast</option><option value="L">L — Laden</option></select></div>
+        <div class="field"><label>Date &amp; Time (initial)</label><input type="datetime-local" id="s_initDateTime"></div>
+        <div class="field"><label>Departure</label><input id="s_departPort"></div>
+        <div class="field"><label>Arrival</label><input id="s_arrivePort"></div>
+        <div class="field"><label>Voyage Distance (nm)</label><input type="number" step="0.1" id="s_voyageDistance"></div>
+      </div>
+      <div class="hint">Each voyage number <strong>starts as B (ballast)</strong> and <strong>ends as L (laden)</strong>. Only these two letters mark voyage condition — never any other. Legs are stored separately so the active log stays short.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Remaining Onboard (Opening ROB)</h2>
+      <h3 class="sub">Fuel (metric tons)</h3>
+      <div class="unit-group cols5" id="setupFuelRob"></div>
+      <h3 class="sub">Lube Oil &amp; Fresh Water (litres)</h3>
+      <div class="unit-group cols5" id="setupLubeRob"></div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+        <button class="primary" id="btnSaveVoyageDetails">Update Voyage Details</button>
+        <button class="danger" id="btnResetVoyage">Create New Voyage…</button>
+      </div>
+      <div class="hint" style="margin-top:12px; text-align:center;">Create New Voyage clears the voyage log and receipts to start fresh, but keeps everything continuous: your last entry's meter readings carry over as the opening reference for the next entry, current ROB becomes the new opening ROB, and Departure Port is set to this voyage's Arrival Port. Before it runs, Voyage No., Ships Condition, and Date &amp; Time above must be updated to reflect the new voyage.</div>
+    </div>
   </div>
 
   <!-- SETUP -->
@@ -611,19 +644,6 @@
     </div>
 
     <div class="panel">
-      <h2>Voyage Specifics</h2>
-      <div class="form-grid cols3">
-        <div class="field"><label>Voyage No.</label><input id="s_voyageNumber"></div>
-        <div class="field"><label>Ships Condition</label><select id="s_shipCondition"><option value="B">B — Ballast</option><option value="L">L — Laden</option></select></div>
-        <div class="field"><label>Date &amp; Time (initial)</label><input type="datetime-local" id="s_initDateTime"></div>
-        <div class="field"><label>Departure</label><input id="s_departPort"></div>
-        <div class="field"><label>Arrival</label><input id="s_arrivePort"></div>
-        <div class="field"><label>Voyage Distance (nm)</label><input type="number" step="0.1" id="s_voyageDistance"></div>
-      </div>
-      <div class="hint">Each voyage number <strong>starts as B (ballast)</strong> and <strong>ends as L (laden)</strong>. Only these two letters mark voyage condition — never any other. Legs are stored separately so the active log stays short.</div>
-    </div>
-
-    <div class="panel">
       <h2>Voyage Library — B / L Legs</h2>
       <div class="hint" style="margin-bottom:8px;">Lists voyage numbers for the <strong>selected vessel only</strong> (Fleet selector above). Other ships’ legs stay hidden.</div>
       <div class="form-grid cols3">
@@ -647,20 +667,9 @@
     </div>
 
     <div class="panel">
-      <h2>Remaining Onboard (Opening ROB)</h2>
-      <h3 class="sub">Fuel (metric tons)</h3>
-      <div class="unit-group cols5" id="setupFuelRob"></div>
-      <h3 class="sub">Lube Oil &amp; Fresh Water (litres)</h3>
-      <div class="unit-group cols5" id="setupLubeRob"></div>
-    </div>
-
-    <div class="panel">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
-        <button class="primary" id="btnSaveVoyageDetails">Update Voyage Details</button>
-        <button class="danger" id="btnResetVoyage">Create New Voyage…</button>
         <button class="ghost" id="btnToggleShipDetails">Ship Details ▾</button>
       </div>
-      <div class="hint" style="margin-top:12px; text-align:center;">Create New Voyage clears the voyage log and receipts to start fresh, but keeps everything continuous: your last entry's meter readings carry over as the opening reference for the next entry, current ROB becomes the new opening ROB, and Departure Port is set to this voyage's Arrival Port. Before it runs, Voyage No., Ships Condition, and Date &amp; Time above must be updated to reflect the new voyage.</div>
     </div>
 
     <div id="shipDetailsSection" style="display:none;">
@@ -1276,7 +1285,7 @@
       <h2>Voyage Progress</h2>
       <div id="voyageProgressViz"></div>
       <div class="stat-strip" id="voyageProgressStrip" style="margin-top:14px;"></div>
-      <div class="hint">Distance To Go, Days To Go and ETA are based on Total Voyage Distance (Setup → Voyage Specifics) minus cumulative distance run as of the last log entry, divided by that entry's own speed (falling back to the voyage average speed if the last entry has none).</div>
+      <div class="hint">Distance To Go, Days To Go and ETA are based on Total Voyage Distance (Voyage Setup → Voyage Specifics) minus cumulative distance run as of the last log entry, divided by that entry's own speed (falling back to the voyage average speed if the last entry has none).</div>
     </div>
     <div class="panel">
       <h2>Performance Averages</h2>
@@ -5848,7 +5857,7 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
   await saveSetup();
   await renderVoyageLibrary();
   render();
-  switchTab('setup');
+  switchTab('voyagesetup');
   alert(`Started ${newVoyageNo} / ${newCondition}. Previous leg kept in Voyage Library. Downloaded "${backupName}" and "${abstractName}".`);
 });
 
@@ -7145,7 +7154,7 @@ function renderVoyageProgress(animateShip){
   const traveled = lastRow ? (lastRow.cumDistShip||0) : 0;
 
   if (totalDistance==null || totalDistance<=0){
-    box.innerHTML = `<div class="hint">Set Total Voyage Distance in Setup → Voyage Specifics to see the voyage progress chart.</div>`;
+    box.innerHTML = `<div class="hint">Set Total Voyage Distance in Voyage Setup → Voyage Specifics to see the voyage progress chart.</div>`;
     return;
   }
 
