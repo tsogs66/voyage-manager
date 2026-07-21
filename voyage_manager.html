@@ -1042,7 +1042,7 @@
             <tbody id="vsRobBody"></tbody>
           </table>
         </div>
-        <button class="ghost small" id="btnVsResetConsOverride" type="button" style="margin-top:8px;">Reset ROB Cons. to Calculated</button>
+        <button class="ghost small" id="btnVsResetConsOverride" type="button" style="margin-top:8px;">Reset Lube ROB Cons. to Calculated</button>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -3333,6 +3333,23 @@ function fmt(n,d=2){
 function fmtFuel(n){ return fmt(n, 3); }
 /* Lube oil quantities — whole litres, no decimals. */
 function fmtLube(n){ return fmt(n, 0); }
+/** Fuel & Lube ROB decimals: fuel 3, lube oil none, fresh water 2. */
+function robDec(cat){
+  if (cat==='fuel') return 3;
+  if (cat==='fw') return 2;
+  return 0;
+}
+function fmtRob(n, cat){ return fmt(n, robDec(cat)); }
+function robConsStep(cat){
+  if (cat==='fuel') return '0.001';
+  if (cat==='fw') return '0.01';
+  return '1';
+}
+function fmtRobInput(n, cat){
+  const d = robDec(cat);
+  if (n===null||n===undefined||isNaN(n)) return (0).toFixed(d);
+  return Number(n).toFixed(d);
+}
 /* Numeric CSV / export cells. Default 2 decimals; pass d for fuel(3)/lube(0). */
 function fmtNum(n, d=2){
   if (n===null||n===undefined||n==='') return '';
@@ -5872,8 +5889,8 @@ function openRobSnapshot(entryId){
     const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
     const consVal = robRowCons(row, r);
     const nowVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
-    const dec = r.cat==='fuel' ? 3 : 0;
-    return { label:r.label, prevVal, consVal, nowVal, dec, consDec: r.cat==='fuel'?3:0 };
+    const dec = robDec(r.cat);
+    return { label:r.label, prevVal, consVal, nowVal, dec, consDec: dec };
   });
 
   document.getElementById('robSnapshotBody').innerHTML = rowsForPrint.map(r=>`<tr>
@@ -6136,8 +6153,8 @@ function openVoyageSummary(entryId){
 
   document.getElementById('vs_fwProdMeter').value = entry.fwProd ?? '';
   document.getElementById('vs_fwRob').value = entry.fwRob ?? '';
-  document.getElementById('vs_fwProduced').value = row.fwProdD==null?'—':fmtLube(row.fwProdD);
-  document.getElementById('vs_fwConsumed').value = row.fwConsD==null?'—':fmtLube(row.fwConsD);
+  document.getElementById('vs_fwProduced').value = row.fwProdD==null?'—':fmtRob(row.fwProdD, 'fw');
+  document.getElementById('vs_fwConsumed').value = row.fwConsD==null?'—':fmtRob(row.fwConsD, 'fw');
   updateVsFwDisplays();
 
   const misc = entry.miscCons || {"MDO/MGO":0,"LSMGO":0};
@@ -6149,27 +6166,22 @@ function openVoyageSummary(entryId){
     const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
     const consVal = robRowCons(row, r);
     const robVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
+    const lubeEditable = r.cat==='lube';
     return `<tr>
       <td>${r.label}</td>
-      <td>${fmt(prevVal, r.cat==='fuel'?3:0)}</td>
-      <td><input class="pf-input" style="width:80px;" type="number" step="0.001" id="vs_cons_${slugKey(r.key)}" value="${consVal!=null?consVal:0}" data-prev="${prevVal||0}" data-cat="${r.cat}" data-key="${r.key}"></td>
-      <td id="vs_rob_${slugKey(r.key)}">${fmt(robVal, r.cat==='fuel'?3:0)}</td>
+      <td>${fmtRob(prevVal, r.cat)}</td>
+      <td><input class="pf-input" style="width:80px;" type="number" step="${robConsStep(r.cat)}" id="vs_cons_${slugKey(r.key)}" value="${fmtRobInput(consVal, r.cat)}" data-prev="${prevVal||0}" data-cat="${r.cat}" data-key="${r.key}"${lubeEditable?'':' readonly'}></td>
+      <td id="vs_rob_${slugKey(r.key)}">${fmtRob(robVal, r.cat)}</td>
     </tr>`;
   }).join('');
 
-  robBody.querySelectorAll('.pf-input').forEach(inp=>{
+  // Only lube oil cons is editable; fuel grades and fresh water are calculated.
+  robBody.querySelectorAll('.pf-input:not([readonly])').forEach(inp=>{
     inp.addEventListener('input', ()=>{
       const prevVal = parseFloat(inp.dataset.prev)||0;
       const consVal = parseFloat(inp.value)||0;
-      const cat = inp.dataset.cat;
       const robEl = document.getElementById(`vs_rob_${slugKey(inp.dataset.key)}`);
-      if (!robEl) return;
-      if (cat==='fw'){
-        const fwRob = parseFloat(document.getElementById('vs_fwRob')?.value);
-        robEl.textContent = isNaN(fwRob) ? '—' : fmt(fwRob, 0);
-      } else {
-        robEl.textContent = fmt(prevVal - consVal, cat==='fuel'?3:0);
-      }
+      if (robEl) robEl.textContent = fmtRob(prevVal - consVal, inp.dataset.cat || 'lube');
     });
   });
 
@@ -6232,24 +6244,23 @@ function updateVsRobLiveFromCons(){
   const entry = state.entries.find(e=>e.id===currentVsEntryId);
   if (!entry) return;
   const live = computeVsLiveConsByType(entry);
-  const focusedId = document.activeElement ? document.activeElement.id : null;
   getRobRows().forEach(r=>{
-    const consId = 'vs_cons_' + slugKey(r.key);
-    const consEl = document.getElementById(consId);
+    const consEl = document.getElementById('vs_cons_' + slugKey(r.key));
     const robEl = document.getElementById('vs_rob_' + slugKey(r.key));
     if (!consEl) return;
-    const liveCons = robRowCons({consByType: live.consByType, lubeByType: live.lubeByType}, r);
-    if (focusedId !== consId){
-      consEl.value = (liveCons===null || liveCons===undefined) ? 0 : liveCons;
+    // Fuel grades + FW are calculated (not editable); leave lube oil cons as the user set it.
+    if (r.cat!=='lube'){
+      const liveCons = robRowCons({consByType: live.consByType, lubeByType: live.lubeByType}, r);
+      consEl.value = fmtRobInput(liveCons, r.cat);
     }
     const prevVal = parseFloat(consEl.dataset.prev)||0;
     const consVal = parseFloat(consEl.value)||0;
     if (!robEl) return;
     if (r.cat==='fw'){
       const fwRob = parseFloat(document.getElementById('vs_fwRob')?.value);
-      robEl.textContent = isNaN(fwRob) ? '—' : fmt(fwRob, 0);
+      robEl.textContent = isNaN(fwRob) ? '—' : fmtRob(fwRob, 'fw');
     } else {
-      robEl.textContent = fmt(prevVal - consVal, r.cat==='fuel'?3:0);
+      robEl.textContent = fmtRob(prevVal - consVal, r.cat);
     }
   });
 }
@@ -6421,10 +6432,12 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
     GE: num('vs_unit_ge'),
     BLR: num('vs_unit_blr')
   };
+  // Persist only lube oil cons overrides — fuel grades and FW are derived, not edited here.
   entry.consOverride = {};
   getRobRows().forEach(r=>{
+    if (r.cat!=='lube') return;
     const el = document.getElementById('vs_cons_'+slugKey(r.key));
-    entry.consOverride[r.key] = el ? (parseFloat(el.value)||0) : null;
+    if (el) entry.consOverride[r.key] = parseFloat(el.value)||0;
   });
 
   // Keep log-entry bridges in sync
@@ -6630,9 +6643,9 @@ function printVoyageSummary(entryId){
   ].join(''));
 
   const fwSection = printSection('Fresh Water', [
-    printRow('Produced', row.fwProdD==null?'—':`${fmt(row.fwProdD, 2)} L`),
-    printRow('Consumed', row.fwConsD==null?'—':`${fmtLube(row.fwConsD)} L`),
-    printRow('R.O.B.', entry.fwRob==null?'—':`${fmt(entry.fwRob, 2)} L`)
+    printRow('Produced', row.fwProdD==null?'—':`${fmtRob(row.fwProdD, 'fw')} L`),
+    printRow('Consumed', row.fwConsD==null?'—':`${fmtRob(row.fwConsD, 'fw')} L`),
+    printRow('R.O.B.', entry.fwRob==null?'—':`${fmtRob(entry.fwRob, 'fw')} L`)
   ].join(''));
 
   const deltaCls = sfocDeltaClass(row.sfocDelta);
@@ -6705,8 +6718,8 @@ function printVoyageSummary(entryId){
         const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
         const consVal = robRowCons(row, r);
         const nowVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
-        const dec = r.cat==='fuel' ? 3 : 0;
-        return `<tr><td class="row-lbl">${r.label}</td><td>${fmt(prevVal,dec)}</td><td>${consVal===null||consVal===undefined?'—':fmt(consVal,r.cat==='fuel'?3:0)}</td><td>${fmt(nowVal,dec)}</td></tr>`;
+        const dec = robDec(r.cat);
+        return `<tr><td class="row-lbl">${r.label}</td><td>${fmt(prevVal,dec)}</td><td>${consVal===null||consVal===undefined?'—':fmt(consVal,dec)}</td><td>${fmt(nowVal,dec)}</td></tr>`;
       }).join('')}
     </table>`);
 
@@ -6881,7 +6894,7 @@ function updateVsFwDisplays(){
   if (prev && prev.fwRob!=null && fwRob!=null && fwProdD!=null){
     fwCons = prev.fwRob + fwProdD - fwRob;
   }
-  const set = (id, val)=>{ const el=document.getElementById(id); if (el) el.value = val==null?'—':fmtLube(val); };
+  const set = (id, val)=>{ const el=document.getElementById(id); if (el) el.value = val==null?'—':fmtRob(val, 'fw'); };
   set('vs_fwProduced', fwProdD);
   set('vs_fwConsumed', fwCons);
 }
