@@ -4701,17 +4701,10 @@ function render(){
     }));
   }
 
-  // voyage log table
+  // voyage abstract table — hide columns that are empty or all-zero
+  renderVoyageAbstractTable(rows, { headId:'voyageAbstractHead', bodyId:'voyageAbstractBody', withActions:true });
   const vlBody = document.getElementById('voyageAbstractBody');
-  if (rows.length===0){
-    vlBody.innerHTML = `<tr class="empty-row"><td colspan="32">No entries yet.</td></tr>`;
-  } else {
-    vlBody.innerHTML = rows.map(r=> `<tr>${abstractRowCells(r)}
-        <td style="display:flex; gap:4px;">
-          <button class="small ghost" data-view="${r.id}">View</button>
-          <button class="small danger" data-del="${r.id}">✕</button>
-        </td>
-      </tr>`).join('');
+  if (vlBody && rows.length){
     vlBody.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', async ()=>{
       await deleteEntryById(b.dataset.del);
     }));
@@ -7981,7 +7974,7 @@ function renderAbstractList(){
       const a = state.abstracts.find(x=>x.id===b.dataset.viewAbstract);
       if (!a) return;
       document.getElementById('abstractViewerTitle').textContent = `${a.filename}`;
-      document.getElementById('abstractViewerBody').innerHTML = a.rows.map(r=>`<tr>${abstractRowCells(r)}</tr>`).join('');
+      renderVoyageAbstractTable(a.rows || [], { headId:'abstractViewerHead', bodyId:'abstractViewerBody', withActions:false });
       document.getElementById('abstractViewerPanel').style.display = '';
       document.getElementById('btnDownloadAbstract').onclick = () => downloadAbstractCsv(a);
       document.getElementById('abstractViewerPanel').scrollIntoView({behavior:'smooth', block:'nearest'});
