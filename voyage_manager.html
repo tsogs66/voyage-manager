@@ -625,6 +625,7 @@
 
     <div class="panel">
       <h2>Voyage Library — B / L Legs</h2>
+      <div class="hint" style="margin-bottom:8px;">Lists voyage numbers for the <strong>selected vessel only</strong> (Fleet selector above). Other ships’ legs stay hidden.</div>
       <div class="form-grid cols3">
         <div class="field"><label>Voyage No. (library)</label><select id="s_voyageSelect"></select></div>
         <div class="field"><label>Condition leg</label><select id="s_legCondition"><option value="B">B — Ballast</option><option value="L">L — Laden</option></select></div>
@@ -2632,6 +2633,8 @@ async function clearVesselPackData(vesselId){
   for (const store of ['entries','receipts','documents','abstracts','printHistory']){
     await clearVesselStore(store, vesselId);
   }
+  const legs = await listVoyageLegsForVessel(vesselId);
+  for (const leg of legs) await dbDelete('voyageLegs', leg.id);
   await dbDelete('meta', `setup:${vesselId}`);
 }
 
@@ -2676,15 +2679,51 @@ function tagVesselId(item){
   return item;
 }
 
+function vesselRecord(vesselId){
+  if (!vesselId) return null;
+  return state.vessels.find(v => v.id === vesselId || v.slug === vesselId) || null;
+}
+
+/** Registry id + sync slug keys that identify one vessel. */
+function vesselIdentityKeys(vesselId){
+  const keys = new Set();
+  if (vesselId) keys.add(String(vesselId));
+  const v = vesselRecord(vesselId);
+  if (v?.id) keys.add(v.id);
+  if (v?.slug) keys.add(v.slug);
+  return keys;
+}
+
+function vesselRegistryId(vesselId){
+  return vesselRecord(vesselId)?.id || vesselId || state.activeVesselId || LEGACY_VESSEL_ID;
+}
+
+/** True only when a library leg belongs to the given vessel (never other ships). */
+function legBelongsToVessel(leg, vesselId){
+  if (!leg || !vesselId) return false;
+  const keys = vesselIdentityKeys(vesselId);
+  const registryId = vesselRegistryId(vesselId);
+  if (leg.vesselId) return keys.has(leg.vesselId);
+  const lid = String(leg.id || '');
+  for (const k of keys){
+    if (k && lid.startsWith(k + '::')) return true;
+  }
+  /* Untagged, unprefixed legacy rows belong only to the legacy vessel. */
+  if (!lid.includes('::') && registryId === LEGACY_VESSEL_ID) return true;
+  return false;
+}
+
 function belongsToActiveVessel(item){
-  const vid = item?.vesselId || LEGACY_VESSEL_ID;
-  return vid === (state.activeVesselId || LEGACY_VESSEL_ID);
+  if (!item) return false;
+  const keys = vesselIdentityKeys(state.activeVesselId || LEGACY_VESSEL_ID);
+  if (item.vesselId) return keys.has(item.vesselId);
+  return (state.activeVesselId || LEGACY_VESSEL_ID) === LEGACY_VESSEL_ID;
 }
 
 function voyageLegId(vesselId, voyageNumber, condition){
   const vn = slugVoyageNo(voyageNumber);
   const cond = normalizeCondition(condition);
-  return `${vesselId || LEGACY_VESSEL_ID}::${vn}::${cond}`;
+  return `${vesselRegistryId(vesselId)}::${vn}::${cond}`;
 }
 
 function slugVoyageNo(voyageNumber){
@@ -2757,18 +2796,21 @@ async function archiveActiveVoyageLeg(){
 }
 
 async function listVoyageLegsForVessel(vesselId){
-  const vid = vesselId || state.activeVesselId || LEGACY_VESSEL_ID;
+  const vid = vesselRegistryId(vesselId || state.activeVesselId || LEGACY_VESSEL_ID);
   const all = await dbGetAll('voyageLegs');
-  const mine = all.filter(l => (l.vesselId || LEGACY_VESSEL_ID) === vid);
-  /* Migrate legacy BALLAST/LADEN leg ids to B/L once. */
+  const mine = all.filter(l => legBelongsToVessel(l, vid));
+  /* Migrate legacy BALLAST/LADEN leg ids to B/L and normalize vesselId once. */
   const out = [];
   for (const leg of mine){
     const cond = normalizeCondition(leg.condition);
     const wantId = voyageLegId(vid, leg.voyageNumber, cond);
-    if (leg.id !== wantId || leg.condition !== cond){
-      const migrated = { ...leg, id: wantId, condition: cond };
+    if (leg.id !== wantId || leg.condition !== cond || leg.vesselId !== vid){
+      const migrated = { ...leg, id: wantId, condition: cond, vesselId: vid };
       if (migrated.setup) migrated.setup.shipCondition = cond;
-      (migrated.entries || []).forEach(e => { e.condition = normalizeCondition(e.condition); });
+      (migrated.entries || []).forEach(e => {
+        e.condition = normalizeCondition(e.condition);
+        e.vesselId = vid;
+      });
       await dbPut('voyageLegs', migrated);
       if (leg.id !== wantId) await dbDelete('voyageLegs', leg.id);
       out.push(migrated);
@@ -2811,9 +2853,10 @@ async function activateVoyageLeg(vesselId, voyageNumber, condition){
   }
 
   const id = voyageLegId(vid, vn, cond);
-  const all = await dbGetAll('voyageLegs');
-  const leg = all.find(l => l.id === id);
-  if (!leg) throw new Error(`No ${cond} records for voyage ${vn}`);
+  const all = await listVoyageLegsForVessel(vid);
+  const leg = all.find(l => l.id === id)
+    || all.find(l => (l.voyageNumber || '').trim() === vn && normalizeCondition(l.condition) === cond);
+  if (!leg) throw new Error(`No ${cond} records for voyage ${vn} on this vessel`);
 
   await clearActiveVesselWorkingData(vid);
 
@@ -2841,17 +2884,27 @@ async function activateVoyageLeg(vesselId, voyageNumber, condition){
   return leg;
 }
 
+/** Vessel whose Voyage Library is shown — selected fleet vessel, else active. */
+function libraryScopeVesselId(){
+  return document.getElementById('s_vesselSelect')?.value || state.activeVesselId || LEGACY_VESSEL_ID;
+}
+
 async function renderVoyageLibrary(){
   const body = document.getElementById('voyageLibraryBody');
   const sel = document.getElementById('s_voyageSelect');
   const hint = document.getElementById('voyageLibraryHint');
   if (!body) return;
-  const index = await getVoyageLibraryIndex(state.activeVesselId);
-  const activeVn = (state.setup.voyageNumber || '').trim();
-  const activeCond = normalizeCondition(state.setup.shipCondition);
+  const scopeVid = libraryScopeVesselId();
+  const vessel = vesselRecord(scopeVid);
+  const index = await getVoyageLibraryIndex(scopeVid);
+  const isActiveScope = scopeVid === state.activeVesselId;
+  const activeVn = isActiveScope ? (state.setup.voyageNumber || '').trim() : '';
+  const activeCond = isActiveScope
+    ? normalizeCondition(state.setup.shipCondition)
+    : (index.find(r=>r.B)?.B ? 'B' : (index.find(r=>r.L)?.L ? 'L' : 'B'));
 
   if (!index.length){
-    body.innerHTML = `<tr class="empty-row"><td colspan="4">No archived voyage legs yet — save the current leg or install the test fleet.</td></tr>`;
+    body.innerHTML = `<tr class="empty-row"><td colspan="4">No voyage legs for ${vessel?.name || 'this vessel'} — save the current leg or install the test fleet.</td></tr>`;
   } else {
     body.innerHTML = index.map(row=>{
       const b = row.B;
@@ -2859,8 +2912,8 @@ async function renderVoyageLibrary(){
       const bTxt = b ? `${b.entryCount||0} entries` : '—';
       const lTxt = l ? `${l.entryCount||0} entries` : '—';
       const updated = [b?.updatedAt, l?.updatedAt].filter(Boolean).sort().slice(-1)[0] || '—';
-      const active = row.voyageNumber === activeVn ? ` style="background:rgba(63,200,220,0.08)"` : '';
-      return `<tr${active}><td>${row.voyageNumber}${row.voyageNumber===activeVn?' ★':''}</td><td>${bTxt}</td><td>${lTxt}</td><td>${updated=== '—' ? '—' : new Date(updated).toLocaleString()}</td></tr>`;
+      const active = isActiveScope && row.voyageNumber === activeVn ? ` style="background:rgba(63,200,220,0.08)"` : '';
+      return `<tr${active}><td>${row.voyageNumber}${isActiveScope && row.voyageNumber===activeVn?' ★':''}</td><td>${bTxt}</td><td>${lTxt}</td><td>${updated=== '—' ? '—' : new Date(updated).toLocaleString()}</td></tr>`;
     }).join('');
   }
 
@@ -2875,11 +2928,16 @@ async function renderVoyageLibrary(){
   const legSel = document.getElementById('s_legCondition');
   if (legSel) legSel.value = activeCond;
   if (hint){
-    hint.textContent = `Active: voyage ${activeVn || '—'} · ${activeCond} · ${state.entries.length} log entries. Voyages start B and finish L; each condition is a separate short record.`;
+    const vName = vessel?.name || 'selected vessel';
+    if (isActiveScope){
+      hint.textContent = `${vName} library only · active voyage ${activeVn || '—'} · ${activeCond} · ${state.entries.length} log entries. Voyages start B and finish L; each condition is a separate short record.`;
+    } else {
+      hint.textContent = `Showing ${vName} library only (${index.length} voyage no.). Load Selected Vessel to make it active before opening a leg.`;
+    }
   }
 
   const pullSel = document.getElementById('sync_pullVoyage');
-  if (pullSel){
+  if (pullSel && isActiveScope){
     const keep = pullSel.value;
     pullSel.innerHTML = index.length
       ? index.map(r=>`<option value="${r.voyageNumber}">${r.voyageNumber}</option>`).join('')
@@ -2952,7 +3010,11 @@ async function loadVesselFromDb(vesselId){
   const [allEntries, allReceipts, allDocs, allAbstracts, allPrint] = await Promise.all([
     dbGetAll('entries'), dbGetAll('receipts'), dbGetAll('documents'), dbGetAll('abstracts'), dbGetAll('printHistory')
   ]);
-  const match = item => (item.vesselId || LEGACY_VESSEL_ID) === vesselId;
+  const match = item => {
+    if (!item) return false;
+    if (item.vesselId) return vesselIdentityKeys(vesselId).has(item.vesselId);
+    return vesselId === LEGACY_VESSEL_ID;
+  };
   state.entries = allEntries.filter(match).map(normalizeEntry);
   state.receipts = allReceipts.filter(match);
   state.documents = allDocs.filter(match);
@@ -3059,6 +3121,20 @@ async function migrateToMultiVessel(metaAll){
       for (const item of all){
         item.vesselId = vUser.id;
         await dbPut(store, item);
+      }
+    }
+    const legacyLegs = await dbGetAll('voyageLegs');
+    for (const leg of legacyLegs){
+      if (!leg.vesselId || leg.vesselId === LEGACY_VESSEL_ID){
+        const cond = normalizeCondition(leg.condition);
+        const migrated = {
+          ...leg,
+          vesselId: vUser.id,
+          condition: cond,
+          id: voyageLegId(vUser.id, leg.voyageNumber, cond)
+        };
+        await dbPut('voyageLegs', migrated);
+        if (leg.id !== migrated.id) await dbDelete('voyageLegs', leg.id);
       }
     }
     await installTestFleet({ switchToFirst: false });
@@ -5521,6 +5597,8 @@ document.getElementById('s_vesselSelect').addEventListener('change', ()=>{
   const v = state.vessels.find(x=>x.id===sel?.value);
   const hint = document.getElementById('vesselSwitchHint');
   if (hint && v) hint.textContent = `Selected: ${v.name} (sync slug: ${v.slug}). Click Load Selected Vessel to switch, or Pull from Server if sync is configured.`;
+  /* Voyage Library list follows the selected vessel only. */
+  renderVoyageLibrary().catch(()=>{});
 });
 
 document.getElementById('btnAddVessel').addEventListener('click', async ()=>{
@@ -8090,6 +8168,10 @@ document.getElementById('btnLoadVoyageLeg')?.addEventListener('click', async ()=
   const cond = normalizeCondition(document.getElementById('s_legCondition')?.value);
   if (!vn){ alert('Select a voyage number from the library list.'); return; }
   try {
+    const scopeVid = libraryScopeVesselId();
+    if (scopeVid && scopeVid !== state.activeVesselId){
+      await switchVessel(scopeVid);
+    }
     await activateVoyageLeg(state.activeVesselId, vn, cond);
     render();
     applyEntryDefaults();
