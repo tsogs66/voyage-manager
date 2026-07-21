@@ -1,7 +1,9 @@
-const CACHE = 'noon-report-v36';
+const CACHE = 'noon-report-v37';
 const PRECACHE = [
   './voyage_manager.html',
   './manifest.webmanifest',
+  './icons/logoBG.png',
+  './icons/apple-touch-icon.png',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];

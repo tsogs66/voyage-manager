@@ -10,7 +10,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Noon Report">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" type="image/png" href="icons/logoBG.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -30,7 +32,7 @@
   .wrap{max-width:1280px;margin:0 auto;}
   .masthead{display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid var(--brass-dim); padding-bottom:14px; margin-bottom:6px; gap:20px; flex-wrap:wrap;}
   .masthead-left{display:flex; align-items:center; gap:14px;}
-  .brass-dot{width:10px;height:10px;border-radius:50%;background:var(--brass);box-shadow:0 0 10px var(--brass);}
+  .app-logo{width:52px;height:52px;object-fit:contain;flex-shrink:0;display:block;}
   h1{font-family:'Oswald',sans-serif; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; font-size:24px; margin:0;}
   .subtitle{font-size:11px; color:var(--paper-dim); letter-spacing:0.08em; text-transform:uppercase; margin-top:2px;}
   #dbStatus{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--teal);}
@@ -216,6 +218,7 @@
     .subtitle{font-size:10px;}
     .masthead{align-items:flex-start; gap:10px; padding-bottom:10px; margin-bottom:4px;}
     .masthead-left{gap:10px;}
+    .app-logo{width:42px;height:42px;}
     .status-row{align-items:flex-start; width:100%;}
     #dbStatus,#syncStatus{font-size:10px; word-break:break-word;}
 
@@ -554,7 +557,7 @@
 
   <div class="masthead">
     <div class="masthead-left">
-      <div class="brass-dot"></div>
+      <img class="app-logo" src="icons/logoBG.png" width="52" height="52" alt="Noon Report">
       <div>
         <h1>Noon Report</h1>
         <div class="subtitle" id="activeVesselLabel">Engine Department — Voyage Log &amp; Performance</div>
