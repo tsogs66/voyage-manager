@@ -1163,8 +1163,8 @@
     <div class="panel">
       <h2>Voyage Abstract</h2>
       <div class="table-scroll">
-        <table class="freeze-cols">
-          <thead><tr>
+        <table class="freeze-cols" id="voyageAbstractTable">
+          <thead><tr id="voyageAbstractHead">
             <th>Date/Time</th><th>Operation</th><th>Run Hrs</th><th>RPM</th>
             <th>Dist by Engine</th><th>Speed by Engine</th>
             <th>Dist by Ship</th><th>Speed by Ship</th>
@@ -1192,8 +1192,8 @@
       <div class="panel" id="abstractViewerPanel" style="display:none; margin-top:14px;">
         <h2 id="abstractViewerTitle">Voyage Abstract</h2>
         <div class="table-scroll">
-          <table class="freeze-cols">
-            <thead><tr>
+          <table class="freeze-cols" id="abstractViewerTable">
+            <thead><tr id="abstractViewerHead">
               <th>Date/Time</th><th>Operation</th><th>Run Hrs</th><th>RPM</th>
               <th>Dist by Engine</th><th>Speed by Engine</th>
               <th>Dist by Ship</th><th>Speed by Ship</th>
@@ -4323,29 +4323,142 @@ function renderFlowmeterCounterRows(){
 }
 
 /* ---------------- render ---------------- */
-function abstractRowCells(r){
+const ABSTRACT_COLS = [
+  { key:'datetime', label:'Date/Time', always:true, kind:'text' },
+  { key:'operation', label:'Operation', always:true, kind:'text' },
+  { key:'hrs', label:'Run Hrs', kind:'num' },
+  { key:'rpm', label:'RPM', kind:'num' },
+  { key:'distEngine', label:'Dist by Engine', kind:'num' },
+  { key:'speedEngine', label:'Speed by Engine', kind:'num' },
+  { key:'distanceShip', label:'Dist by Ship', kind:'num' },
+  { key:'speedShip', label:'Speed by Ship', kind:'num' },
+  { key:'slip', label:'Slip %', kind:'num' },
+  { key:'mcrPct', label:'%MCR', kind:'num' },
+  { key:'kwEst', label:'Est. KW', kind:'num' },
+  { key:'condition', label:'Cond', always:true, kind:'cond' },
+  { key:'hrs2', label:'Hrs', kind:'num' },
+  { key:'distanceShip2', label:'Dist Ship', kind:'num' },
+  { key:'rpm2', label:'RPM', kind:'num' },
+  { key:'revCounter', label:'Rev. Counter', kind:'num' },
+  { key:'dailyRevs', label:'Daily Revs', kind:'num' },
+  { key:'meRun', label:'ME Run', kind:'meter' },
+  { key:'geRun', label:'GE Run', kind:'meter' },
+  { key:'blrRun', label:'Blr Run', kind:'num' },
+  { key:'meCons', label:'ME Cons', kind:'fuel' },
+  { key:'geCons', label:'GE Cons', kind:'fuel' },
+  { key:'blrCons', label:'Blr Cons', kind:'fuel' },
+  { key:'total', label:'Total Cons', kind:'fuel' },
+  { key:'cylOil', label:'Cyl Oil Cons (Grade)', kind:'cyl' },
+  { key:'meLoCons', label:'ME LO', kind:'lube' },
+  { key:'geLoCons', label:'GE LO', kind:'lube' },
+  { key:'fwProd', label:'FW Meter', kind:'lube' },
+  { key:'fwProdD', label:'FW Produced', kind:'fw' },
+  { key:'fwRob', label:'FW ROB', kind:'fw' },
+  { key:'fwConsD', label:'FW Cons', kind:'fw' },
+  { key:'actions', label:'', always:true, kind:'actions' }
+];
+
+function abstractRowValues(r){
   const dt = new Date(r.datetime);
-  const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-  const condClass = r.condition==='B' ? 'cond-B':'cond-L';
-  const cylText = r.cylCons===null||r.cylCons===undefined ? '—' : `${fmtLube(r.cylCons)} (${r.tbn})`;
-  return `<td>${dtStr}</td><td>${r.operation}</td>
-    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,2)}</td><td>${r.rpm==null||r.rpm===undefined?'—':fmt(r.rpm,2)}</td>
-    <td>${r.distEngine===null||r.distEngine===undefined?'—':fmt(r.distEngine,2)}</td><td>${r.speedEngine===null||r.speedEngine===undefined?'—':fmt(r.speedEngine,2)}</td>
-    <td>${fmt(r.distanceShip,2)}</td><td>${r.speedShip===null||r.speedShip===undefined?'—':fmt(r.speedShip,2)}</td>
-    <td>${r.slip===null||r.slip===undefined?'—':fmt(r.slip,2)}</td><td>${r.mcrPct===null||r.mcrPct===undefined?'—':fmt(r.mcrPct,2)}</td><td>${r.kwEst===null||r.kwEst===undefined?'—':fmt(r.kwEst,2)}</td>
-    <td><span class="cond-tag ${condClass}">${r.condition[0]}</span></td>
-    <td>${r.hrs===null||r.hrs===undefined?'—':fmt(r.hrs,2)}</td><td>${fmt(r.distanceShip,2)}</td><td>${r.rpm==null||r.rpm===undefined?'—':fmt(r.rpm,2)}</td>
-    <td>${r.revCounter==null||r.revCounter===undefined?'—':fmt(r.revCounter,2)}</td><td>${r.dailyRevs===null||r.dailyRevs===undefined?'—':fmt(r.dailyRevs,2)}</td>
-    <td>${meterCellText(r.me)}</td><td>${meterCellText(r.ge)}</td><td>${fmt(r.blr.meter,2)}</td>
-    <td>${r.meCons===null||r.meCons===undefined?'—':fmtFuel(r.meCons)}</td><td>${r.geCons===null||r.geCons===undefined?'—':fmtFuel(r.geCons)}</td>
-    <td>${r.blrCons===null||r.blrCons===undefined?'—':fmtFuel(r.blrCons)}</td>
-    <td>${r.total===null||r.total===undefined?'—':fmtFuel(r.total)}</td>
-    <td>${cylText}</td>
-    <td>${r.meLoCons===null||r.meLoCons===undefined?'—':fmtLube(r.meLoCons)}</td><td>${r.geLoCons===null||r.geLoCons===undefined?'—':fmtLube(r.geLoCons)}</td>
-    <td>${r.fwProd===null||r.fwProd===undefined?'—':fmtLube(r.fwProd)}</td>
-    <td>${r.fwProdD===null||r.fwProdD===undefined?'—':fmtLube(r.fwProdD)}</td>
-    <td>${r.fwRob===null||r.fwRob===undefined?'—':fmtLube(r.fwRob)}</td>
-    <td>${r.fwConsD===null||r.fwConsD===undefined?'—':fmtLube(r.fwConsD)}</td>`;
+  return {
+    datetime: dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}),
+    operation: r.operation,
+    hrs: r.hrs, rpm: r.rpm,
+    distEngine: r.distEngine, speedEngine: r.speedEngine,
+    distanceShip: r.distanceShip, speedShip: r.speedShip,
+    slip: r.slip, mcrPct: r.mcrPct, kwEst: r.kwEst,
+    condition: r.condition,
+    hrs2: r.hrs, distanceShip2: r.distanceShip, rpm2: r.rpm,
+    revCounter: r.revCounter, dailyRevs: r.dailyRevs,
+    meRun: r.me, geRun: r.ge, blrRun: r.blr?.meter,
+    meCons: r.meCons, geCons: r.geCons, blrCons: r.blrCons, total: r.total,
+    cylOil: { cons: r.cylCons, tbn: r.tbn },
+    meLoCons: r.meLoCons, geLoCons: r.geLoCons,
+    fwProd: r.fwProd, fwProdD: r.fwProdD, fwRob: r.fwRob, fwConsD: r.fwConsD,
+    actions: r.id
+  };
+}
+
+/** True when a cell has a meaningful non-empty, non-zero value. */
+function abstractCellHasValue(col, v){
+  if (col.kind==='actions' || col.kind==='cond' || col.kind==='text'){
+    if (col.kind==='text') return v!=null && String(v).trim()!=='' && v!=='—';
+    return true;
+  }
+  if (col.kind==='meter'){
+    if (!v) return false;
+    if (v.meterIn!=null && v.meterOut!=null){
+      return (Number(v.meterIn)||0)!==0 || (Number(v.meterOut)||0)!==0;
+    }
+    return v.meter!=null && !isNaN(v.meter) && Number(v.meter)!==0;
+  }
+  if (col.kind==='cyl'){
+    return v!=null && v.cons!=null && !isNaN(v.cons) && Number(v.cons)!==0;
+  }
+  if (v==null || v==='' || (typeof v==='number' && isNaN(v))) return false;
+  return Number(v)!==0;
+}
+
+function formatAbstractCell(col, v){
+  if (col.kind==='text') return v ?? '—';
+  if (col.kind==='cond'){
+    const c = v || 'B';
+    const cls = c==='B' || c?.[0]==='B' ? 'cond-B' : 'cond-L';
+    return `<span class="cond-tag ${cls}">${String(c)[0]}</span>`;
+  }
+  if (col.kind==='meter') return meterCellText(v || {});
+  if (col.kind==='cyl'){
+    if (!v || v.cons==null || isNaN(v.cons)) return '—';
+    return `${fmtLube(v.cons)} (${v.tbn||'—'})`;
+  }
+  if (col.kind==='fuel') return (v==null||isNaN(v)) ? '—' : fmtFuel(v);
+  if (col.kind==='lube') return (v==null||isNaN(v)) ? '—' : fmtLube(v);
+  if (col.kind==='fw') return (v==null||isNaN(v)) ? '—' : fmtRob(v, 'fw');
+  if (col.kind==='num') return (v==null||isNaN(v)) ? '—' : fmt(v, 2);
+  return v ?? '—';
+}
+
+function visibleAbstractCols(rows, { withActions=false } = {}){
+  const data = rows.map(abstractRowValues);
+  return ABSTRACT_COLS.filter(col=>{
+    if (col.kind==='actions') return withActions;
+    if (col.always) return true;
+    return data.some(row => abstractCellHasValue(col, row[col.key]));
+  });
+}
+
+/** Voyage Abstract: omit columns that are empty or all-zero across every entry. */
+function renderVoyageAbstractTable(rows, { headId, bodyId, withActions=false } = {}){
+  const head = document.getElementById(headId);
+  const body = document.getElementById(bodyId);
+  if (!head || !body) return;
+  const cols = withActions ? ABSTRACT_COLS : ABSTRACT_COLS.filter(c=>c.kind!=='actions');
+  if (!rows.length){
+    head.innerHTML = cols.map(c=>`<th>${c.label}</th>`).join('');
+    body.innerHTML = `<tr class="empty-row"><td colspan="${cols.length}">No entries yet.</td></tr>`;
+    return;
+  }
+  const data = rows.map(abstractRowValues);
+  const visible = visibleAbstractCols(rows, { withActions });
+  head.innerHTML = visible.map(c=>`<th>${c.label}</th>`).join('');
+  body.innerHTML = data.map(row=>{
+    const cells = visible.map(col=>{
+      if (col.kind==='actions'){
+        return `<td style="display:flex; gap:4px;">
+          <button class="small ghost" data-view="${row.actions}">View</button>
+          <button class="small danger" data-del="${row.actions}">✕</button>
+        </td>`;
+      }
+      return `<td>${formatAbstractCell(col, row[col.key])}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+}
+
+/** @deprecated Prefer renderVoyageAbstractTable — kept for CSV path compatibility. */
+function abstractRowCells(r){
+  const row = abstractRowValues(r);
+  return ABSTRACT_COLS.filter(c=>c.kind!=='actions').map(col=>`<td>${formatAbstractCell(col, row[col.key])}</td>`).join('');
 }
 
 const ABSTRACT_CSV_HEADER = ["DateTime","Operation","RunHrs","RPM","DistEngine","SpeedEngine","DistShip","SpeedShip","Slip%","%MCR","EstKW",
@@ -4588,17 +4701,10 @@ function render(){
     }));
   }
 
-  // voyage log table
+  // voyage abstract table — hide columns that are empty or all-zero
+  renderVoyageAbstractTable(rows, { headId:'voyageAbstractHead', bodyId:'voyageAbstractBody', withActions:true });
   const vlBody = document.getElementById('voyageAbstractBody');
-  if (rows.length===0){
-    vlBody.innerHTML = `<tr class="empty-row"><td colspan="32">No entries yet.</td></tr>`;
-  } else {
-    vlBody.innerHTML = rows.map(r=> `<tr>${abstractRowCells(r)}
-        <td style="display:flex; gap:4px;">
-          <button class="small ghost" data-view="${r.id}">View</button>
-          <button class="small danger" data-del="${r.id}">✕</button>
-        </td>
-      </tr>`).join('');
+  if (vlBody && rows.length){
     vlBody.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', async ()=>{
       await deleteEntryById(b.dataset.del);
     }));
@@ -7868,7 +7974,7 @@ function renderAbstractList(){
       const a = state.abstracts.find(x=>x.id===b.dataset.viewAbstract);
       if (!a) return;
       document.getElementById('abstractViewerTitle').textContent = `${a.filename}`;
-      document.getElementById('abstractViewerBody').innerHTML = a.rows.map(r=>`<tr>${abstractRowCells(r)}</tr>`).join('');
+      renderVoyageAbstractTable(a.rows || [], { headId:'abstractViewerHead', bodyId:'abstractViewerBody', withActions:false });
       document.getElementById('abstractViewerPanel').style.display = '';
       document.getElementById('btnDownloadAbstract').onclick = () => downloadAbstractCsv(a);
       document.getElementById('abstractViewerPanel').scrollIntoView({behavior:'smooth', block:'nearest'});
