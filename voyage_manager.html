@@ -1042,7 +1042,7 @@
             <tbody id="vsRobBody"></tbody>
           </table>
         </div>
-        <button class="ghost small" id="btnVsResetConsOverride" type="button" style="margin-top:8px;">Reset ROB Cons. to Calculated</button>
+        <button class="ghost small" id="btnVsResetConsOverride" type="button" style="margin-top:8px;">Reset Lube ROB Cons. to Calculated</button>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -6149,27 +6149,22 @@ function openVoyageSummary(entryId){
     const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
     const consVal = robRowCons(row, r);
     const robVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
+    const lubeEditable = r.cat==='lube';
     return `<tr>
       <td>${r.label}</td>
       <td>${fmt(prevVal, r.cat==='fuel'?3:0)}</td>
-      <td><input class="pf-input" style="width:80px;" type="number" step="0.001" id="vs_cons_${slugKey(r.key)}" value="${consVal!=null?consVal:0}" data-prev="${prevVal||0}" data-cat="${r.cat}" data-key="${r.key}"></td>
+      <td><input class="pf-input" style="width:80px;" type="number" step="${r.cat==='fuel'?'0.001':'1'}" id="vs_cons_${slugKey(r.key)}" value="${consVal!=null?consVal:0}" data-prev="${prevVal||0}" data-cat="${r.cat}" data-key="${r.key}"${lubeEditable?'':' readonly'}></td>
       <td id="vs_rob_${slugKey(r.key)}">${fmt(robVal, r.cat==='fuel'?3:0)}</td>
     </tr>`;
   }).join('');
 
-  robBody.querySelectorAll('.pf-input').forEach(inp=>{
+  // Only lube oil cons is editable; fuel grades and fresh water are calculated.
+  robBody.querySelectorAll('.pf-input:not([readonly])').forEach(inp=>{
     inp.addEventListener('input', ()=>{
       const prevVal = parseFloat(inp.dataset.prev)||0;
       const consVal = parseFloat(inp.value)||0;
-      const cat = inp.dataset.cat;
       const robEl = document.getElementById(`vs_rob_${slugKey(inp.dataset.key)}`);
-      if (!robEl) return;
-      if (cat==='fw'){
-        const fwRob = parseFloat(document.getElementById('vs_fwRob')?.value);
-        robEl.textContent = isNaN(fwRob) ? '—' : fmt(fwRob, 0);
-      } else {
-        robEl.textContent = fmt(prevVal - consVal, cat==='fuel'?3:0);
-      }
+      if (robEl) robEl.textContent = fmt(prevVal - consVal, 0);
     });
   });
 
@@ -6239,7 +6234,8 @@ function updateVsRobLiveFromCons(){
     const robEl = document.getElementById('vs_rob_' + slugKey(r.key));
     if (!consEl) return;
     const liveCons = robRowCons({consByType: live.consByType, lubeByType: live.lubeByType}, r);
-    if (focusedId !== consId){
+    // Fuel/FW always follow calculated cons; lube keeps the focused field while typing.
+    if (r.cat!=='lube' || focusedId !== consId){
       consEl.value = (liveCons===null || liveCons===undefined) ? 0 : liveCons;
     }
     const prevVal = parseFloat(consEl.dataset.prev)||0;
@@ -6421,10 +6417,12 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
     GE: num('vs_unit_ge'),
     BLR: num('vs_unit_blr')
   };
+  // Persist only lube oil cons overrides — fuel grades and FW are derived, not edited here.
   entry.consOverride = {};
   getRobRows().forEach(r=>{
+    if (r.cat!=='lube') return;
     const el = document.getElementById('vs_cons_'+slugKey(r.key));
-    entry.consOverride[r.key] = el ? (parseFloat(el.value)||0) : null;
+    if (el) entry.consOverride[r.key] = parseFloat(el.value)||0;
   });
 
   // Keep log-entry bridges in sync
