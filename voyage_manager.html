@@ -5673,6 +5673,14 @@ function normalizeEntry(e){
 }
 
 async function saveSetupFromForm(){
+  /* Vessel identity lives on the Setup tab (voyage fields are on Voyage Setup). */
+  state.setup.vesselName = document.getElementById('s_vesselName').value;
+  state.setup.chEng = document.getElementById('s_chEng').value;
+  state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value)||null;
+  state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
+  const v = activeVessel();
+  if (v) v.name = document.getElementById('s_vesselName').value.trim() || v.name;
+
   const prevArr = state.setup.flowArr;
   state.setup.flowArr = document.getElementById('s_flowArr').value;
   state.setup.pitch = parseFloat(document.getElementById('s_pitch').value)||0;
@@ -5748,6 +5756,7 @@ async function saveSetupFromForm(){
   state.setup.fwTanks = fwTankList();
 
   await saveSetup();
+  await saveVesselRegistry();
   applyEntryDefaults();
   render();
   if (prevArr !== state.setup.flowArr){
