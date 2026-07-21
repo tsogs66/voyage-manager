@@ -595,7 +595,8 @@
     </div>
 
     <div class="panel">
-      <h2>Remaining Onboard (Opening ROB)</h2>
+      <h2>Remaining Onboard</h2>
+      <div class="hint" id="voyageSetupRobHint" style="margin-bottom:8px;">Shows the current ROB of this vessel’s active report (same stock as the ROB tab). With an empty log you can edit the voyage Opening ROB baseline; with log entries the values are live current ROB.</div>
       <h3 class="sub">Fuel (metric tons)</h3>
       <div class="unit-group cols5" id="setupFuelRob"></div>
       <h3 class="sub">Lube Oil &amp; Fresh Water (litres)</h3>
@@ -4187,6 +4188,35 @@ function csvEscape(v){
   return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
 }
 
+/** Voyage Setup ROB inputs: live current ROB of the active vessel report (editable opening only when log is empty). */
+function renderVoyageSetupRobFields(rob, robLube){
+  const fuelBox = document.getElementById('setupFuelRob');
+  const lubeBox = document.getElementById('setupLubeRob');
+  const hint = document.getElementById('voyageSetupRobHint');
+  if (!fuelBox || !lubeBox) return;
+  const hasLog = state.entries.length > 0;
+  const fuelLabel = hasLog ? 'Current ROB (MT)' : 'Opening ROB (MT)';
+  const lubeLabel = hasLog ? 'Current ROB (L)' : 'Opening ROB (L)';
+  const ro = hasLog ? ' readonly' : '';
+  fuelBox.innerHTML = fuelTankList().map(t=>{
+    const val = hasLog ? (rob[t.id] ?? 0) : tankRobValue(state.setup.rob, t);
+    return `<div class="unit-box"><h3>${t.name}</h3><div class="field"><label>${fuelLabel}</label><input type="number" step="0.001" data-setup-fuel-rob="${t.id}" value="${Number(val).toFixed(3)}"${ro}></div></div>`;
+  }).join('');
+  lubeBox.innerHTML = lubeTankList().map(t=>{
+    const val = hasLog ? (robLube[t.id] ?? 0) : tankRobValue(state.setup.robLube, t);
+    return `<div class="unit-box"><h3>${t.name}</h3><div class="field"><label>${lubeLabel}</label><input type="number" step="1" data-setup-lube-rob="${t.id}" value="${Number(val).toFixed(0)}"${ro}></div></div>`;
+  }).join('') + fwTankList().map(t=>{
+    const val = hasLog ? (robLube[t.id] ?? 0) : tankRobValue(state.setup.robLube, t);
+    return `<div class="unit-box"><h3>${t.name}</h3><div class="field"><label>${lubeLabel}</label><input type="number" step="0.01" data-setup-lube-rob="${t.id}" value="${Number(val).toFixed(2)}"${ro}></div></div>`;
+  }).join('');
+  if (hint){
+    const vName = state.setup.vesselName || activeVessel()?.name || 'this vessel';
+    hint.textContent = hasLog
+      ? `Current ROB for ${vName} (active report) — matches the ROB tab. Opening baseline is locked while the log has entries; use Create New Voyage to roll current ROB into the next opening.`
+      : `Opening ROB baseline for ${vName}. With no log entries this is also the current ROB; edit and save with Update Voyage Details.`;
+  }
+}
+
 function render(){
   _gaugeUid = 0;
   renderVesselSelector();
@@ -4248,12 +4278,7 @@ function render(){
   document.getElementById('s_def_geSg').value = d.geSg;
   document.getElementById('s_def_blrSg').value = d.blrSg;
 
-  document.getElementById('setupFuelRob').innerHTML = fuelTankList().map(t=>`
-    <div class="unit-box"><h3>${t.name}</h3><div class="field"><label>Opening ROB (MT)</label><input type="number" step="0.1" data-setup-fuel-rob="${t.id}" value="${tankRobValue(state.setup.rob, t)}"></div></div>`).join('');
-  document.getElementById('setupLubeRob').innerHTML = lubeTankList().map(t=>`
-    <div class="unit-box"><h3>${t.name}</h3><div class="field"><label>Opening ROB (L)</label><input type="number" step="1" data-setup-lube-rob="${t.id}" value="${tankRobValue(state.setup.robLube, t)}"></div></div>`).join('') +
-    fwTankList().map(t=>`
-    <div class="unit-box"><h3>${t.name}</h3><div class="field"><label>Opening ROB (L)</label><input type="number" step="1" data-setup-lube-rob="${t.id}" value="${tankRobValue(state.setup.robLube, t)}"></div></div>`).join('');
+  renderVoyageSetupRobFields(rob, robLube);
 
   document.getElementById('capacitySettings').innerHTML =
     fuelTankList().map(t=>`<div class="unit-box"><h3>${t.name} (MT)</h3><div class="field"><input type="number" data-cap-fuel="${t.id}" value="${tankCapValue(state.setup.capacity, t)}"></div></div>`).join('') +
@@ -5581,8 +5606,11 @@ async function saveVoyageDetails(){
   const v = activeVessel();
   if (v) v.name = document.getElementById('s_vesselName').value.trim() || v.name;
 
-  document.querySelectorAll('[data-setup-fuel-rob]').forEach(inp=> state.setup.rob[inp.dataset.setupFuelRob] = parseFloat(inp.value)||0);
-  document.querySelectorAll('[data-setup-lube-rob]').forEach(inp=> state.setup.robLube[inp.dataset.setupLubeRob] = parseFloat(inp.value)||0);
+  /* Only edit Opening ROB baseline when the log is empty. With entries, fields show live current ROB. */
+  if (state.entries.length === 0){
+    document.querySelectorAll('[data-setup-fuel-rob]').forEach(inp=> state.setup.rob[inp.dataset.setupFuelRob] = parseFloat(inp.value)||0);
+    document.querySelectorAll('[data-setup-lube-rob]').forEach(inp=> state.setup.robLube[inp.dataset.setupLubeRob] = parseFloat(inp.value)||0);
+  }
   await saveSetup();
   await saveVesselRegistry();
   render();
