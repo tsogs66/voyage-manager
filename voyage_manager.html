@@ -222,23 +222,11 @@
     .status-row{align-items:flex-start; width:100%;}
     #dbStatus,#syncStatus{font-size:10px; word-break:break-word;}
 
-    /* Sticky scrollable tab bar */
-    .tabs{
-      position:sticky; top:0; z-index:40;
-      margin:10px -10px 14px;
-      padding:0 10px;
-      background:rgba(10,20,32,0.94);
-      backdrop-filter:blur(8px);
-      -webkit-backdrop-filter:blur(8px);
-      overflow-x:auto; flex-wrap:nowrap;
-      -webkit-overflow-scrolling:touch;
-      scrollbar-width:none;
-      border-bottom:1px solid var(--line);
-    }
-    .tabs::-webkit-scrollbar{display:none;}
-    .tab{
-      flex:0 0 auto; padding:12px 14px; font-size:11px;
-      min-height:44px; display:inline-flex; align-items:center;
+    /* Top tabs move into bottom bar on phone */
+    .tabs{display:none;}
+    .bottom-nav{display:flex;}
+    body{
+      padding-bottom:calc(72px + env(safe-area-inset-bottom));
     }
 
     .panel{padding:14px 12px; margin-bottom:14px; border-radius:8px;}
@@ -363,6 +351,83 @@
   .pf-input{width:64px; background:var(--ink); border:1px solid var(--line-strong); color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:12px; padding:4px; border-radius:2px;}
   .pf-computed{color:var(--teal); font-family:'IBM Plex Mono',monospace; font-size:12px;}
 
+  /* ---- Mobile bottom navigation (phones) ---- */
+  .bottom-nav{
+    display:none;
+    position:fixed; left:0; right:0; bottom:0; z-index:80;
+    align-items:stretch; justify-content:space-around;
+    gap:2px;
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    background:rgba(10,20,32,0.96);
+    border-top:1px solid var(--line-strong);
+    backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);
+    box-shadow:0 -8px 24px rgba(0,0,0,0.35);
+  }
+  .bn-item{
+    flex:1 1 0; min-width:0; max-width:88px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; padding:6px 2px 4px;
+    border:0 !important; background:transparent; color:var(--paper-dim);
+    font-family:'Oswald',sans-serif; font-size:9px; letter-spacing:0.06em;
+    text-transform:uppercase; cursor:pointer; border-radius:8px;
+    min-height:52px; touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+    transition:color .15s ease, background .15s ease;
+  }
+  .bn-item svg{width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0;}
+  .bn-item.active{color:var(--brass); background:rgba(201,154,83,0.12);}
+  .bn-item:hover{color:var(--paper); border-color:transparent;}
+  .bn-item.active:hover{color:var(--brass);}
+  .bn-item:active{transform:scale(0.96);}
+  .bn-more-sheet{
+    display:none; position:fixed; inset:0; z-index:79;
+    background:rgba(4,10,18,0.55);
+    backdrop-filter:blur(2px);
+    -webkit-backdrop-filter:blur(2px);
+  }
+  .bn-more-sheet.open{display:block;}
+  .bn-more-panel{
+    position:absolute; left:0; right:0; bottom:0;
+    padding:14px 12px calc(86px + env(safe-area-inset-bottom));
+    background:linear-gradient(180deg, var(--panel), var(--panel2));
+    border-top:1px solid var(--line-strong);
+    border-radius:16px 16px 0 0;
+    box-shadow:0 -12px 40px rgba(0,0,0,0.45);
+    max-height:min(70vh, 480px);
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  .bn-more-handle{
+    width:36px; height:4px; border-radius:2px;
+    background:var(--line-strong); margin:0 auto 12px;
+  }
+  .bn-more-title{
+    font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:0.1em;
+    text-transform:uppercase; color:var(--brass); margin:0 0 10px; text-align:center;
+  }
+  .bn-more-grid{
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:8px;
+  }
+  .bn-more-item{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:6px; padding:14px 8px; min-height:72px;
+    border:1px solid var(--line) !important; border-radius:10px;
+    background:rgba(0,0,0,0.18); color:var(--paper-dim);
+    font-family:'Oswald',sans-serif; font-size:10px; letter-spacing:0.05em;
+    text-transform:uppercase; cursor:pointer;
+    touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+    transition:color .15s ease, background .15s ease, border-color .15s ease;
+  }
+  .bn-more-item svg{width:24px; height:24px; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round;}
+  .bn-more-item.active{color:var(--brass); border-color:var(--brass-dim) !important; background:rgba(201,154,83,0.12);}
+  .bn-more-item:hover{color:var(--paper); border-color:var(--line-strong) !important;}
+  .bn-more-item.active:hover{color:var(--brass);}
+  .bn-more-item:active{transform:scale(0.97);}
+  @media (max-width:420px){
+    .bn-more-grid{grid-template-columns:repeat(2, 1fr);}
+    .bn-item{font-size:8px;}
+  }
+
   /* ---- print layout (single A4 landscape page) ---- */
   #printArea{ display:none; }
   @media print{
@@ -374,6 +439,7 @@
     }
     /* Hide the app entirely — visibility:hidden still paginates layout and can create dozens of blank pages */
     body > *:not(#printArea){ display:none !important; }
+    .bottom-nav, .bn-more-sheet{ display:none !important; }
     #printArea{
       display:block !important; position:absolute !important;
       top:0 !important; left:0 !important;
@@ -1524,6 +1590,62 @@
   </div>
 
   <div class="footer-note">Noon Report — offline-capable PWA with local IndexedDB storage and optional self-hosted sync. Install on Android or PC from the Data tab when served over HTTPS.</div>
+</div>
+
+<nav class="bottom-nav" id="bottomNav" aria-label="Primary">
+  <button type="button" class="bn-item active" data-page="summary" aria-label="Summary">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19H2"/></svg>
+    <span>Summary</span>
+  </button>
+  <button type="button" class="bn-item" data-page="entry" aria-label="Log Entry">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>
+    <span>Log</span>
+  </button>
+  <button type="button" class="bn-item" data-page="rob" aria-label="ROB">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c-3.5 4.2-6 7.4-6 10.2A6 6 0 0 0 12 21a6 6 0 0 0 6-7.8C18 10.4 15.5 7.2 12 3z"/></svg>
+    <span>ROB</span>
+  </button>
+  <button type="button" class="bn-item" data-page="consumption" aria-label="Consumption">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/><path d="M12 4v2"/></svg>
+    <span>Cons</span>
+  </button>
+  <button type="button" class="bn-item" data-page="more" aria-label="More">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+    <span>More</span>
+  </button>
+</nav>
+
+<div class="bn-more-sheet" id="bnMoreSheet" aria-hidden="true">
+  <div class="bn-more-panel" role="dialog" aria-label="More pages">
+    <div class="bn-more-handle" aria-hidden="true"></div>
+    <div class="bn-more-title">More</div>
+    <div class="bn-more-grid">
+      <button type="button" class="bn-more-item" data-page="voyageabstract">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+        <span>Abstract</span>
+      </button>
+      <button type="button" class="bn-more-item" data-page="receipts">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21V3z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg>
+        <span>Receipts</span>
+      </button>
+      <button type="button" class="bn-more-item" data-page="reports">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h3"/></svg>
+        <span>Reports</span>
+      </button>
+      <button type="button" class="bn-more-item" data-page="data">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>
+        <span>Data</span>
+      </button>
+      <button type="button" class="bn-more-item" data-page="voyagesetup">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17h18"/><path d="M5 17V9l7-5 7 5v8"/><path d="M9 17v-4h6v4"/></svg>
+        <span>Voyage</span>
+      </button>
+      <button type="button" class="bn-more-item" data-page="setup">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.9 4.9l1.4 1.4"/><path d="M17.7 17.7l1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.9 19.1l1.4-1.4"/><path d="M17.7 6.3l1.4-1.4"/></svg>
+        <span>Setup</span>
+      </button>
+    </div>
+  </div>
 </div>
 
 <div id="printArea"></div>
@@ -4882,11 +5004,44 @@ async function saveSetup(){
 }
 
 /* ---------------- tabs ---------------- */
+const BOTTOM_NAV_PRIMARY = new Set(['summary', 'entry', 'rob', 'consumption']);
+const BOTTOM_NAV_MORE = new Set(['voyageabstract', 'receipts', 'reports', 'data', 'voyagesetup', 'setup']);
+
+function closeMoreSheet(){
+  const sheet = document.getElementById('bnMoreSheet');
+  if (!sheet) return;
+  sheet.classList.remove('open');
+  sheet.setAttribute('aria-hidden', 'true');
+}
+
+function openMoreSheet(){
+  const sheet = document.getElementById('bnMoreSheet');
+  if (!sheet) return;
+  sheet.classList.add('open');
+  sheet.setAttribute('aria-hidden', 'false');
+  syncBottomNav(_activeTab);
+}
+
+function syncBottomNav(pageName){
+  const inMore = BOTTOM_NAV_MORE.has(pageName);
+  document.querySelectorAll('#bottomNav .bn-item').forEach(btn=>{
+    const key = btn.dataset.page;
+    const active = key === 'more' ? inMore : key === pageName;
+    btn.classList.toggle('active', active);
+  });
+  document.querySelectorAll('#bnMoreSheet .bn-more-item').forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.page === pageName);
+  });
+}
+
 function switchTab(pageName){
+  if (!pageName || pageName === 'more') return;
   const prev = _activeTab;
-  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.page===pageName));
+  document.querySelectorAll('#tabs .tab').forEach(t=>t.classList.toggle('active', t.dataset.page===pageName));
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+pageName));
   _activeTab = pageName;
+  syncBottomNav(pageName);
+  closeMoreSheet();
   if (pageName === 'rob' && prev !== 'rob'){
     resetRobGaugesToZero();
     requestAnimationFrame(()=> animateRobGauges());
@@ -4894,11 +5049,29 @@ function switchTab(pageName){
   if (pageName === 'summary' && prev !== 'summary'){
     renderVoyageProgress(true);
   }
+  try{ window.scrollTo({ top:0, behavior:'smooth' }); }catch(_){ window.scrollTo(0,0); }
 }
 document.getElementById('tabs').addEventListener('click', (e)=>{
   const tab = e.target.closest('.tab');
   if (!tab) return;
   switchTab(tab.dataset.page);
+});
+document.getElementById('bottomNav').addEventListener('click', (e)=>{
+  const btn = e.target.closest('.bn-item');
+  if (!btn) return;
+  if (btn.dataset.page === 'more'){
+    const sheet = document.getElementById('bnMoreSheet');
+    if (sheet && sheet.classList.contains('open')) closeMoreSheet();
+    else openMoreSheet();
+    return;
+  }
+  switchTab(btn.dataset.page);
+});
+document.getElementById('bnMoreSheet').addEventListener('click', (e)=>{
+  if (e.target.id === 'bnMoreSheet'){ closeMoreSheet(); return; }
+  const item = e.target.closest('.bn-more-item');
+  if (!item) return;
+  switchTab(item.dataset.page);
 });
 
 /* ---------------- reports (supplementary data per entry) ---------------- */
