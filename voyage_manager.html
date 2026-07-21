@@ -6153,8 +6153,8 @@ function openVoyageSummary(entryId){
 
   document.getElementById('vs_fwProdMeter').value = entry.fwProd ?? '';
   document.getElementById('vs_fwRob').value = entry.fwRob ?? '';
-  document.getElementById('vs_fwProduced').value = row.fwProdD==null?'—':fmtLube(row.fwProdD);
-  document.getElementById('vs_fwConsumed').value = row.fwConsD==null?'—':fmtLube(row.fwConsD);
+  document.getElementById('vs_fwProduced').value = row.fwProdD==null?'—':fmtRob(row.fwProdD, 'fw');
+  document.getElementById('vs_fwConsumed').value = row.fwConsD==null?'—':fmtRob(row.fwConsD, 'fw');
   updateVsFwDisplays();
 
   const misc = entry.miscCons || {"MDO/MGO":0,"LSMGO":0};
