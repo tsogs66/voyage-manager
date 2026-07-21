@@ -1,0 +1,24 @@
+{
+  "name": "voyage-manager",
+  "version": "1.0.0",
+  "description": "Noon Report — Voyage Manager (PWA + Android)",
+  "private": true,
+  "scripts": {
+    "www:sync": "node scripts/sync-www.js",
+    "cap:sync": "npm run www:sync && npx cap sync android",
+    "cap:open": "npx cap open android",
+    "android:sync": "npm run cap:sync"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tsogs66/voyage-manager.git"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor/android": "^7.6.8",
+    "@capacitor/core": "^7.6.8"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.6.8"
+  }
+}

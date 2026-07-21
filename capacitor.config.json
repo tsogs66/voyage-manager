@@ -1,0 +1,12 @@
+{
+  "appId": "com.noonreport.voyagemanager",
+  "appName": "Noon Report",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#0a1420"
+  }
+}

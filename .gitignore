@@ -1,0 +1,12 @@
+node_modules/
+www/
+.DS_Store
+*.log
+.idea/
+*.iml
+android/.idea/
+android/local.properties
+android/**/build/
+android/.gradle/
+*.apk
+*.aab

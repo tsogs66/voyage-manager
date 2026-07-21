@@ -92,6 +92,22 @@ pct exec <CTID> -- cloudflared tunnel --url http://127.0.0.1:8080
 
 Use the tunnel URL in the app **Data → Server Sync** settings.
 
+## Android Studio app
+
+Native Android wrapper (Capacitor) lives in `android/`. Full steps: [`android/README.md`](android/README.md).
+
+```bash
+npm install
+npm run cap:sync
+npx cap open android
+```
+
+Or build from CLI after sync:
+
+```bash
+cd android && ./gradlew assembleDebug
+```
+
 ## Quick Start (Local / Ship PC)
 
 Serve the folder over HTTP (required for PWA and service worker — `file://` URLs will not register a service worker):
