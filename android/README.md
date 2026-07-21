@@ -64,7 +64,7 @@ Whenever you change `voyage_manager.html`, `sw.js`, `manifest.webmanifest`, or `
 npm run cap:sync
 ```
 
-Then rebuild/run in Android Studio.
+Then rebuild/run in Android Studio. **Required after pulling web UI fixes** (bottom nav, etc.) — the APK embeds a copy of the web files.
 
 ## App identity
 

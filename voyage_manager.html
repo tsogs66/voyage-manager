@@ -15,6 +15,23 @@
 <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+/* Prefer bottom nav in Capacitor/Android and on touch devices (WebView CSS width is often >720). */
+(function(){
+  try{
+    var cap = window.Capacitor;
+    var native = !!(cap && (cap.isNativePlatform ? cap.isNativePlatform() : (cap.getPlatform && cap.getPlatform() !== 'web')));
+    var touch = false;
+    try{
+      touch = window.matchMedia('(hover: none) and (pointer: coarse)').matches
+        || (navigator.maxTouchPoints > 0 && Math.min(screen.width, screen.height) <= 1100);
+    }catch(_e){}
+    if (native || touch || Math.min(window.innerWidth || 0, window.innerHeight || 0) <= 900){
+      document.documentElement.classList.add('use-bottom-nav');
+    }
+  }catch(_e){}
+})();
+</script>
 <style>
   :root{
     --ink:#0a1420; --panel:#122238; --panel2:#0e1c30;
@@ -222,11 +239,11 @@
     .status-row{align-items:flex-start; width:100%;}
     #dbStatus,#syncStatus{font-size:10px; word-break:break-word;}
 
-    /* Top tabs move into bottom bar on phone */
+    /* Top tabs move into bottom bar on phone (also see html.use-bottom-nav) */
     .tabs{display:none;}
     .bottom-nav{display:flex;}
     body{
-      padding-bottom:calc(72px + env(safe-area-inset-bottom));
+      padding-bottom:calc(78px + env(safe-area-inset-bottom, 0px));
     }
 
     .panel{padding:14px 12px; margin-bottom:14px; border-radius:8px;}
@@ -354,15 +371,29 @@
   /* ---- Mobile bottom navigation (phones) ---- */
   .bottom-nav{
     display:none;
-    position:fixed; left:0; right:0; bottom:0; z-index:80;
+    position:fixed; left:0; right:0; bottom:0; z-index:1200;
     align-items:stretch; justify-content:space-around;
     gap:2px;
-    padding:6px 4px calc(6px + env(safe-area-inset-bottom));
-    background:rgba(10,20,32,0.96);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    background:rgba(10,20,32,0.98);
     border-top:1px solid var(--line-strong);
     backdrop-filter:blur(12px);
     -webkit-backdrop-filter:blur(12px);
     box-shadow:0 -8px 24px rgba(0,0,0,0.35);
+  }
+  /* Capacitor / Android / coarse-pointer: always use bottom bar (WebView width is often >720px) */
+  html.use-bottom-nav .tabs{display:none !important;}
+  html.use-bottom-nav .bottom-nav{display:flex !important;}
+  html.use-bottom-nav body{
+    padding-bottom:calc(78px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  html.use-bottom-nav .footer-note{margin-bottom:12px;}
+  @media (max-width:1100px), (hover:none) and (pointer:coarse){
+    html:not(.use-top-tabs) .tabs{display:none;}
+    html:not(.use-top-tabs) .bottom-nav{display:flex;}
+    html:not(.use-top-tabs) body{
+      padding-bottom:calc(78px + env(safe-area-inset-bottom, 0px));
+    }
   }
   .bn-item{
     flex:1 1 0; min-width:0; max-width:88px;
@@ -380,7 +411,7 @@
   .bn-item.active:hover{color:var(--brass);}
   .bn-item:active{transform:scale(0.96);}
   .bn-more-sheet{
-    display:none; position:fixed; inset:0; z-index:79;
+    display:none; position:fixed; inset:0; z-index:1100;
     background:rgba(4,10,18,0.55);
     backdrop-filter:blur(2px);
     -webkit-backdrop-filter:blur(2px);
@@ -388,7 +419,7 @@
   .bn-more-sheet.open{display:block;}
   .bn-more-panel{
     position:absolute; left:0; right:0; bottom:0;
-    padding:14px 12px calc(86px + env(safe-area-inset-bottom));
+    padding:14px 12px calc(86px + env(safe-area-inset-bottom, 0px));
     background:linear-gradient(180deg, var(--panel), var(--panel2));
     border-top:1px solid var(--line-strong);
     border-radius:16px 16px 0 0;
@@ -396,6 +427,7 @@
     max-height:min(70vh, 480px);
     overflow-y:auto;
     -webkit-overflow-scrolling:touch;
+    z-index:1101;
   }
   .bn-more-handle{
     width:36px; height:4px; border-radius:2px;
@@ -5055,23 +5087,45 @@ document.getElementById('tabs').addEventListener('click', (e)=>{
   if (!tab) return;
   switchTab(tab.dataset.page);
 });
-document.getElementById('bottomNav').addEventListener('click', (e)=>{
-  const btn = e.target.closest('.bn-item');
-  if (!btn) return;
-  if (btn.dataset.page === 'more'){
-    const sheet = document.getElementById('bnMoreSheet');
-    if (sheet && sheet.classList.contains('open')) closeMoreSheet();
-    else openMoreSheet();
-    return;
+(function bindBottomNav(){
+  const nav = document.getElementById('bottomNav');
+  const sheet = document.getElementById('bnMoreSheet');
+  if (!nav) return;
+  /* Re-evaluate native/touch after Capacitor bridge injects (Android) */
+  function refreshBottomNavMode(){
+    try{
+      const cap = window.Capacitor;
+      const native = !!(cap && (cap.isNativePlatform ? cap.isNativePlatform() : (cap.getPlatform && cap.getPlatform() !== 'web')));
+      const android = /android/i.test(navigator.userAgent || '');
+      if (native || android) document.documentElement.classList.add('use-bottom-nav');
+    }catch(_){}
+    syncBottomNav(_activeTab);
   }
-  switchTab(btn.dataset.page);
-});
-document.getElementById('bnMoreSheet').addEventListener('click', (e)=>{
-  if (e.target.id === 'bnMoreSheet'){ closeMoreSheet(); return; }
-  const item = e.target.closest('.bn-more-item');
-  if (!item) return;
-  switchTab(item.dataset.page);
-});
+  refreshBottomNavMode();
+  document.addEventListener('deviceready', refreshBottomNavMode, { once:true });
+  window.addEventListener('capacitorReady', refreshBottomNavMode, { once:true });
+  setTimeout(refreshBottomNavMode, 0);
+  setTimeout(refreshBottomNavMode, 300);
+  nav.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.bn-item');
+    if (!btn) return;
+    e.preventDefault();
+    if (btn.dataset.page === 'more'){
+      if (sheet && sheet.classList.contains('open')) closeMoreSheet();
+      else openMoreSheet();
+      return;
+    }
+    switchTab(btn.dataset.page);
+  });
+  if (sheet){
+    sheet.addEventListener('click', (e)=>{
+      if (e.target.id === 'bnMoreSheet'){ closeMoreSheet(); return; }
+      const item = e.target.closest('.bn-more-item');
+      if (!item) return;
+      switchTab(item.dataset.page);
+    });
+  }
+})();
 
 /* ---------------- reports (supplementary data per entry) ---------------- */
 const REPORT_CATEGORIES = [
