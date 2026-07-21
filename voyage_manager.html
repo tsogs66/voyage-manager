@@ -6227,15 +6227,13 @@ function updateVsRobLiveFromCons(){
   const entry = state.entries.find(e=>e.id===currentVsEntryId);
   if (!entry) return;
   const live = computeVsLiveConsByType(entry);
-  const focusedId = document.activeElement ? document.activeElement.id : null;
   getRobRows().forEach(r=>{
-    const consId = 'vs_cons_' + slugKey(r.key);
-    const consEl = document.getElementById(consId);
+    const consEl = document.getElementById('vs_cons_' + slugKey(r.key));
     const robEl = document.getElementById('vs_rob_' + slugKey(r.key));
     if (!consEl) return;
-    const liveCons = robRowCons({consByType: live.consByType, lubeByType: live.lubeByType}, r);
-    // Fuel/FW always follow calculated cons; lube keeps the focused field while typing.
-    if (r.cat!=='lube' || focusedId !== consId){
+    // Fuel grades + FW are calculated (not editable); leave lube oil cons as the user set it.
+    if (r.cat!=='lube'){
+      const liveCons = robRowCons({consByType: live.consByType, lubeByType: live.lubeByType}, r);
       consEl.value = (liveCons===null || liveCons===undefined) ? 0 : liveCons;
     }
     const prevVal = parseFloat(consEl.dataset.prev)||0;
