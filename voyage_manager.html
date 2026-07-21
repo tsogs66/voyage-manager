@@ -6128,7 +6128,10 @@ function openVoyageSummary(entryId){
     if (tot) tot.value = fmtFuel(a+b+c);
   };
   ['vs_unit_me','vs_unit_ge','vs_unit_blr'].forEach(id=>{
-    document.getElementById(id)?.addEventListener('input', refreshVsUnitTotal);
+    document.getElementById(id)?.addEventListener('input', ()=>{
+      refreshVsUnitTotal();
+      updateVsRobLiveFromCons();
+    });
   });
 
   document.getElementById('vs_fwProdMeter').value = entry.fwProd ?? '';
@@ -6159,13 +6162,96 @@ function openVoyageSummary(entryId){
       const prevVal = parseFloat(inp.dataset.prev)||0;
       const consVal = parseFloat(inp.value)||0;
       const cat = inp.dataset.cat;
-      document.getElementById(`vs_rob_${slugKey(inp.dataset.key)}`).textContent = fmt(prevVal - consVal, cat==='fuel'?3:0);
+      const robEl = document.getElementById(`vs_rob_${slugKey(inp.dataset.key)}`);
+      if (!robEl) return;
+      if (cat==='fw'){
+        const fwRob = parseFloat(document.getElementById('vs_fwRob')?.value);
+        robEl.textContent = isNaN(fwRob) ? '—' : fmt(fwRob, 0);
+      } else {
+        robEl.textContent = fmt(prevVal - consVal, cat==='fuel'?3:0);
+      }
     });
   });
+
+  updateVsRobLiveFromCons();
 
   document.getElementById('voyageSummaryPanel').style.display = '';
   switchTab('entry');
   document.getElementById('voyageSummaryPanel').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+/** Live cons by fuel/lube grade from Voyage Summary unit/misc/FW fields + current entry machinery types. */
+function computeVsLiveConsByType(entry){
+  const consByType = {"HFO":0,"LSFO":0,"MDO/MGO":0,"LSMGO":0};
+  const lubeByType = {"CYL HIGH":0,"CYL LOW":0,"ME SYS OIL":0,"GE SYS OIL":0,"FRESH WATER":null};
+  if (!entry) return {consByType, lubeByType};
+  const num = id => {
+    const el = document.getElementById(id);
+    if (!el || el.value==='') return null;
+    const v = parseFloat(el.value);
+    return isNaN(v) ? null : v;
+  };
+  const row = getComputedRow(entry.id);
+  const meCons = num('vs_unit_me') ?? row?.meCons;
+  const geCons = num('vs_unit_ge') ?? row?.geCons;
+  const blrCons = num('vs_unit_blr') ?? row?.blrCons;
+  const meType = document.getElementById('me_type')?.value || entry.me?.type;
+  const geType = document.getElementById('ge_type')?.value || entry.ge?.type;
+  const blrType = document.getElementById('blr_type')?.value || entry.blr?.type;
+  if (meCons!=null && meType) consByType[meType] = (consByType[meType]||0) + meCons;
+  if (geCons!=null && geType) consByType[geType] = (consByType[geType]||0) + geCons;
+  if (blrCons!=null && blrType) consByType[blrType] = (consByType[blrType]||0) + blrCons;
+  consByType['MDO/MGO'] = (consByType['MDO/MGO']||0) + (num('vs_misc_mdomgo')||0);
+  consByType['LSMGO'] = (consByType['LSMGO']||0) + (num('vs_misc_lsmgo')||0);
+
+  const prev = previousEntryFor(entry.id) || effectiveCarryover();
+  const rolls = meterRollovers();
+  const cylMeter = num('cyl_meter') ?? entry.cylMeter;
+  const tbn = document.getElementById('in_tbn')?.value || entry.tbn;
+  const meLo = entry.meLo, geLo = entry.geLo;
+  if (prev){
+    const cylD = meterDelta(cylMeter, prev.cylMeter, rolls.cyl);
+    const meLoD = meterDelta(meLo, prev.meLo, rolls.generic);
+    const geLoD = meterDelta(geLo, prev.geLo, rolls.generic);
+    if (cylD) lubeByType[tbn==='LOW' ? 'CYL LOW' : 'CYL HIGH'] += cylD;
+    if (meLoD) lubeByType['ME SYS OIL'] += meLoD;
+    if (geLoD) lubeByType['GE SYS OIL'] += geLoD;
+    const fwProd = num('vs_fwProdMeter') ?? entry.fwProd;
+    const fwRob = num('vs_fwRob') ?? entry.fwRob;
+    const fwProdD = meterDelta(fwProd, prev.fwProd, rolls.generic) || 0;
+    if (prev.fwRob!=null && fwRob!=null){
+      lubeByType['FRESH WATER'] = prev.fwRob + fwProdD - fwRob;
+    }
+  }
+  return {consByType, lubeByType};
+}
+
+/** Refresh Fuel & Lube ROB cons/present cells from live unit/misc/FW + machinery fuel types. */
+function updateVsRobLiveFromCons(){
+  if (!currentVsEntryId || !isVoyageSummaryOpen()) return;
+  const entry = state.entries.find(e=>e.id===currentVsEntryId);
+  if (!entry) return;
+  const live = computeVsLiveConsByType(entry);
+  const focusedId = document.activeElement ? document.activeElement.id : null;
+  getRobRows().forEach(r=>{
+    const consId = 'vs_cons_' + slugKey(r.key);
+    const consEl = document.getElementById(consId);
+    const robEl = document.getElementById('vs_rob_' + slugKey(r.key));
+    if (!consEl) return;
+    const liveCons = robRowCons({consByType: live.consByType, lubeByType: live.lubeByType}, r);
+    if (focusedId !== consId){
+      consEl.value = (liveCons===null || liveCons===undefined) ? 0 : liveCons;
+    }
+    const prevVal = parseFloat(consEl.dataset.prev)||0;
+    const consVal = parseFloat(consEl.value)||0;
+    if (!robEl) return;
+    if (r.cat==='fw'){
+      const fwRob = parseFloat(document.getElementById('vs_fwRob')?.value);
+      robEl.textContent = isNaN(fwRob) ? '—' : fmt(fwRob, 0);
+    } else {
+      robEl.textContent = fmt(prevVal - consVal, r.cat==='fuel'?3:0);
+    }
+  });
 }
 
 function readVsGeGeneratorsDraft(inUse){
@@ -6424,7 +6510,8 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   const sortedAfter = sortedEntries();
   const savedIdx = sortedAfter.findIndex(e=>e.id===entry.id);
   if (savedIdx >= 0 && savedIdx < sortedAfter.length - 1){
-    await cascadeSucceedingEntries(savedIdx + 1, { clearOverrides: false });
+    // Clear later cons/unit overrides so ROB chain follows this entry's revised consumption
+    await cascadeSucceedingEntries(savedIdx + 1, { clearOverrides: true });
   }
   markPendingSync();
   render();
@@ -6814,9 +6901,6 @@ document.getElementById('vs_distanceShip')?.addEventListener('input', ()=>{
   updateVsRunCalcDisplays();
   updateLivePreview();
 });
-['vs_fwProdMeter','vs_fwRob'].forEach(id=>{
-  document.getElementById(id)?.addEventListener('input', updateVsFwDisplays);
-});
 document.getElementById('in_datetime').addEventListener('change', ()=>{
   if (document.getElementById('vs_rpm')?.value || document.getElementById('in_rpm')?.value)
     syncRpmRevCounter(document.getElementById('vs_rpm')?.value ? 'vs_rpm' : 'in_rpm');
@@ -7172,12 +7256,13 @@ document.getElementById('btnVsResetUnitCons')?.addEventListener('click', ()=>{
   if (!entry) return;
   entry.unitOverride = { ME:null, GE:null, BLR:null };
   const row = getComputedRow(currentVsEntryId);
-  const set = (id, val)=>{ const el=document.getElementById(id); if (el) el.value = val==null?'':val; };
+  const set = (id, val)=>{ const el=document.getElementById(id); if (el) el.value = val==null?'': (typeof val==='number'? Number(val).toFixed(3):val); };
   set('vs_unit_me', row?.meCons);
   set('vs_unit_ge', row?.geCons);
   set('vs_unit_blr', row?.blrCons);
   const tot = document.getElementById('vs_unit_total');
   if (tot) tot.value = fmtFuel((row?.meCons||0)+(row?.geCons||0)+(row?.blrCons||0));
+  updateVsRobLiveFromCons();
 });
 document.getElementById('btnVsResetConsOverride')?.addEventListener('click', ()=>{
   if (!currentVsEntryId) return;
@@ -7187,8 +7272,21 @@ document.getElementById('btnVsResetConsOverride')?.addEventListener('click', ()=
   openVoyageSummary(currentVsEntryId);
 });
 
+['vs_misc_mdomgo','vs_misc_lsmgo'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('input', updateVsRobLiveFromCons);
+});
+['vs_fwProdMeter','vs_fwRob'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('input', ()=>{
+    updateVsFwDisplays();
+    updateVsRobLiveFromCons();
+  });
+});
+['me_type','ge_type','blr_type','in_tbn'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('change', updateVsRobLiveFromCons);
+});
+
 document.getElementById('logEntryFormPanel').addEventListener('input', ()=>{ updateLivePreview(); updateVsRunCalcDisplays(); });
-document.getElementById('logEntryFormPanel').addEventListener('change', ()=>{ updateLivePreview(); updateVsRunCalcDisplays(); });
+document.getElementById('logEntryFormPanel').addEventListener('change', ()=>{ updateLivePreview(); updateVsRunCalcDisplays(); updateVsRobLiveFromCons(); });
 
 /* ---------------- entry form handlers ---------------- */
 document.getElementById('btnAdd').addEventListener('click', async ()=>{
