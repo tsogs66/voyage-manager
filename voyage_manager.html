@@ -4219,8 +4219,6 @@ function renderVoyageSetupRobFields(rob, robLube){
 
 /** Build one consumption-table data row (fuel-by-type × unit + FW). */
 function consumptionRowValues(r){
-  const unit = (type, cons) => (r[type]?.type === cons ? r[`${type==='me'?'me':type==='ge'?'ge':'blr'}Cons`] : null);
-  // clearer:
   const meOf = fuel => r.me.type===fuel ? r.meCons : null;
   const geOf = fuel => r.ge.type===fuel ? r.geCons : null;
   const blrOf = fuel => r.blr.type===fuel ? r.blrCons : null;
