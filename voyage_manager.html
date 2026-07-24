@@ -395,6 +395,28 @@
   .cii-band-D{color:#d08a4a;} .cii-band-E{color:var(--alert);}
   #page-reference table td{white-space:normal;}
   #page-reference table.compact td,#page-reference table.compact th{padding:5px 7px; font-size:11px;}
+  .lube-equiv-list{display:flex; flex-direction:column; gap:8px; margin-top:8px;}
+  .lube-equiv{
+    border:1px solid var(--line); border-radius:6px; background:rgba(0,0,0,0.15);
+    overflow:hidden;
+  }
+  .lube-equiv > summary{
+    list-style:none; cursor:pointer; display:flex; align-items:center; justify-content:space-between;
+    gap:12px; padding:12px 14px; font-family:'Oswald',sans-serif; font-size:12px;
+    letter-spacing:0.06em; text-transform:uppercase; color:var(--brass);
+    touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+  }
+  .lube-equiv > summary::-webkit-details-marker{display:none;}
+  .lube-equiv > summary::after{
+    content:'▸'; color:var(--paper-dim); font-size:14px; transition:transform .15s ease;
+  }
+  .lube-equiv[open] > summary::after{transform:rotate(90deg); color:var(--brass);}
+  .lube-equiv > summary .lube-meta{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0;
+    text-transform:none; color:var(--teal); font-weight:500;
+  }
+  .lube-equiv .lube-body{padding:0 14px 12px;}
+  .lube-equiv .lube-body .hint{margin-top:0; margin-bottom:8px;}
 
   /* ---- Mobile bottom navigation (phones) ---- */
   .bottom-nav{
@@ -1661,6 +1683,8 @@
         <a href="#ref-nox">NOx tiers</a>
         <a href="#ref-nox-calc">NOx calc</a>
         <a href="#ref-fuel">Fuel / CO₂</a>
+        <a href="#ref-iso8217">ISO 8217</a>
+        <a href="#ref-lube">Lube oils</a>
         <a href="#ref-sulphur">Sulphur</a>
         <a href="#ref-eca">ECA / NECA</a>
         <a href="#ref-cii">CII</a>
@@ -1787,6 +1811,172 @@
             <tr><td>Ammonia</td><td>0</td><td>~18 600</td><td>~682 (liq.)</td><td>Carbon-free fuel (tank-to-wake CO₂ = 0)</td><td>—</td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <div class="panel ref-section" id="ref-iso8217">
+      <h2>ISO 8217 Marine Fuel Grades</h2>
+      <div class="hint">Common designations under ISO 8217 (marine fuel oils). Viscosity is at 50&nbsp;°C for residual grades and at 40&nbsp;°C for distillates. Confirm full specification limits (density, CCAI, aluminium+silicon, pour point, flash point, sulphur) against the BDN and the applicable edition of ISO 8217.</div>
+      <h3 class="sub">Distillate fuels</h3>
+      <div class="table-scroll" style="margin-bottom:14px;">
+        <table class="compact">
+          <thead><tr><th>Grade</th><th>Category</th><th>Viscosity @ 40&nbsp;°C (approx.)</th><th>Typical use</th><th>App grade map</th></tr></thead>
+          <tbody>
+            <tr><td>DMX</td><td>Distillate</td><td>≤ 5.5 mm²/s</td><td>Emergency / special distillate</td><td>MGO</td></tr>
+            <tr><td>DMA</td><td>Distillate</td><td>≤ 6.0 mm²/s</td><td>Marine gas oil (MGO / LSMGO)</td><td>MDO/MGO, LSMGO</td></tr>
+            <tr><td>DFA</td><td>Distillate (FAME)</td><td>≤ 6.0 mm²/s</td><td>DMA-class with fatty-acid methyl ester allowance</td><td>MDO/MGO, LSMGO</td></tr>
+            <tr><td>DFZ</td><td>Distillate (FAME)</td><td>≤ 6.0 mm²/s</td><td>DMZ-class with FAME allowance</td><td>MDO/MGO, LSMGO</td></tr>
+            <tr><td>DMZ</td><td>Distillate</td><td>≤ 6.0 mm²/s</td><td>DMA-like with higher minimum viscosity / winter grades</td><td>MDO/MGO, LSMGO</td></tr>
+            <tr><td>DMB</td><td>Distillate</td><td>≤ 11.0 mm²/s</td><td>Marine diesel oil (MDO)</td><td>MDO/MGO</td></tr>
+            <tr><td>DFB</td><td>Distillate (FAME)</td><td>≤ 11.0 mm²/s</td><td>DMB-class with FAME allowance</td><td>MDO/MGO</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3 class="sub">Residual fuels</h3>
+      <div class="table-scroll">
+        <table class="compact">
+          <thead><tr><th>Grade</th><th>Category</th><th>Viscosity @ 50&nbsp;°C (approx.)</th><th>Typical use</th><th>App grade map</th></tr></thead>
+          <tbody>
+            <tr><td>RMA 10</td><td>Residual</td><td>≤ 10 mm²/s</td><td>Light residual / blended fuels</td><td>LSFO / HFO</td></tr>
+            <tr><td>RMB 30</td><td>Residual</td><td>≤ 30 mm²/s</td><td>Light IFO</td><td>LSFO / HFO</td></tr>
+            <tr><td>RMD 80</td><td>Residual</td><td>≤ 80 mm²/s</td><td>IFO 80 class</td><td>LSFO / HFO</td></tr>
+            <tr><td>RME 180</td><td>Residual</td><td>≤ 180 mm²/s</td><td>IFO 180</td><td>LSFO / HFO</td></tr>
+            <tr><td>RMG 180</td><td>Residual</td><td>≤ 180 mm²/s</td><td>IFO 180 (RMG family)</td><td>LSFO / HFO</td></tr>
+            <tr><td>RMG 380</td><td>Residual</td><td>≤ 380 mm²/s</td><td>Common HSFO / VLSFO bunker grade</td><td>HFO, LSFO</td></tr>
+            <tr><td>RMG 500</td><td>Residual</td><td>≤ 500 mm²/s</td><td>Heavier IFO / HSFO</td><td>HFO, LSFO</td></tr>
+            <tr><td>RMG 700</td><td>Residual</td><td>≤ 700 mm²/s</td><td>Heavy residual</td><td>HFO</td></tr>
+            <tr><td>RMK 380</td><td>Residual</td><td>≤ 380 mm²/s</td><td>Higher-density residual family</td><td>HFO</td></tr>
+            <tr><td>RMK 500</td><td>Residual</td><td>≤ 500 mm²/s</td><td>Heavy residual (RMK)</td><td>HFO</td></tr>
+            <tr><td>RMK 700</td><td>Residual</td><td>≤ 700 mm²/s</td><td>Very heavy residual</td><td>HFO</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="hint">Setup → Fuel types stores the vessel’s operational grade (HFO / LSFO / MDO/MGO / LSMGO) and the matching ISO 8217 designation used for classification.</div>
+    </div>
+
+    <div class="panel ref-section" id="ref-lube">
+      <h2>Lube Oil Types — Brand Equivalents</h2>
+      <div class="hint">Tap a type to expand approximate cross-brand equivalents (Shell, ExxonMobil, Castrol, TotalEnergies, Chevron, Lukoil). These are guidance only — always confirm OEM approval, TBN vs fuel sulphur, and company SMS before changing brand or grade.</div>
+      <div class="lube-equiv-list">
+
+        <details class="lube-equiv">
+          <summary><span>Cylinder oil — high TBN (≈ 70–100)</span><span class="lube-meta">CYL HIGH · HSFO / high-S fuel</span></summary>
+          <div class="lube-body">
+            <div class="hint">Typical for 2-stroke crosshead cylinder lubrication on higher-sulphur residual fuels.</div>
+            <div class="table-scroll">
+              <table class="compact">
+                <thead><tr><th>Company</th><th>Equivalent product(s)</th></tr></thead>
+                <tbody>
+                  <tr><td>Shell</td><td>Alexia 70 / Alexia 100</td></tr>
+                  <tr><td>ExxonMobil</td><td>Mobilgard 570 / Mobilgard 5100</td></tr>
+                  <tr><td>Castrol</td><td>Cyltech 70f / Cyltech 100f</td></tr>
+                  <tr><td>TotalEnergies</td><td>Talusia HR 70 / Talusia Universal 100</td></tr>
+                  <tr><td>Chevron</td><td>Taro Ultra 70 / Taro Ultra 100</td></tr>
+                  <tr><td>Lukoil</td><td>Navigo Cylinder 70 / 100</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <details class="lube-equiv">
+          <summary><span>Cylinder oil — mid / low TBN (≈ 25–40)</span><span class="lube-meta">CYL LOW · VLSFO / ULSFO / ECA</span></summary>
+          <div class="lube-body">
+            <div class="hint">Lower BN cylinder oils for 0.50% / 0.10% sulphur fuels. Match BN to fuel sulphur and maker feed-rate guidance.</div>
+            <div class="table-scroll">
+              <table class="compact">
+                <thead><tr><th>Company</th><th>Equivalent product(s)</th></tr></thead>
+                <tbody>
+                  <tr><td>Shell</td><td>Alexia 40 / Alexia 25 / Alexia S4</td></tr>
+                  <tr><td>ExxonMobil</td><td>Mobilgard 540 / Mobilgard 525</td></tr>
+                  <tr><td>Castrol</td><td>Cyltech 40SX</td></tr>
+                  <tr><td>TotalEnergies</td><td>Talusia LS 40</td></tr>
+                  <tr><td>Chevron</td><td>Taro Special HT LS 40 / Taro Special HT LF</td></tr>
+                  <tr><td>Lukoil</td><td>Navigo Cylinder 40 / 25</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <details class="lube-equiv">
+          <summary><span>Main engine system oil (SAE 30)</span><span class="lube-meta">ME SYS OIL · crosshead crankcase</span></summary>
+          <div class="lube-body">
+            <div class="hint">Crankcase / system oil for 2-stroke crosshead engines (typically low TBN ~5–6).</div>
+            <div class="table-scroll">
+              <table class="compact">
+                <thead><tr><th>Company</th><th>Equivalent product(s)</th></tr></thead>
+                <tbody>
+                  <tr><td>Shell</td><td>Melina S 30</td></tr>
+                  <tr><td>ExxonMobil</td><td>Mobilgard 300 / Mobilgard 300C</td></tr>
+                  <tr><td>Castrol</td><td>CDX 30 / CDX 30f</td></tr>
+                  <tr><td>TotalEnergies</td><td>Atlanta Marine D 3005</td></tr>
+                  <tr><td>Chevron</td><td>Veritas 800A Marine 30</td></tr>
+                  <tr><td>Lukoil</td><td>Navigo MS 3006</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <details class="lube-equiv">
+          <summary><span>Generator / trunk-piston oil</span><span class="lube-meta">GE SYS OIL · 4-stroke medium speed</span></summary>
+          <div class="lube-body">
+            <div class="hint">Trunk-piston engine oils for D/G and other 4-stroke medium-speed engines. Grade (TBN / SAE) depends on fuel sulphur and maker recommendation.</div>
+            <div class="table-scroll">
+              <table class="compact">
+                <thead><tr><th>Company</th><th>Equivalent product(s)</th></tr></thead>
+                <tbody>
+                  <tr><td>Shell</td><td>Argina S / Argina T / Argina X series</td></tr>
+                  <tr><td>ExxonMobil</td><td>Mobilgard 412 / 450 / ADL series</td></tr>
+                  <tr><td>Castrol</td><td>TLX Plus / HLX / MHP series</td></tr>
+                  <tr><td>TotalEnergies</td><td>Aurelia TI series</td></tr>
+                  <tr><td>Chevron</td><td>Taro 30/40 DP / XL series</td></tr>
+                  <tr><td>Lukoil</td><td>Navigo TPEO series</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <details class="lube-equiv">
+          <summary><span>Hydraulic oil (ISO VG 32 / 46)</span><span class="lube-meta">Deck / steering / hatch</span></summary>
+          <div class="lube-body">
+            <div class="table-scroll">
+              <table class="compact">
+                <thead><tr><th>Company</th><th>Equivalent product(s)</th></tr></thead>
+                <tbody>
+                  <tr><td>Shell</td><td>Tellus S2 MX / Tellus S3 M 32/46</td></tr>
+                  <tr><td>ExxonMobil</td><td>Mobil DTE 24 / 25 · Nuto H 32/46</td></tr>
+                  <tr><td>Castrol</td><td>Hyspin AWS 32/46</td></tr>
+                  <tr><td>TotalEnergies</td><td>Azolla ZS 32/46</td></tr>
+                  <tr><td>Chevron</td><td>Rando HD 32/46</td></tr>
+                  <tr><td>Lukoil</td><td>Geyser ST 32/46</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <details class="lube-equiv">
+          <summary><span>Gear / stern tube oil</span><span class="lube-meta">Reduction gear · stern tube</span></summary>
+          <div class="lube-body">
+            <div class="table-scroll">
+              <table class="compact">
+                <thead><tr><th>Company</th><th>Equivalent product(s)</th></tr></thead>
+                <tbody>
+                  <tr><td>Shell</td><td>Omala S2 G / Omala S4 GX · Naturelle / Turbo T (stern tube options)</td></tr>
+                  <tr><td>ExxonMobil</td><td>Mobilgear 600 XP · Mobil SHC Gear · Mobil Gargoyle / Vacuoline (stern tube)</td></tr>
+                  <tr><td>Castrol</td><td>Alpha SP · Optigear · BioStat (EAL stern tube)</td></tr>
+                  <tr><td>TotalEnergies</td><td>Carter EP · Biomultis / Biohydran (EAL options)</td></tr>
+                  <tr><td>Chevron</td><td>Meropa · Clarity Synthetic EA (EAL)</td></tr>
+                  <tr><td>Lukoil</td><td>Gears · Stern tube series (maker list)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
       </div>
     </div>
 
