@@ -783,7 +783,7 @@
         <button class="ghost small" id="btnInstallTestFleet">Install / Reset Test Fleet</button>
       </div>
       <div class="hint" id="vesselSwitchHint">Each vessel keeps its own setup, voyage log, receipts, and documents in this browser. Switch vessels here to review or continue another ship's records. Use Pull from Server when sync is configured for that vessel's slug.</div>
-      <div class="hint">Test Fleet loads three scenario vessels for formula checks: <strong>M/V HARBOUR KEY</strong> (port ops), <strong>M/V ROADSTEAD</strong> (anchorage/drifting), <strong>M/V CIRCUMNAV</strong> (full voyage). Re-running replaces only those three ships' data — your other vessels are left alone.</div>
+      <div class="hint">Test Fleet loads four scenario vessels for formula checks: <strong>M/V HARBOUR KEY</strong> (port ops), <strong>M/V ROADSTEAD</strong> (anchorage/drifting), <strong>M/V CIRCUMNAV</strong> (full voyage), <strong>M/V PACIFIC TRADER</strong> (three succeeding voyages 40/41/42). Re-running replaces only those four ships' data — your other vessels are left alone.</div>
     </div>
 
     <div class="panel">
@@ -3317,6 +3317,228 @@ function buildDemoPackCircumnav(){
   };
 }
 
+function buildDemoPackPacificTrader(){
+  /* Product tanker on a Persian Gulf <-> India shuttle: three complete, succeeding
+     voyages (40, 41, 42), each a ballast reposition + laden cargo leg. Meters, ROB
+     and dates carry forward continuously across all six legs, same as a real vessel's
+     voyage history — this is the example referenced when checking multi-voyage sync. */
+  const setup = defaultSetupTemplate({
+    vesselName:'M/V PACIFIC TRADER', chEng:'Chief Engr. Marco Dalisay', voyageNumber:'40', shipCondition:'B',
+    departPort:'FUJAIRAH, UAE', arrivePort:'RAS TANURA, SAUDI ARABIA', voyageDistance:392,
+    initDateTime:'2026-04-01T06:00', pitch:4.95, mcrRpm:105, mcrKw:9700,
+    sfoc100:176.5, sfoc85:173.0, lcvRef:42700, lcvActual:41950,
+    dwt:51000, imoNo:'IMO 9756231',
+    alternatorMaxKw:600, generatorCount:2,
+    boilerMaxKw:950, incineratorMaxKw:75,
+    meCylinderCount:6, turboCount:2,
+    defaults:{ cylTbn:'HIGH', meType:'HFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.980, geSg:0.870, blrSg:0.870 },
+    flowmeters:{
+      main:{ reading:2100000, digits:8 }, aux:{ reading:860000, digits:8 },
+      boiler:{ reading:41000, digits:8 }, cyl:{ reading:520000, digits:8 }, rc:{ reading:295000, digits:8 }
+    },
+    rob:{ hfo:610, lsfo:0, mdomgo:140, lsmgo:35 },
+    robLube:{ cylhigh:6200, cyllow:0, mesysoil:4200, gesysoil:1900, freshwater:58000 },
+    capacity:{ hfo:1300, lsfo:150, mdomgo:320, lsmgo:120 },
+    capacityLube:{ cylhigh:11000, cyllow:9000, mesysoil:7000, gesysoil:3500, freshwater:150000 },
+    sync:{ vesselId:'mv-pacific-trader' }
+  });
+  setup.generators = [{maxKw:600},{maxKw:600},{maxKw:600}];
+
+  const tr = createMeterTracker({
+    me:2100000, ge:860000, blr:41000, cyl:520000, meLo:230000, geLo:96000,
+    fwProd:15000, fwRob:58000, rev:295000,
+    meRt:61000, blrRt:1180, ge1:19200, ge2:18700, ge3:0
+  });
+  const hfo = { meType:'HFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.98, geSg:0.87, blrSg:0.87 };
+  const seaOps = new Set(['START - PASSAGE','AT SEA - NOON','END - PASSAGE']);
+
+  let bucket = null;
+  let lastDt = null;
+  function pushSea(id, dt, op, cond, delta, extra){
+    const hrs = (new Date(dt) - new Date(lastDt)) / 3600000;
+    const rpm = extra.rpm;
+    const d = Object.assign({}, hfo, delta);
+    if (rpm != null && rpm > 0 && hrs > 0){
+      d.rev = Math.round(rpm * hrs * 60);
+      if (d.meRt == null) d.meRt = Math.round(hrs * 10) / 10;
+    }
+    let distanceShip = extra.distanceShip;
+    if (rpm != null && rpm > 0 && d.rev > 0 && extra.autoDist !== false){
+      const eng = (setup.pitch * d.rev) / NM_METERS;
+      const slipPct = extra.slipPct != null ? extra.slipPct : 5;
+      distanceShip = Math.round(eng * (1 - slipPct / 100) * 10) / 10;
+    }
+    const snap = tr.apply(d);
+    const common = {
+      remarks: extra.remarks || '',
+      eta: extra.eta || null,
+      blrRuntime: snap.blrRt,
+      generatorsInUse: extra.generatorsInUse != null ? extra.generatorsInUse : 1,
+      generators:[
+        {runtime:snap.ge1, avgKw:extra.ge1Kw},
+        {runtime:snap.ge2, avgKw:extra.ge2Kw}
+      ],
+      perfTable:{
+        BOILER:{ avgPower:extra.blrKw != null ? extra.blrKw : 130, runTime:delta.blrRt || 0 }
+      }
+    };
+    const report = seaOps.has(op)
+      ? seaReport(Object.assign(common, extra.reportExtra || {}))
+      : portReport(Object.assign(common, extra.reportExtra || {}));
+    bucket.push(entryFromSnap(id, dt, op, cond, snap, {
+      distanceShip, rpm, tbn: extra.tbn || 'HIGH',
+      ge1Kw: extra.ge1Kw, ge2Kw: extra.ge2Kw, generatorsInUse: common.generatorsInUse,
+      weather: extra.weather, report
+    }));
+    lastDt = dt;
+  }
+  function openLeg(id, dt, op, cond, port, cargoOp, remarks, ge1Kw, generatorsInUse){
+    lastDt = dt;
+    const snap = tr.snapshot(hfo);
+    bucket.push(entryFromSnap(id, dt, op, cond, snap, {
+      ge1Kw, ge2Kw: generatorsInUse > 1 ? ge1Kw - 15 : null, generatorsInUse,
+      report: portReport({ port, cargoOp, remarks, blrRuntime: snap.blrRt,
+        generators:[{runtime:snap.ge1, avgKw:ge1Kw},{runtime:snap.ge2, avgKw:generatorsInUse>1?ge1Kw-15:null}] })
+    }));
+  }
+
+  const v40B = [], v40L = [], v41B = [], v41L = [], v42B = [], v42L = [];
+
+  /* ---- Voyage 40 — B: Fujairah -> Ras Tanura (ballast reposition) ---- */
+  bucket = v40B;
+  openLeg('e-pt-40b-1','2026-04-01T06:00','LAST LINE - DEPARTURE','B','Fujairah Anchorage','Ballast departure',
+    'Last line. Ballast passage to Ras Tanura for loading.', 260, 2);
+  pushSea('e-pt-40b-2','2026-04-02T06:00','AT SEA - NOON','B',
+    { me:26400, ge:1560, blr:360, cyl:108, meLo:8, geLo:6, fwProd:16800, fwRob:70200, blrRt:7, ge1:24, ge2:0 },
+    { rpm:90, slipPct:3, ge1Kw:270, blrKw:120, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:33, seaTemp:27}), remarks:'Steady ballast passage. Single A/E on load.' });
+  pushSea('e-pt-40b-3','2026-04-02T10:00','FIRST LINE - ARRIVAL','B',
+    { me:4400, ge:260, blr:60, cyl:18, meLo:1, geLo:1, fwProd:2800, fwRob:70600, blrRt:1, ge1:4, ge2:0 },
+    { rpm:90, slipPct:3, ge1Kw:280, generatorsInUse:2, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:33, seaTemp:28}),
+      remarks:'Ballast passage complete. All fast Ras Tanura.', reportExtra:{ port:'Ras Tanura SPM', cargoOp:'Awaiting berth for loading' } });
+
+  /* ---- Voyage 40 — L: Ras Tanura -> Chennai (laden) ---- */
+  bucket = v40L;
+  openLeg('e-pt-40l-1','2026-04-03T12:00','LAST LINE - DEPARTURE','L','Ras Tanura','Laden departure',
+    'Loaded. Laden passage to Chennai.', 300, 2);
+  pushSea('e-pt-40l-2','2026-04-05T12:00','AT SEA - NOON','L',
+    { me:48000, ge:3120, blr:720, cyl:216, meLo:14, geLo:12, fwProd:33600, fwRob:79000, blrRt:14, ge1:48, ge2:0 },
+    { rpm:88, slipPct:5, ge1Kw:295, blrKw:150, weather: weather({windDir:'W', windBft:4, seaState:3, airTemp:32, seaTemp:29}), remarks:'Full away laden. Arabian Sea, moderate seas.' });
+  pushSea('e-pt-40l-3','2026-04-08T12:00','AT SEA - NOON','L',
+    { me:72000, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:66500, blrRt:21, ge1:72, ge2:0 },
+    { rpm:88, slipPct:5, ge1Kw:290, blrKw:140, weather: weather({windDir:'SW', windBft:5, seaState:4, swellDir:'SW', airTemp:30, seaTemp:28}), remarks:'Mid-passage. Steady laden run toward Bay of Bengal.' });
+  pushSea('e-pt-40l-4','2026-04-10T14:00','FIRST LINE - ARRIVAL','L',
+    { me:50000, ge:3250, blr:750, cyl:225, meLo:15, geLo:13, fwProd:35000, fwRob:60200, blrRt:15, ge1:50, ge2:0 },
+    { rpm:88, slipPct:5, ge1Kw:300, generatorsInUse:2, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:31, seaTemp:29}),
+      remarks:'Laden passage complete. All fast Chennai.', reportExtra:{ port:'Chennai', cargoOp:'Awaiting berth for discharge' } });
+
+  /* ---- Voyage 41 — B: Chennai -> Ras Tanura (ballast return) ---- */
+  bucket = v41B;
+  openLeg('e-pt-41b-1','2026-04-11T14:00','LAST LINE - DEPARTURE','B','Chennai','Ballast departure',
+    'Discharge complete. Ballast return to Ras Tanura for next cargo.', 265, 2);
+  pushSea('e-pt-41b-2','2026-04-14T14:00','AT SEA - NOON','B',
+    { me:79200, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:76800, blrRt:22, ge1:72, ge2:0 },
+    { rpm:90, slipPct:3, ge1Kw:275, blrKw:120, weather: weather({windDir:'E', windBft:3, seaState:2, airTemp:30, seaTemp:28}), remarks:'Ballast passage. Bay of Bengal, moderate weather.' });
+  pushSea('e-pt-41b-3','2026-04-17T14:00','AT SEA - NOON','B',
+    { me:79200, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:83200, blrRt:22, ge1:72, ge2:0 },
+    { rpm:90, slipPct:3, ge1Kw:270, blrKw:115, weather: weather({windDir:'SE', windBft:2, seaState:2, airTemp:32, seaTemp:29}), remarks:'Steady ballast run. Arabian Sea crossing.' });
+  pushSea('e-pt-41b-4','2026-04-18T09:00','FIRST LINE - ARRIVAL','B',
+    { me:20900, ge:1235, blr:285, cyl:86, meLo:6, geLo:5, fwProd:13300, fwRob:79600, blrRt:6, ge1:19, ge2:0 },
+    { rpm:90, slipPct:3, ge1Kw:280, generatorsInUse:2, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:33, seaTemp:28}),
+      remarks:'Ballast passage complete. All fast Ras Tanura.', reportExtra:{ port:'Ras Tanura SPM', cargoOp:'Awaiting berth for loading' } });
+
+  /* ---- Voyage 41 — L: Ras Tanura -> Chennai (laden) ---- */
+  bucket = v41L;
+  openLeg('e-pt-41l-1','2026-04-19T12:00','LAST LINE - DEPARTURE','L','Ras Tanura','Laden departure',
+    'Loaded. Laden passage to Chennai.', 300, 2);
+  pushSea('e-pt-41l-2','2026-04-21T12:00','AT SEA - NOON','L',
+    { me:48000, ge:3120, blr:720, cyl:216, meLo:14, geLo:12, fwProd:33600, fwRob:88000, blrRt:14, ge1:48, ge2:0 },
+    { rpm:88, slipPct:5, ge1Kw:295, blrKw:150, weather: weather({windDir:'W', windBft:4, seaState:3, airTemp:32, seaTemp:29}), remarks:'Full away laden. Arabian Sea, moderate seas.' });
+  pushSea('e-pt-41l-3','2026-04-24T12:00','AT SEA - NOON','L',
+    { me:72000, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:75500, blrRt:21, ge1:72, ge2:0 },
+    { rpm:88, slipPct:5, ge1Kw:290, blrKw:140, weather: weather({windDir:'SW', windBft:5, seaState:4, swellDir:'SW', airTemp:30, seaTemp:28}), remarks:'Mid-passage. Steady laden run toward Bay of Bengal.' });
+  pushSea('e-pt-41l-4','2026-04-26T14:00','FIRST LINE - ARRIVAL','L',
+    { me:50000, ge:3250, blr:750, cyl:225, meLo:15, geLo:13, fwProd:35000, fwRob:69200, blrRt:15, ge1:50, ge2:0 },
+    { rpm:88, slipPct:5, ge1Kw:300, generatorsInUse:2, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:31, seaTemp:29}),
+      remarks:'Laden passage complete. All fast Chennai.', reportExtra:{ port:'Chennai', cargoOp:'Awaiting berth for discharge' } });
+
+  /* ---- Voyage 42 — B: Chennai -> Ras Tanura (ballast return) ---- */
+  bucket = v42B;
+  openLeg('e-pt-42b-1','2026-04-27T14:00','LAST LINE - DEPARTURE','B','Chennai','Ballast departure',
+    'Discharge complete. Ballast return to Ras Tanura for next cargo.', 265, 2);
+  pushSea('e-pt-42b-2','2026-04-30T14:00','AT SEA - NOON','B',
+    { me:79200, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:86000, blrRt:22, ge1:72, ge2:0 },
+    { rpm:90, slipPct:3, ge1Kw:275, blrKw:120, weather: weather({windDir:'E', windBft:3, seaState:2, airTemp:30, seaTemp:28}), remarks:'Ballast passage. Bay of Bengal, moderate weather.' });
+  pushSea('e-pt-42b-3','2026-05-03T14:00','AT SEA - NOON','B',
+    { me:79200, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:92500, blrRt:22, ge1:72, ge2:0 },
+    { rpm:90, slipPct:3, ge1Kw:270, blrKw:115, weather: weather({windDir:'SE', windBft:2, seaState:2, airTemp:32, seaTemp:29}), remarks:'Steady ballast run. Arabian Sea crossing.' });
+  pushSea('e-pt-42b-4','2026-05-04T09:00','FIRST LINE - ARRIVAL','B',
+    { me:20900, ge:1235, blr:285, cyl:86, meLo:6, geLo:5, fwProd:13300, fwRob:88900, blrRt:6, ge1:19, ge2:0 },
+    { rpm:90, slipPct:3, ge1Kw:280, generatorsInUse:2, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:33, seaTemp:28}),
+      remarks:'Ballast passage complete. All fast Ras Tanura.', reportExtra:{ port:'Ras Tanura SPM', cargoOp:'Awaiting berth for loading' } });
+
+  /* ---- Voyage 42 — L: Ras Tanura -> Chennai (laden, final) ---- */
+  bucket = v42L;
+  openLeg('e-pt-42l-1','2026-05-05T12:00','LAST LINE - DEPARTURE','L','Ras Tanura','Laden departure',
+    'Loaded. Laden passage to Chennai.', 300, 2);
+  pushSea('e-pt-42l-2','2026-05-07T12:00','AT SEA - NOON','L',
+    { me:48000, ge:3120, blr:720, cyl:216, meLo:14, geLo:12, fwProd:33600, fwRob:97500, blrRt:14, ge1:48, ge2:0 },
+    { rpm:88, slipPct:5, ge1Kw:295, blrKw:150, weather: weather({windDir:'W', windBft:4, seaState:3, airTemp:32, seaTemp:29}), remarks:'Full away laden. Arabian Sea, moderate seas.' });
+  pushSea('e-pt-42l-3','2026-05-10T12:00','AT SEA - NOON','L',
+    { me:72000, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:84500, blrRt:21, ge1:72, ge2:0 },
+    { rpm:88, slipPct:5, ge1Kw:290, blrKw:140, weather: weather({windDir:'SW', windBft:5, seaState:4, swellDir:'SW', airTemp:30, seaTemp:28}), remarks:'Mid-passage. Steady laden run toward Bay of Bengal.' });
+  pushSea('e-pt-42l-4','2026-05-12T14:00','FIRST LINE - ARRIVAL','L',
+    { me:50000, ge:3250, blr:750, cyl:225, meLo:15, geLo:13, fwProd:35000, fwRob:78200, blrRt:15, ge1:50, ge2:0 },
+    { rpm:88, slipPct:5, ge1Kw:300, generatorsInUse:2, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:31, seaTemp:29}),
+      remarks:'Laden passage complete, voyage 42 done. All fast Chennai. Awaiting next fixture.', reportExtra:{ port:'Chennai', cargoOp:'Discharge complete' } });
+
+  const bunkerReceipts = (tag, date) => ([
+    { id:`r-pt-${tag}-1`, date, category:'fuel', type:'HFO', tankId:'hfo', qty:400, bdnNo:`BDN-RT-${tag}-H`, company:'Aramco Trading', location:'Ras Tanura' },
+    { id:`r-pt-${tag}-2`, date, category:'fuel', type:'MDO/MGO', tankId:'mdomgo', qty:70, bdnNo:`BDN-RT-${tag}-M`, company:'Aramco Trading', location:'Ras Tanura' },
+    { id:`r-pt-${tag}-3`, date, category:'lube', type:'CYL HIGH', tankId:'cylhigh', qty:1800, bdnNo:`BDN-RT-${tag}-C`, company:'ExxonMobil Marine', location:'Ras Tanura' }
+  ]);
+
+  const legSetup = (overrides) => migrateSetup({ ...setup, ...overrides });
+  /* The opening entry of each leg is diffed against setup.flowmeters (the "carryover"
+     reference) — it must equal the meter position at THAT leg's start, not the pack's
+     initial reading, or the app computes a huge phantom consumption on leg boundaries. */
+  const legFlow = (main, aux, boiler, cyl, rc) => ({
+    main:{ reading:main, digits:8 }, mainOut:{ reading:null, digits:8 },
+    aux:{ reading:aux, digits:8 }, auxOut:{ reading:null, digits:8 },
+    boiler:{ reading:boiler, digits:8 }, cyl:{ reading:cyl, digits:8 }, rc:{ reading:rc, digits:8 }
+  });
+
+  return {
+    setup,
+    activeVoyageNumber:'42', activeCondition:'L',
+    legs: [
+      { voyageNumber:'40', condition:'B', entries:v40B.map(normalizeEntry), receipts:[], documents:[], abstracts:[], printHistory:[],
+        setup: legSetup({ shipCondition:'B', departPort:'FUJAIRAH, UAE', arrivePort:'RAS TANURA, SAUDI ARABIA', voyageDistance:392, initDateTime:'2026-04-01T06:00',
+          flowmeters: legFlow(2100000, 860000, 41000, 520000, 295000),
+          rob:{ hfo:610, lsfo:0, mdomgo:140, lsmgo:35 }, robLube:{ cylhigh:6200, cyllow:0, mesysoil:4200, gesysoil:1900, freshwater:58000 } }) },
+      { voyageNumber:'40', condition:'L', entries:v40L.map(normalizeEntry), receipts:bunkerReceipts('40', '2026-04-02'), documents:[], abstracts:[], printHistory:[],
+        setup: legSetup({ shipCondition:'L', departPort:'RAS TANURA, SAUDI ARABIA', arrivePort:'CHENNAI, INDIA', voyageDistance:2280, initDateTime:'2026-04-03T12:00',
+          flowmeters: legFlow(2130800, 861820, 41420, 520126, 446200),
+          rob:{ hfo:578.6, lsfo:0, mdomgo:137.4, lsmgo:35 }, robLube:{ cylhigh:6074, cyllow:0, mesysoil:4192, gesysoil:1894, freshwater:70600 } }) },
+      { voyageNumber:'41', condition:'B', entries:v41B.map(normalizeEntry), receipts:[], documents:[], abstracts:[], printHistory:[],
+        setup: legSetup({ shipCondition:'B', departPort:'CHENNAI, INDIA', arrivePort:'RAS TANURA, SAUDI ARABIA', voyageDistance:2282, initDateTime:'2026-04-11T14:00',
+          flowmeters: legFlow(2300800, 872870, 43970, 520891, 1343800),
+          rob:{ hfo:805.1, lsfo:0, mdomgo:191.8, lsmgo:35 }, robLube:{ cylhigh:7109, cyllow:0, mesysoil:4141, gesysoil:1876, freshwater:60200 } }) },
+      { voyageNumber:'41', condition:'L', entries:v41L.map(normalizeEntry), receipts:bunkerReceipts('41', '2026-04-18'), documents:[], abstracts:[], printHistory:[],
+        setup: legSetup({ shipCondition:'L', departPort:'RAS TANURA, SAUDI ARABIA', arrivePort:'CHENNAI, INDIA', voyageDistance:2280, initDateTime:'2026-04-19T12:00',
+          flowmeters: legFlow(2480100, 883465, 46415, 521625, 2224000),
+          rob:{ hfo:622.1, lsfo:0, mdomgo:176.8, lsmgo:35 }, robLube:{ cylhigh:6375, cyllow:0, mesysoil:4091, gesysoil:1835, freshwater:79600 } }) },
+      { voyageNumber:'42', condition:'B', entries:v42B.map(normalizeEntry), receipts:[], documents:[], abstracts:[], printHistory:[],
+        setup: legSetup({ shipCondition:'B', departPort:'CHENNAI, INDIA', arrivePort:'RAS TANURA, SAUDI ARABIA', voyageDistance:2282, initDateTime:'2026-04-27T14:00',
+          flowmeters: legFlow(2650100, 894515, 48965, 522390, 3121600),
+          rob:{ hfo:848.7, lsfo:0, mdomgo:231.2, lsmgo:35 }, robLube:{ cylhigh:7410, cyllow:0, mesysoil:4040, gesysoil:1817, freshwater:69200 } }) },
+      { voyageNumber:'42', condition:'L', entries:v42L.map(normalizeEntry), receipts:bunkerReceipts('42', '2026-05-04'), documents:[], abstracts:[], printHistory:[],
+        setup: legSetup({ shipCondition:'L', departPort:'RAS TANURA, SAUDI ARABIA', arrivePort:'CHENNAI, INDIA', voyageDistance:2280, initDateTime:'2026-05-05T12:00',
+          flowmeters: legFlow(2829400, 905110, 51410, 523124, 4001800),
+          rob:{ hfo:665.74, lsfo:0, mdomgo:216.2, lsmgo:35 }, robLube:{ cylhigh:6676, cyllow:0, mesysoil:3989, gesysoil:1776, freshwater:88900 } }) }
+    ]
+  };
+}
+
 /** Compatibility aliases — old names redirect to new packs during migration. */
 function buildDemoPackFangcheng(){ return buildDemoPackHarbourKey(); }
 function buildDemoPackAtlanticStar(){ return buildDemoPackRoadstead(); }
@@ -3324,7 +3546,8 @@ function buildDemoPackAtlanticStar(){ return buildDemoPackRoadstead(); }
 const TEST_FLEET_VESSELS = [
   { id:'v-harbourkey', name:'M/V HARBOUR KEY', slug:'mv-harbour-key', pack: buildDemoPackHarbourKey },
   { id:'v-roadstead', name:'M/V ROADSTEAD', slug:'mv-roadstead', pack: buildDemoPackRoadstead },
-  { id:'v-circumnav', name:'M/V CIRCUMNAV', slug:'mv-circumnav', pack: buildDemoPackCircumnav }
+  { id:'v-circumnav', name:'M/V CIRCUMNAV', slug:'mv-circumnav', pack: buildDemoPackCircumnav },
+  { id:'v-pacifictrader', name:'M/V PACIFIC TRADER', slug:'mv-pacific-trader', pack: buildDemoPackPacificTrader }
 ];
 
 async function clearVesselPackData(vesselId){
@@ -3672,11 +3895,14 @@ async function saveVesselPack(vesselId, pack){
         setup
       }];
 
+  /* A pack may span several voyage numbers (a vessel's succeeding voyage history);
+     each leg can carry its own voyageNumber, else it falls back to setup.voyageNumber. */
   let prefer = null;
   for (const leg of legs){
+    const legVoyageNumber = ((leg.voyageNumber != null ? leg.voyageNumber : voyageNumber) + '').trim() || voyageNumber;
     const cond = normalizeCondition(leg.condition || setup.shipCondition);
-    const legSetup = migrateSetup({ ...(leg.setup || setup), voyageNumber, shipCondition: cond, sync: setup.sync });
-    const saved = await saveVoyageLegToLibrary(vesselId, voyageNumber, cond, {
+    const legSetup = migrateSetup({ ...(leg.setup || setup), voyageNumber: legVoyageNumber, shipCondition: cond, sync: setup.sync });
+    const saved = await saveVoyageLegToLibrary(vesselId, legVoyageNumber, cond, {
       setup: legSetup,
       entries: leg.entries || [],
       receipts: leg.receipts || [],
@@ -3684,7 +3910,13 @@ async function saveVesselPack(vesselId, pack){
       abstracts: leg.abstracts || [],
       printHistory: leg.printHistory || []
     });
-    if (!prefer || cond === 'B') prefer = saved;
+    /* pack.activeVoyageNumber/activeCondition pin which leg becomes the loaded working set;
+       otherwise fall back to the old heuristic (last B leg seen, else last leg). */
+    if (pack.activeVoyageNumber != null){
+      if (legVoyageNumber === String(pack.activeVoyageNumber).trim() && cond === normalizeCondition(pack.activeCondition || cond)) prefer = saved;
+    } else if (!prefer || cond === 'B') {
+      prefer = saved;
+    }
   }
   if (!prefer) return null;
 
@@ -6818,11 +7050,12 @@ document.getElementById('btnAddVessel').addEventListener('click', async ()=>{
 
 document.getElementById('btnInstallTestFleet').addEventListener('click', async ()=>{
   const ok = confirm(
-    'Install / reset the three test vessels?\n\n' +
+    'Install / reset the four test vessels?\n\n' +
     '• M/V HARBOUR KEY — port operations\n' +
     '• M/V ROADSTEAD — anchorage & drifting\n' +
-    '• M/V CIRCUMNAV — full voyage\n\n' +
-    'Only these three ships are replaced. Your other vessels stay unchanged.'
+    '• M/V CIRCUMNAV — full voyage\n' +
+    '• M/V PACIFIC TRADER — three succeeding voyages (40, 41, 42)\n\n' +
+    'Only these four ships are replaced. Your other vessels stay unchanged.'
   );
   if (!ok) return;
   const created = await installTestFleet({ switchToFirst: true });
