@@ -1,11 +1,11 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   One-click PC install for Noon Report (runs fully local on this computer).
 .DESCRIPTION
   Downloads the latest app from GitHub into %LOCALAPPDATA%\NoonReport\app,
   installs Start / Update launchers, creates a Desktop shortcut, and starts
-  the local server. Every launch uses http://127.0.0.1 — not the online site.
+  the local server. Every launch uses http://127.0.0.1 - not the online site.
   Voyage data stays in this browser's IndexedDB on the PC.
 
   One-click (PowerShell):
@@ -28,7 +28,7 @@ $ZipUrl = "https://github.com/$Repo/archive/refs/heads/$Branch.zip"
 $RawBase = "https://raw.githubusercontent.com/$Repo/$Branch/install/pc"
 
 Write-Host ""
-Write-Host "  Noon Report — PC installer" -ForegroundColor Yellow
+Write-Host "  Noon Report - PC installer" -ForegroundColor Yellow
 Write-Host "  Install folder: $InstallRoot"
 Write-Host ""
 
@@ -97,7 +97,7 @@ try {
     $sc.TargetPath = $bat
     $sc.WorkingDirectory = $AppDir
     $sc.WindowStyle = 1
-    $sc.Description = "Noon Report — local PC (offline-capable)"
+    $sc.Description = "Noon Report - local PC (offline-capable)"
     $icon = Join-Path $AppDir "icons\icon-192.png"
     if (Test-Path $icon) { $sc.IconLocation = "$env:SystemRoot\System32\shell32.dll,13" }
     $sc.Save()

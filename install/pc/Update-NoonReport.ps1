@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Update the local Noon Report PC install from GitHub (still runs locally afterward).
