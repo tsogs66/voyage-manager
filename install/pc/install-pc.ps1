@@ -1,25 +1,29 @@
-﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-  One-click PC install for Noon Report (runs fully local on this computer).
-.DESCRIPTION
-  Downloads the latest app from GitHub into %LOCALAPPDATA%\NoonReport\app,
-  installs Start / Update launchers, creates a Desktop shortcut, and starts
-  the local server. Every launch uses http://127.0.0.1 - not the online site.
-  Voyage data stays in this browser's IndexedDB on the PC.
-
-  One-click (PowerShell):
-    irm https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 | iex
-#>
-param(
-  [string]$Repo = "tsogs66/voyage-manager",
-  [string]$Branch = "main",
-  [switch]$NoStart,
-  [switch]$PortableOnly
-)
+#Requires -Version 5.1
+# Noon Report - one-click PC installer (local http://127.0.0.1, not the website).
+#
+# Recommended (Windows PowerShell):
+#   $f="$env:TEMP\noon-install-pc.ps1"; iwr https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 -UseBasicParsing -OutFile $f; powershell -NoProfile -ExecutionPolicy Bypass -File $f
+#
+# Also works:
+#   irm https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 | iex
+#
+# Optional overrides (set before irm|iex, or ignore when using -File):
+#   $NoonReportRepo = "tsogs66/voyage-manager"
+#   $NoonReportBranch = "main"
+#   $NoonReportNoStart = $true
 
 $ErrorActionPreference = "Stop"
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+try {
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+} catch { }
+
+# Defaults (no param{} block - irm|iex on Windows PS 5.1 breaks param)
+if (-not $NoonReportRepo) { $NoonReportRepo = "tsogs66/voyage-manager" }
+if (-not $NoonReportBranch) { $NoonReportBranch = "main" }
+$NoStart = [bool]$NoonReportNoStart
+
+$Repo = [string]$NoonReportRepo
+$Branch = [string]$NoonReportBranch
 
 $InstallRoot = Join-Path $env:LOCALAPPDATA "NoonReport"
 $AppDir = Join-Path $InstallRoot "app"
@@ -37,6 +41,11 @@ New-Item -ItemType Directory -Force -Path $InstallRoot, $AppDir, $BinDir | Out-N
 $tmp = Join-Path $env:TEMP ("noonreport-pc-" + [guid]::NewGuid().ToString("n"))
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 $zip = Join-Path $tmp "repo.zip"
+
+function Write-Utf8BomFile([string]$Path, [string]$Text) {
+  $utf8Bom = New-Object System.Text.UTF8Encoding $true
+  [System.IO.File]::WriteAllText($Path, $Text, $utf8Bom)
+}
 
 try {
   Write-Host "Downloading $ZipUrl ..."
@@ -62,44 +71,55 @@ try {
     Copy-Item -LiteralPath $from -Destination $to -Recurse -Force
   }
 
-  # Launchers into bin + app root for portable double-click use
-  $launcherNames = @("Start-NoonReport.ps1", "Start-NoonReport.bat", "Update-NoonReport.ps1", "Update-NoonReport.bat")
+  $launcherNames = @(
+    "Start-NoonReport.ps1",
+    "Start-NoonReport.bat",
+    "Update-NoonReport.ps1",
+    "Update-NoonReport.bat",
+    "install-pc.ps1"
+  )
   foreach ($ln in $launcherNames) {
-    $fromPc = Join-Path $src "install\pc\$ln"
-    if (Test-Path $fromPc) {
-      Copy-Item -LiteralPath $fromPc -Destination (Join-Path $BinDir $ln) -Force
-      Copy-Item -LiteralPath $fromPc -Destination (Join-Path $AppDir $ln) -Force
+    $fromPc = Join-Path $src (Join-Path "install\pc" $ln)
+    $destBin = Join-Path $BinDir $ln
+    $destApp = Join-Path $AppDir $ln
+    if (Test-Path -LiteralPath $fromPc) {
+      Copy-Item -LiteralPath $fromPc -Destination $destBin -Force
+      Copy-Item -LiteralPath $fromPc -Destination $destApp -Force
     } else {
-      # Fallback: fetch from raw GitHub if zip layout changes
       try {
-        Invoke-WebRequest -Uri "$RawBase/$ln" -OutFile (Join-Path $BinDir $ln) -UseBasicParsing
-        Copy-Item (Join-Path $BinDir $ln) (Join-Path $AppDir $ln) -Force
-      } catch {}
+        Invoke-WebRequest -Uri "$RawBase/$ln" -OutFile $destBin -UseBasicParsing
+        Copy-Item -LiteralPath $destBin -Destination $destApp -Force
+      } catch { }
+    }
+
+    # Ensure .ps1 launchers on disk use UTF-8 BOM for Windows PowerShell 5.1 -File
+    if ($ln -like "*.ps1" -and (Test-Path -LiteralPath $destBin)) {
+      $raw = [System.IO.File]::ReadAllText($destBin)
+      Write-Utf8BomFile -Path $destBin -Text $raw
+      Write-Utf8BomFile -Path $destApp -Text $raw
     }
   }
 
-  # Version stamp
-  @{
+  $stamp = @{
     installedAt = (Get-Date).ToString("o")
     repo = $Repo
     branch = $Branch
     source = $ZipUrl
     mode = "local-pc"
-  } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $InstallRoot "install.json") -Encoding UTF8
+  } | ConvertTo-Json
+  Set-Content -LiteralPath (Join-Path $InstallRoot "install.json") -Value $stamp -Encoding UTF8
 
-  # Desktop shortcut
   $desktop = [Environment]::GetFolderPath("Desktop")
   $shortcutPath = Join-Path $desktop "Noon Report.lnk"
   $bat = Join-Path $BinDir "Start-NoonReport.bat"
-  if (Test-Path $bat) {
+  if (Test-Path -LiteralPath $bat) {
     $wsh = New-Object -ComObject WScript.Shell
     $sc = $wsh.CreateShortcut($shortcutPath)
     $sc.TargetPath = $bat
     $sc.WorkingDirectory = $AppDir
     $sc.WindowStyle = 1
     $sc.Description = "Noon Report - local PC (offline-capable)"
-    $icon = Join-Path $AppDir "icons\icon-192.png"
-    if (Test-Path $icon) { $sc.IconLocation = "$env:SystemRoot\System32\shell32.dll,13" }
+    $sc.IconLocation = "$env:SystemRoot\System32\shell32.dll,13"
     $sc.Save()
     Write-Host "Desktop shortcut: $shortcutPath" -ForegroundColor Green
   }
@@ -114,14 +134,18 @@ try {
   Write-Host "This PC always runs locally (http://127.0.0.1). Online sync is optional under Data." -ForegroundColor DarkGray
   Write-Host ""
 
-  if (-not $NoStart -and (Test-Path (Join-Path $BinDir "Start-NoonReport.ps1"))) {
+  $startPs1 = Join-Path $BinDir "Start-NoonReport.ps1"
+  if ((-not $NoStart) -and (Test-Path -LiteralPath $startPs1)) {
     Write-Host "Starting Noon Report..."
-    Start-Process powershell -ArgumentList @(
-      "-NoProfile", "-ExecutionPolicy", "Bypass",
-      "-File", (Join-Path $BinDir "Start-NoonReport.ps1"),
+    Start-Process -FilePath "powershell.exe" -ArgumentList @(
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", $startPs1,
       "-AppDir", $AppDir
     )
   }
 } finally {
-  try { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+  try {
+    Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+  } catch { }
 }

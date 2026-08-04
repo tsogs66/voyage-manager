@@ -3,7 +3,7 @@ Noon Report — PC local install
 
 One-click install (Windows PowerShell):
 
-  irm https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 | iex
+  $f="$env:TEMP\noon-install-pc.ps1"; iwr https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 -UseBasicParsing -OutFile $f; powershell -NoProfile -ExecutionPolicy Bypass -File $f
 
 Or download the portable ZIP from GitHub Releases / build with scripts/build-pc-portable.sh,
 unzip, then double-click:
