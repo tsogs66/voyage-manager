@@ -1665,7 +1665,7 @@
       <div class="hint">First-time ship PC setup — one command installs Noon Report onto the computer and always runs it locally (<code>http://127.0.0.1</code>), not from the website. Later updates use the same local install. Voyage data stays in this PC’s browser.</div>
       <div class="field span2" style="margin-top:10px;">
         <label>Windows one-click (PowerShell)</label>
-        <input id="pcInstallCmd" readonly value="irm https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 | iex" style="font-size:12px;">
+        <input id="pcInstallCmd" readonly value="$f=&quot;$env:TEMP\noon-install-pc.ps1&quot;; iwr https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 -UseBasicParsing -OutFile $f; powershell -NoProfile -ExecutionPolicy Bypass -File $f" style="font-size:12px;">
       </div>
       <div class="btn-row">
         <button class="primary small" type="button" id="btnCopyPcInstall">Copy install command</button>
@@ -9718,7 +9718,7 @@ document.getElementById('btnInstallApp').addEventListener('click', async ()=>{
 
 document.getElementById('btnCopyPcInstall')?.addEventListener('click', async ()=>{
   const el = document.getElementById('pcInstallCmd');
-  const text = (el && el.value) || 'irm https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 | iex';
+  const text = (el && el.value) || '$f="$env:TEMP\\noon-install-pc.ps1"; iwr https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 -UseBasicParsing -OutFile $f; powershell -NoProfile -ExecutionPolicy Bypass -File $f';
   try{
     if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
     else if (el){ el.focus(); el.select(); document.execCommand('copy'); }
