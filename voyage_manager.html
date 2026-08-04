@@ -367,6 +367,12 @@
   .badge{display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:10px; padding:2px 7px; border-radius:10px; border:1px solid var(--line-strong); color:var(--paper-dim); margin-left:8px;}
   .pf-input{width:64px; background:var(--ink); border:1px solid var(--line-strong); color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:12px; padding:4px; border-radius:2px;}
   .pf-computed{color:var(--teal); font-family:'IBM Plex Mono',monospace; font-size:12px;}
+  a.btn-link-like{
+    font-family:'Oswald',sans-serif; letter-spacing:0.06em; text-transform:uppercase; font-size:12px;
+    padding:10px 18px; border-radius:3px; border:1px solid var(--line-strong); color:var(--paper-dim);
+    text-decoration:none; display:inline-flex; align-items:center;
+  }
+  a.btn-link-like:hover{color:var(--paper); border-color:var(--paper-dim);}
 
   /* ---- Reference tab ---- */
   .ref-jump{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 16px;}
@@ -1653,6 +1659,20 @@
       <div class="hint" id="syncMetaLine">Last sync: never</div>
       <div id="remoteVoyageList" class="hint" style="display:none; margin-top:8px;"></div>
       <div class="hint">Server folders: <code>data/&lt;vessel&gt;/&lt;voyageNo&gt;/B.json</code> and <code>…/L.json</code> (B = ballast, L = laden). Sync Now pushes the active voyage + condition only.</div>
+    </div>
+    <div class="panel">
+      <h2>Install on PC (local)</h2>
+      <div class="hint">First-time ship PC setup — one command installs Noon Report onto the computer and always runs it locally (<code>http://127.0.0.1</code>), not from the website. Later updates use the same local install. Voyage data stays in this PC’s browser.</div>
+      <div class="field span2" style="margin-top:10px;">
+        <label>Windows one-click (PowerShell)</label>
+        <input id="pcInstallCmd" readonly value="irm https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 | iex" style="font-size:12px;">
+      </div>
+      <div class="btn-row">
+        <button class="primary small" type="button" id="btnCopyPcInstall">Copy install command</button>
+        <a class="btn-link-like" id="pcInstallRawLink" href="https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1" target="_blank" rel="noopener">Open install script</a>
+        <a class="btn-link-like" href="https://github.com/tsogs66/voyage-manager/tree/main/install/pc" target="_blank" rel="noopener">PC install docs</a>
+      </div>
+      <div class="hint">After install: use Desktop shortcut <strong>Noon Report</strong>. To update later, run <code>Update-NoonReport.bat</code> in <code>%LOCALAPPDATA%\NoonReport\bin</code> (or paste the same PowerShell command again).</div>
     </div>
     <div class="panel">
       <h2>Local Database</h2>
@@ -9694,6 +9714,18 @@ document.getElementById('btnInstallApp').addEventListener('click', async ()=>{
   await deferredInstallPrompt.userChoice;
   deferredInstallPrompt = null;
   document.getElementById('btnInstallApp').style.display = 'none';
+});
+
+document.getElementById('btnCopyPcInstall')?.addEventListener('click', async ()=>{
+  const el = document.getElementById('pcInstallCmd');
+  const text = (el && el.value) || 'irm https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 | iex';
+  try{
+    if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
+    else if (el){ el.focus(); el.select(); document.execCommand('copy'); }
+    alert('PC install command copied.\n\nOn the ship PC: open PowerShell, paste, press Enter.');
+  }catch(e){
+    alert('Copy failed — select the command manually and copy it.\n\n' + text);
+  }
 });
 
 /* ---------------- export / import ---------------- */

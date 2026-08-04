@@ -108,6 +108,33 @@ Or build from CLI after sync:
 cd android && ./gradlew assembleDebug
 ```
 
+## PC install (one-click, runs locally)
+
+Installs the app onto the PC and always opens it as **local** `http://127.0.0.1` (not the online site). Voyage data stays in that PC’s browser. Updates replace app files only — same local workflow every time.
+
+### One-click (Windows PowerShell)
+
+Copy/paste in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 | iex
+```
+
+This downloads the latest `main` build into `%LOCALAPPDATA%\NoonReport`, creates a **Desktop → Noon Report** shortcut, and starts the app.
+
+- **Start later:** double-click the Desktop shortcut  
+- **Update later:** `%LOCALAPPDATA%\NoonReport\bin\Update-NoonReport.bat` (or re-run the one-click command)
+
+### Portable ZIP (no install)
+
+```bash
+./scripts/build-pc-portable.sh
+```
+
+Share `dist/NoonReport-PC.zip`. On the ship PC: unzip → double-click **Start Noon Report.bat**.
+
+Details: [`install/pc/README.txt`](install/pc/README.txt).
+
 ## Quick Start (Local / Ship PC)
 
 Serve the folder over HTTP (required for PWA and service worker — `file://` URLs will not register a service worker):
