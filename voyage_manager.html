@@ -8656,28 +8656,28 @@ function renderVoyageProgress(animateShip){
     <circle cx="${pierX+7}" cy="${y-8}" r="2.4" fill="var(--ink)" stroke="var(--paper-dim)" stroke-width="1"/>
     <circle cx="${pierX+16}" cy="${y-8}" r="2.4" fill="var(--ink)" stroke="var(--paper-dim)" stroke-width="1"/>`;
 
-  // Classic stock anchor hung clear of the centered text column (starboard / bow side).
-  const ax = shipX + 58;
-  const ay = y + 24;
+  // Stock anchor + chain, hung well starboard of the hull so metrics never cover it.
+  const ax = Math.min(x1 - 18, shipX + 72);
+  const ay = y + 22;
   const anchorSvg = `
     <g fill="var(--brass)" stroke="var(--brass)" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="${ax}" cy="${ay+4}" r="4.2" fill="none" stroke-width="2"/>
-      <rect x="${ax-1.4}" y="${ay+8}" width="2.8" height="16" rx="0.8" stroke="none"/>
-      <rect x="${ax-10}" y="${ay+11.5}" width="20" height="2.6" rx="1.2" stroke="none"/>
-      <circle cx="${ax}" cy="${ay+25}" r="2.2" stroke="none"/>
-      <path d="M ${ax} ${ay+24}
-               C ${ax-3} ${ay+24} ${ax-9} ${ay+22} ${ax-13} ${ay+31}
-               L ${ax-8.5} ${ay+31}
-               C ${ax-5.5} ${ay+26.5} ${ax-2.5} ${ay+26.5} ${ax} ${ay+28.5}
-               C ${ax+2.5} ${ay+26.5} ${ax+5.5} ${ay+26.5} ${ax+8.5} ${ay+31}
-               L ${ax+13} ${ay+31}
-               C ${ax+9} ${ay+22} ${ax+3} ${ay+24} ${ax} ${ay+24} Z" stroke="none"/>
+      <circle cx="${ax}" cy="${ay+3.5}" r="4.5" fill="none" stroke-width="2.2"/>
+      <rect x="${ax-1.6}" y="${ay+7.5}" width="3.2" height="17" rx="1" stroke="none"/>
+      <rect x="${ax-11}" y="${ay+11}" width="22" height="2.8" rx="1.3" stroke="none"/>
+      <circle cx="${ax}" cy="${ay+26}" r="2.4" stroke="none"/>
+      <path d="M ${ax} ${ay+25}
+               C ${ax-4} ${ay+24.5} ${ax-10} ${ay+22.5} ${ax-14.5} ${ay+33}
+               L ${ax-9.5} ${ay+33}
+               C ${ax-6} ${ay+28} ${ax-2.8} ${ay+27.5} ${ax} ${ay+29.5}
+               C ${ax+2.8} ${ay+27.5} ${ax+6} ${ay+28} ${ax+9.5} ${ay+33}
+               L ${ax+14.5} ${ay+33}
+               C ${ax+10} ${ay+22.5} ${ax+4} ${ay+24.5} ${ax} ${ay+25} Z" stroke="none"/>
     </g>`;
 
   const statusExtras = shipStatus==='PORT'
     ? pierSvg
     : shipStatus==='ANCHORED'
-    ? `<line x1="${ax}" y1="${y+16}" x2="${ax}" y2="${ay+1}" stroke="var(--paper-dim)" stroke-width="1.5" stroke-dasharray="3 3"/>
+    ? `<line x1="${ax}" y1="${y+16}" x2="${ax}" y2="${ay}" stroke="var(--paper-dim)" stroke-width="1.5" stroke-dasharray="3 3"/>
        ${anchorSvg}`
     : '';
 
@@ -8685,8 +8685,8 @@ function renderVoyageProgress(animateShip){
   const nearDep = (shipX - x0) < 120;
   const nearArr = (x1 - shipX) < 120;
   const gapToArr = x1 - shipX;
-  // Metrics stay under/left of the hull so pier/anchor (starboard) never covers them.
-  const metricsX = (shipStatus !== 'UNDERWAY' || gapToArr <= 130) ? Math.max(x0 + 40, shipX - 28) : shipX;
+  // Metrics stay under/port of the hull so pier/anchor (starboard) never covers them.
+  const metricsX = (shipStatus !== 'UNDERWAY' || gapToArr <= 130) ? Math.max(x0 + 48, shipX - 52) : shipX;
   const togoX = gapToArr > 130 ? (shipX + x1) / 2 : metricsX;
   const togoY = gapToArr > 130 ? (y - 18) : (y + 36);
   const bottomBlockY = gapToArr > 130 ? (y + 42) : (y + 52);
