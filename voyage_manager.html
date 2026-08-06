@@ -8646,26 +8646,51 @@ function renderVoyageProgress(animateShip){
 
   // Pier (shown when at port): a post and deck the ship sits alongside, plus bollards.
   const pierPath = `M ${shipX+50} ${y+34} L ${shipX+50} ${y-2} L ${shipX+70} ${y-2} L ${shipX+70} ${y+34} Z`;
-  const gangway = `M ${shipX+24} ${y+2} L ${shipX+50} ${y-2}`;
   const bollards = `<circle cx="${shipX+56}" cy="${y-6}" r="2.5" fill="var(--ink)"/><circle cx="${shipX+64}" cy="${y-6}" r="2.5" fill="var(--ink)"/>`;
 
-  // Anchor + chain (shown when anchored): dashed chain from bow down to an anchor glyph.
-  const chainLine = `M ${shipX+30} ${y+18} L ${shipX+30} ${y+40}`;
-  const anchorGlyph = `M ${shipX+30} ${y+40} m -7 0 a 7 7 0 1 0 14 0 M ${shipX+30} ${y+40} l 0 8 M ${shipX+24} ${y+48} l 12 0`;
+  // Classic stock anchor (ring, shank, stock, crown, flukes) hung from a dashed chain at the bow.
+  const ax = shipX + 32;
+  const ay = y + 36;
+  const anchorSvg = `
+    <g fill="var(--paper-dim)" stroke="var(--paper-dim)" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="${ax}" cy="${ay+3}" r="3.6" fill="none" stroke-width="1.8"/>
+      <rect x="${ax-1.15}" y="${ay+6.5}" width="2.3" height="13.5" rx="0.7" stroke="none"/>
+      <rect x="${ax-8.5}" y="${ay+10}" width="17" height="2.1" rx="1" stroke="none"/>
+      <circle cx="${ax}" cy="${ay+21.5}" r="1.8" stroke="none"/>
+      <path d="M ${ax-1.2} ${ay+20}
+               Q ${ax-10} ${ay+17.5} ${ax-12.5} ${ay+26}
+               L ${ax-8.5} ${ay+24.5}
+               Q ${ax-4.5} ${ay+20.5} ${ax-1.2} ${ay+22} Z" stroke="none"/>
+      <path d="M ${ax+1.2} ${ay+20}
+               Q ${ax+10} ${ay+17.5} ${ax+12.5} ${ay+26}
+               L ${ax+8.5} ${ay+24.5}
+               Q ${ax+4.5} ${ay+20.5} ${ax+1.2} ${ay+22} Z" stroke="none"/>
+    </g>`;
 
   const statusExtras = shipStatus==='PORT'
     ? `<path d="${pierPath}" fill="var(--ink)" stroke="var(--line-strong)" stroke-width="1"/>
        <line x1="${shipX+24}" y1="${y+2}" x2="${shipX+50}" y2="${y-2}" stroke="var(--paper-dim)" stroke-width="2"/>
        ${bollards}`
     : shipStatus==='ANCHORED'
-    ? `<line x1="${shipX+30}" y1="${y+18}" x2="${shipX+30}" y2="${y+40}" stroke="var(--paper-dim)" stroke-width="1.5" stroke-dasharray="3 3"/>
-       <path d="${anchorGlyph}" fill="none" stroke="var(--paper-dim)" stroke-width="2" stroke-linecap="round"/>`
+    ? `<line x1="${ax}" y1="${y+18}" x2="${ax}" y2="${ay}" stroke="var(--paper-dim)" stroke-width="1.5" stroke-dasharray="3 3"/>
+       ${anchorSvg}`
     : '';
+
+  // Keep end-port labels clear of the ship telemetry cluster when the ship is near either end.
+  const nearDep = (shipX - x0) < 120;
+  const nearArr = (x1 - shipX) < 120;
+  const gapToArr = x1 - shipX;
+  // "nm to go" sits in the clear gap ahead of the bow; if the gap is tight, park it under the hull
+  // (and drop further when a hanging anchor occupies that space).
+  const belowExtra = shipStatus === 'ANCHORED' ? 28 : 0;
+  const togoX = gapToArr > 130 ? (shipX + x1) / 2 : shipX;
+  const togoY = gapToArr > 130 ? (y - 18) : (y + 34 + belowExtra);
+  const bottomBlockY = gapToArr > 130 ? (y + 40 + belowExtra) : (y + 50 + belowExtra);
 
   const progLen = Math.max(1, pct * (x1-x0));
 
   box.innerHTML = `
-    <svg viewBox="0 0 900 270" style="width:100%; height:auto; max-height:290px; --prog-len:${progLen}; --ship-from:${shipFromPx}px;">
+    <svg viewBox="0 0 900 290" style="width:100%; height:auto; max-height:310px; --prog-len:${progLen}; --ship-from:${shipFromPx}px;">
       <g class="voyage-wave"><path d="${wave1}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.25"/></g>
       <g class="voyage-wave" style="animation-delay:-3s"><path d="${wave2}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.15"/></g>
 
@@ -8675,10 +8700,14 @@ function renderVoyageProgress(animateShip){
       <circle cx="${x0}" cy="${y}" r="7" fill="var(--teal)"/>
       <circle cx="${x1}" cy="${y}" r="7" fill="none" stroke="var(--paper-dim)" stroke-width="2"/>
 
+      ${nearDep ? '' : `
       <text x="${x0}" y="${y-46}" text-anchor="start" fill="var(--paper)" font-family="Oswald, sans-serif" font-size="15" font-weight="600">${depPort}</text>
       <text x="${x0}" y="${y-28}" text-anchor="start" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">0 nm</text>
+      `}
+      ${nearArr ? '' : `
       <text x="${x1}" y="${y-46}" text-anchor="end" fill="var(--paper)" font-family="Oswald, sans-serif" font-size="15" font-weight="600">${arrPort}</text>
       <text x="${x1}" y="${y-28}" text-anchor="end" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(totalDistance, 2)} nm</text>
+      `}
 
       <g class="${shipAnimClass}">
         ${isUnderway ? `<path class="voyage-wake" d="M ${shipX-44} ${y+14} q -10 4 -22 2" fill="none" stroke="var(--paper-dim)" stroke-width="1.5"/>` : ''}
@@ -8693,24 +8722,26 @@ function renderVoyageProgress(animateShip){
       </g>
 
       ${isUnderway ? `
-      <text x="${shipX}" y="${y-70}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentRpm!=null ? fmt(currentRpm, 2)+' RPM' : '—'}</text>
-      <text x="${shipX}" y="${y-58}" text-anchor="middle" fill="var(--teal)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentSpeed!=null ? fmt(currentSpeed,2)+' kn' : '—'}</text>
-      <text x="${shipX}" y="${y-46}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">Slip ${currentSlip!=null ? fmt(currentSlip,2)+'%' : '—'}</text>
+      <text x="${shipX}" y="${y-78}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentRpm!=null ? fmt(currentRpm, 2)+' RPM' : '—'}</text>
+      <text x="${shipX}" y="${y-64}" text-anchor="middle" fill="var(--teal)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentSpeed!=null ? fmt(currentSpeed,2)+' kn' : '—'}</text>
+      <text x="${shipX}" y="${y-50}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">Slip ${currentSlip!=null ? fmt(currentSlip,2)+'%' : '—'}</text>
       ` : `
-      <text x="${shipX}" y="${y-58}" text-anchor="middle" fill="${shipStatus==='ANCHORED' ? 'var(--brass)' : 'var(--teal)'}" font-family="Oswald, sans-serif" font-size="13" font-weight="600" letter-spacing="0.06em">${shipStatus==='ANCHORED' ? 'AT ANCHOR' : 'AT PORT'}</text>
+      <text x="${shipX}" y="${y-64}" text-anchor="middle" fill="${shipStatus==='ANCHORED' ? 'var(--brass)' : 'var(--teal)'}" font-family="Oswald, sans-serif" font-size="13" font-weight="600" letter-spacing="0.06em">${shipStatus==='ANCHORED' ? 'AT ANCHOR' : 'AT PORT'}</text>
+      ${(nearArr || nearDep) ? `<text x="${shipX}" y="${y-48}" text-anchor="middle" fill="var(--paper)" font-family="Oswald, sans-serif" font-size="14" font-weight="600">${nearArr ? arrPort : depPort}</text>` : ''}
       `}
+
+      <text x="${togoX}" y="${togoY}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(togo, 2)} nm to go</text>
 
       ${isUnderway ? `
-      <text x="${shipX}" y="${y+38}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentKw!=null ? fmt(currentKw, 2)+' KW' : '—'}</text>
-      <text x="${shipX}" y="${y+52}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentMcr!=null ? fmt(currentMcr, 2)+'% MCR' : '—'}</text>
+      <text x="${shipX}" y="${bottomBlockY}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentKw!=null ? fmt(currentKw, 2)+' KW' : '—'}</text>
+      <text x="${shipX}" y="${bottomBlockY+14}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentMcr!=null ? fmt(currentMcr, 2)+'% MCR' : '—'}</text>
       ` : `
-      <text x="${shipX}" y="${y+48}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">Engine idle</text>
+      <text x="${shipX}" y="${bottomBlockY+6}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">Engine idle</text>
       `}
-      <text x="${shipX}" y="${y+70}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="13" font-weight="600">${fmt(traveled, 2)} nm</text>
-      <text x="${shipX}" y="${y+86}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${fmt(pct*100, 2)}% complete</text>
+      <text x="${shipX}" y="${bottomBlockY+32}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="13" font-weight="600">${fmt(traveled, 2)} nm</text>
+      <text x="${shipX}" y="${bottomBlockY+48}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${fmt(pct*100, 2)}% complete</text>
 
-      <text x="${(shipX+x1)/2}" y="${y-8}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(togo, 2)} nm to go</text>
-      <text x="${(x0+x1)/2}" y="${y+106}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">Average Speed: ${avgSpeed!=null ? fmt(avgSpeed,2)+' kn' : '—'}</text>
+      <text x="${(x0+x1)/2}" y="${bottomBlockY+68}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">Average Speed: ${avgSpeed!=null ? fmt(avgSpeed,2)+' kn' : '—'}</text>
     </svg>
   `;
   _lastVoyageShipPct = pct;
