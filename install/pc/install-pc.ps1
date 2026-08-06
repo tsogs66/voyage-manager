@@ -109,25 +109,83 @@ try {
   } | ConvertTo-Json
   Set-Content -LiteralPath (Join-Path $InstallRoot "install.json") -Value $stamp -Encoding UTF8
 
-  $desktop = [Environment]::GetFolderPath("Desktop")
-  $shortcutPath = Join-Path $desktop "Noon Report.lnk"
-  $bat = Join-Path $BinDir "Start-NoonReport.bat"
-  if (Test-Path -LiteralPath $bat) {
+  $bat = (Resolve-Path -LiteralPath (Join-Path $BinDir "Start-NoonReport.bat")).Path
+  $startPs1Path = Join-Path $BinDir "Start-NoonReport.ps1"
+
+  function Get-DesktopDirs {
+    $dirs = New-Object System.Collections.Generic.List[string]
+    foreach ($candidate in @(
+      [Environment]::GetFolderPath("Desktop"),
+      [Environment]::GetFolderPath("CommonDesktopDirectory"),
+      (Join-Path $env:USERPROFILE "Desktop"),
+      (Join-Path $env:USERPROFILE "OneDrive\Desktop"),
+      (Join-Path $env:USERPROFILE "OneDrive - Personal\Desktop"),
+      (Join-Path $env:PUBLIC "Desktop")
+    )) {
+      if ($candidate -and (Test-Path -LiteralPath $candidate) -and -not $dirs.Contains($candidate)) {
+        $dirs.Add($candidate)
+      }
+    }
+    return $dirs
+  }
+
+  function New-NoonReportShortcut([string]$LinkPath, [string]$TargetBat, [string]$WorkDir) {
     $wsh = New-Object -ComObject WScript.Shell
-    $sc = $wsh.CreateShortcut($shortcutPath)
-    $sc.TargetPath = $bat
-    $sc.WorkingDirectory = $AppDir
+    $sc = $wsh.CreateShortcut($LinkPath)
+    $sc.TargetPath = $TargetBat
+    $sc.WorkingDirectory = $WorkDir
     $sc.WindowStyle = 1
     $sc.Description = "Noon Report - local PC (offline-capable)"
     $sc.IconLocation = "$env:SystemRoot\System32\shell32.dll,13"
     $sc.Save()
-    Write-Host "Desktop shortcut: $shortcutPath" -ForegroundColor Green
+  }
+
+  $shortcutMade = $false
+  if (Test-Path -LiteralPath $bat) {
+    foreach ($desktop in (Get-DesktopDirs)) {
+      try {
+        $shortcutPath = Join-Path $desktop "Noon Report.lnk"
+        New-NoonReportShortcut -LinkPath $shortcutPath -TargetBat $bat -WorkDir $AppDir
+        # Also drop a plain .bat launcher on Desktop (works if .lnk is blocked)
+        $deskBat = Join-Path $desktop "Noon Report.bat"
+        $deskBatBody = @"
+@echo off
+start "" /D "$AppDir" powershell -NoProfile -ExecutionPolicy Bypass -File "$startPs1Path" -AppDir "$AppDir"
+"@
+        Set-Content -LiteralPath $deskBat -Value $deskBatBody -Encoding ASCII
+        Write-Host "Desktop shortcut: $shortcutPath" -ForegroundColor Green
+        Write-Host "Desktop launcher : $deskBat" -ForegroundColor Green
+        $shortcutMade = $true
+        break
+      } catch {
+        Write-Host ("Desktop shortcut failed in {0}: {1}" -f $desktop, $_.Exception.Message) -ForegroundColor DarkYellow
+      }
+    }
+
+    # Start Menu shortcut
+    try {
+      $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+      if (-not (Test-Path -LiteralPath $startMenu)) {
+        New-Item -ItemType Directory -Force -Path $startMenu | Out-Null
+      }
+      $smLink = Join-Path $startMenu "Noon Report.lnk"
+      New-NoonReportShortcut -LinkPath $smLink -TargetBat $bat -WorkDir $AppDir
+      Write-Host "Start Menu shortcut: $smLink" -ForegroundColor Green
+      $shortcutMade = $true
+    } catch {
+      Write-Host ("Start Menu shortcut failed: {0}" -f $_.Exception.Message) -ForegroundColor DarkYellow
+    }
+  }
+
+  if (-not $shortcutMade) {
+    Write-Host "WARNING: could not create a Desktop shortcut. Start manually with:" -ForegroundColor Yellow
+    Write-Host "  $bat"
   }
 
   Write-Host ""
   Write-Host "Installed successfully." -ForegroundColor Green
   Write-Host "  App files : $AppDir"
-  Write-Host "  Start     : double-click Desktop 'Noon Report' or run:"
+  Write-Host "  Start     : Desktop 'Noon Report' shortcut, or:"
   Write-Host "              $bat"
   Write-Host "  Update    : $BinDir\Update-NoonReport.bat"
   Write-Host ""
