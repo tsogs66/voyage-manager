@@ -3302,6 +3302,7 @@ function buildDemoPackCircumnav(){
     fwProd:0, fwRob:44800, blrRt:2, ge1:3, ge2:3
   }, {
     rpm:45, ge1Kw:420, ge2Kw:400, blrKw:140, incRt:0,
+    weather: weather({ windDir:'SE', windBft:2, seaState:1, airTemp:29, seaTemp:28 }),
     remarks:'Stand by. Pilot boarded.',
     reportExtra:{ port:'Singapore' }
   });
@@ -3312,6 +3313,7 @@ function buildDemoPackCircumnav(){
     fwProd:0, fwRob:44600, blrRt:1, ge1:2, ge2:2
   }, {
     rpm:32, ge1Kw:440, ge2Kw:420, blrKw:120, incRt:0,
+    weather: weather({ windDir:'E', windBft:2, seaState:1, airTemp:30, seaTemp:29 }),
     remarks:'All fast Singapore. Voyage complete.',
     reportExtra:{ port:'Singapore PSA', cargoOp:'Awaiting orders' }
   });
@@ -3369,6 +3371,7 @@ function buildDemoPackCircumnav(){
   });
   ladenEntries.push(entryFromSnap('e-cn-l4','2026-07-07T14:00','EOSP - END OF SEA PASSAGE','L', ls, {
     distanceShip:55, rpm:56, ge1Kw:400, ge2Kw:380, generatorsInUse:2,
+    weather: weather({ windDir:'NE', windBft:3, seaState:2, airTemp:28, seaTemp:27 }),
     report: portReport({ port:'Approaches', remarks:'EOSP laden leg (compressed demo).' })
   }));
 
