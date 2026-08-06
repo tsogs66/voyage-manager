@@ -173,11 +173,56 @@
   @keyframes voyage-wake{0%{opacity:.35;stroke-dashoffset:0}100%{opacity:.05;stroke-dashoffset:-40}}
   @keyframes voyage-progress-fill{from{stroke-dasharray:0 2000}to{stroke-dasharray:var(--prog-len,800) 2000}}
   @keyframes voyage-ship-move{from{transform:translateX(var(--ship-from,0px))}to{transform:translateX(0)}}
-  .voyage-wave{animation:voyage-wave 6s linear infinite;}
+  @keyframes voyage-drift-swell{
+    0%,100%{transform:translate(0,0) rotate(0deg)}
+    25%{transform:translate(5px,-4px) rotate(-1.2deg)}
+    55%{transform:translate(-4px,3px) rotate(1deg)}
+    80%{transform:translate(3px,1px) rotate(-0.5deg)}
+  }
+  @keyframes voyage-wind-streak{
+    0%{transform:translateY(-36px); opacity:0}
+    18%{opacity:.55}
+    100%{transform:translateY(58px); opacity:0}
+  }
+  @keyframes voyage-sea-chop{
+    0%,100%{transform:translateX(0) translateY(0)}
+    50%{transform:translateX(-8px) translateY(var(--chop-y, 3px))}
+  }
+  @keyframes voyage-drift-ripple{
+    0%{transform:scale(0.55); opacity:.45}
+    100%{transform:scale(1.55); opacity:0}
+  }
+  @keyframes voyage-rope-sway{
+    0%,100%{transform:translateY(0)}
+    50%{transform:translateY(1.5px)}
+  }
+  @keyframes voyage-spray{
+    0%{opacity:0; transform:translate(0,0)}
+    30%{opacity:.5}
+    100%{opacity:0; transform:translate(var(--spray-x,12px), var(--spray-y,-10px))}
+  }
+  .voyage-wave{animation:voyage-wave var(--wave-track-dur,6s) linear infinite;}
+  .voyage-wave.sea-rough{animation-duration:var(--wave-track-dur,3.2s);}
   .voyage-ship{animation:voyage-ship-bob 3.5s ease-in-out infinite, voyage-ship-move 1.4s ease-out forwards; transform-box:fill-box; transform-origin:center;}
   .voyage-ship.voyage-ship-static{animation:voyage-ship-bob 3.5s ease-in-out infinite;}
+  .voyage-ship.voyage-ship-drift{
+    animation:voyage-drift-swell 3.4s ease-in-out infinite, voyage-ship-move 1.4s ease-out forwards;
+    transform-box:fill-box; transform-origin:center;
+  }
+  .voyage-ship.voyage-ship-drift.voyage-ship-static{animation:voyage-drift-swell 3.4s ease-in-out infinite;}
   .voyage-wake{animation:voyage-wake 2.2s ease-out infinite;}
   .voyage-progress-line{animation:voyage-progress-fill 1.4s ease-out forwards;}
+  .voyage-wind-streak{animation:voyage-wind-streak var(--wind-dur,2.4s) linear infinite;}
+  .voyage-sea-local{animation:voyage-sea-chop var(--sea-dur,2.8s) ease-in-out infinite; transform-box:fill-box; transform-origin:center;}
+  .voyage-drift-ripple{animation:voyage-drift-ripple 2.6s ease-out infinite; transform-box:fill-box; transform-origin:center;}
+  .voyage-rope{animation:voyage-rope-sway 2.8s ease-in-out infinite; transform-box:fill-box; transform-origin:center;}
+  .voyage-spray{animation:voyage-spray var(--spray-dur,1.8s) ease-out infinite;}
+  @media (prefers-reduced-motion:reduce){
+    .voyage-wave,.voyage-ship,.voyage-ship.voyage-ship-static,.voyage-ship.voyage-ship-drift,
+    .voyage-wake,.voyage-wind-streak,.voyage-sea-local,.voyage-drift-ripple,.voyage-rope,.voyage-spray{
+      animation:none !important;
+    }
+  }
   .gauge-arc-anim,.gauge-needle-anim{transition:opacity 0.05s;}
 
   .stat-strip{display:grid; grid-template-columns:repeat(4,1fr); gap:14px;}
@@ -8581,6 +8626,29 @@ function renderEntryUnitFields(){
   if (tot && document.activeElement!==tot) tot.value = fmtFuel((meCons||0)+(geCons||0)+(blrCons||0));
 }
 
+function voyageWindAngleDeg(dir){
+  const map = {
+    N:0, NNE:22.5, NE:45, ENE:67.5, E:90, ESE:112.5, SE:135, SSE:157.5,
+    S:180, SSW:202.5, SW:225, WSW:247.5, W:270, WNW:292.5, NW:315, NNW:337.5
+  };
+  const key = String(dir || '').toUpperCase().trim();
+  return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : null;
+}
+
+function voyageBfLabel(bft){
+  const labels = ['Calm','Light air','Light breeze','Gentle breeze','Moderate breeze','Fresh breeze','Strong breeze','Near gale','Gale','Strong gale','Storm','Violent storm','Hurricane'];
+  if (bft==null || isNaN(bft)) return '';
+  const i = Math.max(0, Math.min(12, Math.round(Number(bft))));
+  return labels[i] || '';
+}
+
+function voyageSeaLabel(sea){
+  const labels = ['Glassy','Rippled','Wavelets','Slight','Moderate','Rough','Very rough','High','Very high','Phenomenal'];
+  if (sea==null || isNaN(sea)) return '';
+  const i = Math.max(0, Math.min(9, Math.round(Number(sea))));
+  return labels[i] || '';
+}
+
 function renderVoyageProgress(animateShip){
   const box = document.getElementById('voyageProgressViz');
   if (!box) return;
@@ -8600,19 +8668,55 @@ function renderVoyageProgress(animateShip){
   const x0 = 70, x1 = 830;
   const shipX = x0 + pct*(x1-x0);
   const shipFromPx = animateShip ? (x0 - shipX) : 0;
-  const shipAnimClass = animateShip ? 'voyage-ship' : 'voyage-ship voyage-ship-static';
   const depPort = state.setup.departPort || 'Departure';
   const arrPort = state.setup.arrivePort || 'Arrival';
 
-  // gentle sea wave squiggle beneath the track (two layered wavy lines)
+  const currentSpeed = lastRow && lastRow.speedShip!=null ? lastRow.speedShip : null;
+  const currentRpm = lastRow && lastRow.rpm!=null ? lastRow.rpm : null;
+  const currentSlip = lastRow && lastRow.slip!=null ? lastRow.slip : null;
+  const currentKw = lastRow && lastRow.kwEst!=null ? lastRow.kwEst : null;
+  const currentMcr = lastRow && lastRow.mcrPct!=null ? lastRow.mcrPct : null;
+  const avgSpeed = perf.avgSpeedShip;
+  const wx = (lastRow && lastRow.weather) ? lastRow.weather : {};
+  const windDir = wx.windDir || '';
+  const windBft = (wx.windBft!=null && wx.windBft!=='') ? Number(wx.windBft) : null;
+  const seaState = (wx.seaState!=null && wx.seaState!=='') ? Number(wx.seaState) : null;
+  const windAngle = voyageWindAngleDeg(windDir);
+  const bftEff = windBft!=null ? windBft : 2;
+  const seaEff = seaState!=null ? seaState : Math.min(9, Math.round(bftEff * 0.7));
+
+  // Status: port mooring, anchorage (anchor only), drifting (wave motion), or underway.
+  const PORT_OPS = new Set(['LAST LINE - DEPARTURE','PILOT ONBOARD - DEPARTURE','IN PORT - NOON','STAND BY - ARRIVAL','FIRST LINE - ARRIVAL','EOSP - END OF SEA PASSAGE','SHIFTING','BUNKERING','CARGO - LOADING','CARGO - DISCHARGING','IDLE IN PORT']);
+  const ANCHOR_OPS = new Set(['AT ANCHOR - NOON']);
+  const DRIFT_OPS = new Set(['DRIFTING']);
+  let shipStatus = 'UNDERWAY';
+  if (lastRow){
+    if (ANCHOR_OPS.has(lastRow.operation)) shipStatus = 'ANCHORED';
+    else if (DRIFT_OPS.has(lastRow.operation)) shipStatus = 'DRIFTING';
+    else if (PORT_OPS.has(lastRow.operation)) shipStatus = 'PORT';
+    else if (!(currentKw>0) && !(lastRow.distanceShip>0)) shipStatus = 'PORT';
+  }
+  const isUnderway = shipStatus === 'UNDERWAY';
+  const isDrifting = shipStatus === 'DRIFTING';
+  const isAnchored = shipStatus === 'ANCHORED';
+  const isPort = shipStatus === 'PORT';
+
+  let shipAnimClass = 'voyage-ship';
+  if (isDrifting) shipAnimClass = animateShip ? 'voyage-ship voyage-ship-drift' : 'voyage-ship voyage-ship-drift voyage-ship-static';
+  else if (!isUnderway) shipAnimClass = 'voyage-ship voyage-ship-static';
+  else if (!animateShip) shipAnimClass = 'voyage-ship voyage-ship-static';
+
+  // Track waves: taller/faster with sea state & wind.
+  const trackAmp = 5 + seaEff * 1.4 + (isDrifting ? 4 : 0);
+  const trackStep = 24;
+  const trackDur = Math.max(2.2, 7.2 - bftEff * 0.35 - seaEff * 0.15);
   let wave1 = `M ${x0-20} ${y+22}`, wave2 = `M ${x0-20} ${y+34}`;
-  for (let x=x0-20; x<=x1+20; x+=24){
-    wave1 += ` q 12 8 24 0`;
-    wave2 += ` q 12 8 24 0`;
+  for (let x=x0-20; x<=x1+20; x+=trackStep){
+    wave1 += ` q ${trackStep/2} ${trackAmp} ${trackStep} 0`;
+    wave2 += ` q ${trackStep/2} ${trackAmp*0.85} ${trackStep} 0`;
   }
 
-  // Bulk carrier silhouette: flat stern, long deck, tapered bow (facing direction of travel),
-  // aft superstructure/bridge, funnel, and a row of cargo hatch covers.
+  // Bulk carrier silhouette
   const waterlineY = y+9;
   const upperHull = `M ${shipX-44} ${waterlineY} L ${shipX-44} ${y+4} L ${shipX+24} ${y+4} L ${shipX+46} ${waterlineY} Z`;
   const lowerHull = `M ${shipX-44} ${y+18} L ${shipX-44} ${waterlineY} L ${shipX+46} ${waterlineY} L ${shipX+24} ${y+18} Z`;
@@ -8621,53 +8725,117 @@ function renderVoyageProgress(animateShip){
   const funnelPath = `M ${shipX-31} ${y-25} h 6 v 9 h -6 Z`;
   const hatchXs = [shipX-10, shipX+2, shipX+14];
   const hatches = hatchXs.map(hx => `<rect x="${hx}" y="${y}" width="9" height="4" rx="0.5" fill="var(--ink)" stroke="rgba(10,20,32,0.4)" stroke-width="0.5"/>`).join('');
-  const wakeLines = `
-    <path d="M ${shipX-44} ${y+14} q -10 4 -22 2" fill="none" stroke="var(--paper-dim)" stroke-width="1.5" opacity="0.4"/>
-    <path d="M ${shipX-44} ${y+18} q -14 6 -30 4" fill="none" stroke="var(--paper-dim)" stroke-width="1.5" opacity="0.25"/>`;
 
-  const currentSpeed = lastRow && lastRow.speedShip!=null ? lastRow.speedShip : null;
-  const currentRpm = lastRow && lastRow.rpm!=null ? lastRow.rpm : null;
-  const currentSlip = lastRow && lastRow.slip!=null ? lastRow.slip : null;
-  const currentKw = lastRow && lastRow.kwEst!=null ? lastRow.kwEst : null;
-  const currentMcr = lastRow && lastRow.mcrPct!=null ? lastRow.mcrPct : null;
-  const avgSpeed = perf.avgSpeedShip;
+  // Port stay: mooring rope to a quay bollard (no hanging anchor).
+  const bollardX = Math.min(x1 - 10, shipX + 64);
+  const bollardY = y - 2;
+  const portExtras = `
+    <g class="voyage-rope">
+      <path d="M ${shipX+22} ${y+2} Q ${shipX+42} ${y-10} ${bollardX-1} ${bollardY}"
+            fill="none" stroke="#c4a574" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M ${shipX+22} ${y+2} Q ${shipX+40} ${y-7} ${bollardX-1} ${bollardY+1}"
+            fill="none" stroke="#8a7048" stroke-width="1" stroke-linecap="round" opacity="0.7"/>
+    </g>
+    <rect x="${bollardX-7}" y="${y+2}" width="14" height="28" rx="1.5" fill="var(--ink)" stroke="var(--line-strong)" stroke-width="1"/>
+    <rect x="${bollardX-9}" y="${bollardY-2}" width="18" height="5" rx="2" fill="#2a3544" stroke="var(--paper-dim)" stroke-width="1"/>
+    <ellipse cx="${bollardX}" cy="${bollardY}" rx="5.5" ry="3.2" fill="#3a4656" stroke="var(--paper-dim)" stroke-width="1"/>
+    <circle cx="${bollardX}" cy="${bollardY}" r="2" fill="var(--ink)"/>`;
 
-  // Determine ship status: underway, at port, or at anchorage — based on operation,
-  // falling back to "no distance / no engine power" when the operation itself is ambiguous.
-  const PORT_OPS = new Set(['LAST LINE - DEPARTURE','PILOT ONBOARD - DEPARTURE','IN PORT - NOON','STAND BY - ARRIVAL','FIRST LINE - ARRIVAL','EOSP - END OF SEA PASSAGE','SHIFTING','BUNKERING','CARGO - LOADING','CARGO - DISCHARGING','IDLE IN PORT','AT ANCHOR - NOON']);
-  const ANCHOR_OPS = new Set(['DRIFTING','AT ANCHOR - NOON']);
-  let shipStatus = 'UNDERWAY';
-  if (lastRow){
-    if (ANCHOR_OPS.has(lastRow.operation)) shipStatus = 'ANCHORED';
-    else if (PORT_OPS.has(lastRow.operation)) shipStatus = 'PORT';
-    else if (!(currentKw>0) && !(lastRow.distanceShip>0)) shipStatus = 'PORT';
+  // Anchorage only: stock anchor on a chain from the bow.
+  const ax = Math.min(x1 - 16, shipX + 58);
+  const ay = y + 24;
+  const anchorExtras = `
+    <line x1="${ax}" y1="${y+16}" x2="${ax}" y2="${ay}" stroke="var(--paper-dim)" stroke-width="1.5" stroke-dasharray="3 3"/>
+    <g fill="var(--brass)" stroke="var(--brass)" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="${ax}" cy="${ay+3.5}" r="4.5" fill="none" stroke-width="2.2"/>
+      <rect x="${ax-1.6}" y="${ay+7.5}" width="3.2" height="17" rx="1" stroke="none"/>
+      <rect x="${ax-11}" y="${ay+11}" width="22" height="2.8" rx="1.3" stroke="none"/>
+      <circle cx="${ax}" cy="${ay+26}" r="2.4" stroke="none"/>
+      <path d="M ${ax} ${ay+25}
+               C ${ax-4} ${ay+24.5} ${ax-10} ${ay+22.5} ${ax-14.5} ${ay+33}
+               L ${ax-9.5} ${ay+33}
+               C ${ax-6} ${ay+28} ${ax-2.8} ${ay+27.5} ${ax} ${ay+29.5}
+               C ${ax+2.8} ${ay+27.5} ${ax+6} ${ay+28} ${ax+9.5} ${ay+33}
+               L ${ax+14.5} ${ay+33}
+               C ${ax+10} ${ay+22.5} ${ax+4} ${ay+24.5} ${ax} ${ay+25} Z" stroke="none"/>
+    </g>`;
+
+  // Drifting: expanding ripples + lively local chop (no anchor).
+  const driftExtras = `
+    <ellipse class="voyage-drift-ripple" cx="${shipX}" cy="${y+20}" rx="34" ry="10" fill="none" stroke="var(--teal)" stroke-width="1.4" opacity="0.45"/>
+    <ellipse class="voyage-drift-ripple" cx="${shipX}" cy="${y+20}" rx="34" ry="10" fill="none" stroke="var(--teal)" stroke-width="1.2" opacity="0.35" style="animation-delay:-0.9s"/>
+    <ellipse class="voyage-drift-ripple" cx="${shipX}" cy="${y+20}" rx="34" ry="10" fill="none" stroke="var(--paper-dim)" stroke-width="1" opacity="0.3" style="animation-delay:-1.7s"/>`;
+
+  const statusExtras = isPort ? portExtras : (isAnchored ? anchorExtras : (isDrifting ? driftExtras : ''));
+
+  // Local sea around the hull — amplitude/tempo from Douglas sea state (+ Beaufort).
+  const chopY = 2 + seaEff * 0.9 + (isDrifting ? 2 : 0);
+  const seaDur = Math.max(1.1, 3.6 - seaEff * 0.22 - bftEff * 0.08);
+  const localAmp = 3 + seaEff * 1.1 + (isDrifting ? 3 : 0);
+  let localSea = `M ${shipX-70} ${y+20}`;
+  for (let x = shipX-70; x <= shipX+70; x += 14){
+    localSea += ` q 7 ${localAmp} 14 0`;
   }
-  const isUnderway = shipStatus === 'UNDERWAY';
+  let localSea2 = `M ${shipX-66} ${y+28}`;
+  for (let x = shipX-66; x <= shipX+66; x += 14){
+    localSea2 += ` q 7 ${localAmp*0.75} 14 0`;
+  }
+  const seaAround = `
+    <g class="voyage-sea-local" style="--chop-y:${chopY}px; --sea-dur:${seaDur}s;">
+      <path d="${localSea}" fill="none" stroke="var(--teal)" stroke-width="${1.4 + Math.min(2, seaEff*0.15)}" opacity="${0.28 + Math.min(0.35, seaEff*0.04)}"/>
+      <path d="${localSea2}" fill="none" stroke="var(--teal)" stroke-width="1.2" opacity="${0.16 + Math.min(0.25, seaEff*0.03)}"/>
+    </g>`;
 
-  // Pier (shown when at port): a post and deck the ship sits alongside, plus bollards.
-  const pierPath = `M ${shipX+50} ${y+34} L ${shipX+50} ${y-2} L ${shipX+70} ${y-2} L ${shipX+70} ${y+34} Z`;
-  const gangway = `M ${shipX+24} ${y+2} L ${shipX+50} ${y-2}`;
-  const bollards = `<circle cx="${shipX+56}" cy="${y-6}" r="2.5" fill="var(--ink)"/><circle cx="${shipX+64}" cy="${y-6}" r="2.5" fill="var(--ink)"/>`;
+  // Wind streaks from reported direction; speed scales with Beaufort.
+  const windDur = Math.max(0.7, 3.2 - bftEff * 0.2);
+  const streakCount = Math.max(2, Math.min(9, 2 + Math.round(bftEff * 0.7)));
+  let windSvg = '';
+  if (windAngle!=null && bftEff > 0){
+    const streaks = [];
+    for (let i=0; i<streakCount; i++){
+      const ox = -40 + (i % 5) * 18 + ((i*7)%5);
+      const oy = -28 - (i % 3) * 10;
+      const len = 10 + (i % 4) * 3 + bftEff * 0.6;
+      streaks.push(`
+        <g class="voyage-wind-streak" style="animation-delay:${(-i*0.22).toFixed(2)}s; --wind-dur:${windDur}s;">
+          <line x1="${ox}" y1="${oy}" x2="${ox}" y2="${oy+len}" stroke="var(--paper)" stroke-width="${1 + (bftEff>6?0.6:0)}" stroke-linecap="round" opacity="0.55"/>
+          ${bftEff>=5 ? `<circle cx="${ox+((i%2)?3:-3)}" cy="${oy+len*0.4}" r="1.1" fill="var(--paper)" opacity="0.35" class="voyage-spray" style="--spray-x:${(i%2?8:-8)}px; --spray-y:${-6 - bftEff}px; --spray-dur:${(1.4+i*0.1).toFixed(2)}s; animation-delay:${(-i*0.3).toFixed(2)}s;"/>` : ''}
+        </g>`);
+    }
+    // Local axes: -Y = wind source (FROM). Rotate so meteorological FROM maps correctly.
+    windSvg = `<g transform="translate(${shipX}, ${y}) rotate(${windAngle})" pointer-events="none">${streaks.join('')}</g>`;
+  }
 
-  // Anchor + chain (shown when anchored): dashed chain from bow down to an anchor glyph.
-  const chainLine = `M ${shipX+30} ${y+18} L ${shipX+30} ${y+40}`;
-  const anchorGlyph = `M ${shipX+30} ${y+40} m -7 0 a 7 7 0 1 0 14 0 M ${shipX+30} ${y+40} l 0 8 M ${shipX+24} ${y+48} l 12 0`;
+  const bfTxt = windBft!=null ? `BF ${fmt(windBft,0)}${windDir ? ' · '+windDir : ''}` : (windDir ? windDir : '');
+  const bfName = voyageBfLabel(windBft);
+  const seaTxt = seaState!=null ? `Sea ${fmt(seaState,0)}${voyageSeaLabel(seaState) ? ' · '+voyageSeaLabel(seaState) : ''}` : '';
+  const weatherLabel = (bfTxt || seaTxt) ? `
+    <text x="${shipX}" y="${y-92}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${bfTxt}${bfName ? '  '+bfName : ''}</text>
+    ${seaTxt ? `<text x="${shipX}" y="${y-80}" text-anchor="middle" fill="var(--teal)" font-family="'IBM Plex Mono', monospace" font-size="10">${seaTxt}</text>` : ''}
+  ` : '';
 
-  const statusExtras = shipStatus==='PORT'
-    ? `<path d="${pierPath}" fill="var(--ink)" stroke="var(--line-strong)" stroke-width="1"/>
-       <line x1="${shipX+24}" y1="${y+2}" x2="${shipX+50}" y2="${y-2}" stroke="var(--paper-dim)" stroke-width="2"/>
-       ${bollards}`
-    : shipStatus==='ANCHORED'
-    ? `<line x1="${shipX+30}" y1="${y+18}" x2="${shipX+30}" y2="${y+40}" stroke="var(--paper-dim)" stroke-width="1.5" stroke-dasharray="3 3"/>
-       <path d="${anchorGlyph}" fill="none" stroke="var(--paper-dim)" stroke-width="2" stroke-linecap="round"/>`
-    : '';
+  const statusTitle = isAnchored ? 'AT ANCHOR' : (isPort ? 'AT PORT' : (isDrifting ? 'DRIFTING' : ''));
+  const statusColor = isAnchored ? 'var(--brass)' : (isDrifting ? 'var(--paper)' : 'var(--teal)');
+
+  // Keep end labels / under-ship metrics clear of hull extras.
+  const nearDep = (shipX - x0) < 120;
+  const nearArr = (x1 - shipX) < 120;
+  const gapToArr = x1 - shipX;
+  const metricsX = (!isUnderway || gapToArr <= 130) ? Math.max(x0 + 48, shipX - 52) : shipX;
+  const togoX = gapToArr > 130 ? (shipX + x1) / 2 : metricsX;
+  const togoY = gapToArr > 130 ? (y - 18) : (y + 36);
+  const bottomBlockY = gapToArr > 130 ? (y + 42) : (y + 54);
+  const topPad = weatherLabel ? 18 : 0;
 
   const progLen = Math.max(1, pct * (x1-x0));
+  const waveClass = (seaEff >= 4 || isDrifting) ? 'voyage-wave sea-rough' : 'voyage-wave';
 
   box.innerHTML = `
-    <svg viewBox="0 0 900 270" style="width:100%; height:auto; max-height:290px; --prog-len:${progLen}; --ship-from:${shipFromPx}px;">
-      <g class="voyage-wave"><path d="${wave1}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.25"/></g>
-      <g class="voyage-wave" style="animation-delay:-3s"><path d="${wave2}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.15"/></g>
+    <svg viewBox="0 0 900 300" style="width:100%; height:auto; max-height:320px; --prog-len:${progLen}; --ship-from:${shipFromPx}px; --wave-track-dur:${trackDur}s;">
+      <g class="${waveClass}"><path d="${wave1}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.28"/></g>
+      <g class="${waveClass}" style="animation-delay:-${(trackDur/2).toFixed(2)}s"><path d="${wave2}" fill="none" stroke="var(--teal)" stroke-width="1.5" opacity="0.16"/></g>
+      ${seaAround}
+      ${windSvg}
 
       <line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="var(--line-strong)" stroke-width="3" stroke-dasharray="2 6" stroke-linecap="round"/>
       <line x1="${x0}" y1="${y}" x2="${shipX}" y2="${y}" class="voyage-progress-line" stroke="var(--brass)" stroke-width="3" stroke-linecap="round"/>
@@ -8675,10 +8843,14 @@ function renderVoyageProgress(animateShip){
       <circle cx="${x0}" cy="${y}" r="7" fill="var(--teal)"/>
       <circle cx="${x1}" cy="${y}" r="7" fill="none" stroke="var(--paper-dim)" stroke-width="2"/>
 
+      ${nearDep ? '' : `
       <text x="${x0}" y="${y-46}" text-anchor="start" fill="var(--paper)" font-family="Oswald, sans-serif" font-size="15" font-weight="600">${depPort}</text>
       <text x="${x0}" y="${y-28}" text-anchor="start" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">0 nm</text>
+      `}
+      ${nearArr ? '' : `
       <text x="${x1}" y="${y-46}" text-anchor="end" fill="var(--paper)" font-family="Oswald, sans-serif" font-size="15" font-weight="600">${arrPort}</text>
       <text x="${x1}" y="${y-28}" text-anchor="end" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(totalDistance, 2)} nm</text>
+      `}
 
       <g class="${shipAnimClass}">
         ${isUnderway ? `<path class="voyage-wake" d="M ${shipX-44} ${y+14} q -10 4 -22 2" fill="none" stroke="var(--paper-dim)" stroke-width="1.5"/>` : ''}
@@ -8692,25 +8864,29 @@ function renderVoyageProgress(animateShip){
         ${statusExtras}
       </g>
 
-      ${isUnderway ? `
-      <text x="${shipX}" y="${y-70}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentRpm!=null ? fmt(currentRpm, 2)+' RPM' : '—'}</text>
-      <text x="${shipX}" y="${y-58}" text-anchor="middle" fill="var(--teal)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentSpeed!=null ? fmt(currentSpeed,2)+' kn' : '—'}</text>
-      <text x="${shipX}" y="${y-46}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">Slip ${currentSlip!=null ? fmt(currentSlip,2)+'%' : '—'}</text>
-      ` : `
-      <text x="${shipX}" y="${y-58}" text-anchor="middle" fill="${shipStatus==='ANCHORED' ? 'var(--brass)' : 'var(--teal)'}" font-family="Oswald, sans-serif" font-size="13" font-weight="600" letter-spacing="0.06em">${shipStatus==='ANCHORED' ? 'AT ANCHOR' : 'AT PORT'}</text>
-      `}
+      ${weatherLabel}
 
       ${isUnderway ? `
-      <text x="${shipX}" y="${y+38}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentKw!=null ? fmt(currentKw, 2)+' KW' : '—'}</text>
-      <text x="${shipX}" y="${y+52}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentMcr!=null ? fmt(currentMcr, 2)+'% MCR' : '—'}</text>
+      <text x="${shipX}" y="${y-70-topPad}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentRpm!=null ? fmt(currentRpm, 2)+' RPM' : '—'}</text>
+      <text x="${shipX}" y="${y-56-topPad}" text-anchor="middle" fill="var(--teal)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentSpeed!=null ? fmt(currentSpeed,2)+' kn' : '—'}</text>
+      <text x="${shipX}" y="${y-42-topPad}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">Slip ${currentSlip!=null ? fmt(currentSlip,2)+'%' : '—'}</text>
       ` : `
-      <text x="${shipX}" y="${y+48}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">Engine idle</text>
+      <text x="${shipX}" y="${y-64-topPad}" text-anchor="middle" fill="${statusColor}" font-family="Oswald, sans-serif" font-size="13" font-weight="600" letter-spacing="0.06em">${statusTitle}</text>
+      ${(nearArr || nearDep) ? `<text x="${shipX}" y="${y-48-topPad}" text-anchor="middle" fill="var(--paper)" font-family="Oswald, sans-serif" font-size="14" font-weight="600">${nearArr ? arrPort : depPort}</text>` : ''}
       `}
-      <text x="${shipX}" y="${y+70}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="13" font-weight="600">${fmt(traveled, 2)} nm</text>
-      <text x="${shipX}" y="${y+86}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${fmt(pct*100, 2)}% complete</text>
 
-      <text x="${(shipX+x1)/2}" y="${y-8}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(togo, 2)} nm to go</text>
-      <text x="${(x0+x1)/2}" y="${y+106}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">Average Speed: ${avgSpeed!=null ? fmt(avgSpeed,2)+' kn' : '—'}</text>
+      <text x="${togoX}" y="${togoY}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(togo, 2)} nm to go</text>
+
+      ${isUnderway ? `
+      <text x="${metricsX}" y="${bottomBlockY}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentKw!=null ? fmt(currentKw, 2)+' KW' : '—'}</text>
+      <text x="${metricsX}" y="${bottomBlockY+14}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentMcr!=null ? fmt(currentMcr, 2)+'% MCR' : '—'}</text>
+      ` : `
+      <text x="${metricsX}" y="${bottomBlockY+6}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${isDrifting ? 'Low power / drift' : 'Engine idle'}</text>
+      `}
+      <text x="${metricsX}" y="${bottomBlockY+32}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="13" font-weight="600">${fmt(traveled, 2)} nm</text>
+      <text x="${metricsX}" y="${bottomBlockY+48}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${fmt(pct*100, 2)}% complete</text>
+
+      <text x="${(x0+x1)/2}" y="${bottomBlockY+68}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">Average Speed: ${avgSpeed!=null ? fmt(avgSpeed,2)+' kn' : '—'}</text>
     </svg>
   `;
   _lastVoyageShipPct = pct;
