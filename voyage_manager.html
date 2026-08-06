@@ -54,13 +54,24 @@
   .subtitle{font-size:11px; color:var(--paper-dim); letter-spacing:0.08em; text-transform:uppercase; margin-top:2px;}
   #dbStatus{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--teal);}
 
-  .tabs{display:flex; gap:2px; margin:18px 0 20px; border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .tabs{display:flex; gap:2px; margin:18px 0 20px; border-bottom:1px solid var(--line); flex-wrap:wrap; position:relative;}
   .tab{
     font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:0.06em; text-transform:uppercase;
     padding:10px 16px; cursor:pointer; color:var(--paper-dim); border-bottom:2px solid transparent;
+    display:inline-block;
+    transform:translate3d(0,0,0);
+    transition:color .15s ease, border-color .15s ease, transform .22s cubic-bezier(.2,.8,.2,1), text-shadow .22s ease;
+    will-change:transform;
   }
   .tab.active{color:var(--brass); border-bottom-color:var(--brass);}
   .tab:hover{color:var(--paper);}
+  .tab.is-magnet{
+    transition:color .15s ease, border-color .15s ease, transform .08s linear, text-shadow .12s ease;
+    text-shadow:0 0 18px rgba(212,175,106,0.18);
+  }
+  @media (prefers-reduced-motion:reduce){
+    .tab, .tab.is-magnet{transition:color .15s ease, border-color .15s ease; transform:none !important; text-shadow:none !important;}
+  }
   .page{display:none;}
   .page.active{display:block;}
 
@@ -726,13 +737,13 @@
   <div class="tabs" id="tabs">
     <div class="tab active" data-page="summary">Summary</div>
     <div class="tab" data-page="entry">Log Entry</div>
+    <div class="tab" data-page="rob">ROB</div>
     <div class="tab" data-page="voyageabstract">Voyage Abstract</div>
     <div class="tab" data-page="consumption">Consumption</div>
-    <div class="tab" data-page="rob">ROB</div>
     <div class="tab" data-page="receipts">Receipts</div>
     <div class="tab" data-page="reports">Reports</div>
-    <div class="tab" data-page="data">Data</div>
     <div class="tab" data-page="reference">Reference</div>
+    <div class="tab" data-page="data">Data</div>
     <div class="tab" data-page="voyagesetup">Voyage Setup</div>
     <div class="tab" data-page="setup">Setup</div>
   </div>
@@ -2140,13 +2151,13 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h3"/></svg>
         <span>Reports</span>
       </button>
-      <button type="button" class="bn-more-item" data-page="data">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>
-        <span>Data</span>
-      </button>
       <button type="button" class="bn-more-item" data-page="reference">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8"/><path d="M8 11h6"/></svg>
         <span>Reference</span>
+      </button>
+      <button type="button" class="bn-more-item" data-page="data">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>
+        <span>Data</span>
       </button>
       <button type="button" class="bn-more-item" data-page="voyagesetup">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17h18"/><path d="M5 17V9l7-5 7 5v8"/><path d="M9 17v-4h6v4"/></svg>
@@ -5944,6 +5955,75 @@ document.getElementById('tabs').addEventListener('click', (e)=>{
   if (!tab) return;
   switchTab(tab.dataset.page);
 });
+
+/* Magnetic pull: nearby tabs ease toward the pointer on fine-pointer desktops. */
+(function bindTabMagnet(){
+  const bar = document.getElementById('tabs');
+  if (!bar) return;
+  const tabs = () => Array.from(bar.querySelectorAll('.tab'));
+  const finePointer = () => {
+    try{
+      return window.matchMedia('(hover: hover) and (pointer: fine)').matches
+        && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }catch(_){ return true; }
+  };
+  let mx = 0, my = 0, inside = false, raf = 0;
+  const RADIUS = 88;
+  const PULL = 14;
+
+  function resetTabs(){
+    tabs().forEach(t=>{
+      t.style.transform = '';
+      t.classList.remove('is-magnet');
+    });
+  }
+  function frame(){
+    raf = 0;
+    if (!inside || !finePointer()){
+      resetTabs();
+      return;
+    }
+    tabs().forEach(t=>{
+      const r = t.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const dx = mx - cx;
+      const dy = my - cy;
+      const dist = Math.hypot(dx, dy);
+      if (dist >= RADIUS || dist < 0.01){
+        t.style.transform = '';
+        t.classList.remove('is-magnet');
+        return;
+      }
+      const strength = (1 - dist / RADIUS);
+      const ease = strength * strength;
+      const tx = (dx / dist) * PULL * ease;
+      const ty = (dy / dist) * (PULL * 0.4) * ease;
+      t.style.transform = `translate3d(${tx.toFixed(2)}px, ${ty.toFixed(2)}px, 0)`;
+      t.classList.add('is-magnet');
+    });
+  }
+  function schedule(){
+    if (!raf) raf = requestAnimationFrame(frame);
+  }
+  bar.addEventListener('pointerenter', (e)=>{
+    if (e.pointerType && e.pointerType !== 'mouse') return;
+    if (!finePointer()) return;
+    inside = true;
+    mx = e.clientX; my = e.clientY;
+    schedule();
+  });
+  bar.addEventListener('pointermove', (e)=>{
+    if (!inside) return;
+    if (e.pointerType && e.pointerType !== 'mouse') return;
+    mx = e.clientX; my = e.clientY;
+    schedule();
+  });
+  bar.addEventListener('pointerleave', ()=>{
+    inside = false;
+    schedule();
+  });
+})();
 (function bindBottomNav(){
   const nav = document.getElementById('bottomNav');
   const sheet = document.getElementById('bnMoreSheet');
