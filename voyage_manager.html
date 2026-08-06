@@ -8644,35 +8644,40 @@ function renderVoyageProgress(animateShip){
   }
   const isUnderway = shipStatus === 'UNDERWAY';
 
-  // Pier (shown when at port): a post and deck the ship sits alongside, plus bollards.
-  const pierPath = `M ${shipX+50} ${y+34} L ${shipX+50} ${y-2} L ${shipX+70} ${y-2} L ${shipX+70} ${y+34} Z`;
-  const bollards = `<circle cx="${shipX+56}" cy="${y-6}" r="2.5" fill="var(--ink)"/><circle cx="${shipX+64}" cy="${y-6}" r="2.5" fill="var(--ink)"/>`;
+  // Pier (shown when at port): quay wall + deck + bollards, kept starboard of the hull.
+  const pierX = shipX + 56;
+  const pierSvg = `
+    <path d="M ${pierX} ${y+36} L ${pierX} ${y-4} L ${pierX+22} ${y-4} L ${pierX+22} ${y+36} Z"
+          fill="var(--ink)" stroke="var(--line-strong)" stroke-width="1"/>
+    <line x1="${pierX}" y1="${y+8}" x2="${pierX+22}" y2="${y+8}" stroke="var(--line-strong)" stroke-width="1" opacity="0.55"/>
+    <line x1="${pierX}" y1="${y+18}" x2="${pierX+22}" y2="${y+18}" stroke="var(--line-strong)" stroke-width="1" opacity="0.55"/>
+    <line x1="${pierX}" y1="${y+28}" x2="${pierX+22}" y2="${y+28}" stroke="var(--line-strong)" stroke-width="1" opacity="0.55"/>
+    <line x1="${shipX+24}" y1="${y+2}" x2="${pierX}" y2="${y-2}" stroke="var(--paper-dim)" stroke-width="2"/>
+    <circle cx="${pierX+7}" cy="${y-8}" r="2.4" fill="var(--ink)" stroke="var(--paper-dim)" stroke-width="1"/>
+    <circle cx="${pierX+16}" cy="${y-8}" r="2.4" fill="var(--ink)" stroke="var(--paper-dim)" stroke-width="1"/>`;
 
-  // Classic stock anchor (ring, shank, stock, crown, flukes) hung from a dashed chain at the bow.
-  const ax = shipX + 32;
-  const ay = y + 36;
+  // Classic stock anchor hung clear of the centered text column (starboard / bow side).
+  const ax = shipX + 58;
+  const ay = y + 24;
   const anchorSvg = `
-    <g fill="var(--paper-dim)" stroke="var(--paper-dim)" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="${ax}" cy="${ay+3}" r="3.6" fill="none" stroke-width="1.8"/>
-      <rect x="${ax-1.15}" y="${ay+6.5}" width="2.3" height="13.5" rx="0.7" stroke="none"/>
-      <rect x="${ax-8.5}" y="${ay+10}" width="17" height="2.1" rx="1" stroke="none"/>
-      <circle cx="${ax}" cy="${ay+21.5}" r="1.8" stroke="none"/>
-      <path d="M ${ax-1.2} ${ay+20}
-               Q ${ax-10} ${ay+17.5} ${ax-12.5} ${ay+26}
-               L ${ax-8.5} ${ay+24.5}
-               Q ${ax-4.5} ${ay+20.5} ${ax-1.2} ${ay+22} Z" stroke="none"/>
-      <path d="M ${ax+1.2} ${ay+20}
-               Q ${ax+10} ${ay+17.5} ${ax+12.5} ${ay+26}
-               L ${ax+8.5} ${ay+24.5}
-               Q ${ax+4.5} ${ay+20.5} ${ax+1.2} ${ay+22} Z" stroke="none"/>
+    <g fill="var(--brass)" stroke="var(--brass)" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="${ax}" cy="${ay+4}" r="4.2" fill="none" stroke-width="2"/>
+      <rect x="${ax-1.4}" y="${ay+8}" width="2.8" height="16" rx="0.8" stroke="none"/>
+      <rect x="${ax-10}" y="${ay+11.5}" width="20" height="2.6" rx="1.2" stroke="none"/>
+      <circle cx="${ax}" cy="${ay+25}" r="2.2" stroke="none"/>
+      <path d="M ${ax} ${ay+24}
+               C ${ax-3} ${ay+24} ${ax-9} ${ay+22} ${ax-13} ${ay+31}
+               L ${ax-8.5} ${ay+31}
+               C ${ax-5.5} ${ay+26.5} ${ax-2.5} ${ay+26.5} ${ax} ${ay+28.5}
+               C ${ax+2.5} ${ay+26.5} ${ax+5.5} ${ay+26.5} ${ax+8.5} ${ay+31}
+               L ${ax+13} ${ay+31}
+               C ${ax+9} ${ay+22} ${ax+3} ${ay+24} ${ax} ${ay+24} Z" stroke="none"/>
     </g>`;
 
   const statusExtras = shipStatus==='PORT'
-    ? `<path d="${pierPath}" fill="var(--ink)" stroke="var(--line-strong)" stroke-width="1"/>
-       <line x1="${shipX+24}" y1="${y+2}" x2="${shipX+50}" y2="${y-2}" stroke="var(--paper-dim)" stroke-width="2"/>
-       ${bollards}`
+    ? pierSvg
     : shipStatus==='ANCHORED'
-    ? `<line x1="${ax}" y1="${y+18}" x2="${ax}" y2="${ay}" stroke="var(--paper-dim)" stroke-width="1.5" stroke-dasharray="3 3"/>
+    ? `<line x1="${ax}" y1="${y+16}" x2="${ax}" y2="${ay+1}" stroke="var(--paper-dim)" stroke-width="1.5" stroke-dasharray="3 3"/>
        ${anchorSvg}`
     : '';
 
@@ -8680,12 +8685,11 @@ function renderVoyageProgress(animateShip){
   const nearDep = (shipX - x0) < 120;
   const nearArr = (x1 - shipX) < 120;
   const gapToArr = x1 - shipX;
-  // "nm to go" sits in the clear gap ahead of the bow; if the gap is tight, park it under the hull
-  // (and drop further when a hanging anchor occupies that space).
-  const belowExtra = shipStatus === 'ANCHORED' ? 28 : 0;
-  const togoX = gapToArr > 130 ? (shipX + x1) / 2 : shipX;
-  const togoY = gapToArr > 130 ? (y - 18) : (y + 34 + belowExtra);
-  const bottomBlockY = gapToArr > 130 ? (y + 40 + belowExtra) : (y + 50 + belowExtra);
+  // Metrics stay under/left of the hull so pier/anchor (starboard) never covers them.
+  const metricsX = (shipStatus !== 'UNDERWAY' || gapToArr <= 130) ? Math.max(x0 + 40, shipX - 28) : shipX;
+  const togoX = gapToArr > 130 ? (shipX + x1) / 2 : metricsX;
+  const togoY = gapToArr > 130 ? (y - 18) : (y + 36);
+  const bottomBlockY = gapToArr > 130 ? (y + 42) : (y + 52);
 
   const progLen = Math.max(1, pct * (x1-x0));
 
@@ -8733,13 +8737,13 @@ function renderVoyageProgress(animateShip){
       <text x="${togoX}" y="${togoY}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">${fmt(togo, 2)} nm to go</text>
 
       ${isUnderway ? `
-      <text x="${shipX}" y="${bottomBlockY}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentKw!=null ? fmt(currentKw, 2)+' KW' : '—'}</text>
-      <text x="${shipX}" y="${bottomBlockY+14}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentMcr!=null ? fmt(currentMcr, 2)+'% MCR' : '—'}</text>
+      <text x="${metricsX}" y="${bottomBlockY}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="11" font-weight="600">${currentKw!=null ? fmt(currentKw, 2)+' KW' : '—'}</text>
+      <text x="${metricsX}" y="${bottomBlockY+14}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${currentMcr!=null ? fmt(currentMcr, 2)+'% MCR' : '—'}</text>
       ` : `
-      <text x="${shipX}" y="${bottomBlockY+6}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">Engine idle</text>
+      <text x="${metricsX}" y="${bottomBlockY+6}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">Engine idle</text>
       `}
-      <text x="${shipX}" y="${bottomBlockY+32}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="13" font-weight="600">${fmt(traveled, 2)} nm</text>
-      <text x="${shipX}" y="${bottomBlockY+48}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${fmt(pct*100, 2)}% complete</text>
+      <text x="${metricsX}" y="${bottomBlockY+32}" text-anchor="middle" fill="var(--brass)" font-family="'IBM Plex Mono', monospace" font-size="13" font-weight="600">${fmt(traveled, 2)} nm</text>
+      <text x="${metricsX}" y="${bottomBlockY+48}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="10">${fmt(pct*100, 2)}% complete</text>
 
       <text x="${(x0+x1)/2}" y="${bottomBlockY+68}" text-anchor="middle" fill="var(--paper-dim)" font-family="'IBM Plex Mono', monospace" font-size="11">Average Speed: ${avgSpeed!=null ? fmt(avgSpeed,2)+' kn' : '—'}</text>
     </svg>
