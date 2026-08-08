@@ -135,14 +135,14 @@
     .unit-group.cols4{grid-template-columns:repeat(2,1fr);}
     .unit-group.cols6{grid-template-columns:repeat(3,1fr);}
     .form-grid.cols5,.form-grid.cols6{grid-template-columns:repeat(3,1fr);}
-    /* Prefer one-row alignment on Voyage Summary even on mid-width screens */
+    /* Wrap instead of forcing a sideways-scrolling field row on tablets */
     #voyageSummaryPanel .form-grid.cols5{
-      grid-template-columns:repeat(5, minmax(110px, 1fr));
-      overflow-x:auto;
+      grid-template-columns:repeat(3, minmax(0, 1fr));
+      overflow-x:visible;
     }
     #vsCylFields.unit-group.cols6{
-      grid-template-columns:repeat(6, minmax(110px, 1fr));
-      overflow-x:auto;
+      grid-template-columns:repeat(3, minmax(0, 1fr));
+      overflow-x:visible;
     }
     #vsTurboScavRow.unit-group.cols3{
       grid-template-columns:repeat(3, minmax(0, 1fr));
@@ -472,6 +472,130 @@
     .stat-strip,.stat-strip.cols2,.stat-strip.cols3,.stat-strip.cols4,.stat-strip.cols5{grid-template-columns:1fr 1fr;}
     .btn-row > button{flex:1 1 100%;}
   }
+
+  /* ---- Tablet mid-width (portrait tablets / small laptops) ---- */
+  @media (min-width:721px) and (max-width:1100px){
+    body{
+      padding:16px 14px 88px;
+      padding-top:calc(16px + env(safe-area-inset-top, 0px));
+      padding-left:calc(14px + env(safe-area-inset-left, 0px));
+      padding-right:calc(14px + env(safe-area-inset-right, 0px));
+      padding-bottom:calc(84px + env(safe-area-inset-bottom, 0px));
+    }
+    .wrap{max-width:100%;}
+    .panel{padding:16px 16px; margin-bottom:16px;}
+    .form-grid{grid-template-columns:repeat(3,1fr); gap:10px 12px;}
+    .form-grid.cols2{grid-template-columns:repeat(2,1fr);}
+    .form-grid.cols3,.form-grid.cols5,.form-grid.cols6{grid-template-columns:repeat(3,1fr);}
+    .unit-group,.unit-group.cols3{grid-template-columns:repeat(2,1fr);}
+    .unit-group.cols4,.unit-group.cols5,.unit-group.cols6{grid-template-columns:repeat(3,1fr);}
+    .stat-strip.cols5{grid-template-columns:repeat(3,1fr);}
+    .gauge-grid.cols4,.gauge-grid.cols5{grid-template-columns:repeat(3,1fr);}
+    .table-scroll{max-height:min(55vh, 520px); -webkit-overflow-scrolling:touch;}
+    #voyageSummaryPanel .form-grid.cols5{grid-template-columns:repeat(3, minmax(0, 1fr));}
+    #vsCylFields.unit-group.cols6{grid-template-columns:repeat(3, minmax(0, 1fr));}
+    #vsTurboScavRow.unit-group.cols3{grid-template-columns:repeat(2, minmax(0, 1fr));}
+    .field input,.field select{font-size:14px; min-height:40px; padding:8px 9px;}
+    button.small{min-height:36px;}
+  }
+
+  /* Class fallback when orientation media is sticky after rotate (iOS/Android WebView) */
+  html.short-viewport body,
+  html.short-viewport.use-bottom-nav body{
+    padding:8px 10px 64px !important;
+    padding-top:calc(6px + env(safe-area-inset-top, 0px)) !important;
+    padding-bottom:calc(60px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  html.short-viewport .subtitle{display:none;}
+  html.short-viewport .hint{display:none;}
+  html.short-viewport .app-logo{width:32px; height:32px;}
+  html.short-viewport h1{font-size:15px;}
+  html.short-viewport .bottom-nav{padding:2px 4px calc(2px + env(safe-area-inset-bottom, 0px));}
+  html.short-viewport .bn-item{min-height:44px; font-size:8px;}
+  html.short-viewport .bn-item svg{width:18px; height:18px;}
+  html.short-viewport .table-scroll{max-height:min(42vh, 280px);}
+  html.short-viewport .footer-note{display:none;}
+
+  /* ---- Landscape phone / short viewports: maximize vertical content ---- */
+  @media (orientation: landscape) and (max-height:560px){
+    body{
+      padding:8px 10px 64px !important;
+      padding-top:calc(6px + env(safe-area-inset-top, 0px)) !important;
+      padding-left:calc(10px + env(safe-area-inset-left, 0px)) !important;
+      padding-right:calc(10px + env(safe-area-inset-right, 0px)) !important;
+      padding-bottom:calc(60px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+    html.use-bottom-nav body{
+      padding-bottom:calc(60px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+    .masthead{padding-bottom:6px; margin-bottom:2px; gap:8px;}
+    .masthead-left{gap:8px;}
+    .app-logo{width:32px; height:32px;}
+    h1{font-size:15px;}
+    .subtitle{display:none;}
+    .status-row{flex-direction:row; flex-wrap:wrap; align-items:center; gap:6px 10px;}
+    #dbStatus,#syncStatus{font-size:9px;}
+    .panel{padding:10px 12px; margin-bottom:10px;}
+    .panel h2{font-size:12px; margin-bottom:8px;}
+    .panel h3.sub{margin:10px 0 6px;}
+    .hint{display:none;}
+    .form-grid,.form-grid.cols2,.form-grid.cols3,.form-grid.cols5,.form-grid.cols6{
+      grid-template-columns:repeat(3,1fr) !important; gap:8px;
+    }
+    .unit-group,.unit-group.cols2,.unit-group.cols3,
+    .unit-group.cols4,.unit-group.cols5,.unit-group.cols6{
+      grid-template-columns:repeat(2,1fr) !important; gap:8px;
+    }
+    #vsCylFields.unit-group.cols6{grid-template-columns:repeat(3, minmax(0, 1fr)) !important;}
+    #vsOthersFields.form-grid.cols2{grid-template-columns:repeat(2, minmax(0, 1fr)) !important;}
+    .stat-strip,.stat-strip.cols5{grid-template-columns:repeat(3,1fr) !important; gap:8px;}
+    .gauge-grid,.gauge-grid.cols4,.gauge-grid.cols5{grid-template-columns:repeat(3,1fr) !important;}
+    .field label{font-size:9px;}
+    .field input,.field select,.field textarea,textarea{
+      font-size:14px !important; min-height:36px; padding:6px 8px;
+    }
+    .table-scroll{max-height:min(42vh, 280px); -webkit-overflow-scrolling:touch;}
+    .bottom-nav{
+      padding:2px 4px calc(2px + env(safe-area-inset-bottom, 0px));
+    }
+    .bn-item{min-height:44px; padding:4px 2px 2px; font-size:8px; gap:1px;}
+    .bn-item svg{width:18px; height:18px;}
+    .bn-more-panel{padding:10px 12px calc(64px + env(safe-area-inset-bottom, 0px)); max-height:min(80vh, 360px);}
+    .btn-row > button{min-height:40px; padding:8px 12px;}
+    .footer-note{display:none;}
+  }
+
+  /* ---- Tablet / large phone landscape: use width, keep readable density ---- */
+  @media (orientation: landscape) and (min-height:561px) and (max-width:1180px){
+    .wrap{max-width:100%;}
+    body{
+      padding:14px 16px 84px;
+      padding-left:calc(16px + env(safe-area-inset-left, 0px));
+      padding-right:calc(16px + env(safe-area-inset-right, 0px));
+      padding-bottom:calc(78px + env(safe-area-inset-bottom, 0px));
+    }
+    .form-grid{grid-template-columns:repeat(4,1fr);}
+    .form-grid.cols3,.form-grid.cols5,.form-grid.cols6{grid-template-columns:repeat(4,1fr);}
+    .form-grid.cols2{grid-template-columns:repeat(2,1fr);}
+    .unit-group.cols3,.unit-group.cols4{grid-template-columns:repeat(3,1fr);}
+    .unit-group.cols5,.unit-group.cols6{grid-template-columns:repeat(4,1fr);}
+    #vsCylFields.unit-group.cols6{grid-template-columns:repeat(6, minmax(0, 1fr));}
+    #voyageSummaryPanel .form-grid.cols5{grid-template-columns:repeat(5, minmax(0, 1fr));}
+    .stat-strip.cols5{grid-template-columns:repeat(5,1fr);}
+    .gauge-grid.cols4{grid-template-columns:repeat(4,1fr);}
+    .gauge-grid.cols5{grid-template-columns:repeat(5,1fr);}
+    .table-scroll{max-height:min(58vh, 480px);}
+    .bunker-plan-grid{grid-template-columns:1fr 1fr; gap:14px;}
+  }
+
+  /* Wide desktop / large tablet landscape — use more horizontal room */
+  @media (min-width:1280px){
+    .wrap{max-width:1480px;}
+  }
+  @media (min-width:1600px){
+    .wrap{max-width:1680px;}
+  }
+
   .ref-item{border-left:2px solid var(--line-strong); padding-left:8px;}
   .ref-item .rv{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--brass); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .ref-item .rl{font-size:9px; letter-spacing:0.05em; text-transform:uppercase; color:var(--paper-dim); margin-top:1px;}
@@ -6857,19 +6981,33 @@ document.getElementById('tabs').addEventListener('click', (e)=>{
   const nav = document.getElementById('bottomNav');
   const sheet = document.getElementById('bnMoreSheet');
   if (!nav) return;
-  /* Re-evaluate native/touch after Capacitor bridge injects (Android) */
+  /* Re-evaluate native/touch + short/landscape chrome after Capacitor / rotate */
   function refreshBottomNavMode(){
     try{
       const cap = window.Capacitor;
       const native = !!(cap && (cap.isNativePlatform ? cap.isNativePlatform() : (cap.getPlatform && cap.getPlatform() !== 'web')));
       const android = /android/i.test(navigator.userAgent || '');
-      if (native || android) document.documentElement.classList.add('use-bottom-nav');
+      const touch = window.matchMedia('(hover: none) and (pointer: coarse)').matches
+        || ((navigator.maxTouchPoints || 0) > 0 && Math.min(screen.width, screen.height) <= 1100);
+      if (native || android || touch || Math.min(window.innerWidth || 0, window.innerHeight || 0) <= 900){
+        document.documentElement.classList.add('use-bottom-nav');
+      }
+      const short = (window.innerHeight || 0) > 0 && (window.innerHeight || 0) <= 560;
+      const landscape = (window.innerWidth || 0) > (window.innerHeight || 0);
+      document.documentElement.classList.toggle('short-viewport', short);
+      document.documentElement.classList.toggle('landscape-view', landscape);
     }catch(_){}
     syncBottomNav(_activeTab);
   }
   refreshBottomNavMode();
   document.addEventListener('deviceready', refreshBottomNavMode, { once:true });
   window.addEventListener('capacitorReady', refreshBottomNavMode, { once:true });
+  window.addEventListener('orientationchange', ()=> setTimeout(refreshBottomNavMode, 120));
+  let _vpResizeTimer = null;
+  window.addEventListener('resize', ()=>{
+    clearTimeout(_vpResizeTimer);
+    _vpResizeTimer = setTimeout(refreshBottomNavMode, 140);
+  });
   setTimeout(refreshBottomNavMode, 0);
   setTimeout(refreshBottomNavMode, 300);
   nav.addEventListener('click', (e)=>{
