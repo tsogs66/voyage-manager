@@ -8946,7 +8946,7 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
     avgKw: incKw,
     loadPct: incineratorLoadPct(incKw)
   };
-  if (isSea){
+  if (isSea && mainEngineInUse(entry, row)){
     const cylN = meCylinderCount();
     entry.report.pumpRack = Array.from({length:cylN}, (_,i)=> num(`vs_pumpRack${i+1}`));
     entry.report.exhaustTemp = Array.from({length:cylN}, (_,i)=> num(`vs_exhaust${i+1}`));
