@@ -1817,10 +1817,12 @@
         <button class="ghost small" id="btnImportJSON">Import Backup (JSON)</button>
         <button class="ghost small" id="btnExportCSVLog">Export Voyage Log (CSV)</button>
         <button class="ghost small" id="btnExportCSVCons">Export Consumption (CSV)</button>
+        <button class="primary small" id="btnRecalculateAllData" type="button">Recalculate All Data</button>
         <input type="file" id="fileImport" accept="application/json" style="display:none;">
         <input type="file" id="fileImportSetup" accept="application/json" style="display:none;">
       </div>
       <div class="hint">"Export Setup Only" saves just the Setup tab's configuration (vessel details, engine data, flowmeter arrangement, fuel/lube defaults, opening ROB, tank capacities) without any voyage log entries or receipts — handy as a reusable template for a new voyage. "Import Setup Only" loads just that configuration back in and leaves your current log entries and receipts untouched (unlike "Import Backup", which replaces everything).</div>
+      <div class="hint">"Recalculate All Data" re-derives M/E average RPM from rev-counter deltas (so engine distance &amp; slip % match Pitch × Δrevs ÷ 1852), rebuilds performance tables, and refreshes every saved voyage leg. Manual consumption overrides are kept.</div>
       <div class="hint" id="entryCount"></div>
     </div>
   </div>
@@ -4347,7 +4349,7 @@ function pushEntryUndo(record){
 }
 
 /** Refresh stored report period/fuel stamps on entries after a mutation so later watches follow the new previous values. */
-async function cascadeSucceedingEntries(startIdx, { clearOverrides = true } = {}){
+async function cascadeSucceedingEntries(startIdx, { clearOverrides = true, persist = true } = {}){
   const sorted = sortedEntries();
   if (startIdx < 0 || startIdx >= sorted.length) return;
   // Ensure derived rows reflect current meters before we stamp fuel shares
@@ -4403,9 +4405,171 @@ async function cascadeSucceedingEntries(startIdx, { clearOverrides = true } = {}
       e.updatedAt = new Date().toISOString();
       const idx = state.entries.findIndex(x=>x.id===e.id);
       if (idx>-1) state.entries[idx] = e;
-      await dbPut('entries', e);
+      if (persist) await dbPut('entries', e);
     }
   }
+}
+
+/** Formula/data rebuild stamp — bump when stored RPM / perf must be rewritten for existing voyages. */
+const DATA_RECALC_VERSION = 53;
+
+/** Re-derive stored RPM from rev-counter Δrevs and rebuild period performance fields for current state.entries. */
+async function recalculateCurrentEntries({ persist = true, clearOverrides = false } = {}){
+  const rolls = meterRollovers();
+  const sorted = sortedEntries();
+  let prev = effectiveCarryover();
+  let rpmFixed = 0;
+  for (const e of sorted){
+    let changed = false;
+    if (prev && e.revCounter!=null && prev.revCounter!=null && e.datetime && prev.datetime){
+      const hrs = (new Date(e.datetime) - new Date(prev.datetime)) / 3600000;
+      const dailyRevs = meterDelta(e.revCounter, prev.revCounter, rolls.rc);
+      if (dailyRevs != null && hrs > 0){
+        const rpm = rpmFromRevs(dailyRevs, hrs);
+        if (rpm != null){
+          const rounded = Math.round(rpm * 100) / 100;
+          if (e.rpm == null || Math.abs((e.rpm || 0) - rounded) > 0.005){
+            e.rpm = rounded;
+            changed = true;
+            rpmFixed++;
+          }
+        }
+      } else if (dailyRevs === 0 && e.rpm != null && e.rpm !== 0){
+        /* Counter unchanged → average RPM for the period is 0 (do not keep a prior sea RPM). */
+        e.rpm = 0;
+        changed = true;
+        rpmFixed++;
+      }
+    }
+    if (changed){
+      e.updatedAt = new Date().toISOString();
+      const idx = state.entries.findIndex(x=>x.id===e.id);
+      if (idx>-1) state.entries[idx] = e;
+    }
+    prev = e;
+  }
+
+  await cascadeSucceedingEntries(0, { clearOverrides, persist });
+
+  /* Stamp M/E + incinerator derived perf after cascade so %MCR / kW match engine-distance fix. */
+  computeDerived();
+  for (const e of state.entries){
+    e.report = e.report || {};
+    e.report.perfTable = e.report.perfTable || {};
+    e.report.perfTable.ME = Object.assign({}, e.report.perfTable.ME || {}, computeMePerf(e.id));
+    if (e.report.perfTable.INCINERATOR){
+      const inc = e.report.perfTable.INCINERATOR;
+      e.report.perfTable.INCINERATOR = buildIncineratorPerf(inc.runTime ?? null, inc.avgPower ?? null);
+    }
+    const eta = computeEntryEta(e.id);
+    if (eta) e.report.eta = eta;
+    e.updatedAt = new Date().toISOString();
+    if (persist) await dbPut('entries', tagVesselId(e));
+  }
+  return { entryCount: state.entries.length, rpmFixed };
+}
+
+/** Recalculate one voyage-leg pack in memory (does not touch the active working set permanently). */
+async function recalculateLegPack(pack){
+  const saved = {
+    entries: state.entries,
+    receipts: state.receipts,
+    setup: state.setup,
+    abstracts: state.abstracts,
+    documents: state.documents,
+    printHistory: state.printHistory
+  };
+  try{
+    state.setup = migrateSetup(cloneEntry(pack.setup || {}));
+    ensureTankStores();
+    state.entries = (pack.entries || []).map(e=> normalizeEntry(cloneEntry(e)));
+    state.receipts = pack.receipts || [];
+    state.documents = pack.documents || [];
+    state.abstracts = pack.abstracts || [];
+    state.printHistory = pack.printHistory || [];
+    const stats = await recalculateCurrentEntries({ persist: false, clearOverrides: false });
+    return {
+      setup: cloneEntry(state.setup),
+      entries: state.entries.map(cloneEntry),
+      receipts: state.receipts.map(cloneEntry),
+      documents: state.documents.map(cloneEntry),
+      abstracts: state.abstracts.map(cloneEntry),
+      printHistory: state.printHistory.map(cloneEntry),
+      stats
+    };
+  } finally {
+    state.entries = saved.entries;
+    state.receipts = saved.receipts;
+    state.setup = saved.setup;
+    state.abstracts = saved.abstracts;
+    state.documents = saved.documents;
+    state.printHistory = saved.printHistory;
+  }
+}
+
+/** Recalculate active voyage + every saved voyage leg for every vessel. */
+async function recalculateAllProgramData({ interactive = true } = {}){
+  if (interactive){
+    const ok = confirm(
+      'Recalculate all existing voyage data?\n\n' +
+      'This re-derives M/E average RPM from rev-counter deltas, rebuilds engine distance / slip / %MCR / kW / SFOC-linked performance tables, and refreshes generator & boiler period figures for the active voyage and every saved voyage leg.\n\n' +
+      'Manual consumption overrides are kept. Continue?'
+    );
+    if (!ok) return null;
+  }
+
+  const summary = { vessels: 0, legs: 0, entries: 0, rpmFixed: 0 };
+
+  /* 1) Active working set */
+  const activeStats = await recalculateCurrentEntries({ persist: true, clearOverrides: false });
+  summary.entries += activeStats.entryCount;
+  summary.rpmFixed += activeStats.rpmFixed;
+  await saveSetup();
+  if ((state.setup.voyageNumber || '').trim() && state.activeVesselId){
+    await archiveActiveVoyageLeg();
+  }
+
+  /* 2) Every archived voyage leg across the fleet */
+  const vessels = state.vessels?.length ? state.vessels : [{ id: state.activeVesselId || LEGACY_VESSEL_ID }];
+  for (const v of vessels){
+    summary.vessels++;
+    const legs = await listVoyageLegsForVessel(v.id);
+    for (const leg of legs){
+      /* Skip re-writing the active leg we just archived — still safe to refresh. */
+      const rebuilt = await recalculateLegPack(leg);
+      const next = {
+        ...leg,
+        setup: rebuilt.setup,
+        entries: rebuilt.entries,
+        receipts: rebuilt.receipts,
+        documents: rebuilt.documents,
+        abstracts: rebuilt.abstracts,
+        printHistory: rebuilt.printHistory,
+        entryCount: rebuilt.entries.length,
+        updatedAt: new Date().toISOString()
+      };
+      await dbPut('voyageLegs', next);
+      summary.legs++;
+      summary.entries += rebuilt.stats.entryCount;
+      summary.rpmFixed += rebuilt.stats.rpmFixed;
+    }
+  }
+
+  /* If active leg was refreshed from library rewrite, reload active entries from DB state (already updated in step 1). */
+  await dbPut('meta', { key: 'dataRecalcVersion', value: DATA_RECALC_VERSION });
+  markPendingSync();
+  render();
+  prefillFromLastEntry();
+  if (interactive){
+    alert(
+      `Recalculation complete.\n\n` +
+      `Vessels: ${summary.vessels}\n` +
+      `Voyage legs: ${summary.legs}\n` +
+      `Entries processed: ${summary.entries}\n` +
+      `RPM values corrected from rev counters: ${summary.rpmFixed}`
+    );
+  }
+  return summary;
 }
 
 function snapshotLaterEntries(afterDatetime, afterId){
@@ -10644,6 +10808,18 @@ document.getElementById('btnExportCSVCons').addEventListener('click', ()=>{
   const lines = rows.map(r=>[r.datetime,r.operation,r.me.type,fmtNum(r.meCons,3),r.ge.type,fmtNum(r.geCons,3),r.blr.type,fmtNum(r.blrCons,3),fmtNum(r.total,3),fmtNum(r.fwConsD,0)]);
   downloadCSV('consumption.csv', header, lines);
 });
+document.getElementById('btnRecalculateAllData')?.addEventListener('click', async ()=>{
+  const btn = document.getElementById('btnRecalculateAllData');
+  if (btn) btn.disabled = true;
+  try{
+    await recalculateAllProgramData({ interactive: true });
+  } catch(err){
+    console.error(err);
+    alert('Recalculation failed: ' + (err?.message || err));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
 
 function migrateSetup(setup){
   if (!setup || typeof setup !== 'object') setup = {};
@@ -10762,6 +10938,18 @@ function migrateSetup(setup){
     renderReportCategoryButtons();
     bindReferenceCalculators();
     bindBunkerPlanUi();
+
+    /* One-time (per DATA_RECALC_VERSION) rebuild so existing voyages pick up formula fixes. */
+    const recalcMeta = metaAll.find(m => m.key === 'dataRecalcVersion');
+    const needRecalc = !recalcMeta || Number(recalcMeta.value) < DATA_RECALC_VERSION;
+    if (needRecalc){
+      try{
+        document.getElementById('dbStatus').textContent = '● recalculating voyage data…';
+        await recalculateAllProgramData({ interactive: false });
+      } catch(recalcErr){
+        console.error('Auto recalculation failed:', recalcErr);
+      }
+    }
 
     render();
     prefillFromLastEntry();
