@@ -728,17 +728,31 @@
   .pr-sheet.pr-sheet-report .pr-noon-full .pr-section{ margin-bottom:0; }
   .pr-sheet.pr-sheet-noon .pr-noon-cols,
   .pr-sheet.pr-sheet-report .pr-noon-cols{
-    display:grid; grid-template-columns:1fr 1fr; gap:1.5mm; align-items:start;
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:1.2mm; align-items:start;
   }
   .pr-sheet.pr-sheet-noon .pr-noon-col,
   .pr-sheet.pr-sheet-report .pr-noon-col{
-    display:flex; flex-direction:column; gap:1.5mm; min-width:0;
+    display:flex; flex-direction:column; gap:1.2mm; min-width:0;
   }
   .pr-sheet.pr-sheet-noon .pr-noon-col > .pr-section,
   .pr-sheet.pr-sheet-report .pr-noon-col > .pr-section{ margin-bottom:0; }
   .pr-sheet.pr-sheet-noon .pr-noon-pair,
   .pr-sheet.pr-sheet-report .pr-noon-pair{
-    display:flex; flex-direction:column; gap:1.5mm;
+    display:flex; flex-direction:column; gap:1.2mm;
+  }
+  .pr-sheet.pr-sheet-noon .pr-noon-body,
+  .pr-sheet.pr-sheet-report .pr-noon-body{ margin-bottom:1.2mm; }
+  .pr-sheet.pr-sheet-noon .pr-noon-full,
+  .pr-sheet.pr-sheet-report .pr-noon-full{ margin-bottom:1.2mm; }
+  .pr-sheet.pr-sheet-noon .pr-section-title,
+  .pr-sheet.pr-sheet-report .pr-section-title{ padding:0.55mm 0.9mm; font-size:10px; }
+  .pr-sheet.pr-sheet-noon .pr-section-body,
+  .pr-sheet.pr-sheet-report .pr-section-body{ padding:0.7mm 0.9mm; }
+  .pr-sheet.pr-sheet-noon .pr-row,
+  .pr-sheet.pr-sheet-report .pr-row{ padding:0.25mm 0; }
+  .pr-sheet.pr-sheet-noon .pr-remarks,
+  .pr-sheet.pr-sheet-report .pr-remarks{
+    margin:1mm 0; min-height:4mm; max-height:10mm; padding:1mm;
   }
   .pr-doc-header{
     display:grid; grid-template-columns:1fr auto 1fr; align-items:end; gap:1.5mm;
@@ -9579,27 +9593,22 @@ function buildVoyageNoonSheetHTML(entry){
   const geN = geUnitCount();
   const geRows = Array.from({length:geN}, (_,i)=>{
     const p = row.gePeriod?.[i] || {};
-    const totH = perf.geTotals.hrs[i];
-    const totKw = totH>0 ? perf.geTotals.kwHrs[i]/totH : null;
-    const totLoad = perf.geTotals.maxKwHrs[i]>0 ? (perf.geTotals.kwHrs[i]/perf.geTotals.maxKwHrs[i])*100 : null;
     return `<tr>
       <td class="row-lbl">A/E #${i+1}</td>
       <td>${p.hrs==null?'—':fmt(p.hrs, 2)}</td>
       <td>${p.kw==null?'—':fmt(p.kw, 2)}</td>
       <td>${p.loadPct==null?'—':fmt(p.loadPct, 2)}</td>
       <td>${p.fuelCons==null?'—':fmtFuel(p.fuelCons)}</td>
-      <td>${fmt(totH, 2)}</td>
-      <td>${totKw==null?'—':fmt(totKw, 2)}</td>
-      <td>${totLoad==null?'—':fmt(totLoad, 2)}</td>
     </tr>`;
   }).join('');
+  /* Compact period-only generator table fits a 3-column portrait sheet. */
   const geSection = geN>0 ? printSection(`Generators — ${GE_ARR_LABELS[state.setup.geArrangement || 'SINGLE']}`, `
     <table class="pr-table">
-      <tr><th>Unit</th><th>Period Hrs</th><th>kW</th><th>Load %</th><th>Fuel MT</th><th>Voy Hrs</th><th>Voy Avg kW</th><th>Voy Load %</th></tr>
+      <tr><th>Unit</th><th>Hrs</th><th>kW</th><th>Load%</th><th>Fuel</th></tr>
       ${geRows}
     </table>
-    ${printRow('Voyage Avg Gen Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct, 2)}%`)}
-    ${printRow('Voyage Avg Gen kW', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted, 2))}`) : '';
+    ${printRow('Voy Avg Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct, 2)}%`)}
+    ${printRow('Voy Avg kW', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted, 2))}`) : '';
 
   const blrPrev = entryBlrRuntime(previousEntryFor(entryId));
   const blrCur = entryBlrRuntime(entry);
@@ -9651,20 +9660,22 @@ function buildVoyageNoonSheetHTML(entry){
 
   const ecaSection = printEcaSection(report);
   const soundingsSection = printSoundingsSection(report);
-  /* Left/right stacks (not zigzag grid) so short blocks do not leave tall empty holes. */
-  const leftCol = [
+  /* Three column stacks — shorter page height so remarks/signatory are not clipped. */
+  const col1 = [
     weatherSection,
     `<div class="pr-noon-pair">${fuelSection}${fwSection}</div>`,
-    turboOthersSection,
-    blrIncSection,
+    blrIncSection
+  ].filter(Boolean).join('');
+  const col2 = [
+    voyageSection,
+    meSectionPrint,
+    voyageAvgSection,
     ecaSection,
     soundingsSection
   ].filter(Boolean).join('');
-  const rightCol = [
-    voyageSection,
-    meSectionPrint,
-    geSection,
-    voyageAvgSection
+  const col3 = [
+    turboOthersSection,
+    geSection
   ].filter(Boolean).join('');
 
   const remarksSection = `<div class="pr-remarks">
@@ -9684,8 +9695,9 @@ function buildVoyageNoonSheetHTML(entry){
     <div class="pr-noon-body">
       ${cylSection ? `<div class="pr-noon-full">${cylSection}</div>` : ''}
       <div class="pr-noon-cols">
-        <div class="pr-noon-col">${leftCol}</div>
-        <div class="pr-noon-col">${rightCol}</div>
+        <div class="pr-noon-col">${col1}</div>
+        <div class="pr-noon-col">${col2}</div>
+        <div class="pr-noon-col">${col3}</div>
       </div>
       <div class="pr-noon-full">${robTable}</div>
     </div>
