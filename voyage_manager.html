@@ -708,25 +708,36 @@
     font-family:'Inter',sans-serif; font-size:10px; color:var(--pr-ink,#0a1420); line-height:1.35;
   }
   .pr-sheet.pr-dense{ font-size:9.5px; line-height:1.3; }
-  /* Noon portrait keeps the same readable scale (slightly roomier padding) */
-  .pr-sheet.pr-sheet-noon{
+  /* Portrait reports (noon + supplementary) — stacked columns, 10/11 type */
+  .pr-sheet.pr-sheet-noon,
+  .pr-sheet.pr-sheet-report{
     font-size:10px; line-height:1.35;
   }
-  .pr-sheet.pr-sheet-noon.pr-dense{ font-size:10px; line-height:1.3; }
-  .pr-sheet.pr-sheet-noon .pr-section-body{ padding:1mm 1.2mm; }
-  .pr-sheet.pr-sheet-noon .pr-kpi{ gap:1.2mm; margin-bottom:1.5mm; }
+  .pr-sheet.pr-sheet-noon.pr-dense,
+  .pr-sheet.pr-sheet-report.pr-dense{ font-size:10px; line-height:1.3; }
+  .pr-sheet.pr-sheet-noon .pr-section-body,
+  .pr-sheet.pr-sheet-report .pr-section-body{ padding:1mm 1.2mm; }
+  .pr-sheet.pr-sheet-noon .pr-kpi,
+  .pr-sheet.pr-sheet-report .pr-kpi{ gap:1.2mm; margin-bottom:1.5mm; }
   /* Explicit column stacks — avoids large holes from unequal 2-col auto-flow */
-  .pr-sheet.pr-sheet-noon .pr-noon-body{ margin-bottom:1.5mm; }
-  .pr-sheet.pr-sheet-noon .pr-noon-full{ margin-bottom:1.5mm; }
-  .pr-sheet.pr-sheet-noon .pr-noon-full .pr-section{ margin-bottom:0; }
-  .pr-sheet.pr-sheet-noon .pr-noon-cols{
+  .pr-sheet.pr-sheet-noon .pr-noon-body,
+  .pr-sheet.pr-sheet-report .pr-noon-body{ margin-bottom:1.5mm; }
+  .pr-sheet.pr-sheet-noon .pr-noon-full,
+  .pr-sheet.pr-sheet-report .pr-noon-full{ margin-bottom:1.5mm; }
+  .pr-sheet.pr-sheet-noon .pr-noon-full .pr-section,
+  .pr-sheet.pr-sheet-report .pr-noon-full .pr-section{ margin-bottom:0; }
+  .pr-sheet.pr-sheet-noon .pr-noon-cols,
+  .pr-sheet.pr-sheet-report .pr-noon-cols{
     display:grid; grid-template-columns:1fr 1fr; gap:1.5mm; align-items:start;
   }
-  .pr-sheet.pr-sheet-noon .pr-noon-col{
+  .pr-sheet.pr-sheet-noon .pr-noon-col,
+  .pr-sheet.pr-sheet-report .pr-noon-col{
     display:flex; flex-direction:column; gap:1.5mm; min-width:0;
   }
-  .pr-sheet.pr-sheet-noon .pr-noon-col > .pr-section{ margin-bottom:0; }
-  .pr-sheet.pr-sheet-noon .pr-noon-pair{
+  .pr-sheet.pr-sheet-noon .pr-noon-col > .pr-section,
+  .pr-sheet.pr-sheet-report .pr-noon-col > .pr-section{ margin-bottom:0; }
+  .pr-sheet.pr-sheet-noon .pr-noon-pair,
+  .pr-sheet.pr-sheet-report .pr-noon-pair{
     display:flex; flex-direction:column; gap:1.5mm;
   }
   .pr-doc-header{
@@ -1858,7 +1869,7 @@
 
       <div class="btn-row">
         <button class="primary" id="btnSaveReport">Save Supplementary Report</button>
-        <button class="ghost" id="btnPrintReport">Print Supplementary Report (A4, 2-Up)</button>
+        <button class="ghost" id="btnPrintReport">Print Supplementary Report (A4 Portrait)</button>
         <button class="ghost" id="btnCloseReport">Close</button>
       </div>
     </div>
@@ -8030,7 +8041,8 @@ html, body{
   page-break-after:avoid !important; page-break-inside:avoid !important;
   break-inside:avoid !important;
 }
-.pr-page-portrait:has(.pr-sheet-noon){
+.pr-page-portrait:has(.pr-sheet-noon),
+.pr-page-portrait:has(.pr-sheet-report){
   padding:5mm 5.5mm !important;
 }
 .pr-page-portrait-inner{
@@ -8088,14 +8100,14 @@ function fitPrintPortraitRoot(doc){
     return Math.max(0.75, Math.min(1, Math.min(availH / contentH, availW / contentW) * 0.98));
   };
 
-  const isNoon = !!inner.querySelector('.pr-sheet-noon');
+  const isStdPortrait = !!inner.querySelector('.pr-sheet-noon, .pr-sheet-report');
   let scale = measure();
-  /* Keep bunker / noon body at readable sizes — densify only for dense non-noon sheets */
-  if (!isBunker && !isNoon && scale < 0.92){
+  /* Keep bunker / standard portrait body readable — densify only other sheets */
+  if (!isBunker && !isStdPortrait && scale < 0.92){
     inner.querySelector('.pr-sheet')?.classList.add('pr-dense');
     scale = measure();
   }
-  if (!isBunker && !isNoon && scale < 0.82){
+  if (!isBunker && !isStdPortrait && scale < 0.82){
     doc.querySelectorAll('table.pr-table').forEach(t=>{
       if (t.classList.contains('pr-bunker-entry-table')) return;
       t.classList.remove('pr-table-wide');
@@ -8103,7 +8115,7 @@ function fitPrintPortraitRoot(doc){
     });
     scale = measure();
   }
-  if (isNoon) scale = Math.max(0.85, scale);
+  if (isStdPortrait) scale = Math.max(0.85, scale);
   else if (!isBunker) scale = Math.max(0.82, scale);
 
   inner.style.zoom = String(scale);
@@ -8228,9 +8240,12 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
     printRow('FW R.O.B.', `${fmtLube(fwRob)} L`)
   ].join(''));
 
-  const weatherSection = showWeather ? printWeatherSection(entry) : '';
-  const engineRoomSection = printTurboOthersSection(report, { includeMeAux: showMeDetail });
-  const cylSection = showMeDetail ? printMeCylinderSection(report) : '';
+  const hasCylData = !!(report?.pumpRack?.some(v=>v!=null&&v!=='') || report?.exhaustTemp?.some(v=>v!=null&&v!==''));
+  const showMeDetailEff = showMeDetail || hasCylData;
+  const weatherHtml = printWeatherSection(entry);
+  const weatherSection = (showWeather || weatherHtml) ? weatherHtml : '';
+  const engineRoomSection = printTurboOthersSection(report, { includeMeAux: showMeDetailEff });
+  const cylSection = showMeDetailEff ? printMeCylinderSection(report) : '';
 
   let kpiItems = [];
   let voyageSection = '', sfocSection = '';
@@ -8312,7 +8327,26 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
     ? (isSea ? 'Noon Report — At Sea' : 'Noon Report — Port / Anchorage')
     : (isSea ? 'At Sea Report' : 'Port / Anchorage Report');
 
-  return `<div class="pr-sheet${noonOp ? ' pr-sheet-noon' : ''}">
+  const fuelRobSection = printSection('Fuel R.O.B.', fuelInner);
+  const lubeRobSection = printSection('Lube Oil R.O.B.', lubeInner);
+  const ecaSection = printEcaSection(report);
+  const soundingsSection = printSoundingsSection(report);
+  const leftCol = [
+    weatherSection,
+    portSection,
+    `<div class="pr-noon-pair">${fuelRobSection}${fwSection}</div>`,
+    engineRoomSection,
+    ecaSection,
+    soundingsSection
+  ].filter(Boolean).join('');
+  const rightCol = [
+    voyageSection,
+    sfocSection,
+    lubeRobSection,
+    consSection
+  ].filter(Boolean).join('');
+
+  return `<div class="pr-sheet pr-sheet-report${noonOp ? ' pr-sheet-noon' : ''}">
     ${printDocHeader({ title: entry.operation, subtitle, badge: entry.condition })}
     ${printMetaGrid([
       {label:'Date & Time', value:dtStr},
@@ -8323,20 +8357,13 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
       {label:'Arrive', value:state.setup.arrivePort||'—'}
     ])}
     ${printKpiRow(kpiItems)}
-    <div class="pr-grid">
-      ${weatherSection}
-      ${cylSection}
-      ${printSection('Fuel R.O.B.', fuelInner)}
-      ${printSection('Lube Oil R.O.B.', lubeInner)}
-      ${fwSection}
-      ${engineRoomSection}
-      ${printEcaSection(report)}
-      ${printSoundingsSection(report)}
-      ${portSection}
-      ${voyageSection}
-      ${sfocSection}
-      ${consSection}
-      <div class="pr-span2">${perfSection}</div>
+    <div class="pr-noon-body">
+      ${cylSection ? `<div class="pr-noon-full">${cylSection}</div>` : ''}
+      <div class="pr-noon-cols">
+        <div class="pr-noon-col">${leftCol}</div>
+        <div class="pr-noon-col">${rightCol}</div>
+      </div>
+      <div class="pr-noon-full">${perfSection}</div>
     </div>
     <div class="pr-remarks">
       <div class="pr-remarks-title">Remarks</div>
@@ -8353,8 +8380,7 @@ function printSupplementaryReport(entry, isSea, report){
   const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 
   const sheetHTML = buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr);
-  if (isNoonReportOp(entry.operation)) printPortraitSinglePage(sheetHTML);
-  else printSinglePage(sheetHTML);
+  printPortraitSinglePage(sheetHTML);
 }
 
 function loadEntryIntoForm(id){
