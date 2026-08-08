@@ -6217,7 +6217,7 @@ function printBunkerPlan(){
       <section class="pr-section pr-bunker-block">
         <h3 class="pr-section-title">${escPrint(meta.title)} — ${escPrint(side.grade)}</h3>
         <div class="pr-section-body">
-          <table class="pr-table pr-table-xl">
+          <table class="pr-table pr-bunker-entry-table">
             <thead><tr>
               <th style="width:7%">P/A</th>
               <th style="width:18%">From</th>
@@ -6248,7 +6248,7 @@ function printBunkerPlan(){
       </section>`;
   }).join('');
 
-  const sheetHtml = `<div class="pr-sheet pr-dense pr-bunker-sheet">
+  const sheetHtml = `<div class="pr-sheet pr-bunker-sheet">
     ${printDocHeader({
       title: 'Bunker Consumption Calculation',
       subtitle: 'Voyage fuel plan — sea / port legs with margin',
@@ -7124,6 +7124,8 @@ function printDocumentCss(){
 
 function sizePrintTables(root){
   root.querySelectorAll('table.pr-table').forEach(table=>{
+    /* Bunker plan leg tables keep a fixed Calibri 11px entry size */
+    if (table.classList.contains('pr-bunker-entry-table')) return;
     const cols = table.querySelector('tr')?.children?.length || 0;
     const rows = table.querySelectorAll('tr').length;
     table.classList.remove('pr-table-wide', 'pr-table-xl');
@@ -7281,6 +7283,28 @@ html, body{
 .pr-bunker-sheet .pr-bunker-block .pr-meta{ margin-top:1.2mm; margin-bottom:0; }
 .pr-bunker-sheet .pr-remarks{ margin-top:1.5mm; margin-bottom:0; min-height:0; max-height:none; }
 .pr-bunker-sheet .pr-sign{ margin-top:1.5mm; }
+.pr-bunker-sheet table.pr-bunker-entry-table{
+  font-family: Calibri, 'Segoe UI', Candara, sans-serif !important;
+  font-size: 11px !important;
+}
+.pr-bunker-sheet table.pr-bunker-entry-table th{
+  font-family: Calibri, 'Segoe UI', Candara, sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  padding: 1.2mm 1mm !important;
+}
+.pr-bunker-sheet table.pr-bunker-entry-table td{
+  font-family: Calibri, 'Segoe UI', Candara, sans-serif !important;
+  font-size: 11px !important;
+  padding: 1.1mm 1mm !important;
+  line-height: 1.25 !important;
+}
+.pr-bunker-sheet table.pr-bunker-entry-table td.row-lbl{
+  font-family: Calibri, 'Segoe UI', Candara, sans-serif !important;
+  font-weight: 400 !important;
+}
 .pr-section, .pr-box{ break-inside:avoid !important; page-break-inside:avoid !important; }
 ${css}
 </style></head><body>${bodyInner}</body></html>`;
@@ -7290,6 +7314,7 @@ function fitPrintPortraitRoot(doc){
   const page = doc.querySelector('.pr-page-portrait');
   const inner = doc.querySelector('.pr-page-portrait-inner');
   if (!page || !inner) return 1;
+  const isBunker = !!inner.querySelector('.pr-bunker-sheet');
 
   sizePrintTables(doc);
   inner.querySelector('.pr-sheet')?.classList.remove('pr-dense');
@@ -7306,12 +7331,14 @@ function fitPrintPortraitRoot(doc){
   };
 
   let scale = measure();
-  if (scale < 0.92){
+  /* Keep bunker leg tables at Calibri 11px — do not densify/shrink those cells */
+  if (!isBunker && scale < 0.92){
     inner.querySelector('.pr-sheet')?.classList.add('pr-dense');
     scale = measure();
   }
-  if (scale < 0.82){
+  if (!isBunker && scale < 0.82){
     doc.querySelectorAll('table.pr-table').forEach(t=>{
+      if (t.classList.contains('pr-bunker-entry-table')) return;
       t.classList.remove('pr-table-wide');
       t.classList.add('pr-table-xl');
     });
