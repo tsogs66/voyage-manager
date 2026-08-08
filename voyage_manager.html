@@ -2035,7 +2035,6 @@
         <button class="ghost small" id="btnSyncNow">Sync Now (active leg)</button>
         <button class="ghost small" id="btnPullRemote">Pull Active Leg</button>
         <button class="ghost small" id="btnListRemoteVoyages">List Remote Voyages</button>
-        <button class="ghost small" id="btnInstallApp" style="display:none;">Install App</button>
         <button class="ghost small" id="btnRequestPersist">Keep Data Persistent</button>
       </div>
       <div class="form-grid cols3" style="margin-top:10px;">
@@ -2048,6 +2047,24 @@
       <div class="hint" id="syncMetaLine">Last sync: never</div>
       <div id="remoteVoyageList" class="hint" style="display:none; margin-top:8px;"></div>
       <div class="hint">Server folders: <code>data/&lt;vessel&gt;/&lt;voyageNo&gt;/B.json</code> and <code>…/L.json</code> (B = ballast, L = laden). Sync Now pushes the active voyage + condition only.</div>
+    </div>
+    <div class="panel" id="androidInstallPanel">
+      <h2>Install on Android / tablet</h2>
+      <div class="hint" id="androidInstallHint">Install Noon Report on this device for offline use and a home-screen icon. Works on Android phones, Android tablets, and iPad (Safari).</div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="primary small" type="button" id="btnInstallApp">Install App</button>
+        <button class="ghost small" type="button" id="btnInstallHelp">How to install</button>
+      </div>
+      <div class="hint" id="androidInstallStatus" style="margin-top:8px;"></div>
+      <div class="hint" id="androidInstallSteps" style="display:none; margin-top:8px;">
+        <strong>Android (Chrome / Edge / Samsung Internet)</strong><br>
+        1. Open this page over <strong>HTTPS</strong> (or localhost).<br>
+        2. Tap the browser menu (⋮) → <strong>Install app</strong> or <strong>Add to Home screen</strong>.<br>
+        3. Confirm. Open from the home screen icon for full offline use.<br><br>
+        <strong>iPad / iPhone (Safari)</strong><br>
+        1. Tap the Share button.<br>
+        2. Choose <strong>Add to Home Screen</strong> → Add.
+      </div>
     </div>
     <div class="panel">
       <h2>Install on PC (local)</h2>
@@ -11454,19 +11471,114 @@ function registerServiceWorker(){
 }
 
 let deferredInstallPrompt = null;
+
+function isStandalonePwa(){
+  try{
+    if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+    if (window.matchMedia && window.matchMedia('(display-mode: fullscreen)').matches) return true;
+    if (navigator.standalone === true) return true; /* iOS Safari */
+    if (document.referrer && document.referrer.startsWith('android-app://')) return true;
+  }catch(_){}
+  return false;
+}
+function isAndroidUa(){ return /android/i.test(navigator.userAgent || ''); }
+function isAppleMobileUa(){ return /iphone|ipad|ipod/i.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints||0) > 1); }
+function isTouchInstallDevice(){
+  try{
+    if (isAndroidUa() || isAppleMobileUa()) return true;
+    return window.matchMedia('(hover: none) and (pointer: coarse)').matches
+      || ((navigator.maxTouchPoints||0) > 0 && Math.min(screen.width, screen.height) <= 1200);
+  }catch(_){ return isAndroidUa() || isAppleMobileUa(); }
+}
+
+function updateAndroidInstallUi(){
+  const panel = document.getElementById('androidInstallPanel');
+  const btn = document.getElementById('btnInstallApp');
+  const status = document.getElementById('androidInstallStatus');
+  const steps = document.getElementById('androidInstallSteps');
+  if (!panel || !btn) return;
+
+  const standalone = isStandalonePwa();
+  const insecure = location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1';
+
+  /* Always visible in Data tab — Android tablets often use “Desktop site” and skip beforeinstallprompt */
+  panel.style.display = '';
+
+  if (standalone){
+    btn.textContent = 'Installed';
+    btn.disabled = true;
+    btn.classList.remove('primary');
+    btn.classList.add('ghost');
+    if (status) status.textContent = 'Running as installed app on this device. Data stays local; use Sync if you need multi-device.';
+    if (steps) steps.style.display = 'none';
+    return;
+  }
+
+  btn.disabled = false;
+  btn.classList.add('primary');
+  btn.classList.remove('ghost');
+  if (deferredInstallPrompt){
+    btn.textContent = 'Install App';
+    if (status) status.textContent = 'Tap Install App to add Noon Report to your home screen.';
+  } else {
+    btn.textContent = 'Install App';
+    if (status){
+      if (insecure){
+        status.textContent = 'Open this page with HTTPS (or localhost) so Android can offer Install. Meanwhile use browser menu → Add to Home screen.';
+      } else if (isAndroidUa() || isTouchInstallDevice()){
+        status.textContent = 'Tap Install App for steps. On many tablets: browser menu (⋮) → Install app / Add to Home screen.';
+      } else if (isAppleMobileUa()){
+        status.textContent = 'On iPad/iPhone: Safari Share → Add to Home Screen.';
+      } else {
+        status.textContent = 'On phone/tablet: tap Install App (or How to install). Chrome may also offer Install from the address bar.';
+      }
+    }
+  }
+}
+
 window.addEventListener('beforeinstallprompt', (e)=>{
   e.preventDefault();
   deferredInstallPrompt = e;
-  const btn = document.getElementById('btnInstallApp');
-  if (btn) btn.style.display = '';
+  updateAndroidInstallUi();
 });
-document.getElementById('btnInstallApp').addEventListener('click', async ()=>{
-  if (!deferredInstallPrompt) return;
-  deferredInstallPrompt.prompt();
-  await deferredInstallPrompt.userChoice;
+window.addEventListener('appinstalled', ()=>{
   deferredInstallPrompt = null;
-  document.getElementById('btnInstallApp').style.display = 'none';
+  updateAndroidInstallUi();
 });
+
+document.getElementById('btnInstallApp')?.addEventListener('click', async ()=>{
+  if (isStandalonePwa()){
+    alert('Noon Report is already installed on this device.');
+    return;
+  }
+  if (deferredInstallPrompt){
+    try{
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+    }catch(_){}
+    deferredInstallPrompt = null;
+    updateAndroidInstallUi();
+    return;
+  }
+  /* Tablet/Android often never fires beforeinstallprompt — show manual steps */
+  const steps = document.getElementById('androidInstallSteps');
+  if (steps) steps.style.display = '';
+  if (isAndroidUa()){
+    alert('Android install:\n\n1. Tap the browser menu (⋮)\n2. Choose “Install app” or “Add to Home screen”\n3. Confirm\n\nTip: use Chrome/Edge over HTTPS for the Install option.');
+  } else if (isAppleMobileUa()){
+    alert('iPad / iPhone install:\n\n1. Tap Share\n2. Add to Home Screen\n3. Add');
+  } else {
+    alert('Install from your browser menu:\n\n• Android: ⋮ → Install app / Add to Home screen\n• iPad: Share → Add to Home Screen\n\nPage must be served over HTTPS (or localhost).');
+  }
+});
+document.getElementById('btnInstallHelp')?.addEventListener('click', ()=>{
+  const steps = document.getElementById('androidInstallSteps');
+  if (!steps) return;
+  steps.style.display = steps.style.display === 'none' ? '' : 'none';
+});
+/* Show install panel immediately on Android / tablet */
+try{ updateAndroidInstallUi(); }catch(_){}
+setTimeout(()=>{ try{ updateAndroidInstallUi(); }catch(_){} }, 400);
 
 document.getElementById('btnCopyPcInstall')?.addEventListener('click', async ()=>{
   const el = document.getElementById('pcInstallCmd');
