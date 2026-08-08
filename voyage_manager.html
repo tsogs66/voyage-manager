@@ -6079,7 +6079,7 @@ function renderBunkerPlan(){
         <div class="field calc"><label>Next Departure ROB (MT)</label><input readonly tabindex="-1" value="${sum.nextDepRob==null?'—':fmtFuel(sum.nextDepRob)}"></div>
         <div class="field calc full"><label>Stem still needed (MT)</label><input readonly tabindex="-1" value="${sum.stem==null?'—':fmtFuel(sum.stem)}"></div>
       </div>
-      <div class="bunker-formula">Qty = Daily × Days · Margin = Cons × Margin% · Required = Cons + Margin · Arrival ROB = Current ROB − Required · Next Dep ROB = Arrival ROB + Qty to Receive</div>
+      <div class="bunker-formula">Sea days = Dist ÷ (Speed × 24) · Qty = Daily × Days · Margin = Cons × Margin% · Required = Cons + Margin · Arrival ROB = Current ROB − Required · Next Dep ROB = Arrival ROB + Qty to Receive</div>
     </div>`;
   }).join('');
 }
