@@ -1468,7 +1468,7 @@
   <div class="page" id="page-bunkerplan">
     <div class="panel">
       <h2>Bunker Consumption Calculation</h2>
-      <div class="hint">Plan fuel burn by voyage leg for residual (HFO/LSFO) and distillate (MDO/MGO/LSMGO). Sea days auto-fill from Distance ÷ Speed when the Port/Anchor box is unchecked. Quantity = Daily Cons × Days. Required Quantity = Total Consumption + Margin %. Arrival ROB subtracts Required Quantity from Current ROB (conservative planning). Next Departure ROB adds bunkers to be received.</div>
+      <div class="hint">Plan fuel burn by voyage leg for residual (HFO/LSFO) and distillate (MDO/MGO/LSMGO). Sea days auto-fill from Distance ÷ (Speed × 24) when Port/Anchor is unchecked (1 kn = 1 nm/h). Quantity = Daily Cons × Days. Required Quantity = Total Consumption + Margin %. Arrival ROB = Current ROB − Required (conservative). Next Departure ROB adds bunkers to be received.</div>
       <div class="bunker-plan-head">
         <div class="field"><label>Vessel</label><input id="bp_vessel" readonly></div>
         <div class="field"><label>Voyage No.</label><input id="bp_voyageNo"></div>
@@ -1480,7 +1480,7 @@
         </div>
       </div>
       <div class="bunker-plan-grid" id="bunkerPlanGrid"></div>
-      <div class="hint" style="margin-top:12px;">Industry practice: sea days ≈ distance (nm) ÷ speed (kn); port/anchor days are entered directly; a percentage safety margin (often 10–20%) is added to voyage consumption when sizing stems (see also day-based reserves of 48–72 h steaming used by many operators).</div>
+      <div class="hint" style="margin-top:12px;">Industry practice: sea days ≈ distance (nm) ÷ (speed kn × 24); port/anchor days are entered directly; a percentage safety margin (often 10–20%) is added to voyage consumption when sizing stems (many operators also keep a 48–72 h steaming reserve).</div>
     </div>
   </div>
 
@@ -5968,7 +5968,8 @@ function bunkerLegDays(leg){
   if (leg.port) return (leg.days!=null && !isNaN(leg.days)) ? Number(leg.days) : null;
   if (leg.days!=null && leg.days!=='' && !isNaN(leg.days)) return Number(leg.days);
   const dist = Number(leg.distance), spd = Number(leg.speed);
-  if (dist>0 && spd>0) return dist / spd;
+  /* Sea days = nm ÷ (kn × 24 h/day) — 1 kn = 1 nm/h */
+  if (dist>0 && spd>0) return dist / (spd * 24);
   return null;
 }
 function bunkerLegQty(leg){
@@ -6003,7 +6004,7 @@ function summarizeBunkerSide(side){
 function autoFillBunkerSeaDays(leg){
   if (leg.port) return;
   const dist = Number(leg.distance), spd = Number(leg.speed);
-  if (dist>0 && spd>0) leg.days = Math.round((dist/spd) * 1000) / 1000;
+  if (dist>0 && spd>0) leg.days = Math.round((dist / (spd * 24)) * 1000) / 1000;
 }
 
 let _bpSaveTimer = null;
