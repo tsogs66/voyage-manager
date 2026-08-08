@@ -8218,165 +8218,13 @@ function sfocDeltaClass(delta){
   return '';
 }
 
-function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
-  const meRunning = mainEngineInUse(entry, row);
-  const noonOp = isNoonReportOp(entry.operation);
-  /* Weather on noon + sea reports; ME cyl/T/C/scavenge when engine in use (incl. manoeuvring). */
-  const showWeather = noonOp || isSea;
-  const showMeDetail = canShowMeDetailOp(entry.operation) && meRunning;
-
-  const fuelInner = fuelTankList().map(t=>printRow(t.name, `${fmtFuel(asOf.rob[t.id])} MT`)).join('');
-  const totalLube = totalLubeRob(asOf.robLube);
-  const lubeInner = [
-    ...lubeTankList().map(t=>printRow(t.name, `${fmtLube(asOf.robLube[t.id])} L`)),
-    printRow('Total Lube Oil', `${fmtLube(totalLube)} L`)
-  ].join('');
-
-  const primaryFw = fwTankList()[0];
-  const fwRob = primaryFw ? asOf.robLube[primaryFw.id] : null;
-  const fwSection = printSection('Fresh Water', [
-    printRow('FW Produced', `${row.fwProdD===null||row.fwProdD===undefined?'—':fmtLube(row.fwProdD)} L`),
-    printRow('FW Consumed', `${row.fwConsD===null||row.fwConsD===undefined?'—':fmtLube(row.fwConsD)} L`),
-    printRow('FW R.O.B.', `${fmtLube(fwRob)} L`)
-  ].join(''));
-
-  const hasCylData = !!(report?.pumpRack?.some(v=>v!=null&&v!=='') || report?.exhaustTemp?.some(v=>v!=null&&v!==''));
-  const showMeDetailEff = showMeDetail || hasCylData;
-  const weatherHtml = printWeatherSection(entry);
-  const weatherSection = (showWeather || weatherHtml) ? weatherHtml : '';
-  const engineRoomSection = printTurboOthersSection(report, { includeMeAux: showMeDetailEff });
-  const cylSection = showMeDetailEff ? printMeCylinderSection(report) : '';
-
-  let kpiItems = [];
-  let voyageSection = '', sfocSection = '';
-  if (isSea && meRunning){
-    kpiItems = [
-      {label:'RPM', value:fmtP(row.rpmEff!=null?row.rpmEff:entry.rpm, 2)},
-      {label:'% MCR', value:fmtP(row.mcrPct, 2)},
-      {label:'Est. kW', value:fmtP(row.kwEst, 2)},
-      {label:'Ship Speed', value:row.speedShip==null?'—':fmtP(row.speedShip,2)+' kn'},
-      {label:'Slip %', value:fmtP(row.slip, 2)},
-      {label:'Steam Hrs', value:fmtP(row.hrs, 2)}
-    ];
-    voyageSection = printSection('Voyage / Steaming', [
-      printRow('Steam Time', `${fmtP(row.hrs, 2)} hrs`),
-      printRow('ETA', report.eta ? escPrint(new Date(report.eta).toLocaleString()) : '—'),
-      printRow('Rev. Counter', fmtP(entry.revCounter, 2)),
-      printRow('Daily Revs.', fmtP(row.dailyRevs, 2)),
-      printRow('Ship\'s Distance', `${fmtP(entry.distanceShip,2)} nm`),
-      printRow('Engine Distance', `${fmtP(row.distEngine,2)} nm`),
-      printRow('Engine Speed', row.speedEngine==null?'—':`${fmtP(row.speedEngine,2)} kn`)
-    ].join(''));
-    const deltaCls = sfocDeltaClass(row.sfocDelta);
-    const deltaStr = row.sfocDelta==null ? '—' : `${row.sfocDelta>0?'+':''}${fmtP(row.sfocDelta, 2)}%`;
-    sfocSection = printSection('Fuel Efficiency (SFOC)', [
-      printRow('SFOC @ 100% MCR (setup)', state.setup.sfoc100==null?'—':`${fmtP(state.setup.sfoc100, 2)} g/kWh`),
-      printRow(`Ref. SFOC @ ${fmtP(row.mcrPct, 2)}% MCR`, `${fmtP(row.sfocRef, 2)} g/kWh`),
-      printRow('Actual SFOC', `${fmtP(row.sfocActual, 2)} g/kWh`),
-      printRow('Deviation vs Reference', deltaStr, deltaCls)
-    ].join(''));
-  } else {
-    kpiItems = [
-      {label:'Operation', value:escPrint(entry.operation).slice(0,18)},
-      {label:'Condition', value:entry.condition},
-      {label:'Period Hrs', value:fmtP(row.hrs, 2)},
-      {label:'Total Fuel', value:row.total==null?'—':`${fmtFuel(row.total)} MT`}
-    ];
-    if (isSea){
-      voyageSection = printSection('Voyage / Period', [
-        printRow('Period Hours', `${fmtP(row.hrs, 2)} hrs`),
-        printRow('Ship\'s Distance', `${fmtP(entry.distanceShip,2)} nm`),
-        printRow('Main Engine', 'Not in use this period')
-      ].join(''));
-    }
-  }
-
-  const portSection = !isSea ? printSection('Port Details', [
-    printRow('Port', escPrint(report.port || '—')),
-    printRow('Cargo Operation', escPrint(report.cargoOp || '—'))
-  ].join('')) : '';
-
-  const perfTable = report.perfTable || {};
-  /* Hide M/E column when main engine was not running this period. */
-  const perfUnits = meRunning ? PERF_UNITS : PERF_UNITS.filter(u=>u!=='ME');
-  const perfSection = printSection('Performance Readings', `
-    <table class="pr-table">
-      <tr><th></th>${perfUnits.map(u=>`<th>${PERF_UNIT_LABELS[u]}</th>`).join('')}</tr>
-      ${PERF_ROWS.map(([key,label])=>
-        `<tr><td class="row-lbl">${label}</td>${perfUnits.map(u=>`<td>${fmtP(perfTable[u]?perfTable[u][key]:null, 2)}</td>`).join('')}</tr>`
-      ).join('')}
-    </table>`);
-
-  const consSection = printSection('Consumption', `
-    <table class="pr-table">
-      <tr><th></th><th>M/E</th><th>Generator</th><th>Boiler</th><th>Total</th></tr>
-      <tr><td class="row-lbl">HFO</td><td>${entry.me.type==='HFO'?fmtFuel(row.meCons):'—'}</td><td>${entry.ge.type==='HFO'?fmtFuel(row.geCons):'—'}</td><td>${entry.blr.type==='HFO'?fmtFuel(row.blrCons):'—'}</td><td>${fmtFuel((entry.me.type==='HFO'?row.meCons:0)+(entry.ge.type==='HFO'?row.geCons:0)+(entry.blr.type==='HFO'?row.blrCons:0))}</td></tr>
-      <tr><td class="row-lbl">LSFO</td><td>${entry.me.type==='LSFO'?fmtFuel(row.meCons):'—'}</td><td>${entry.ge.type==='LSFO'?fmtFuel(row.geCons):'—'}</td><td>${entry.blr.type==='LSFO'?fmtFuel(row.blrCons):'—'}</td><td>${fmtFuel((entry.me.type==='LSFO'?row.meCons:0)+(entry.ge.type==='LSFO'?row.geCons:0)+(entry.blr.type==='LSFO'?row.blrCons:0))}</td></tr>
-      <tr><td class="row-lbl">MDO/MGO</td><td>${entry.me.type==='MDO/MGO'?fmtFuel(row.meCons):'—'}</td><td>${entry.ge.type==='MDO/MGO'?fmtFuel(row.geCons):'—'}</td><td>${entry.blr.type==='MDO/MGO'?fmtFuel(row.blrCons):'—'}</td><td>${fmtFuel((entry.me.type==='MDO/MGO'?row.meCons:0)+(entry.ge.type==='MDO/MGO'?row.geCons:0)+(entry.blr.type==='MDO/MGO'?row.blrCons:0))}</td></tr>
-      <tr><td class="row-lbl">LSMGO</td><td>${entry.me.type==='LSMGO'?fmtFuel(row.meCons):'—'}</td><td>${entry.ge.type==='LSMGO'?fmtFuel(row.geCons):'—'}</td><td>${entry.blr.type==='LSMGO'?fmtFuel(row.blrCons):'—'}</td><td>${fmtFuel((entry.me.type==='LSMGO'?row.meCons:0)+(entry.ge.type==='LSMGO'?row.geCons:0)+(entry.blr.type==='LSMGO'?row.blrCons:0))}</td></tr>
-    </table>
-    ${printRow('Misc MDO/MGO', `${fmtFuel((row.miscCons||{})['MDO/MGO'])} MT`)}
-    ${printRow('Misc LSMGO', `${fmtFuel((row.miscCons||{})['LSMGO'])} MT`)}
-    ${printRow('Total Fuel Consumption', `${fmtFuel(row.total)} MT`)}
-    ${printRow(`Cyl. Oil (${entry.tbn})`, `${fmtLube(row.cylCons)} L`)}
-    ${printRow('M/E Sys. Oil', `${fmtLube(row.meLoCons)} L`)}
-    ${printRow('A/E Sys. Oil', `${fmtLube(row.geLoCons)} L`)}`);
-
-  const subtitle = noonOp
-    ? (isSea ? 'Noon Report — At Sea' : 'Noon Report — Port / Anchorage')
-    : (isSea ? 'At Sea Report' : 'Port / Anchorage Report');
-
-  const fuelRobSection = printSection('Fuel R.O.B.', fuelInner);
-  const lubeRobSection = printSection('Lube Oil R.O.B.', lubeInner);
-  const ecaSection = printEcaSection(report);
-  const soundingsSection = printSoundingsSection(report);
-  const leftCol = [
-    weatherSection,
-    portSection,
-    `<div class="pr-noon-pair">${fuelRobSection}${fwSection}</div>`,
-    engineRoomSection,
-    ecaSection,
-    soundingsSection
-  ].filter(Boolean).join('');
-  const rightCol = [
-    voyageSection,
-    sfocSection,
-    lubeRobSection,
-    consSection
-  ].filter(Boolean).join('');
-
-  return `<div class="pr-sheet pr-sheet-report${noonOp ? ' pr-sheet-noon' : ''}">
-    ${printDocHeader({ title: entry.operation, subtitle, badge: entry.condition })}
-    ${printMetaGrid([
-      {label:'Date & Time', value:dtStr},
-      {label:'Condition', value:entry.condition},
-      {label:'Depart', value:state.setup.departPort||'—'},
-      {label:'Arrive', value:state.setup.arrivePort||'—'}
-    ], 4)}
-    ${printKpiRow(kpiItems)}
-    <div class="pr-noon-body">
-      ${cylSection ? `<div class="pr-noon-full">${cylSection}</div>` : ''}
-      <div class="pr-noon-cols">
-        <div class="pr-noon-col">${leftCol}</div>
-        <div class="pr-noon-col">${rightCol}</div>
-      </div>
-      <div class="pr-noon-full">${perfSection}</div>
-    </div>
-    <div class="pr-remarks">
-      <div class="pr-remarks-title">Remarks</div>
-      <div class="pr-remarks-body">${escPrint(report.remarks||'') || '—'}</div>
-    </div>
-    ${printSignatory()}
-  </div>`;
-}
-
 function printSupplementaryReport(entry, isSea, report){
-  const row = getComputedRow(entry.id) || {};
-  const asOf = robAsOfEntry(entry.id) || {rob:{}, robLube:{}};
-  const dt = new Date(entry.datetime);
-  const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-
-  const sheetHTML = buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr);
+  /* Same sheet as log-entry / Voyage Summary noon print — merge live report form values. */
+  const entryForPrint = {
+    ...entry,
+    report: { ...(entry.report || {}), ...(report || {}) }
+  };
+  const sheetHTML = buildVoyageNoonSheetHTML(entryForPrint);
   printPortraitSinglePage(sheetHTML);
 }
 
@@ -9660,11 +9508,11 @@ function renderPrintHistoryList(){
   });
 }
 
-function printVoyageSummary(entryId){
-  const baseEntry = state.entries.find(e=>e.id===entryId);
+/** Shared noon / voyage-summary sheet used by Log Entry print and Reports tab print. */
+function buildVoyageNoonSheetHTML(entry){
+  const entryId = entry.id;
   const row = getComputedRow(entryId);
-  if (!baseEntry || !row) return;
-  const entry = snapshotVoyageSummaryForPrint(baseEntry);
+  if (!entry || !row) return '';
 
   const {perf} = computeDerived();
   const sorted = sortedEntries();
@@ -9819,7 +9667,12 @@ function printVoyageSummary(entryId){
     voyageAvgSection
   ].filter(Boolean).join('');
 
-  const sheetHtml = `<div class="pr-sheet pr-sheet-noon">
+  const remarksSection = `<div class="pr-remarks">
+      <div class="pr-remarks-title">Remarks</div>
+      <div class="pr-remarks-body">${escPrint(report.remarks||'') || '—'}</div>
+    </div>`;
+
+  return `<div class="pr-sheet pr-sheet-noon">
     ${printDocHeader({ title: noonOp ? 'Noon Report — Voyage Summary' : 'Voyage Summary', subtitle: entry.operation, badge: entry.condition })}
     ${printMetaGrid([
       {label:'Date & Time', value:dtStr},
@@ -9836,9 +9689,17 @@ function printVoyageSummary(entryId){
       </div>
       <div class="pr-noon-full">${robTable}</div>
     </div>
+    ${remarksSection}
     ${printSignatory()}
   </div>`;
+}
 
+function printVoyageSummary(entryId){
+  const baseEntry = state.entries.find(e=>e.id===entryId);
+  if (!baseEntry || !getComputedRow(entryId)) return;
+  const entry = snapshotVoyageSummaryForPrint(baseEntry);
+  const noonOp = isNoonReportOp(entry.operation);
+  const sheetHtml = buildVoyageNoonSheetHTML(entry);
   const fittedHtml = printPortraitSinglePage(sheetHtml);
   recordPrintHistory(noonOp ? 'noon-report' : 'voyage-summary', entry, fittedHtml);
 }
