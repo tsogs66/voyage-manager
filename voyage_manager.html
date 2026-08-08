@@ -36,9 +36,20 @@
   :root{
     --ink:#0a1420; --panel:#122238; --panel2:#0e1c30;
     --paper:#e9e4d6; --paper-dim:#a9a292;
-    --brass:#c99a53; --brass-dim:#8a6b3c;
-    --teal:#57b3ab; --alert:#c1573a; --good:#5f9e6e;
+    --brass:#c99a53; --brass-dim:#8a6b3c; --brass-bright:#dcae6c;
+    --teal:#57b3ab; --alert:#e06a4c; --good:#5f9e6e;
     --line:rgba(233,228,214,0.12); --line-strong:rgba(233,228,214,0.24);
+    --pr-ink:#0a1420; --pr-muted:#5a6578; --pr-accent:#2a6b7a; --pr-rule:#cfd6e0;
+  }
+  html.bright{
+    --ink:#f4f1ea; --panel:#ffffff; --panel2:#f7f5ef;
+    --paper:#122238; --paper-dim:#4a5568;
+    --brass:#8a5a1a; --brass-dim:#a67c3a; --brass-bright:#b8862d;
+    --teal:#1f7a72; --alert:#b33a22; --good:#2f7a45;
+    --line:rgba(18,34,56,0.12); --line-strong:rgba(18,34,56,0.28);
+  }
+  html.bright body{
+    background:linear-gradient(180deg, #efebe3 0%, #f7f5ef 40%, #ffffff 100%);
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -80,9 +91,10 @@
   .form-grid.cols6{grid-template-columns:repeat(6,1fr);}
   .field{display:flex; flex-direction:column; gap:4px;}
   .field.span2{grid-column:span 2;}
-  .field label{font-size:10px; letter-spacing:0.07em; text-transform:uppercase; color:var(--paper-dim);}
+  .field label{font-size:11px; letter-spacing:0.07em; text-transform:uppercase; color:var(--paper-dim);}
   .field input, .field select{background:var(--ink); border:1px solid var(--line-strong); border-radius:3px; color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:7px 8px; width:100%;}
-  .field input:focus, .field select:focus{outline:none; border-color:var(--teal);}
+  .field input:focus, .field select:focus{outline:none; border-color:var(--teal); box-shadow:0 0 0 2px rgba(87,179,171,0.28);}
+  button:focus-visible, .tab:focus-visible, .bn-item:focus-visible{outline:2px solid var(--teal); outline-offset:2px;}
 
   .unit-group{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px;}
   .unit-group.cols2{grid-template-columns:1fr 1fr;}
@@ -102,7 +114,7 @@
   }
   #vsCylFields .unit-box{min-width:0; padding:8px;}
   #vsCylFields .unit-box h3{font-size:10px;}
-  #vsCylFields .field label{font-size:9px;}
+  #vsCylFields .field label{font-size:11px;}
   #vsCylFields .field input{font-size:12px; padding:6px;}
   #vsTurboScavRow.unit-group.cols3{
     grid-template-columns:repeat(3, minmax(0, 1fr));
@@ -117,7 +129,7 @@
     gap:8px 10px;
   }
   #vsOthersFields .field{margin-bottom:0;}
-  #vsOthersFields .field label{font-size:9px;}
+  #vsOthersFields .field label{font-size:11px;}
   #vsOthersFields .field input{font-size:12px; padding:6px;}
   @media (max-width:1100px){
     .unit-group.cols4{grid-template-columns:repeat(2,1fr);}
@@ -146,10 +158,10 @@
   button{font-family:'Oswald',sans-serif; letter-spacing:0.06em; text-transform:uppercase; font-size:12px; padding:10px 18px; border-radius:3px; border:1px solid var(--brass-dim); cursor:pointer; background:transparent; color:var(--brass); transition:all .15s ease;}
   button.primary{background:var(--brass); color:var(--ink); font-weight:600;}
   button.primary:hover{background:#dcae6c;}
-  button:hover{border-color:var(--brass); color:#dcae6c;}
+  button:hover{border-color:var(--brass); color:var(--brass-bright);}
   button.ghost{border-color:var(--line-strong); color:var(--paper-dim);}
   button.ghost:hover{color:var(--paper); border-color:var(--paper-dim);}
-  button.small{padding:5px 10px; font-size:10px;}
+  button.small{padding:5px 10px; font-size:11px;}
   button.danger{border-color:var(--alert); color:var(--alert);}
   button.danger:hover{background:var(--alert); color:var(--paper);}
 
@@ -232,10 +244,10 @@
   .stat-strip.cols5{grid-template-columns:repeat(5,1fr);}
   .stat{border-left:2px solid var(--brass-dim); padding-left:10px;}
   .stat .num{font-family:'IBM Plex Mono',monospace; font-size:19px; color:var(--paper);}
-  .stat .lbl{font-size:9px; letter-spacing:0.06em; text-transform:uppercase; color:var(--paper-dim); margin-top:2px;}
+  .stat .lbl{font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:var(--paper-dim); margin-top:2px;}
 
   table{width:100%; border-collapse:collapse; font-family:'IBM Plex Mono',monospace; font-size:11.5px;}
-  thead th{text-align:left; font-family:'Oswald',sans-serif; font-size:9.5px; letter-spacing:0.05em; text-transform:uppercase; color:var(--brass); border-bottom:1px solid var(--line-strong); padding:6px 7px; white-space:nowrap; position:sticky; top:0; background:var(--panel2);}
+  thead th{text-align:left; font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:0.05em; text-transform:uppercase; color:var(--brass); border-bottom:1px solid var(--line-strong); padding:6px 7px; white-space:nowrap; position:sticky; top:0; background:var(--panel2);}
   tbody td{padding:6px 7px; border-bottom:1px solid var(--line); color:var(--paper); white-space:nowrap;}
   tbody tr:hover{background:rgba(255,255,255,0.03);}
   .table-scroll{overflow-x:auto; max-height:460px; overflow-y:auto;}
@@ -266,7 +278,7 @@
     margin:0 -4px; padding:0 4px 4px;
   }
   .bunker-table{width:100%; min-width:640px; border-collapse:collapse; font-size:11px; table-layout:fixed;}
-  .bunker-table th{font-family:'Oswald',sans-serif; font-size:9px; letter-spacing:0.05em; text-transform:uppercase; color:var(--paper-dim); font-weight:500; padding:4px 3px; border-bottom:1px solid var(--line); white-space:nowrap;}
+  .bunker-table th{font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:0.05em; text-transform:uppercase; color:var(--paper-dim); font-weight:500; padding:4px 3px; border-bottom:1px solid var(--line); white-space:nowrap;}
   .bunker-table td{padding:3px 2px; vertical-align:middle;}
   .bunker-table input[type="text"],
   .bunker-table input[type="number"]{
@@ -692,7 +704,7 @@
     z-index:1; pointer-events:none;
   }
   .pr-sheet{
-    font-family:'Inter',sans-serif; font-size:8.5px; color:#0a1420; line-height:1.25;
+    font-family:'Inter',sans-serif; font-size:8.5px; color:var(--pr-ink,#0a1420); line-height:1.25;
   }
   .pr-sheet.pr-dense{ font-size:7.5px; line-height:1.2; }
   .pr-doc-header{
@@ -707,7 +719,7 @@
   .pr-doc-title-wrap{ text-align:center; }
   .pr-doc-badge{
     display:inline-block; font-family:'Oswald',sans-serif; font-size:7px; font-weight:600;
-    text-transform:uppercase; letter-spacing:0.1em; color:#fff; background:#2a6b7a;
+    text-transform:uppercase; letter-spacing:0.1em; color:#fff; background:var(--pr-accent,#2a6b7a);
     padding:1px 5px; border-radius:2px; margin-bottom:0;
   }
   .pr-doc-title{
@@ -832,6 +844,7 @@
       </div>
     </div>
     <div class="status-row">
+      <button type="button" class="ghost small" id="btnToggleBright" title="Day / bright mode for sunlight">Bright</button>
       <div id="dbStatus">● local database ready</div>
       <div id="syncStatus">○ sync not configured</div>
     </div>
@@ -1219,8 +1232,11 @@
           <div class="field"><label>M/E Rev. Counter (linked)</label><input type="number" step="1" id="vs_revCounter"></div>
           <div class="field"><label>Engine Speed (kn, calc)</label><input type="text" id="vs_engineSpeed" readonly></div>
           <div class="field"><label>Slip % (calc)</label><input type="text" id="vs_slip" readonly></div>
+          <div class="field"><label>Shaft kW (optional override)</label><input type="number" step="1" id="vs_shaftKw" placeholder="torque meter / shaft power"></div>
+          <div class="field"><label>FO Viscosity (cSt)</label><input type="number" step="0.1" id="vs_foVisc"></div>
+          <div class="field"><label>FO Dens. obs. (kg/m³)</label><input type="number" step="0.1" id="vs_foDens"></div>
         </div>
-        <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous) ÷ (Run Hours × 60). Engine distance = Pitch(m) × Δrevs ÷ 1852 when the rev counter is available (Δrevs = 0 → engine dist 0). Falls back to RPM × pitch × 60 ÷ 1852 × hours only if Δrevs is unknown. Slip % = (Engine Dist − Ship Dist) ÷ Engine Dist × 100.</div>
+        <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous) ÷ (Run Hours × 60). Engine distance = Pitch(m) × Δrevs ÷ 1852 when the rev counter is available (Δrevs = 0 → engine dist 0). Falls back to RPM × pitch × 60 ÷ 1852 × hours only if Δrevs is unknown. Slip % = (Engine Dist − Ship Dist) ÷ Engine Dist × 100. Shaft kW overrides propeller-law estimate for SFOC when entered.</div>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -1305,9 +1321,33 @@
               <div class="field"><label>Pump Mark</label><input type="number" step="0.1" id="vs_pumpMark"></div>
               <div class="field"><label>Fuel Temp (°C)</label><input type="number" step="0.1" id="vs_fuelTemp"></div>
               <div class="field"><label>Pressure Diff. (bar)</label><input type="number" step="0.01" id="vs_pressDiff"></div>
+              <div class="field"><label>T/C Air Cooler In (°C)</label><input type="number" step="0.1" id="vs_acIn"></div>
+              <div class="field"><label>T/C Air Cooler Out (°C)</label><input type="number" step="0.1" id="vs_acOut"></div>
+              <div class="field"><label>M/E LO Temp (°C)</label><input type="number" step="0.1" id="vs_meLoTemp"></div>
+              <div class="field"><label>M/E LO Press (bar)</label><input type="number" step="0.01" id="vs_meLoPress"></div>
+              <div class="field"><label>G/E LO Temp (°C)</label><input type="number" step="0.1" id="vs_geLoTemp"></div>
+              <div class="field"><label>LO Purifier Hrs</label><input type="number" step="0.1" id="vs_purifierHrs"></div>
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="panel" style="margin:0 0 16px; padding:16px;" id="vsEcaBlock">
+        <h3 class="sub" style="margin-top:0;">ECA / Fuel Changeover</h3>
+        <div class="form-grid cols3">
+          <div class="field"><label>Grade in use</label>
+            <select id="vs_ecaGrade">
+              <option value="">—</option>
+              <option>HFO</option><option>LSFO</option><option>MDO/MGO</option><option>LSMGO</option>
+            </select>
+          </div>
+          <div class="field"><label>Changeover start</label><input type="datetime-local" id="vs_ecaStart"></div>
+          <div class="field"><label>Changeover complete</label><input type="datetime-local" id="vs_ecaEnd"></div>
+          <div class="field"><label>ROB at ECA entry (MT)</label><input type="number" step="0.01" id="vs_ecaRobIn"></div>
+          <div class="field"><label>ROB at ECA exit (MT)</label><input type="number" step="0.01" id="vs_ecaRobOut"></div>
+          <div class="field"><label>Dist. in ECA (nm)</label><input type="number" step="0.1" id="vs_ecaDist"></div>
+        </div>
+        <div class="hint">Record sulphur-compliant grade and changeover window for ECA entry/exit legs. Printed on noon / ECA reports.</div>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -1358,6 +1398,14 @@
           </table>
         </div>
         <button class="ghost small" id="btnVsResetConsOverride" type="button" style="margin-top:8px;">Reset Lube ROB Cons. to Calculated</button>
+        <h3 class="sub">Tank Soundings (optional)</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Tank</th><th>Sounding (cm)</th><th>Temp (°C)</th><th>Volume (MT/L)</th></tr></thead>
+            <tbody id="vsSoundingsBody"></tbody>
+          </table>
+        </div>
+        <div class="hint">Record ullage/sounding and observed temperature for handover. Volume is manual (from sounding tables) — does not override calculated R.O.B.</div>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -1569,6 +1617,9 @@
         <div class="field"><label>BDN No.</label><input id="rcpt_bdn"></div>
         <div class="field"><label>Company</label><input id="rcpt_company"></div>
         <div class="field"><label>Location</label><input id="rcpt_location"></div>
+        <div class="field"><label>Density @ 15°C (kg/m³)</label><input type="number" step="0.1" id="rcpt_density" placeholder="e.g. 991"></div>
+        <div class="field"><label>LCV (kJ/kg)</label><input type="number" step="1" id="rcpt_lcv" placeholder="e.g. 40500"></div>
+        <div class="field"><label>Viscosity (cSt)</label><input type="number" step="0.1" id="rcpt_viscosity" placeholder="e.g. 380"></div>
       </div>
       <div class="btn-row"><button class="primary small" id="btnAddReceipt">Log Receipt</button></div>
     </div>
@@ -1617,12 +1668,41 @@
     <div class="panel">
       <h2>Fuel Efficiency (SFOC)</h2>
       <div class="stat-strip cols5" id="sfocStrip"></div>
-      <div class="hint">Reference SFOC uses SFOC₁₀₀ from Setup and the standard load curve SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²) with a + b = 1 (default a = 0.25, b = 0.75; calibrated through 85% when that shop-trial point is entered). Actual SFOC = M/E fuel (g) ÷ shaft energy (kWh). When bunker LCV is set, ISO-corrected SFOC = measured × (LCV<sub>ref</sub> / LCV<sub>actual</sub>). A sustained +3% deviation from reference often warrants investigation.</div>
+      <div class="hint">Reference SFOC uses SFOC₁₀₀ from Setup and SFOC(L) = SFOC₁₀₀ × (a + b × (L/100)²). <strong>Estimated kW uses the propeller law (RPM/MCR RPM)³ × MCR kW — not a shaft torque meter</strong> unless Shaft kW is entered on Voyage Summary. When bunker LCV is set, ISO-corrected SFOC = measured × (LCV<sub>ref</sub> / LCV<sub>actual</sub>). A sustained +3% deviation from reference often warrants investigation.</div>
+    </div>
+    <div class="panel">
+      <h2>Machinery Running Hours (voyage)</h2>
+      <div class="stat-strip cols5" id="runningHoursStrip"></div>
+      <div class="hint">Period totals from log / report hour-meters — useful for PMS planning. M/E hours = steaming periods with engine distance; A/E / boiler / incinerator from supplementary / voyage-summary runtime.</div>
+    </div>
+    <div class="panel">
+      <h2>Departure / Arrival ROB Comparison</h2>
+      <div class="btn-row" style="margin-bottom:10px;">
+        <button class="ghost small" type="button" id="btnPrintDepArrRob">Print Dep / Arr ROB Sheet</button>
+        <button class="ghost small" type="button" id="btnExportWeeklyAbstract">Export Weekly Abstract (CSV)</button>
+      </div>
+      <div class="table-scroll" id="depArrRobTable"></div>
+      <div class="hint">Opening ROB (voyage start / carryover) vs present ROB after all receipts and consumption. Print for end-of-voyage or port arrival handover.</div>
     </div>
     <div class="panel">
       <h2>Carbon Intensity &amp; CO₂ (voyage estimate)</h2>
+      <div class="form-grid cols3" style="margin-bottom:12px;">
+        <div class="field"><label>Ship type (CII)</label>
+          <select id="s_ciiShipType">
+            <option value="">— select —</option>
+            <option value="bulk">Bulk carrier</option>
+            <option value="tanker">Tanker</option>
+            <option value="container">Container</option>
+            <option value="general">General cargo</option>
+            <option value="lng">LNG carrier</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="field"><label>CII year</label><input type="number" step="1" id="s_ciiYear" placeholder="2026"></div>
+        <div class="field"><label>Required CII (manual)</label><input type="number" step="0.01" id="s_ciiRequired" placeholder="optional override"></div>
+      </div>
       <div class="cii-strip" id="ciiStrip"></div>
-      <div class="hint" id="ciiHint">Attained CII ≈ total CO₂ (g) ÷ (DWT × distance nm). CO₂ factors follow IMO EEDI Cf values (HFO 3.114, LSFO 3.151, MDO/MGO &amp; LSMGO 3.206). This is a voyage-level estimate — annual CII for SEEMP uses calendar-year DCS totals.</div>
+      <div class="hint" id="ciiHint">Attained CII ≈ total CO₂ (g) ÷ (DWT × distance nm). Cf: HFO 3.114, LSFO 3.151, MDO/LSMGO 3.206. Required CII uses a simplified year reduction from a 2019-style reference when ship type + DWT are set, or your manual override. Rating A–E is indicative only — confirm against IMO G5 guidelines / SEEMP Part III.</div>
     </div>
     <div class="panel">
       <h2>Voyage Time Averages</h2>
@@ -2343,7 +2423,7 @@ const PERF_UNITS = ['ME','AE1','AE2','AE3','BOILER','INCINERATOR'];
 const PERF_UNIT_LABELS = {ME:'M/E', AE1:'A/E #1', AE2:'A/E #2', AE3:'A/E #3', BOILER:'Boiler', INCINERATOR:'Incinerator'};
 const PERF_ROWS = [
   ['avgPower','Average Power (KW)'], ['avgLoad','Average Load (%)'],
-  ['minLoad','Minimum Load (%)'], ['maxLoad','Maximum Load (%)'], ['runTime','Run Time (hrs)']
+  ['runTime','Run Time (hrs)']
 ];
 const GAUGE_COLORS = {
   'HFO': '#7a1f2b', 'LSFO': '#7a1f2b',
@@ -2663,6 +2743,10 @@ function seaReport(extra){
     exhaustTemp: [385,390,388,392,386,389],
     turbos: [{in:45,out:320,rpm:9800},{in:44,out:318,rpm:9750}],
     scavTemp: 38, scavPress: 2.15, fuelTemp: 135, pumpMark: 6.2, pressDiff: 1.8,
+    airCoolerIn: 42, airCoolerOut: 38,
+    meLoTemp: 48, meLoPress: 2.4, geLoTemp: 52, purifierHrs: 12,
+    foVisc: 12, foDens: 991, shaftKw: null,
+    eca: { grade:'', start:'', end:'', robIn:null, robOut:null, distNm:null },
     generators: [],
     perfTable: {}
   }, extra || {});
@@ -4413,7 +4497,7 @@ async function cascadeSucceedingEntries(startIdx, { clearOverrides = true, persi
 }
 
 /** Formula/data rebuild stamp — bump when stored RPM / perf must be rewritten for existing voyages. */
-const DATA_RECALC_VERSION = 54;
+const DATA_RECALC_VERSION = 56;
 
 /** Re-derive stored RPM from rev-counter Δrevs and rebuild period performance fields for current state.entries. */
 async function recalculateCurrentEntries({ persist = true, clearOverrides = false } = {}){
@@ -4811,6 +4895,49 @@ function totalCO2Tonnes(consByFuel){
   return t;
 }
 
+/* Simplified CII reference parameters (indicative MEPC-style a·DWT^(-c)). Confirm against current G5 guidelines. */
+const CII_REF_PARAMS = {
+  bulk: { a: 4745, c: 0.622 },
+  tanker: { a: 5247, c: 0.610 },
+  container: { a: 1984, c: 0.489 },
+  general: { a: 588, c: 0.3885 },
+  lng: { a: 29.517, c: 0.0 }, /* treated as constant × DWT^0 fallback — prefer manual Required CII */
+  other: { a: 588, c: 0.3885 }
+};
+const CII_Z_REDUCTION = { 2019:0, 2020:1, 2021:2, 2022:3, 2023:5, 2024:7, 2025:9, 2026:11, 2027:13, 2028:15, 2029:17, 2030:19 };
+
+function computeReferenceCII(shipType, dwt){
+  const p = CII_REF_PARAMS[shipType];
+  if (!p || !dwt || dwt <= 0) return null;
+  if (shipType === 'lng') return null; /* LNG needs vessel-specific; use manual override */
+  return p.a * Math.pow(dwt, -p.c);
+}
+
+function computeRequiredCII(shipType, dwt, year, manual){
+  if (manual != null && !isNaN(manual) && manual > 0) return manual;
+  const ref = computeReferenceCII(shipType, dwt);
+  if (ref == null) return null;
+  const y = year || new Date().getFullYear();
+  let z = CII_Z_REDUCTION[y];
+  if (z == null){
+    const years = Object.keys(CII_Z_REDUCTION).map(Number).sort((a,b)=>a-b);
+    if (y < years[0]) z = CII_Z_REDUCTION[years[0]];
+    else z = CII_Z_REDUCTION[years[years.length-1]];
+  }
+  return ref * (1 - z / 100);
+}
+
+/** Indicative A–E band vs required CII (simplified boundaries). */
+function ciiRatingBand(attained, required){
+  if (attained == null || required == null || !(required > 0)) return null;
+  const r = attained / required;
+  if (r < 0.86) return 'A';
+  if (r < 0.94) return 'B';
+  if (r < 1.06) return 'C';
+  if (r < 1.18) return 'D';
+  return 'E';
+}
+
 function sfocDeltaPct(actual, reference){
   if (actual==null || reference==null || !(reference>0)) return null;
   return ((actual - reference) / reference) * 100;
@@ -4885,14 +5012,17 @@ function computeDerived(){
       if (unitOv.ME!=null) meCons = unitOv.ME;
       if (unitOv.GE!=null) geCons = unitOv.GE;
       if (unitOv.BLR!=null) blrCons = unitOv.BLR;
-      total = (meCons||0)+(geCons||0)+(blrCons||0);
+      const miscMdo = misc['MDO/MGO']||0;
+      const miscLsmgo = misc['LSMGO']||0;
+      const miscTotal = miscMdo + miscLsmgo;
+      total = (meCons||0)+(geCons||0)+(blrCons||0)+miscTotal;
 
       const rawFuel = {"HFO":0,"LSFO":0,"MDO/MGO":0,"LSMGO":0};
       if (meCons) rawFuel[e.me.type] += meCons;
       if (geCons) rawFuel[e.ge.type] += geCons;
       if (blrCons) rawFuel[e.blr.type] += blrCons;
-      rawFuel['MDO/MGO'] += (misc['MDO/MGO']||0);
-      rawFuel['LSMGO'] += (misc['LSMGO']||0);
+      rawFuel['MDO/MGO'] += miscMdo;
+      rawFuel['LSMGO'] += miscLsmgo;
       FUEL_TYPES.forEach(t=>{
         consByType[t] = (overrideForGrade(override, t, fuelTankList())!=null) ? overrideForGrade(override, t, fuelTankList()) : rawFuel[t];
         consByFuel[t] += consByType[t];
@@ -4943,6 +5073,8 @@ function computeDerived(){
           : (rpmEff * propConstant);
         mcrPct = Math.pow(rpmEff/mcrRpm, 3) * 100;
         kwEst = Math.pow(rpmEff/mcrRpm, 3) * mcrKw;
+        const shaftKw = e.shaftKw != null ? e.shaftKw : e.report?.shaftKw;
+        if (shaftKw != null && !isNaN(shaftKw) && shaftKw > 0) kwEst = shaftKw;
         sumRpm += rpmEff; cntRpm++;
         sumMcr += mcrPct; cntMcr++;
         sumKw += kwEst; cntKw++;
@@ -4999,6 +5131,8 @@ function computeDerived(){
       speedEngine = rpmEff * propConstant;
       mcrPct = Math.pow(rpmEff/mcrRpm, 3) * 100;
       kwEst = Math.pow(rpmEff/mcrRpm, 3) * mcrKw;
+      const shaftKw2 = e.shaftKw != null ? e.shaftKw : e.report?.shaftKw;
+      if (shaftKw2 != null && !isNaN(shaftKw2) && shaftKw2 > 0) kwEst = shaftKw2;
       sumRpm += rpmEff; cntRpm++;
       sumMcr += mcrPct; cntMcr++;
       sumKw += kwEst; cntKw++;
@@ -5006,8 +5140,8 @@ function computeDerived(){
 
     prev = e;
     return {...e, hrs, meCons, geCons, blrCons, total, cylCons, meLoCons, geLoCons, fwProdD, fwConsD,
-             consByType, lubeByType,
-             distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, dailyRevs,
+             consByType, lubeByType, miscCons: misc,
+             distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, dailyRevs, rpmEff,
              sfocRef, sfocActual, sfocDelta, meFuelMtDay, meFuelExpected, gePeriod,
              cumFuel: {...consByFuel}, cumLube: {...consByLube}, cumDistShip: totalDistShip};
   });
@@ -5083,14 +5217,14 @@ function deductLubeConsumption(robMap, kind, consumed){
 function currentROB(consByFuel, consByLube){
   const rob = {};
   fuelTankList().forEach(t=>{
-    const received = state.receipts.filter(r=>r.category==='fuel' && (r.tankId===t.id || r.type===t.name || r.type===t.grade)).reduce((s,r)=>s+r.qty,0);
+    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'fuel')).reduce((s,r)=>s+r.qty,0);
     rob[t.id] = tankRobValue(state.setup.rob, t) + received;
   });
   FUEL_TYPES.forEach(g=> deductGradeConsumption(rob, fuelTankList(), g, 'grade', consByFuel[g]||0));
 
   const robLube = {};
   lubeTankList().forEach(t=>{
-    const received = state.receipts.filter(r=>r.category==='lube' && (r.tankId===t.id || r.type===t.name || r.type===lubeKindToLabel(t.kind))).reduce((s,r)=>s+r.qty,0);
+    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'lube')).reduce((s,r)=>s+r.qty,0);
     robLube[t.id] = tankRobValue(state.setup.robLube, t) + received;
   });
   deductLubeConsumption(robLube, 'cylHigh', consByLube['CYL HIGH']||0);
@@ -5102,7 +5236,7 @@ function currentROB(consByFuel, consByLube){
   const primaryFw = fwTanks[0];
   if (primaryFw) robLube[primaryFw.id] = latestFwRob(null);
   fwTanks.slice(1).forEach(t=>{
-    const received = state.receipts.filter(r=>(r.category==='fw' || r.category==='lube') && (r.tankId===t.id || r.type===t.name)).reduce((s,r)=>s+r.qty,0);
+    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, ['fw','lube'])).reduce((s,r)=>s+r.qty,0);
     robLube[t.id] = tankRobValue(state.setup.robLube, t) + received;
   });
   return {rob, robLube};
@@ -5120,14 +5254,14 @@ function robAsOfEntry(entryId){
   const cutoff = new Date(row.datetime);
   const rob = {};
   fuelTankList().forEach(t=>{
-    const received = state.receipts.filter(r=>r.category==='fuel' && (r.tankId===t.id || r.type===t.name || r.type===t.grade) && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
+    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'fuel') && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
     rob[t.id] = tankRobValue(state.setup.rob, t) + received;
   });
   FUEL_TYPES.forEach(g=> deductGradeConsumption(rob, fuelTankList(), g, 'grade', row.cumFuel?.[g]||0));
 
   const robLube = {};
   lubeTankList().forEach(t=>{
-    const received = state.receipts.filter(r=>r.category==='lube' && (r.tankId===t.id || r.type===t.name || r.type===lubeKindToLabel(t.kind)) && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
+    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'lube') && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
     robLube[t.id] = tankRobValue(state.setup.robLube, t) + received;
   });
   deductLubeConsumption(robLube, 'cylHigh', row.cumLube?.['CYL HIGH']||0);
@@ -5770,9 +5904,12 @@ function consumptionRowValues(r){
     lsfoMe: meOf('LSFO'), lsfoGe: geOf('LSFO'), lsfoBlr: blrOf('LSFO'),
     lsfoTotal: sum(meOf('LSFO'), geOf('LSFO'), blrOf('LSFO')),
     mdoMe: meOf('MDO/MGO'), mdoGe: geOf('MDO/MGO'), mdoBlr: blrOf('MDO/MGO'),
-    mdoTotal: sum(meOf('MDO/MGO'), geOf('MDO/MGO'), blrOf('MDO/MGO')),
+    mdoTotal: sum(meOf('MDO/MGO'), geOf('MDO/MGO'), blrOf('MDO/MGO'), (r.miscCons||{})['MDO/MGO']),
     lsmgoMe: meOf('LSMGO'), lsmgoGe: geOf('LSMGO'), lsmgoBlr: blrOf('LSMGO'),
-    lsmgoTotal: sum(meOf('LSMGO'), geOf('LSMGO'), blrOf('LSMGO')),
+    lsmgoTotal: sum(meOf('LSMGO'), geOf('LSMGO'), blrOf('LSMGO'), (r.miscCons||{})['LSMGO']),
+    miscMdo: (r.miscCons||{})['MDO/MGO'] || null,
+    miscLsmgo: (r.miscCons||{})['LSMGO'] || null,
+    periodTotal: r.total,
     fwCons: r.fwConsD
   };
 }
@@ -5796,6 +5933,9 @@ const CONSUMPTION_COLS = [
   { key:'lsmgoGe', label:'LSMGO G/E', kind:'fuel' },
   { key:'lsmgoBlr', label:'LSMGO Blr', kind:'fuel' },
   { key:'lsmgoTotal', label:'LSMGO Total', kind:'fuel' },
+  { key:'miscMdo', label:'Misc MDO/MGO', kind:'fuel' },
+  { key:'miscLsmgo', label:'Misc LSMGO', kind:'fuel' },
+  { key:'periodTotal', label:'Period Total', kind:'fuel' },
   { key:'fwCons', label:'FW Cons', kind:'fw' }
 ];
 
@@ -5932,7 +6072,10 @@ function render(){
     rl.innerHTML = `<div class="hint">No receipts logged yet.</div>`;
   } else {
     rl.innerHTML = state.receipts.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).map(r=>{
-      const extra = [r.bdnNo?`BDN ${r.bdnNo}`:'', r.company||'', r.location||''].filter(Boolean).join(' · ');
+      const dens = r.density15!=null ? `ρ ${fmt(r.density15,1)}` : '';
+      const lcv = r.lcv!=null ? `LCV ${fmt(r.lcv,0)}` : '';
+      const visc = r.viscosity!=null ? `${fmt(r.viscosity,1)} cSt` : '';
+      const extra = [r.bdnNo?`BDN ${r.bdnNo}`:'', r.company||'', r.location||'', dens, lcv, visc].filter(Boolean).join(' · ');
       const qtyStr = r.category==='fuel' ? fmtFuel(r.qty) : fmtLube(r.qty);
       return `<div class="receipt-row">
         <span class="desc">${r.date} — ${r.category.toUpperCase()} — ${r.type}${extra?' — '+extra:''}</span>
@@ -6069,6 +6212,8 @@ function render(){
   }
 
   renderCiiStrip(consByFuel, perf);
+  renderRunningHoursStrip(rows, perf);
+  renderDepArrRobTable(consByFuel, consByLube);
 
   document.getElementById('voyageTimeAvgStrip').innerHTML = `
     <div class="stat"><div class="num">${fmt(perf.totalHrs/24,2)}</div><div class="lbl">Days at sea</div></div>
@@ -6095,10 +6240,22 @@ function renderCiiStrip(consByFuel, perf){
   const strip = document.getElementById('ciiStrip');
   const hint = document.getElementById('ciiHint');
   if (!strip) return;
+  const shipTypeEl = document.getElementById('s_ciiShipType');
+  const yearEl = document.getElementById('s_ciiYear');
+  const reqEl = document.getElementById('s_ciiRequired');
+  if (shipTypeEl && document.activeElement !== shipTypeEl) shipTypeEl.value = state.setup.ciiShipType || '';
+  if (yearEl && document.activeElement !== yearEl) yearEl.value = state.setup.ciiYear ?? new Date().getFullYear();
+  if (reqEl && document.activeElement !== reqEl) reqEl.value = state.setup.ciiRequired ?? '';
+
   const totalFuel = FUEL_TYPES.reduce((s,t)=>s+(consByFuel[t]||0), 0);
   const co2 = totalCO2Tonnes(consByFuel);
   const dwt = state.setup.dwt;
   const cii = computeAttainedCII(consByFuel, perf.totalDistShip, dwt);
+  const shipType = state.setup.ciiShipType || shipTypeEl?.value || '';
+  const year = state.setup.ciiYear != null ? state.setup.ciiYear : (parseInt(yearEl?.value,10)||new Date().getFullYear());
+  const manualReq = state.setup.ciiRequired != null ? state.setup.ciiRequired : parseFloat(reqEl?.value);
+  const required = computeRequiredCII(shipType, dwt, year, Number.isFinite(manualReq)?manualReq:null);
+  const rating = ciiRatingBand(cii, required);
   const card = (val, label, unit='') =>
     `<div class="cii-card"><div class="val">${val==null?'—':val}${unit?`<span style="font-size:11px;color:var(--paper-dim)"> ${unit}</span>`:''}</div><div class="lbl">${label}</div></div>`;
   strip.innerHTML =
@@ -6106,11 +6263,14 @@ function renderCiiStrip(consByFuel, perf){
     card(fmt(co2,2), 'Total CO₂', 't') +
     card(perf.totalDistShip?fmt(perf.totalDistShip,2):null, 'Distance run', 'nm') +
     card(dwt?fmt(dwt,2):null, 'Capacity DWT', 't') +
-    card(cii!=null?fmt(cii,2):null, 'Attained CII', 'g/DWT·nm');
+    card(cii!=null?fmt(cii,2):null, 'Attained CII', 'g/DWT·nm') +
+    card(required!=null?fmt(required,2):null, 'Required CII', 'g/DWT·nm') +
+    card(rating, 'Rating band', '');
   if (hint){
     const parts = [];
     if (!dwt) parts.push('Enter vessel DWT in Setup → Vessel to compute attained CII.');
     if (!(perf.totalDistShip>0)) parts.push('Add distance-run on Voyage Summary for CII transport work.');
+    if (!shipType && !(manualReq>0)) parts.push('Select ship type (or enter Required CII) for the rating band.');
     if (cii!=null) parts.push(`Voyage estimate only — annual CII for SEEMP Part III uses calendar-year IMO DCS fuel and distance.`);
     if (parts.length) hint.textContent = parts.join(' ');
   }
@@ -6700,6 +6860,15 @@ const REPORT_CATEGORIES = [
 const SEA_TYPE_OPS = new Set([
   'START - PASSAGE','AT SEA - NOON','END - PASSAGE','DRIFTING','ECA - ENTRY','ECA - EXIT','CHANGE OF SPEED','HEAVY WEATHER'
 ]);
+const MANEUVERING_ME_OPS = new Set([
+  'LAST LINE - DEPARTURE','PILOT ONBOARD - DEPARTURE','STAND BY - ARRIVAL','FIRST LINE - ARRIVAL',
+  'EOSP - END OF SEA PASSAGE','SHIFTING'
+]);
+
+/** Ops that may carry M/E cylinder / T/C detail when the engine is in use. */
+function canShowMeDetailOp(op){
+  return SEA_TYPE_OPS.has(op) || MANEUVERING_ME_OPS.has(op);
+}
 
 /** True noon / weather noon ops that should carry weather + ME detail on the printout. */
 function isNoonReportOp(op){
@@ -6707,14 +6876,25 @@ function isNoonReportOp(op){
   return u.includes('NOON') || u === 'HEAVY WEATHER';
 }
 
-/** Main engine was turning / burning this period — gate cylinder, T/C and scavenge print sections. */
+/** Main engine was turning / burning this period — prefer measured Δrevs / cons over stale typed RPM. */
 function mainEngineInUse(entry, row){
   if (!entry) return false;
-  if (entry.rpm != null && !isNaN(entry.rpm) && entry.rpm > 0) return true;
   if (row?.dailyRevs != null && row.dailyRevs > 0) return true;
-  if (row?.distEngine != null && row.distEngine > 0) return true;
   if (row?.meCons != null && row.meCons > 0) return true;
+  if (row?.distEngine != null && row.distEngine > 0) return true;
+  if (row?.rpmEff != null && !isNaN(row.rpmEff) && row.rpmEff > 0) return true;
+  /* Only trust stored RPM when Δrevs is unknown (not when Δrevs is explicitly 0). */
+  if (row?.dailyRevs === 0) return false;
+  if (entry.rpm != null && !isNaN(entry.rpm) && entry.rpm > 0) return true;
   return false;
+}
+
+/** Credit bunker/lube/FW receipts to one tank — tankId preferred; legacy type match only if tankId missing. */
+function receiptMatchesTank(r, tank, categories){
+  const cats = Array.isArray(categories) ? categories : [categories];
+  if (!r || !tank || !cats.includes(r.category)) return false;
+  if (r.tankId) return r.tankId === tank.id;
+  return r.type === tank.name || r.type === tank.grade || r.type === lubeKindToLabel(tank.kind);
 }
 
 function formatWeatherBft(bft){
@@ -6783,6 +6963,18 @@ function printTurboOthersSection(report, { includeMeAux = true } = {}){
     parts.push(printRow('Fuel Temperature', `${fmtP(report.fuelTemp, 2)} °C`));
     parts.push(printRow('Pump Mark', fmtP(report.pumpMark, 2)));
     parts.push(printRow('Press. Differential', `${fmtP(report.pressDiff,2)} bar`));
+    if (report.airCoolerIn!=null || report.airCoolerOut!=null){
+      parts.push(printRow('T/C Air Cooler In / Out', `${fmtP(report.airCoolerIn,2)} / ${fmtP(report.airCoolerOut,2)} °C`));
+    }
+    if (report.meLoTemp!=null || report.meLoPress!=null){
+      parts.push(printRow('M/E LO Temp / Press', `${fmtP(report.meLoTemp,2)} °C / ${fmtP(report.meLoPress,2)} bar`));
+    }
+    if (report.geLoTemp!=null) parts.push(printRow('G/E LO Temp', `${fmtP(report.geLoTemp,2)} °C`));
+    if (report.purifierHrs!=null) parts.push(printRow('LO Purifier Hrs', fmtP(report.purifierHrs,2)));
+    if (report.foVisc!=null || report.foDens!=null){
+      parts.push(printRow('FO Visc / Dens', `${fmtP(report.foVisc,1)} cSt / ${fmtP(report.foDens,1)} kg/m³`));
+    }
+    if (report.shaftKw!=null) parts.push(printRow('Shaft kW (meter)', fmtP(report.shaftKw, 2)));
   }
   parts.push(printRow('E.R. Temperature', `${fmtP(report.erTemp, 2)} °C`));
   parts.push(printRow('S/W Temperature', `${fmtP(report.swTemp, 2)} °C`));
@@ -6791,6 +6983,192 @@ function printTurboOthersSection(report, { includeMeAux = true } = {}){
   parts.push(printRow('Sludge R.O.B.', `${fmtP(report.sludgeRob,2)} m³`));
   const title = includeMeAux ? 'Turbocharger &amp; Others' : 'Engine Room &amp; Tank Readings';
   return printSection(title, parts.join(''));
+}
+
+function printEcaSection(report){
+  const eca = report?.eca;
+  if (!eca) return '';
+  const has = eca.grade || eca.start || eca.end || eca.robIn!=null || eca.robOut!=null || eca.distNm!=null;
+  if (!has) return '';
+  const fmtDt = (v)=>{
+    if (!v) return '—';
+    const d = new Date(v);
+    return isNaN(d) ? escPrint(String(v)) : escPrint(d.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}));
+  };
+  return printSection('ECA / Fuel Changeover', [
+    printRow('Grade in use', escPrint(eca.grade || '—')),
+    printRow('Changeover start', fmtDt(eca.start)),
+    printRow('Changeover complete', fmtDt(eca.end)),
+    printRow('ROB at ECA entry', eca.robIn==null?'—':`${fmtFuel(eca.robIn)} MT`),
+    printRow('ROB at ECA exit', eca.robOut==null?'—':`${fmtFuel(eca.robOut)} MT`),
+    printRow('Distance in ECA', eca.distNm==null?'—':`${fmtP(eca.distNm,1)} nm`)
+  ].join(''));
+}
+
+function printSoundingsSection(report){
+  const s = report?.soundings;
+  if (!s || typeof s !== 'object') return '';
+  const rows = Object.keys(s).map(id=>{
+    const row = s[id] || {};
+    if (row.soundingCm==null && row.tempC==null && row.volume==null) return '';
+    const tank = [...fuelTankList(), ...lubeTankList(), ...fwTankList()].find(t=>t.id===id);
+    const label = tank?.name || id;
+    return `<tr><td class="row-lbl">${escPrint(label)}</td><td>${fmtP(row.soundingCm,1)}</td><td>${fmtP(row.tempC,1)}</td><td>${fmtP(row.volume,2)}</td></tr>`;
+  }).filter(Boolean).join('');
+  if (!rows) return '';
+  return printSection('Tank Soundings', `
+    <table class="pr-table">
+      <tr><th>Tank</th><th>Sounding cm</th><th>Temp °C</th><th>Volume</th></tr>
+      ${rows}
+    </table>`);
+}
+
+function renderRunningHoursStrip(rows, perf){
+  const el = document.getElementById('runningHoursStrip');
+  if (!el) return;
+  let meHrs = 0, blrHrs = 0, incHrs = 0, purHrs = 0;
+  const sorted = rows || [];
+  sorted.forEach((r,i)=>{
+    if ((r.distEngine!=null && r.distEngine>0) || (r.meCons!=null && r.meCons>0) || (r.dailyRevs!=null && r.dailyRevs>0)){
+      meHrs += (r.hrs||0);
+    }
+    const e = state.entries.find(x=>x.id===r.id) || r;
+    const prev = i>0 ? (state.entries.find(x=>x.id===sorted[i-1].id) || sorted[i-1]) : null;
+    const curBlr = entryBlrRuntime(e);
+    const prevBlr = prev ? entryBlrRuntime(prev) : null;
+    if (curBlr!=null && prevBlr!=null){
+      const d = runtimeDelta(curBlr, prevBlr);
+      if (d!=null && d>=0) blrHrs += d;
+    } else if (e.report?.perfTable?.BOILER?.runTime!=null){
+      blrHrs += e.report.perfTable.BOILER.runTime||0;
+    }
+    const inc = entryIncineratorRunTime(e);
+    if (inc!=null){
+      const prevInc = prev ? entryIncineratorRunTime(prev) : null;
+      if (prevInc!=null){
+        const d = runtimeDelta(inc, prevInc);
+        if (d!=null && d>=0) incHrs += d;
+      } else {
+        /* first reading treated as period if small; else skip cumulative alone */
+      }
+    }
+    if (e.report?.purifierHrs!=null && !isNaN(e.report.purifierHrs)) purHrs += Number(e.report.purifierHrs)||0;
+  });
+  const geHrs = perf?.totalGeHrs || 0;
+  const stat = (num,lbl)=>`<div class="stat"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`;
+  el.innerHTML =
+    stat(fmt(meHrs,1), 'M/E steaming hrs') +
+    stat(fmt(geHrs,1), 'A/E hrs (voyage)') +
+    stat(fmt(blrHrs,1), 'Boiler hrs') +
+    stat(fmt(incHrs,1), 'Incinerator hrs') +
+    stat(fmt(purHrs,1), 'LO purifier hrs');
+}
+
+function depArrRobRows(consByFuel, consByLube){
+  const {rob, robLube} = currentROB(consByFuel, consByLube);
+  const rows = [];
+  fuelTankList().forEach(t=>{
+    const open = tankRobValue(state.setup.rob, t) || 0;
+    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'fuel')).reduce((s,r)=>s+(r.qty||0),0);
+    const present = rob[t.id] ?? 0;
+    const consumed = open + received - present;
+    rows.push({ id:t.id, label:t.name, unit:'MT', open, received, consumed, present, cat:'fuel' });
+  });
+  lubeTankList().forEach(t=>{
+    const open = tankRobValue(state.setup.robLube, t) || 0;
+    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'lube')).reduce((s,r)=>s+(r.qty||0),0);
+    const present = robLube[t.id] ?? 0;
+    const consumed = open + received - present;
+    rows.push({ id:t.id, label:t.name, unit:'L', open, received, consumed, present, cat:'lube' });
+  });
+  fwTankList().forEach(t=>{
+    const open = tankRobValue(state.setup.robLube, t) || 0;
+    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, ['fw','lube'])).reduce((s,r)=>s+(r.qty||0),0);
+    const present = robLube[t.id] ?? 0;
+    const consumed = open + received - present;
+    rows.push({ id:t.id, label:t.name, unit:'L', open, received, consumed, present, cat:'fw' });
+  });
+  return rows;
+}
+
+function renderDepArrRobTable(consByFuel, consByLube){
+  const el = document.getElementById('depArrRobTable');
+  if (!el) return;
+  const rows = depArrRobRows(consByFuel, consByLube);
+  if (!rows.length){
+    el.innerHTML = '<div class="hint">No tanks configured.</div>';
+    return;
+  }
+  const fmtU = (v, unit) => unit==='MT' ? fmtFuel(v) : fmtLube(v);
+  el.innerHTML = `<table>
+    <thead><tr><th>Tank</th><th>Opening</th><th>Received</th><th>Consumed</th><th>Present</th><th>Unit</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td>${r.label}</td>
+      <td>${fmtU(r.open,r.unit)}</td>
+      <td>${fmtU(r.received,r.unit)}</td>
+      <td>${fmtU(r.consumed,r.unit)}</td>
+      <td>${fmtU(r.present,r.unit)}</td>
+      <td>${r.unit}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function printDepArrRobSheet(){
+  const {consByFuel, consByLube} = computeDerived();
+  const rows = depArrRobRows(consByFuel, consByLube);
+  const fmtU = (v, unit) => unit==='MT' ? fmtFuel(v) : fmtLube(v);
+  const table = printSection('Departure / Arrival ROB', `
+    <table class="pr-table">
+      <tr><th>Tank</th><th>Opening</th><th>Received</th><th>Consumed</th><th>Present</th><th>Unit</th></tr>
+      ${rows.map(r=>`<tr>
+        <td class="row-lbl">${escPrint(r.label)}</td>
+        <td>${fmtU(r.open,r.unit)}</td>
+        <td>${fmtU(r.received,r.unit)}</td>
+        <td>${fmtU(r.consumed,r.unit)}</td>
+        <td>${fmtU(r.present,r.unit)}</td>
+        <td>${r.unit}</td>
+      </tr>`).join('')}
+    </table>`);
+  const sheet = `<div class="pr-sheet">
+    ${printDocHeader({ title: 'Dep / Arr ROB Comparison', subtitle: state.setup.voyageNumber||'Voyage', badge: state.setup.shipCondition||'' })}
+    ${printMetaGrid([
+      {label:'Vessel', value:state.setup.vesselName||'—'},
+      {label:'Voyage No.', value:state.setup.voyageNumber||'—'},
+      {label:'Route', value:`${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}`},
+      {label:'Chief Engineer', value:state.setup.chEng||'—'}
+    ], 4)}
+    <div class="pr-grid"><div class="pr-span2">${table}</div></div>
+    ${printSignatory()}
+  </div>`;
+  printPortraitSinglePage(sheet);
+}
+
+function exportWeeklyAbstractCsv(){
+  const {rows} = computeDerived();
+  const cutoff = Date.now() - 7*24*3600*1000;
+  const week = rows.filter(r=> new Date(r.datetime).getTime() >= cutoff);
+  const src = week.length ? week : rows;
+  const cols = ['datetime','operation','hrs','distanceShip','rpmEff','meCons','geCons','blrCons','total','slip','mcrPct','sfocActual'];
+  const esc = (v)=>{
+    if (v==null || v==='') return '';
+    const s = String(v);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  };
+  const lines = [cols.join(',')];
+  src.forEach(r=>{
+    lines.push(cols.map(c=>{
+      if (c==='distanceShip') return esc(r.distanceShip);
+      return esc(r[c]);
+    }).join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  const voy = (state.setup.voyageNumber||'voyage').replace(/[^a-z0-9_-]+/gi,'_');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${voy}_weekly_abstract.csv`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
 function renderReportCategoryButtons(){
@@ -7174,7 +7552,7 @@ function openReportEditor(entryId){
   const isSea = SEA_TYPE_OPS.has(e.operation);
   const rowForMe = getComputedRow(entryId);
   const meRunning = mainEngineInUse(e, rowForMe);
-  const showMeDetail = isSea && meRunning;
+  const showMeDetail = canShowMeDetailOp(e.operation) && meRunning;
   const dt = new Date(e.datetime);
   const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 
@@ -7480,7 +7858,7 @@ function fitPrintRoot(doc){
       const contentW = Math.max(1, inner.scrollWidth);
       scale = Math.min(scale, availH / contentH, availW / contentW);
     });
-    return Math.max(0.4, Math.min(1, scale * 0.97));
+    return Math.max(0.75, Math.min(1, scale * 0.97));
   };
 
   // Prefer full-size type; only densify / shrink tables if the half-sheet overflows
@@ -7489,13 +7867,14 @@ function fitPrintRoot(doc){
     inners.forEach(inner=> inner.querySelector('.pr-sheet')?.classList.add('pr-dense'));
     scale = measurePair();
   }
-  if (scale < 0.78){
+  if (scale < 0.82){
     doc.querySelectorAll('table.pr-table').forEach(t=>{
       t.classList.remove('pr-table-wide');
       t.classList.add('pr-table-xl');
     });
     scale = measurePair();
   }
+  scale = Math.max(0.75, scale);
 
   // Same zoom on both copies so Office/Ship stay matched; zoom shrinks layout for pagination
   inners.forEach(inner=>{ inner.style.zoom = String(scale); });
@@ -7617,7 +7996,7 @@ function fitPrintPortraitRoot(doc){
     const availW = Math.max(1, page.clientWidth - 2);
     const contentH = Math.max(1, inner.scrollHeight);
     const contentW = Math.max(1, inner.scrollWidth);
-    return Math.max(0.45, Math.min(1, Math.min(availH / contentH, availW / contentW) * 0.98));
+    return Math.max(0.75, Math.min(1, Math.min(availH / contentH, availW / contentW) * 0.98));
   };
 
   let scale = measure();
@@ -7634,6 +8013,7 @@ function fitPrintPortraitRoot(doc){
     });
     scale = measure();
   }
+  if (!isBunker) scale = Math.max(0.75, scale);
 
   inner.style.zoom = String(scale);
   doc.documentElement.style.height = '297mm';
@@ -7712,7 +8092,10 @@ function printSection(title, inner){
 }
 
 function printRow(label, value, cls){
-  return `<div class="pr-row"><span class="pr-row-lbl">${label}</span><span class="pr-row-val${cls?' '+cls:''}">${value}</span></div>`;
+  let v = value;
+  if (cls === 'warn' && v != null && !String(v).startsWith('!')) v = '! ' + v;
+  if (cls === 'good' && v != null && !String(v).startsWith('OK')) v = 'OK ' + v;
+  return `<div class="pr-row"><span class="pr-row-lbl">${label}</span><span class="pr-row-val${cls?' '+cls:''}">${v}</span></div>`;
 }
 
 function printSignatory(){
@@ -7735,9 +8118,9 @@ function sfocDeltaClass(delta){
 function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
   const meRunning = mainEngineInUse(entry, row);
   const noonOp = isNoonReportOp(entry.operation);
-  /* Weather on noon printouts; ME cyl/T/C/scavenge only when the main engine was in use. */
-  const showWeather = noonOp;
-  const showMeDetail = isSea && meRunning;
+  /* Weather on noon + sea reports; ME cyl/T/C/scavenge when engine in use (incl. manoeuvring). */
+  const showWeather = noonOp || isSea;
+  const showMeDetail = canShowMeDetailOp(entry.operation) && meRunning;
 
   const fuelInner = fuelTankList().map(t=>printRow(t.name, `${fmtFuel(asOf.rob[t.id])} MT`)).join('');
   const totalLube = totalLubeRob(asOf.robLube);
@@ -7762,7 +8145,7 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
   let voyageSection = '', sfocSection = '';
   if (isSea && meRunning){
     kpiItems = [
-      {label:'RPM', value:fmtP(entry.rpm, 2)},
+      {label:'RPM', value:fmtP(row.rpmEff!=null?row.rpmEff:entry.rpm, 2)},
       {label:'% MCR', value:fmtP(row.mcrPct, 2)},
       {label:'Est. kW', value:fmtP(row.kwEst, 2)},
       {label:'Ship Speed', value:row.speedShip==null?'—':fmtP(row.speedShip,2)+' kn'},
@@ -7826,6 +8209,8 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
       <tr><td class="row-lbl">MDO/MGO</td><td>${entry.me.type==='MDO/MGO'?fmtFuel(row.meCons):'—'}</td><td>${entry.ge.type==='MDO/MGO'?fmtFuel(row.geCons):'—'}</td><td>${entry.blr.type==='MDO/MGO'?fmtFuel(row.blrCons):'—'}</td><td>${fmtFuel((entry.me.type==='MDO/MGO'?row.meCons:0)+(entry.ge.type==='MDO/MGO'?row.geCons:0)+(entry.blr.type==='MDO/MGO'?row.blrCons:0))}</td></tr>
       <tr><td class="row-lbl">LSMGO</td><td>${entry.me.type==='LSMGO'?fmtFuel(row.meCons):'—'}</td><td>${entry.ge.type==='LSMGO'?fmtFuel(row.geCons):'—'}</td><td>${entry.blr.type==='LSMGO'?fmtFuel(row.blrCons):'—'}</td><td>${fmtFuel((entry.me.type==='LSMGO'?row.meCons:0)+(entry.ge.type==='LSMGO'?row.geCons:0)+(entry.blr.type==='LSMGO'?row.blrCons:0))}</td></tr>
     </table>
+    ${printRow('Misc MDO/MGO', `${fmtFuel((row.miscCons||{})['MDO/MGO'])} MT`)}
+    ${printRow('Misc LSMGO', `${fmtFuel((row.miscCons||{})['LSMGO'])} MT`)}
     ${printRow('Total Fuel Consumption', `${fmtFuel(row.total)} MT`)}
     ${printRow(`Cyl. Oil (${entry.tbn})`, `${fmtLube(row.cylCons)} L`)}
     ${printRow('M/E Sys. Oil', `${fmtLube(row.meLoCons)} L`)}
@@ -7853,6 +8238,8 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
       ${fwSection}
       ${weatherSection}
       ${engineRoomSection}
+      ${printEcaSection(report)}
+      ${printSoundingsSection(report)}
       ${portSection}
       ${voyageSection}
       ${sfocSection}
@@ -8025,6 +8412,35 @@ document.getElementById('btnPullVesselRemote').addEventListener('click', async (
   if (!confirm('Pull this vessel\'s records from the sync server? Local data for this vessel will be replaced by the server copy.')) return;
   await pullVesselFromServer(vesselId);
 });
+
+(function bindBrightMode(){
+  const btn = document.getElementById('btnToggleBright');
+  if (!btn) return;
+  if (localStorage.getItem('vm_bright') === '1') document.documentElement.classList.add('bright');
+  btn.addEventListener('click', ()=>{
+    document.documentElement.classList.toggle('bright');
+    localStorage.setItem('vm_bright', document.documentElement.classList.contains('bright') ? '1' : '0');
+  });
+})();
+
+async function persistCiiSetupFromForm(){
+  const shipType = document.getElementById('s_ciiShipType')?.value || '';
+  const year = parseInt(document.getElementById('s_ciiYear')?.value, 10);
+  const req = parseFloat(document.getElementById('s_ciiRequired')?.value);
+  state.setup.ciiShipType = shipType;
+  state.setup.ciiYear = Number.isFinite(year) ? year : new Date().getFullYear();
+  state.setup.ciiRequired = Number.isFinite(req) && req > 0 ? req : null;
+  await saveSetup();
+  const {consByFuel, perf} = computeDerived();
+  renderCiiStrip(consByFuel, perf);
+}
+['s_ciiShipType','s_ciiYear','s_ciiRequired'].forEach(id=>{
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('change', ()=>{ persistCiiSetupFromForm().catch(console.error); });
+});
+document.getElementById('btnPrintDepArrRob')?.addEventListener('click', ()=> printDepArrRobSheet());
+document.getElementById('btnExportWeeklyAbstract')?.addEventListener('click', ()=> exportWeeklyAbstractCsv());
 
 document.getElementById('btnToggleShipDetails').addEventListener('click', ()=>{
   const section = document.getElementById('shipDetailsSection');
@@ -8428,7 +8844,7 @@ function openVoyageSummary(entryId){
     ${stat('Load %', fmt(row.mcrPct,2))}
     ${stat('Engine Distance', fmt(row.distEngine,2))}
     ${stat('Engine Speed', row.speedEngine==null?'—':fmt(row.speedEngine,2)+' kn')}
-    ${stat('RPM', fmt(entry.rpm,2))}
+    ${stat('RPM', fmt(row.rpmEff!=null?row.rpmEff:entry.rpm,2))}
     ${stat('Ave. kW', fmt(perf.avgKw, 2))}
     ${stat('Slip %', fmt(row.slip,2))}
     ${stat('ETA', etaStr)}
@@ -8460,7 +8876,7 @@ function openVoyageSummary(entryId){
   const r = entry.report || {};
   const isSea = SEA_TYPE_OPS.has(entry.operation);
   const meRunning = mainEngineInUse(entry, row);
-  const showMeDetail = isSea && meRunning;
+  const showMeDetail = canShowMeDetailOp(entry.operation) && meRunning;
   document.getElementById('vsSeaReportBlock').style.display = showMeDetail ? '' : 'none';
 
   // Others (ER/tank) always available; scavenge / pump mark / fuel temp only with M/E in use
@@ -8474,8 +8890,39 @@ function openVoyageSummary(entryId){
   document.getElementById('vs_pumpMark').value = r.pumpMark ?? '';
   document.getElementById('vs_fuelTemp').value = r.fuelTemp ?? '';
   document.getElementById('vs_pressDiff').value = r.pressDiff ?? '';
+  document.getElementById('vs_acIn').value = r.airCoolerIn ?? '';
+  document.getElementById('vs_acOut').value = r.airCoolerOut ?? '';
+  document.getElementById('vs_meLoTemp').value = r.meLoTemp ?? '';
+  document.getElementById('vs_meLoPress').value = r.meLoPress ?? '';
+  document.getElementById('vs_geLoTemp').value = r.geLoTemp ?? '';
+  document.getElementById('vs_purifierHrs').value = r.purifierHrs ?? '';
+  document.getElementById('vs_shaftKw').value = (entry.shaftKw ?? r.shaftKw) ?? '';
+  document.getElementById('vs_foVisc').value = r.foVisc ?? '';
+  document.getElementById('vs_foDens').value = r.foDens ?? '';
+  const eca = r.eca || {};
+  document.getElementById('vs_ecaGrade').value = eca.grade || '';
+  document.getElementById('vs_ecaStart').value = eca.start || '';
+  document.getElementById('vs_ecaEnd').value = eca.end || '';
+  document.getElementById('vs_ecaRobIn').value = eca.robIn ?? '';
+  document.getElementById('vs_ecaRobOut').value = eca.robOut ?? '';
+  document.getElementById('vs_ecaDist').value = eca.distNm ?? '';
   document.getElementById('vs_remarks').value = r.remarks ?? '';
-  ['vs_scavTemp','vs_scavPress','vs_pumpMark','vs_fuelTemp','vs_pressDiff'].forEach(id=>{
+  // Tank soundings
+  const sndBody = document.getElementById('vsSoundingsBody');
+  if (sndBody){
+    const snd = r.soundings || {};
+    const allTanks = [...fuelTankList(), ...lubeTankList(), ...fwTankList()];
+    sndBody.innerHTML = allTanks.map(tk=>{
+      const s = snd[tk.id] || {};
+      return `<tr>
+        <td>${tk.name}</td>
+        <td><input type="number" step="0.1" id="vs_snd_cm_${tk.id}" value="${s.soundingCm??''}"></td>
+        <td><input type="number" step="0.1" id="vs_snd_temp_${tk.id}" value="${s.tempC??''}"></td>
+        <td><input type="number" step="0.01" id="vs_snd_vol_${tk.id}" value="${s.volume??''}"></td>
+      </tr>`;
+    }).join('');
+  }
+  ['vs_scavTemp','vs_scavPress','vs_pumpMark','vs_fuelTemp','vs_pressDiff','vs_acIn','vs_acOut','vs_meLoTemp','vs_meLoPress','vs_geLoTemp','vs_purifierHrs'].forEach(id=>{
     const el = document.getElementById(id);
     const wrap = el?.closest('.field');
     if (wrap) wrap.style.display = showMeDetail ? '' : 'none';
@@ -8926,6 +9373,34 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   entry.report.stTemp = num('vs_stTemp');
   entry.report.swTemp = num('vs_swTemp');
   entry.report.remarks = document.getElementById('vs_remarks')?.value || '';
+  entry.report.airCoolerIn = num('vs_acIn');
+  entry.report.airCoolerOut = num('vs_acOut');
+  entry.report.meLoTemp = num('vs_meLoTemp');
+  entry.report.meLoPress = num('vs_meLoPress');
+  entry.report.geLoTemp = num('vs_geLoTemp');
+  entry.report.purifierHrs = num('vs_purifierHrs');
+  entry.report.foVisc = num('vs_foVisc');
+  entry.report.foDens = num('vs_foDens');
+  const shaftKw = num('vs_shaftKw');
+  entry.report.shaftKw = shaftKw;
+  entry.shaftKw = shaftKw;
+  entry.report.eca = {
+    grade: document.getElementById('vs_ecaGrade')?.value || '',
+    start: document.getElementById('vs_ecaStart')?.value || '',
+    end: document.getElementById('vs_ecaEnd')?.value || '',
+    robIn: num('vs_ecaRobIn'),
+    robOut: num('vs_ecaRobOut'),
+    distNm: num('vs_ecaDist')
+  };
+  entry.report.soundings = {};
+  [...fuelTankList(), ...lubeTankList(), ...fwTankList()].forEach(tk=>{
+    const soundingCm = num('vs_snd_cm_'+tk.id);
+    const tempC = num('vs_snd_temp_'+tk.id);
+    const volume = num('vs_snd_vol_'+tk.id);
+    if (soundingCm!=null || tempC!=null || volume!=null){
+      entry.report.soundings[tk.id] = { soundingCm, tempC, volume };
+    }
+  });
   entry.report.blrRuntime = blrRuntime;
   entry.blrRuntime = blrRuntime;
   entry.report.generatorsInUse = inUse;
@@ -8946,7 +9421,7 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
     avgKw: incKw,
     loadPct: incineratorLoadPct(incKw)
   };
-  if (isSea && mainEngineInUse(entry, row)){
+  if (canShowMeDetailOp(entry.operation) && mainEngineInUse(entry, row)){
     const cylN = meCylinderCount();
     entry.report.pumpRack = Array.from({length:cylN}, (_,i)=> num(`vs_pumpRack${i+1}`));
     entry.report.exhaustTemp = Array.from({length:cylN}, (_,i)=> num(`vs_exhaust${i+1}`));
@@ -9094,7 +9569,7 @@ function printVoyageSummary(entryId){
   const kpiItems = [
     {label:'Run Hrs', value:fmt(row.hrs, 2)},
     {label:'Ship Dist (nm)', value:fmt(entry.distanceShip, 2)},
-    {label:'RPM', value:fmt(entry.rpm, 2)},
+    {label:'RPM', value:fmt(row.rpmEff!=null?row.rpmEff:entry.rpm, 2)},
     {label:'Speed (kn)', value:fmt(row.speedShip,2)},
     {label:'% MCR', value:fmt(row.mcrPct, 2)},
     {label:'Est. kW', value:fmt(row.kwEst, 2)}
@@ -9125,7 +9600,7 @@ function printVoyageSummary(entryId){
   const deltaCls = sfocDeltaClass(row.sfocDelta);
   const deltaStr = row.sfocDelta==null ? '—' : `${row.sfocDelta>0?'+':''}${fmt(row.sfocDelta, 2)}%`;
   const meSection = printSection('M/E Performance', [
-    printRow('RPM', fmt(entry.rpm, 2)),
+    printRow('RPM', fmt(row.rpmEff!=null?row.rpmEff:entry.rpm, 2)),
     printRow('% MCR', fmt(row.mcrPct, 2)),
     printRow('Est. kW', fmt(row.kwEst, 2)),
     printRow('Engine Speed', row.speedEngine==null?'—':`${fmt(row.speedEngine,2)} kn`),
@@ -9201,9 +9676,10 @@ function printVoyageSummary(entryId){
   const noonOp = isNoonReportOp(entry.operation);
   const isSea = SEA_TYPE_OPS.has(entry.operation);
   const meRunning = mainEngineInUse(entry, row);
-  const weatherSection = noonOp ? printWeatherSection(entry) : '';
-  const cylSection = (isSea && meRunning) ? printMeCylinderSection(report) : '';
-  const turboOthersSection = printTurboOthersSection(report, { includeMeAux: isSea && meRunning });
+  const showMeDetail = canShowMeDetailOp(entry.operation) && meRunning;
+  const weatherSection = (noonOp || isSea) ? printWeatherSection(entry) : '';
+  const cylSection = showMeDetail ? printMeCylinderSection(report) : '';
+  const turboOthersSection = printTurboOthersSection(report, { includeMeAux: showMeDetail });
   const meSectionPrint = meRunning ? meSection : '';
 
   const sheetHtml = `<div class="pr-sheet">
@@ -9223,6 +9699,8 @@ function printVoyageSummary(entryId){
       ${meSectionPrint}
       ${cylSection}
       ${turboOthersSection}
+      ${printEcaSection(report)}
+      ${printSoundingsSection(report)}
       ${geSection}
       ${blrIncSection}
       ${voyageAvgSection}
@@ -9490,6 +9968,9 @@ function updateLivePreview(){
   if (rpmEff!=null && !isNaN(rpmEff)){
     mcrPct = Math.pow(rpmEff/mcrRpm, 3) * 100;
     kwEst = Math.pow(rpmEff/mcrRpm, 3) * mcrKw;
+    const shaftOv = parseFloat(document.getElementById('vs_shaftKw')?.value);
+    if (Number.isFinite(shaftOv) && shaftOv > 0) kwEst = shaftOv;
+    else if (curEntry.shaftKw != null && !isNaN(curEntry.shaftKw) && curEntry.shaftKw > 0) kwEst = curEntry.shaftKw;
     if (speedEngine==null) speedEngine = rpmEff * propConstant;
   }
 
@@ -10301,6 +10782,9 @@ document.getElementById('btnAddReceipt').addEventListener('click', async ()=>{
   const date = document.getElementById('rcpt_date').value;
   const qty = parseFloat(document.getElementById('rcpt_qty').value);
   if (!date || isNaN(qty) || qty<=0){ alert('Enter a date and a positive quantity.'); return; }
+  const dens = parseFloat(document.getElementById('rcpt_density').value);
+  const lcv = parseFloat(document.getElementById('rcpt_lcv').value);
+  const visc = parseFloat(document.getElementById('rcpt_viscosity').value);
   const receipt = {
     id: uid(), date, category: document.getElementById('rcpt_category').value,
     type: document.getElementById('rcpt_type').selectedOptions[0]?.textContent || document.getElementById('rcpt_type').value,
@@ -10311,6 +10795,9 @@ document.getElementById('btnAddReceipt').addEventListener('click', async ()=>{
     company: document.getElementById('rcpt_company').value,
     location: document.getElementById('rcpt_location').value
   };
+  if (Number.isFinite(dens) && dens > 0) receipt.density15 = dens;
+  if (Number.isFinite(lcv) && lcv > 0) receipt.lcv = lcv;
+  if (Number.isFinite(visc) && visc > 0) receipt.viscosity = visc;
   state.receipts.push(receipt);
   await dbPut('receipts', receipt);
   markPendingSync();
@@ -10318,6 +10805,9 @@ document.getElementById('btnAddReceipt').addEventListener('click', async ()=>{
   document.getElementById('rcpt_bdn').value = '';
   document.getElementById('rcpt_company').value = '';
   document.getElementById('rcpt_location').value = '';
+  document.getElementById('rcpt_density').value = '';
+  document.getElementById('rcpt_lcv').value = '';
+  document.getElementById('rcpt_viscosity').value = '';
   render();
 });
 
@@ -11024,6 +11514,9 @@ function migrateSetup(setup){
   if (setup.imoNo===undefined) setup.imoNo = '';
   if (setup.lcvRef==null) setup.lcvRef = DEFAULT_LCV_REF;
   if (setup.lcvActual===undefined) setup.lcvActual = null;
+  if (setup.ciiShipType===undefined) setup.ciiShipType = '';
+  if (setup.ciiYear===undefined) setup.ciiYear = new Date().getFullYear();
+  if (setup.ciiRequired===undefined) setup.ciiRequired = null;
   if (setup.pitch==null) setup.pitch = 5.85;
   if (setup.mcrRpm==null) setup.mcrRpm = 91;
   if (setup.mcrKw==null) setup.mcrKw = 18630;
