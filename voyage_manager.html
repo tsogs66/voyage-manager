@@ -1022,7 +1022,7 @@
         <div id="geMaxKwFields" class="form-grid cols3" style="margin-top:12px;"></div>
         <div class="hint">Generator load % is calculated as (average kW ÷ max kW) × 100 for each alternator. Enter per-generator max kW from the nameplate.</div>
         <div class="hint">Boiler and incinerator load % in supplementary reports uses the max kW values above.</div>
-        <div class="hint">Engine speed (kn) = RPM × Pitch(m) × 60 ÷ 1852. Engine distance (nm) = Pitch × Δrevs ÷ 1852 (preferred from rev counter; RPM × hours is the fallback). Slip % = (Engine Dist − Ship Dist) ÷ Engine Dist × 100. %MCR / kW use the propeller law (RPM ÷ MCR RPM)³.</div>
+        <div class="hint">Engine speed (kn) = RPM × Pitch(m) × 60 ÷ 1852. Engine distance (nm) = Pitch × Δrevs ÷ 1852 when the rev counter is available (including Δrevs = 0). RPM × pitch × 60 ÷ 1852 × hours is used only if Δrevs is unknown. Slip % = (Engine Dist − Ship Dist) ÷ Engine Dist × 100. %MCR / kW use the propeller law (RPM ÷ MCR RPM)³.</div>
       </div>
 
       <div class="panel">
@@ -1220,7 +1220,7 @@
           <div class="field"><label>Engine Speed (kn, calc)</label><input type="text" id="vs_engineSpeed" readonly></div>
           <div class="field"><label>Slip % (calc)</label><input type="text" id="vs_slip" readonly></div>
         </div>
-        <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous) ÷ (Run Hours × 60). Engine distance prefers Pitch × Δrevs ÷ 1852 (standard noon-report practice); falls back to RPM × pitch × hours. Slip % = (Engine Dist − Ship Dist) ÷ Engine Dist × 100.</div>
+        <div class="hint">RPM and Rev. Counter are linked: RPM = (Rev. Counter − previous) ÷ (Run Hours × 60). Engine distance = Pitch(m) × Δrevs ÷ 1852 when the rev counter is available (Δrevs = 0 → engine dist 0). Falls back to RPM × pitch × 60 ÷ 1852 × hours only if Δrevs is unknown. Slip % = (Engine Dist − Ship Dist) ÷ Engine Dist × 100.</div>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -4650,9 +4650,11 @@ function sfocDeltaPct(actual, reference){
   return ((actual - reference) / reference) * 100;
 }
 
-/* Engine distance from propeller pitch and revolutions (preferred noon-report method). */
+/* Engine distance from propeller pitch and revolutions (preferred noon-report method).
+   When Δrevs is known — including 0 (ME stopped / counter unchanged) — use pitch × Δrevs / 1852.
+   RPM × hours is only a fallback when the rev counter delta is unavailable. */
 function engineDistanceNm(pitchM, dailyRevs, rpm, hrs){
-  if (pitchM > 0 && dailyRevs != null && dailyRevs > 0){
+  if (pitchM > 0 && dailyRevs != null && !isNaN(dailyRevs) && dailyRevs >= 0){
     return (pitchM * dailyRevs) / NM_METERS;
   }
   if (pitchM > 0 && rpm != null && !isNaN(rpm) && hrs > 0){
@@ -4662,8 +4664,17 @@ function engineDistanceNm(pitchM, dailyRevs, rpm, hrs){
 }
 
 function rpmFromRevs(dailyRevs, hrs){
-  if (dailyRevs == null || !(hrs > 0)) return null;
+  if (dailyRevs == null || isNaN(dailyRevs) || !(hrs > 0)) return null;
   return dailyRevs / (hrs * 60);
+}
+
+/* Average RPM for performance: prefer true mean from Δrevs over a typed value that may disagree. */
+function effectiveRpm(rpmEntered, dailyRevs, hrs){
+  if (dailyRevs != null && !isNaN(dailyRevs) && hrs > 0){
+    return rpmFromRevs(dailyRevs, hrs);
+  }
+  if (rpmEntered != null && !isNaN(rpmEntered)) return rpmEntered;
+  return null;
 }
 
 /* ---------------- derived calculations ---------------- */
@@ -4748,21 +4759,22 @@ function computeDerived(){
       lubeByType['FRESH WATER'] = fwConsD;
       if (fwConsD!=null) consByLube["FRESH WATER"] += fwConsD;
 
-      // performance — prefer rev-counter distance (pitch × Δrevs / 1852)
+      // performance — prefer rev-counter distance (pitch × Δrevs / 1852); RPM from Δrevs when available
       dailyRevs = meterDelta(e.revCounter, prev.revCounter, rolls.rc);
-      if (rpmEff==null && dailyRevs!=null && hrs>0){
-        rpmEff = rpmFromRevs(dailyRevs, hrs);
-      }
+      rpmEff = effectiveRpm(rpmEff, dailyRevs, hrs);
       distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
       if (hrs>0) speedShip = e.distanceShip / hrs;
-      if (distEngine && distEngine>0 && e.distanceShip!==null){
+      if (distEngine!=null && distEngine>0 && e.distanceShip!==null){
         slip = ((distEngine - e.distanceShip)/distEngine)*100;
         sumSlip += slip; cntSlip++;
       }
       if (speedShip!==null && !isNaN(speedShip)){ sumSpeedShip+=speedShip; cntSpeedShip++; }
 
       if (rpmEff!=null && !isNaN(rpmEff)){
-        speedEngine = rpmEff * propConstant;
+        /* Engine speed from distance/hours when Δrevs known — matches pitch×Δrevs/1852 */
+        speedEngine = (distEngine!=null && hrs>0 && dailyRevs!=null)
+          ? (distEngine / hrs)
+          : (rpmEff * propConstant);
         mcrPct = Math.pow(rpmEff/mcrRpm, 3) * 100;
         kwEst = Math.pow(rpmEff/mcrRpm, 3) * mcrKw;
         sumRpm += rpmEff; cntRpm++;
@@ -8705,6 +8717,15 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   render();
   document.getElementById('voyageSummaryPanel').style.display = 'none';
   currentVsEntryId = null;
+  /* Reset next-watch distance/RPM bridges so the last summary does not leak into the new log entry */
+  prefillFromLastEntry();
+  ['vs_distanceShip','vs_rpm','vs_revCounter','vs_engineDist','vs_engineSpeed','vs_shipSpeed','vs_slip'].forEach(id=>{
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (id === 'vs_distanceShip') el.value = '0';
+    else if (id === 'vs_rpm' || id === 'vs_revCounter') el.value = '';
+    else el.value = '—';
+  });
   alert('Voyage summary saved — distance, RPM, consumption, freshwater, misc., and machinery data updated. Later entries recalculated.');
 });
 /* ---------------- print history (Log Entry) ---------------- */
@@ -8998,6 +9019,7 @@ function syncRpmRevCounter(sourceId){
   if (!(runHours>0)) return;
   rpmSyncGuard = true;
   const src = (sourceId === 'vs_rpm' || sourceId === 'in_rpm') ? 'rpm' : 'rev';
+  const rolls = meterRollovers();
   if (src === 'rpm'){
     const rpmEl = document.getElementById(sourceId === 'vs_rpm' ? 'vs_rpm' : 'in_rpm') || document.getElementById('vs_rpm');
     const rpm = parseFloat(rpmEl?.value);
@@ -9009,7 +9031,8 @@ function syncRpmRevCounter(sourceId){
     const rcEl = document.getElementById(sourceId === 'vs_revCounter' ? 'vs_revCounter' : 'in_revCounter');
     const rc = parseFloat(rcEl?.value);
     if (!isNaN(rc)){
-      const rpm = (rc - prevRef.revCounter)/(runHours*60);
+      const dRevs = meterDelta(rc, prevRef.revCounter, rolls.rc);
+      const rpm = (dRevs != null) ? dRevs / (runHours * 60) : null;
       setLinkedRpmFields(rpm, rc);
     }
   }
@@ -9018,10 +9041,14 @@ function syncRpmRevCounter(sourceId){
   updateVsRunCalcDisplays();
 }
 function updateVsRunCalcDisplays(){
-  const distEl = document.getElementById('vs_distanceShip');
-  const rpmEl = document.getElementById('vs_rpm');
-  if (distEl) document.getElementById('in_distanceShip').value = distEl.value || '0';
-  if (rpmEl && rpmEl.value!=='') document.getElementById('in_rpm').value = rpmEl.value;
+  /* Only bridge VS → log-entry hidden fields while the summary for this entry is open.
+     Otherwise stale vs_* values rewrite the next watch's distance/RPM and poison slip. */
+  if (isVoyageSummaryOpen()){
+    const distEl = document.getElementById('vs_distanceShip');
+    const rpmEl = document.getElementById('vs_rpm');
+    if (distEl) document.getElementById('in_distanceShip').value = distEl.value || '0';
+    if (rpmEl && rpmEl.value!=='') document.getElementById('in_rpm').value = rpmEl.value;
+  }
   const ctx = getActivePeriodContext();
   const curEntry = readCurrentFormAsEntry();
   if (ctx.entry){
@@ -9031,18 +9058,17 @@ function updateVsRunCalcDisplays(){
   const prevRef = getPrevReferenceFor(ctx.datetime || curEntry.datetime, ctx.excludeId);
   const pitch = state.setup.pitch||0, propConstant = pitch*60/NM_METERS;
   let distEngine=null, speedEngine=null, shipSpeed=null, slip=null;
-  let rpmEff = curEntry.rpm;
   const hrs = periodRunHours(prevRef, ctx.datetime || curEntry.datetime, ctx.meRuntime);
   let dailyRevs = null;
   if (prevRef && curEntry.revCounter!=null && prevRef.revCounter!=null){
     const rolls = meterRollovers();
     dailyRevs = meterDelta(curEntry.revCounter, prevRef.revCounter, rolls.rc);
   }
-  if ((rpmEff==null || isNaN(rpmEff)) && dailyRevs!=null && hrs>0){
-    rpmEff = rpmFromRevs(dailyRevs, hrs);
-  }
+  const rpmEff = effectiveRpm(curEntry.rpm, dailyRevs, hrs);
   if (rpmEff!=null) speedEngine = rpmEff * propConstant;
   distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
+  /* Keep speed consistent with distance when Δrevs drove the distance */
+  if (distEngine!=null && hrs>0 && dailyRevs!=null) speedEngine = distEngine / hrs;
   if (hrs>0 && curEntry.distanceShip!=null) shipSpeed = curEntry.distanceShip / hrs;
   if (distEngine!=null && distEngine>0 && curEntry.distanceShip!=null){
     slip = ((distEngine - curEntry.distanceShip) / distEngine) * 100;
@@ -9115,11 +9141,12 @@ function readCurrentFormAsEntry(){
     || state.setup.carryover;
   const vsFwProd = num('vs_fwProdMeter');
   const vsFwRob = num('vs_fwRob');
+  const vsOpen = isVoyageSummaryOpen();
   return {
     datetime: txt('in_datetime'),
-    distanceShip: num('vs_distanceShip') ?? num('in_distanceShip'),
-    rpm: num('vs_rpm') ?? num('in_rpm'),
-    revCounter: num('vs_revCounter') ?? num('in_revCounter'),
+    distanceShip: vsOpen ? (num('vs_distanceShip') ?? num('in_distanceShip')) : num('in_distanceShip'),
+    rpm: vsOpen ? (num('vs_rpm') ?? num('in_rpm')) : (num('in_rpm') ?? num('vs_rpm')),
+    revCounter: vsOpen ? (num('vs_revCounter') ?? num('in_revCounter')) : (num('in_revCounter') ?? num('vs_revCounter')),
     tbn: txt('in_tbn'),
     me: meField, ge: geField,
     blr: { meter: num('blr_meter'), type: txt('blr_type'), sg: num('blr_sg') },
@@ -9144,13 +9171,12 @@ function updateLivePreview(){
   let rpmEff = curEntry.rpm;
 
   if (prevRef && curEntry.datetime){
-    hrs = (new Date(curEntry.datetime) - new Date(prevRef.datetime)) / 3600000;
+    const formRt = parseFloat(document.getElementById('me_runtime')?.value);
+    hrs = periodRunHours(prevRef, curEntry.datetime, isNaN(formRt) ? curEntry.meRuntime : formRt);
     if (curEntry.revCounter!=null && prevRef.revCounter!=null){
       dailyRevs = meterDelta(curEntry.revCounter, prevRef.revCounter, rolls.rc);
     }
-    if ((rpmEff==null || isNaN(rpmEff)) && dailyRevs!=null && hrs>0){
-      rpmEff = rpmFromRevs(dailyRevs, hrs);
-    }
+    rpmEff = effectiveRpm(rpmEff, dailyRevs, hrs);
     if (hrs>0){
       const {meRaw, geRaw} = meGeRawLitres(curEntry, prevRef, rolls);
       const blrD = meterDelta(curEntry.blr.meter, prevRef.blr.meter, rolls.boiler);
@@ -9164,6 +9190,7 @@ function updateLivePreview(){
       if (unitGe && unitGe.value!=='') geCons = parseFloat(unitGe.value);
       if (unitBlr && unitBlr.value!=='') blrCons = parseFloat(unitBlr.value);
       distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
+      if (distEngine!=null && dailyRevs!=null) speedEngine = distEngine / hrs;
       if (distEngine!=null && distEngine>0 && curEntry.distanceShip!=null){
         slip = ((distEngine - curEntry.distanceShip)/distEngine)*100;
       }
@@ -9173,7 +9200,7 @@ function updateLivePreview(){
   if (rpmEff!=null && !isNaN(rpmEff)){
     mcrPct = Math.pow(rpmEff/mcrRpm, 3) * 100;
     kwEst = Math.pow(rpmEff/mcrRpm, 3) * mcrKw;
-    speedEngine = rpmEff * propConstant;
+    if (speedEngine==null) speedEngine = rpmEff * propConstant;
   }
 
   const rpmDisp = document.getElementById('in_rpm_display');
