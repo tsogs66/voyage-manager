@@ -6195,60 +6195,81 @@ function clearBunkerPlan(){
 function printBunkerPlan(){
   readBunkerPlanFromDom();
   const bp = ensureBunkerPlan();
-  const vessel = state.setup.vesselName || 'Vessel';
+  const voyageNo = bp.voyageNo || state.setup.voyageNumber || '—';
   const sidesHtml = BUNKER_PLAN_SIDES.map(meta=>{
     const side = bp[meta.key];
     const sum = summarizeBunkerSide(side);
-    const body = side.legs.map((leg,i)=>{
+    const body = side.legs.map((leg)=>{
       const days = bunkerLegDays(leg);
       const qty = bunkerLegQty(leg);
-      const has = leg.from || leg.to || leg.distance || leg.dailyCons || days;
-      if (!has) return '';
       return `<tr>
-        <td>${leg.port?'●':''}</td>
-        <td>${escPrint(leg.from)}</td><td>${escPrint(leg.to)}</td>
-        <td>${leg.distance!=null?fmt(leg.distance,2):''}</td>
-        <td>${leg.speed!=null?fmt(leg.speed,2):''}</td>
-        <td>${leg.dailyCons!=null?fmtFuel(leg.dailyCons):''}</td>
-        <td>${days!=null?fmt(days,3):''}</td>
-        <td>${qty!=null?fmtFuel(qty):''}</td>
+        <td>${leg.port ? '●' : ''}</td>
+        <td class="row-lbl">${escPrint(leg.from || '')}</td>
+        <td class="row-lbl">${escPrint(leg.to || '')}</td>
+        <td>${leg.distance!=null ? fmt(leg.distance, 2) : ''}</td>
+        <td>${leg.speed!=null ? fmt(leg.speed, 2) : ''}</td>
+        <td>${leg.dailyCons!=null ? fmtFuel(leg.dailyCons) : ''}</td>
+        <td>${days!=null ? fmt(days, 3) : ''}</td>
+        <td>${qty!=null ? fmtFuel(qty) : ''}</td>
       </tr>`;
     }).join('');
-    return printSection(`${meta.title} — ${side.grade}`, `
-      <table class="pr-table">
-        <thead><tr><th>P/A</th><th>From</th><th>To</th><th>Dist</th><th>Speed</th><th>Daily</th><th>Days</th><th>Qty MT</th></tr></thead>
-        <tbody>${body || '<tr><td colspan="8">No legs entered</td></tr>'}</tbody>
-      </table>
-      ${printMetaGrid([
-        {label:'Current ROB', value: side.currentRob==null?'—':fmtFuel(side.currentRob)+' MT'},
-        {label:'Margin %', value: fmt(side.marginPct,1)+'%'},
-        {label:'Qty to Receive', value: side.qtyReceive==null?'—':fmtFuel(side.qtyReceive)+' MT'},
-        {label:'Days Port', value: fmt(sum.daysPort,3)},
-        {label:'Days Sea', value: fmt(sum.daysSea,3)},
-        {label:'Total Distance', value: fmt(sum.totalDist,2)+' nm'},
-        {label:'Total Consumption', value: fmtFuel(sum.totalCons)+' MT'},
-        {label:'Total Margin', value: fmtFuel(sum.margin)+' MT'},
-        {label:'Required Quantity', value: fmtFuel(sum.required)+' MT'},
-        {label:'Arrival ROB', value: sum.arrivalRob==null?'—':fmtFuel(sum.arrivalRob)+' MT'},
-        {label:'Next Departure ROB', value: sum.nextDepRob==null?'—':fmtFuel(sum.nextDepRob)+' MT'},
-        {label:'Stem still needed', value: sum.stem==null?'—':fmtFuel(sum.stem)+' MT'}
-      ], 3)}
-    `);
+    return `
+      <section class="pr-section pr-bunker-block">
+        <h3 class="pr-section-title">${escPrint(meta.title)} — ${escPrint(side.grade)}</h3>
+        <div class="pr-section-body">
+          <table class="pr-table pr-table-xl">
+            <thead><tr>
+              <th style="width:7%">P/A</th>
+              <th style="width:18%">From</th>
+              <th style="width:18%">To</th>
+              <th style="width:10%">Dist</th>
+              <th style="width:10%">Speed</th>
+              <th style="width:12%">Daily</th>
+              <th style="width:10%">Days</th>
+              <th style="width:15%">Qty MT</th>
+            </tr></thead>
+            <tbody>${body}</tbody>
+          </table>
+          ${printMetaGrid([
+            {label:'Current ROB', value: side.currentRob==null ? '—' : fmtFuel(side.currentRob)+' MT'},
+            {label:'Margin %', value: fmt(side.marginPct, 1)+'%'},
+            {label:'Qty to Receive', value: side.qtyReceive==null ? '—' : fmtFuel(side.qtyReceive)+' MT'},
+            {label:'Days Port', value: fmt(sum.daysPort, 3)},
+            {label:'Days Sea', value: fmt(sum.daysSea, 3)},
+            {label:'Total Distance', value: fmt(sum.totalDist, 2)+' nm'},
+            {label:'Total Consumption', value: fmtFuel(sum.totalCons)+' MT'},
+            {label:'Total Margin', value: fmtFuel(sum.margin)+' MT'},
+            {label:'Required Quantity', value: fmtFuel(sum.required)+' MT'},
+            {label:'Arrival ROB', value: sum.arrivalRob==null ? '—' : fmtFuel(sum.arrivalRob)+' MT'},
+            {label:'Next Departure ROB', value: sum.nextDepRob==null ? '—' : fmtFuel(sum.nextDepRob)+' MT'},
+            {label:'Stem still needed', value: sum.stem==null ? '—' : fmtFuel(sum.stem)+' MT'}
+          ], 4)}
+        </div>
+      </section>`;
   }).join('');
 
-  const area = document.getElementById('printArea');
-  area.innerHTML = `<div class="pr-page">
-    ${printDocHeader({ title:'Bunker Consumption Calculation', subtitle: vessel, badge: bp.voyageNo || state.setup.voyageNumber || '' })}
+  const sheetHtml = `<div class="pr-sheet pr-dense pr-bunker-sheet">
+    ${printDocHeader({
+      title: 'Bunker Consumption Calculation',
+      subtitle: 'Voyage fuel plan — sea / port legs with margin',
+      badge: voyageNo
+    })}
     ${printMetaGrid([
-      {label:'Voyage No.', value: escPrint(bp.voyageNo || state.setup.voyageNumber || '—')},
+      {label:'Voyage No.', value: escPrint(voyageNo)},
       {label:'Date', value: escPrint(bp.date || '—')},
-      {label:'Vessel', value: escPrint(vessel)}
-    ], 3)}
+      {label:'Vessel', value: escPrint(state.setup.vesselName || '—')},
+      {label:'Condition', value: escPrint(state.setup.shipCondition || '—')}
+    ], 4)}
     ${sidesHtml}
-    <div class="pr-footer">Required = Total Consumption + (Consumption × Margin%). Arrival ROB = Current ROB − Required. Next Departure ROB = Arrival ROB + Quantity to Receive.</div>
+    <div class="pr-remarks">
+      <div class="pr-remarks-title">Calculation basis</div>
+      <div class="pr-remarks-body">Sea days = Dist ÷ (Speed × 24). Quantity = Daily Cons × Days. Margin = Consumption × Margin%. Required = Consumption + Margin. Arrival ROB = Current ROB − Required. Next Departure ROB = Arrival ROB + Quantity to Receive.</div>
+    </div>
+    ${printSignatory()}
   </div>`;
+
   scheduleBunkerPlanSave();
-  window.print();
+  printPortraitSinglePage(sheetHtml);
 }
 
 function bindBunkerPlanUi(){
@@ -7222,6 +7243,110 @@ function printSinglePage(sheetHtml){
     } finally {
       setTimeout(cleanup, 1500);
     }
+  };
+
+  if (doc.fonts && doc.fonts.ready){
+    doc.fonts.ready.then(()=> setTimeout(doPrint, 40)).catch(()=> setTimeout(doPrint, 120));
+  } else {
+    setTimeout(doPrint, 120);
+  }
+  return fittedHtml;
+}
+
+function buildPrintDocumentHtmlPortrait(bodyInner){
+  const css = printDocumentCss();
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Print</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+@page{ size: A4 portrait; margin: 0; }
+html, body{
+  margin:0 !important; padding:0 !important; background:#fff !important;
+  width:210mm !important; height:297mm !important;
+  max-height:297mm !important; overflow:hidden !important;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+.pr-page-portrait{
+  display:block !important;
+  width:210mm !important; height:297mm !important; max-height:297mm !important;
+  overflow:hidden !important; box-sizing:border-box !important;
+  padding:7mm 8mm !important; background:#fff !important;
+  page-break-after:avoid !important; page-break-inside:avoid !important;
+  break-inside:avoid !important;
+}
+.pr-page-portrait-inner{
+  transform-origin:top left; width:100%; box-sizing:border-box;
+}
+.pr-bunker-sheet .pr-bunker-block{ margin-bottom:2.2mm; }
+.pr-bunker-sheet .pr-bunker-block .pr-section-body{ padding:1mm 1.2mm 1.2mm; }
+.pr-bunker-sheet .pr-bunker-block .pr-meta{ margin-top:1.2mm; margin-bottom:0; }
+.pr-bunker-sheet .pr-remarks{ margin-top:1.5mm; margin-bottom:0; min-height:0; max-height:none; }
+.pr-bunker-sheet .pr-sign{ margin-top:1.5mm; }
+.pr-section, .pr-box{ break-inside:avoid !important; page-break-inside:avoid !important; }
+${css}
+</style></head><body>${bodyInner}</body></html>`;
+}
+
+function fitPrintPortraitRoot(doc){
+  const page = doc.querySelector('.pr-page-portrait');
+  const inner = doc.querySelector('.pr-page-portrait-inner');
+  if (!page || !inner) return 1;
+
+  sizePrintTables(doc);
+  inner.querySelector('.pr-sheet')?.classList.remove('pr-dense');
+  inner.style.zoom = '1';
+  inner.style.transform = 'none';
+  inner.style.width = '100%';
+
+  const measure = ()=>{
+    const availH = Math.max(1, page.clientHeight - 2);
+    const availW = Math.max(1, page.clientWidth - 2);
+    const contentH = Math.max(1, inner.scrollHeight);
+    const contentW = Math.max(1, inner.scrollWidth);
+    return Math.max(0.45, Math.min(1, Math.min(availH / contentH, availW / contentW) * 0.98));
+  };
+
+  let scale = measure();
+  if (scale < 0.92){
+    inner.querySelector('.pr-sheet')?.classList.add('pr-dense');
+    scale = measure();
+  }
+  if (scale < 0.82){
+    doc.querySelectorAll('table.pr-table').forEach(t=>{
+      t.classList.remove('pr-table-wide');
+      t.classList.add('pr-table-xl');
+    });
+    scale = measure();
+  }
+
+  inner.style.zoom = String(scale);
+  doc.documentElement.style.height = '297mm';
+  doc.documentElement.style.overflow = 'hidden';
+  doc.body.style.height = '297mm';
+  doc.body.style.overflow = 'hidden';
+  return scale;
+}
+
+function printPortraitSinglePage(sheetHtml){
+  // One A4 portrait page — same visual theme as other reports, stacked full-width content
+  const bodyInner = `<div class="pr-page-portrait"><div class="pr-page-portrait-inner">${sheetHtml}</div></div>`;
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;opacity:0;pointer-events:none;';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  doc.open();
+  doc.write(buildPrintDocumentHtmlPortrait(bodyInner));
+  doc.close();
+
+  fitPrintPortraitRoot(doc);
+  const fittedHtml = doc.body.innerHTML;
+  const win = iframe.contentWindow;
+
+  const cleanup = ()=>{ try{ iframe.remove(); }catch(e){} };
+  const doPrint = ()=>{
+    try{ win.focus(); win.print(); }
+    finally { setTimeout(cleanup, 1500); }
   };
 
   if (doc.fonts && doc.fonts.ready){
