@@ -840,14 +840,14 @@
   <div class="tabs" id="tabs">
     <div class="tab active" data-page="summary">Summary</div>
     <div class="tab" data-page="entry">Log Entry</div>
-    <div class="tab" data-page="voyageabstract">Voyage Abstract</div>
-    <div class="tab" data-page="consumption">Consumption</div>
-    <div class="tab" data-page="bunkerplan">Bunker Plan</div>
     <div class="tab" data-page="rob">ROB</div>
+    <div class="tab" data-page="bunkerplan">Bunker Plan</div>
+    <div class="tab" data-page="consumption">Consumption</div>
+    <div class="tab" data-page="voyageabstract">Voyage Abstract</div>
     <div class="tab" data-page="receipts">Receipts</div>
     <div class="tab" data-page="reports">Reports</div>
-    <div class="tab" data-page="data">Data</div>
     <div class="tab" data-page="reference">Reference</div>
+    <div class="tab" data-page="data">Data</div>
     <div class="tab" data-page="voyagesetup">Voyage Setup</div>
     <div class="tab" data-page="setup">Setup</div>
   </div>
@@ -2246,9 +2246,9 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c-3.5 4.2-6 7.4-6 10.2A6 6 0 0 0 12 21a6 6 0 0 0 6-7.8C18 10.4 15.5 7.2 12 3z"/></svg>
     <span>ROB</span>
   </button>
-  <button type="button" class="bn-item" data-page="consumption" aria-label="Consumption">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/><path d="M12 4v2"/></svg>
-    <span>Cons</span>
+  <button type="button" class="bn-item" data-page="bunkerplan" aria-label="Bunker Plan">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M6 20V9l5-5 5 5v11"/><path d="M10 20v-5h4v5"/><path d="M9 11h.01"/><path d="M15 11h.01"/></svg>
+    <span>Bunker</span>
   </button>
   <button type="button" class="bn-item" data-page="more" aria-label="More">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
@@ -2261,13 +2261,13 @@
     <div class="bn-more-handle" aria-hidden="true"></div>
     <div class="bn-more-title">More</div>
     <div class="bn-more-grid">
+      <button type="button" class="bn-more-item" data-page="consumption">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/><path d="M12 4v2"/></svg>
+        <span>Cons</span>
+      </button>
       <button type="button" class="bn-more-item" data-page="voyageabstract">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
         <span>Abstract</span>
-      </button>
-      <button type="button" class="bn-more-item" data-page="bunkerplan">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M6 20V9l5-5 5 5v11"/><path d="M10 20v-5h4v5"/><path d="M9 11h.01"/><path d="M15 11h.01"/></svg>
-        <span>Bunker</span>
       </button>
       <button type="button" class="bn-more-item" data-page="receipts">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21V3z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg>
@@ -2277,13 +2277,13 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h3"/></svg>
         <span>Reports</span>
       </button>
-      <button type="button" class="bn-more-item" data-page="data">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>
-        <span>Data</span>
-      </button>
       <button type="button" class="bn-more-item" data-page="reference">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8"/><path d="M8 11h6"/></svg>
         <span>Reference</span>
+      </button>
+      <button type="button" class="bn-more-item" data-page="data">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>
+        <span>Data</span>
       </button>
       <button type="button" class="bn-more-item" data-page="voyagesetup">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17h18"/><path d="M5 17V9l7-5 7 5v8"/><path d="M9 17v-4h6v4"/></svg>
@@ -5948,7 +5948,7 @@ async function saveSetup(){
 }
 
 /* ---------------- tabs ---------------- */
-const BOTTOM_NAV_MORE = new Set(['voyageabstract', 'bunkerplan', 'receipts', 'reports', 'data', 'reference', 'voyagesetup', 'setup']);
+const BOTTOM_NAV_MORE = new Set(['consumption', 'voyageabstract', 'receipts', 'reports', 'reference', 'data', 'voyagesetup', 'setup']);
 const BUNKER_PLAN_LEGS = 10;
 const BUNKER_PLAN_SIDES = [
   { key:'residual', title:'HFO / LSFO', grades:['HFO','LSFO'], defaultGrade:'HFO', qtyLabel:'HFO/LSFO' },
