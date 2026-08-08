@@ -255,13 +255,17 @@
 
   .hint{font-size:11px; color:var(--paper-dim); margin-top:4px; line-height:1.5;}
   .bunker-plan-head{display:flex; flex-wrap:wrap; gap:12px 18px; align-items:end; margin-bottom:14px;}
-  .bunker-plan-head .field{min-width:140px;}
+  .bunker-plan-head .field{min-width:140px; flex:1 1 140px;}
+  .bunker-plan-head .btn-row{flex:1 1 100%;}
   .bunker-plan-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;}
-  @media (max-width:1100px){ .bunker-plan-grid{grid-template-columns:1fr;} }
-  .bunker-side{border:1px solid var(--line); border-radius:6px; padding:14px 12px 12px; background:rgba(0,0,0,0.12);}
+  .bunker-side{border:1px solid var(--line); border-radius:6px; padding:14px 12px 12px; background:rgba(0,0,0,0.12); min-width:0;}
   .bunker-side h3{font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:0.08em; text-transform:uppercase; color:var(--brass); margin:0 0 10px;}
-  .bunker-side .bunker-grade{margin-bottom:10px;}
-  .bunker-table{width:100%; border-collapse:collapse; font-size:11px;}
+  .bunker-side .bunker-grade{margin-bottom:10px; max-width:280px;}
+  .bunker-side .table-scroll{
+    overflow-x:auto; -webkit-overflow-scrolling:touch;
+    margin:0 -4px; padding:0 4px 4px;
+  }
+  .bunker-table{width:100%; min-width:640px; border-collapse:collapse; font-size:11px; table-layout:fixed;}
   .bunker-table th{font-family:'Oswald',sans-serif; font-size:9px; letter-spacing:0.05em; text-transform:uppercase; color:var(--paper-dim); font-weight:500; padding:4px 3px; border-bottom:1px solid var(--line); white-space:nowrap;}
   .bunker-table td{padding:3px 2px; vertical-align:middle;}
   .bunker-table input[type="text"],
@@ -271,14 +275,54 @@
   }
   .bunker-table input[readonly]{color:var(--brass); border-color:transparent; background:transparent; padding-left:2px;}
   .bunker-table input[type="checkbox"]{width:16px; height:16px; accent-color:var(--teal);}
-  .bunker-table .col-port{width:36px; text-align:center;}
-  .bunker-table .col-num{width:58px;}
-  .bunker-table .col-qty{width:64px;}
+  .bunker-table .col-port{width:40px; text-align:center;}
+  .bunker-table .col-from,
+  .bunker-table .col-to{width:18%;}
+  .bunker-table .col-num{width:70px;}
+  .bunker-table .col-qty{width:78px;}
   .bunker-totals{display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; margin-top:12px;}
-  .bunker-totals .field input{font-weight:600;}
+  .bunker-totals .field{min-width:0;}
+  .bunker-totals .field input{font-weight:600; min-width:0;}
   .bunker-totals .field.calc input{color:var(--brass); border-color:var(--brass-dim);}
   .bunker-totals .field.full{grid-column:1 / -1;}
   .bunker-formula{font-size:10px; color:var(--paper-dim); margin-top:8px; line-height:1.45;}
+  /* Tablet: stack HFO/LSFO above MGO/LSMGO for wider From/To and unclipped totals */
+  @media (max-width:1200px){
+    .bunker-plan-grid{grid-template-columns:1fr; gap:18px;}
+    .bunker-table{min-width:0; width:100%;}
+    .bunker-table .col-from,
+    .bunker-table .col-to{width:22%;}
+    .bunker-table .col-num{width:72px;}
+    .bunker-table .col-qty{width:84px;}
+    .bunker-table input[type="text"],
+    .bunker-table input[type="number"]{font-size:12px; padding:6px 7px;}
+    .bunker-totals{grid-template-columns:1fr 1fr; gap:10px 12px;}
+  }
+  @media (max-width:720px){
+    .bunker-plan-head{gap:10px;}
+    .bunker-plan-head .field{min-width:100%; flex:1 1 100%;}
+    .bunker-plan-head .btn-row{width:100%; flex-wrap:wrap;}
+    .bunker-plan-head .btn-row button{flex:1 1 auto; min-height:44px;}
+    .bunker-side{padding:12px 10px 10px;}
+    .bunker-side .bunker-grade{max-width:none;}
+    .bunker-side .bunker-grade select{font-size:16px; min-height:44px;}
+    .bunker-table{min-width:560px; font-size:12px;}
+    .bunker-table th{font-size:9px; padding:6px 4px;}
+    .bunker-table td{padding:5px 3px;}
+    .bunker-table .col-from,
+    .bunker-table .col-to{width:26%;}
+    .bunker-table .col-num{width:68px;}
+    .bunker-table .col-qty{width:80px;}
+    .bunker-table input[type="text"],
+    .bunker-table input[type="number"]{
+      font-size:16px; min-height:40px; padding:8px 8px; border-radius:5px;
+    }
+    .bunker-table input[type="checkbox"]{width:20px; height:20px;}
+    .bunker-totals{grid-template-columns:1fr; gap:10px;}
+    .bunker-totals .field.full{grid-column:auto;}
+    .bunker-totals .field input{font-size:16px; min-height:44px; padding:10px 10px;}
+    .bunker-formula{font-size:11px;}
+  }
   .ref-grid{display:grid; grid-template-columns:repeat(6,1fr); gap:10px 14px;}
   @media (max-width:900px){
     .ref-grid{grid-template-columns:repeat(3,1fr);}
@@ -6039,12 +6083,12 @@ function renderBunkerPlan(){
       const qty = bunkerLegQty(leg);
       return `<tr data-side="${meta.key}" data-row="${i}">
         <td class="col-port"><input type="checkbox" data-f="port" ${leg.port?'checked':''} title="Port or anchorage stay"></td>
-        <td><input type="text" data-f="from" value="${escAttr(leg.from)}" placeholder="From"></td>
-        <td><input type="text" data-f="to" value="${escAttr(leg.to)}" placeholder="To"></td>
-        <td class="col-num"><input type="number" step="0.1" data-f="distance" value="${leg.distance ?? ''}" ${leg.port?'disabled':''}></td>
-        <td class="col-num"><input type="number" step="0.1" data-f="speed" value="${leg.speed ?? ''}" ${leg.port?'disabled':''}></td>
-        <td class="col-num"><input type="number" step="0.01" data-f="dailyCons" value="${leg.dailyCons ?? ''}"></td>
-        <td class="col-num"><input type="number" step="0.001" data-f="days" value="${days ?? ''}"></td>
+        <td class="col-from"><input type="text" data-f="from" value="${escAttr(leg.from)}" placeholder="From" autocomplete="off"></td>
+        <td class="col-to"><input type="text" data-f="to" value="${escAttr(leg.to)}" placeholder="To" autocomplete="off"></td>
+        <td class="col-num"><input type="number" step="0.1" data-f="distance" value="${leg.distance ?? ''}" ${leg.port?'disabled':''} inputmode="decimal"></td>
+        <td class="col-num"><input type="number" step="0.1" data-f="speed" value="${leg.speed ?? ''}" ${leg.port?'disabled':''} inputmode="decimal"></td>
+        <td class="col-num"><input type="number" step="0.01" data-f="dailyCons" value="${leg.dailyCons ?? ''}" inputmode="decimal"></td>
+        <td class="col-num"><input type="number" step="0.001" data-f="days" value="${days ?? ''}" inputmode="decimal"></td>
         <td class="col-qty"><input type="number" readonly tabindex="-1" value="${qty==null?'':fmtFuel(qty)}"></td>
       </tr>`;
     }).join('');
@@ -6053,14 +6097,17 @@ function renderBunkerPlan(){
       <div class="field bunker-grade"><label>Grade for ROB / stem</label>
         <select data-side-grade="${meta.key}">${gradeOpts}</select>
       </div>
-      <div class="table-scroll">
+      <div class="table-scroll" role="region" aria-label="${meta.title} legs">
         <table class="bunker-table">
           <thead><tr>
             <th class="col-port" title="Check if port or anchorage">P/A</th>
-            <th>From</th><th>To</th>
-            <th>Dist nm</th><th>Speed kn</th>
-            <th>Daily Cons</th><th>Days</th>
-            <th>${meta.qtyLabel} MT</th>
+            <th class="col-from">From</th>
+            <th class="col-to">To</th>
+            <th class="col-num">Dist nm</th>
+            <th class="col-num">Speed kn</th>
+            <th class="col-num">Daily Cons</th>
+            <th class="col-num">Days</th>
+            <th class="col-qty">${meta.qtyLabel} MT</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>

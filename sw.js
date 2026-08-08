@@ -1,4 +1,4 @@
-const CACHE = 'noon-report-v48';
+const CACHE = 'noon-report-v49';
 const PRECACHE = [
   './voyage_manager.html',
   './manifest.webmanifest',
