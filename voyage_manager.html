@@ -9145,8 +9145,8 @@ function readCurrentFormAsEntry(){
   return {
     datetime: txt('in_datetime'),
     distanceShip: vsOpen ? (num('vs_distanceShip') ?? num('in_distanceShip')) : num('in_distanceShip'),
-    rpm: vsOpen ? (num('vs_rpm') ?? num('in_rpm')) : (num('in_rpm') ?? num('vs_rpm')),
-    revCounter: vsOpen ? (num('vs_revCounter') ?? num('in_revCounter')) : (num('in_revCounter') ?? num('vs_revCounter')),
+    rpm: vsOpen ? (num('vs_rpm') ?? num('in_rpm')) : num('in_rpm'),
+    revCounter: vsOpen ? (num('vs_revCounter') ?? num('in_revCounter')) : num('in_revCounter'),
     tbn: txt('in_tbn'),
     me: meField, ge: geField,
     blr: { meter: num('blr_meter'), type: txt('blr_type'), sg: num('blr_sg') },
