@@ -8322,7 +8322,6 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
     ${printRow('M/E Sys. Oil', `${fmtLube(row.meLoCons)} L`)}
     ${printRow('A/E Sys. Oil', `${fmtLube(row.geLoCons)} L`)}`);
 
-  const routeStr = `${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}`;
   const subtitle = noonOp
     ? (isSea ? 'Noon Report — At Sea' : 'Noon Report — Port / Anchorage')
     : (isSea ? 'At Sea Report' : 'Port / Anchorage Report');
@@ -8351,11 +8350,9 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
     ${printMetaGrid([
       {label:'Date & Time', value:dtStr},
       {label:'Condition', value:entry.condition},
-      {label:'Route', value:routeStr},
-      {label:'Chief Engineer', value:state.setup.chEng||'—'},
       {label:'Depart', value:state.setup.departPort||'—'},
       {label:'Arrive', value:state.setup.arrivePort||'—'}
-    ])}
+    ], 4)}
     ${printKpiRow(kpiItems)}
     <div class="pr-noon-body">
       ${cylSection ? `<div class="pr-noon-full">${cylSection}</div>` : ''}
