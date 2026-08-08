@@ -1712,17 +1712,19 @@
           <div class="field span2"><div class="hint">Based on voyage distance remaining at this log entry and this entry's ship speed. Override if needed.</div></div>
         </div>
 
-        <h3 class="sub">Main Engine — Cylinder Readings</h3>
-        <div class="unit-group cols5" id="reportCylFields"></div>
+        <div id="reportMeDetailFields">
+          <h3 class="sub">Main Engine — Cylinder Readings</h3>
+          <div class="unit-group cols5" id="reportCylFields"></div>
 
-        <h3 class="sub">Turbochargers &amp; Scavenge</h3>
-        <div class="unit-group cols3" id="reportTurboFields"></div>
-        <div class="form-grid cols3" style="margin-top:10px;">
-          <div class="field"><label>Scavenge Temp (°C)</label><input type="number" step="0.1" id="rep_scavTemp"></div>
-          <div class="field"><label>Scavenge Pressure (bar)</label><input type="number" step="0.01" id="rep_scavPress"></div>
-          <div class="field"><label>Fuel Temp (°C)</label><input type="number" step="0.1" id="rep_fuelTemp"></div>
-          <div class="field"><label>Pump Mark</label><input type="number" step="0.1" id="rep_pumpMark"></div>
-          <div class="field"><label>Pressure Diff. (bar)</label><input type="number" step="0.01" id="rep_pressDiff"></div>
+          <h3 class="sub">Turbochargers &amp; Scavenge</h3>
+          <div class="unit-group cols3" id="reportTurboFields"></div>
+          <div class="form-grid cols3" style="margin-top:10px;">
+            <div class="field"><label>Scavenge Temp (°C)</label><input type="number" step="0.1" id="rep_scavTemp"></div>
+            <div class="field"><label>Scavenge Pressure (bar)</label><input type="number" step="0.01" id="rep_scavPress"></div>
+            <div class="field"><label>Fuel Temp (°C)</label><input type="number" step="0.1" id="rep_fuelTemp"></div>
+            <div class="field"><label>Pump Mark</label><input type="number" step="0.1" id="rep_pumpMark"></div>
+            <div class="field"><label>Pressure Diff. (bar)</label><input type="number" step="0.01" id="rep_pressDiff"></div>
+          </div>
         </div>
       </div>
 
@@ -6699,6 +6701,98 @@ const SEA_TYPE_OPS = new Set([
   'START - PASSAGE','AT SEA - NOON','END - PASSAGE','DRIFTING','ECA - ENTRY','ECA - EXIT','CHANGE OF SPEED','HEAVY WEATHER'
 ]);
 
+/** True noon / weather noon ops that should carry weather + ME detail on the printout. */
+function isNoonReportOp(op){
+  const u = (op || '').toUpperCase();
+  return u.includes('NOON') || u === 'HEAVY WEATHER';
+}
+
+/** Main engine was turning / burning this period — gate cylinder, T/C and scavenge print sections. */
+function mainEngineInUse(entry, row){
+  if (!entry) return false;
+  if (entry.rpm != null && !isNaN(entry.rpm) && entry.rpm > 0) return true;
+  if (row?.dailyRevs != null && row.dailyRevs > 0) return true;
+  if (row?.distEngine != null && row.distEngine > 0) return true;
+  if (row?.meCons != null && row.meCons > 0) return true;
+  return false;
+}
+
+function formatWeatherBft(bft){
+  if (bft == null || bft === '') return '—';
+  const n = Number(bft);
+  const labels = {
+    0:'Calm',1:'Light air',2:'Light breeze',3:'Gentle breeze',4:'Moderate breeze',
+    5:'Fresh breeze',6:'Strong breeze',7:'Near gale',8:'Gale',9:'Strong gale',
+    10:'Storm',11:'Violent storm',12:'Hurricane'
+  };
+  if (isNaN(n)) return String(bft);
+  return labels[n] != null ? `BF ${n} — ${labels[n]}` : `BF ${n}`;
+}
+
+function formatDouglasSea(state){
+  if (state == null || state === '') return '—';
+  const n = Number(state);
+  const labels = {
+    0:'Glassy',1:'Rippled',2:'Wavelets',3:'Slight',4:'Moderate',
+    5:'Rough',6:'Very Rough',7:'High',8:'Very High',9:'Phenomenal'
+  };
+  if (isNaN(n)) return String(state);
+  return labels[n] != null ? `${n} — ${labels[n]}` : String(n);
+}
+
+function printWeatherSection(entry){
+  const w = entry?.weather || {};
+  const hasAny = w.windDir || w.windBft != null && w.windBft !== '' || w.seaState != null && w.seaState !== ''
+    || w.swellDir || w.airTemp != null || w.seaTemp != null;
+  if (!hasAny) return '';
+  return printSection('Weather &amp; Sea State', [
+    printRow('Wind Direction', escPrint(w.windDir || '—')),
+    printRow('Wind (Beaufort)', formatWeatherBft(w.windBft)),
+    printRow('Sea State (Douglas)', formatDouglasSea(w.seaState)),
+    printRow('Swell Direction', escPrint(w.swellDir || '—')),
+    printRow('Air Temp', w.airTemp==null||w.airTemp===''?'—':`${fmtP(w.airTemp, 2)} °C`),
+    printRow('Sea Temp', w.seaTemp==null||w.seaTemp===''?'—':`${fmtP(w.seaTemp, 2)} °C`)
+  ].join(''));
+}
+
+function printMeCylinderSection(report){
+  const pr = report?.pumpRack || [], ex = report?.exhaustTemp || [];
+  const cylN = meCylinderCount();
+  const hasData = pr.some(v=>v!=null&&v!=='') || ex.some(v=>v!=null&&v!=='');
+  if (!hasData) return '';
+  return printSection('Main Engine — Cylinder Readings', `
+    <table class="pr-table">
+      <tr><th></th>${Array.from({length:cylN},(_,i)=>`<th>Cyl ${i+1}</th>`).join('')}</tr>
+      <tr><td class="row-lbl">Pump Rack</td>${Array.from({length:cylN},(_,i)=>`<td>${fmtP(pr[i], 2)}</td>`).join('')}</tr>
+      <tr><td class="row-lbl">Exhaust °C</td>${Array.from({length:cylN},(_,i)=>`<td>${fmtP(ex[i], 2)}</td>`).join('')}</tr>
+    </table>`);
+}
+
+function printTurboOthersSection(report, { includeMeAux = true } = {}){
+  if (!report) return '';
+  const parts = [];
+  if (includeMeAux){
+    const turbos = report.turbos || [report.turbo1, report.turbo2].filter(Boolean);
+    const turboRows = Array.from({length:turboCount()}, (_,i)=>{
+      const t = turbos[i] || {};
+      return printRow(`T/C #${i+1} In / Out / RPM`, `${fmtP(t.in, 2)} / ${fmtP(t.out, 2)} / ${fmtP(t.rpm, 2)}`);
+    }).join('');
+    parts.push(turboRows);
+    parts.push(printRow('Scav. Temperature', `${fmtP(report.scavTemp, 2)} °C`));
+    parts.push(printRow('Scav. Pressure', `${fmtP(report.scavPress,2)} bar`));
+    parts.push(printRow('Fuel Temperature', `${fmtP(report.fuelTemp, 2)} °C`));
+    parts.push(printRow('Pump Mark', fmtP(report.pumpMark, 2)));
+    parts.push(printRow('Press. Differential', `${fmtP(report.pressDiff,2)} bar`));
+  }
+  parts.push(printRow('E.R. Temperature', `${fmtP(report.erTemp, 2)} °C`));
+  parts.push(printRow('S/W Temperature', `${fmtP(report.swTemp, 2)} °C`));
+  parts.push(printRow('S/T Temperature', `${fmtP(report.stTemp, 2)} °C`));
+  parts.push(printRow('Bilge R.O.B.', `${fmtP(report.bilgeRob,2)} m³`));
+  parts.push(printRow('Sludge R.O.B.', `${fmtP(report.sludgeRob,2)} m³`));
+  const title = includeMeAux ? 'Turbocharger &amp; Others' : 'Engine Room &amp; Tank Readings';
+  return printSection(title, parts.join(''));
+}
+
 function renderReportCategoryButtons(){
   const box = document.getElementById('reportCategoryButtons');
   if (!box) return;
@@ -7078,6 +7172,9 @@ function openReportEditor(entryId){
   const e = state.entries.find(x=>x.id===entryId);
   if (!e) return;
   const isSea = SEA_TYPE_OPS.has(e.operation);
+  const rowForMe = getComputedRow(entryId);
+  const meRunning = mainEngineInUse(e, rowForMe);
+  const showMeDetail = isSea && meRunning;
   const dt = new Date(e.datetime);
   const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 
@@ -7089,14 +7186,15 @@ function openReportEditor(entryId){
     <div class="field"><label>Date / Time</label><input value="${dtStr}" readonly></div>
     <div class="field"><label>Operation</label><input value="${e.operation}" readonly></div>
     <div class="field"><label>Condition</label><input value="${e.condition}" readonly></div>
-    <div class="field"><label>Report Type</label><input value="${isSea ? 'Sea / Underway (full)' : 'Port / Maneuvering (common only)'}" readonly></div>
+    <div class="field"><label>Report Type</label><input value="${isSea ? (showMeDetail ? 'Sea / Underway (M/E in use)' : 'Sea / Underway (M/E not in use)') : 'Port / Maneuvering (common only)'}" readonly></div>
   `;
   document.getElementById('reportSeaFields').style.display = isSea ? '' : 'none';
+  document.getElementById('reportMeDetailFields').style.display = showMeDetail ? '' : 'none';
   document.getElementById('reportPortFields').style.display = isSea ? 'none' : '';
 
   const cylBox = document.getElementById('reportCylFields');
   const cylN = meCylinderCount();
-  if (isSea){
+  if (showMeDetail){
     cylBox.innerHTML = Array.from({length:cylN}, (_,i)=>{ const n=i+1; return `
       <div class="unit-box">
         <h3>Cyl ${n}</h3>
@@ -7150,6 +7248,8 @@ function openReportEditor(entryId){
   document.getElementById('rep_remarks').value = r.remarks ?? '';
   if (isSea){
     document.getElementById('rep_eta').value = r.eta || computeEntryEta(entryId) || '';
+  }
+  if (showMeDetail){
     Array.from({length:cylN}, (_,i)=>i+1).forEach(n=>{
       document.getElementById(`rep_pumpRack${n}`).value = (r.pumpRack && r.pumpRack[n-1]!=null) ? r.pumpRack[n-1] : '';
       document.getElementById(`rep_exhaust${n}`).value = (r.exhaustTemp && r.exhaustTemp[n-1]!=null) ? r.exhaustTemp[n-1] : '';
@@ -7241,15 +7341,29 @@ function openReportEditor(entryId){
     report.perfTable = perfTable;
     if (isSea){
       report.eta = document.getElementById('rep_eta').value;
-      report.pumpRack = Array.from({length:cylN}, (_,i)=>num(`rep_pumpRack${i+1}`));
-      report.exhaustTemp = Array.from({length:cylN}, (_,i)=>num(`rep_exhaust${i+1}`));
-      report.turbos = Array.from({length:turboCount()}, (_,i)=>({
-        in: num(`rep_t${i+1}in`), out: num(`rep_t${i+1}out`), rpm: num(`rep_t${i+1}rpm`)
-      }));
-      report.turbo1 = report.turbos[0] || null;
-      report.turbo2 = report.turbos[1] || null;
-      report.scavTemp = num('rep_scavTemp'); report.scavPress = num('rep_scavPress');
-      report.fuelTemp = num('rep_fuelTemp'); report.pumpMark = num('rep_pumpMark'); report.pressDiff = num('rep_pressDiff');
+      if (showMeDetail){
+        report.pumpRack = Array.from({length:cylN}, (_,i)=>num(`rep_pumpRack${i+1}`));
+        report.exhaustTemp = Array.from({length:cylN}, (_,i)=>num(`rep_exhaust${i+1}`));
+        report.turbos = Array.from({length:turboCount()}, (_,i)=>({
+          in: num(`rep_t${i+1}in`), out: num(`rep_t${i+1}out`), rpm: num(`rep_t${i+1}rpm`)
+        }));
+        report.turbo1 = report.turbos[0] || null;
+        report.turbo2 = report.turbos[1] || null;
+        report.scavTemp = num('rep_scavTemp'); report.scavPress = num('rep_scavPress');
+        report.fuelTemp = num('rep_fuelTemp'); report.pumpMark = num('rep_pumpMark'); report.pressDiff = num('rep_pressDiff');
+      } else {
+        /* M/E not in use — keep any previously saved cylinder/T/C values, do not print them. */
+        report.pumpRack = r.pumpRack || null;
+        report.exhaustTemp = r.exhaustTemp || null;
+        report.turbos = r.turbos || null;
+        report.turbo1 = r.turbo1 || null;
+        report.turbo2 = r.turbo2 || null;
+        report.scavTemp = r.scavTemp ?? null;
+        report.scavPress = r.scavPress ?? null;
+        report.fuelTemp = r.fuelTemp ?? null;
+        report.pumpMark = r.pumpMark ?? null;
+        report.pressDiff = r.pressDiff ?? null;
+      }
     }
     return report;
   }
@@ -7619,6 +7733,12 @@ function sfocDeltaClass(delta){
 }
 
 function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
+  const meRunning = mainEngineInUse(entry, row);
+  const noonOp = isNoonReportOp(entry.operation);
+  /* Weather on noon printouts; ME cyl/T/C/scavenge only when the main engine was in use. */
+  const showWeather = noonOp;
+  const showMeDetail = isSea && meRunning;
+
   const fuelInner = fuelTankList().map(t=>printRow(t.name, `${fmtFuel(asOf.rob[t.id])} MT`)).join('');
   const totalLube = totalLubeRob(asOf.robLube);
   const lubeInner = [
@@ -7634,17 +7754,13 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
     printRow('FW R.O.B.', `${fmtLube(fwRob)} L`)
   ].join(''));
 
-  const engineRoomSection = printSection('Engine Room &amp; Tank Readings', [
-    printRow('E.R. Temperature', `${fmtP(report.erTemp, 2)} °C`),
-    printRow('Bilge R.O.B.', `${fmtP(report.bilgeRob,2)} m³`),
-    printRow('Sludge R.O.B.', `${fmtP(report.sludgeRob,2)} m³`),
-    printRow('S/T Temperature', `${fmtP(report.stTemp, 2)} °C`),
-    printRow('S/W Temperature', `${fmtP(report.swTemp, 2)} °C`)
-  ].join(''));
+  const weatherSection = showWeather ? printWeatherSection(entry) : '';
+  const engineRoomSection = printTurboOthersSection(report, { includeMeAux: showMeDetail });
+  const cylSection = showMeDetail ? printMeCylinderSection(report) : '';
 
   let kpiItems = [];
-  let voyageSection = '', cylSection = '', turboSection = '', sfocSection = '';
-  if (isSea){
+  let voyageSection = '', sfocSection = '';
+  if (isSea && meRunning){
     kpiItems = [
       {label:'RPM', value:fmtP(entry.rpm, 2)},
       {label:'% MCR', value:fmtP(row.mcrPct, 2)},
@@ -7662,27 +7778,6 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
       printRow('Engine Distance', `${fmtP(row.distEngine,2)} nm`),
       printRow('Engine Speed', row.speedEngine==null?'—':`${fmtP(row.speedEngine,2)} kn`)
     ].join(''));
-    const pr = report.pumpRack||[], ex = report.exhaustTemp||[];
-    const cylN = meCylinderCount();
-    cylSection = printSection('Pump Rack &amp; M/E Exhaust', `
-      <table class="pr-table">
-        <tr><th></th>${Array.from({length:cylN},(_,i)=>`<th>Cyl ${i+1}</th>`).join('')}</tr>
-        <tr><td class="row-lbl">Pump Rack</td>${Array.from({length:cylN},(_,i)=>`<td>${fmtP(pr[i], 2)}</td>`).join('')}</tr>
-        <tr><td class="row-lbl">Exhaust °C</td>${Array.from({length:cylN},(_,i)=>`<td>${fmtP(ex[i], 2)}</td>`).join('')}</tr>
-      </table>`);
-    const turbos = report.turbos || [report.turbo1, report.turbo2].filter(Boolean);
-    const turboRows = Array.from({length:turboCount()}, (_,i)=>{
-      const t = turbos[i] || {};
-      return printRow(`T/C #${i+1} In / Out / RPM`, `${fmtP(t.in, 2)} / ${fmtP(t.out, 2)} / ${fmtP(t.rpm, 2)}`);
-    }).join('');
-    turboSection = printSection('Turbochargers &amp; Scavenge', [
-      turboRows,
-      printRow('Scav. Temperature', `${fmtP(report.scavTemp, 2)} °C`),
-      printRow('Scav. Pressure', `${fmtP(report.scavPress,2)} bar`),
-      printRow('Fuel Temperature', `${fmtP(report.fuelTemp, 2)} °C`),
-      printRow('Pump Mark', fmtP(report.pumpMark, 2)),
-      printRow('Press. Differential', `${fmtP(report.pressDiff,2)} bar`)
-    ].join(''));
     const deltaCls = sfocDeltaClass(row.sfocDelta);
     const deltaStr = row.sfocDelta==null ? '—' : `${row.sfocDelta>0?'+':''}${fmtP(row.sfocDelta, 2)}%`;
     sfocSection = printSection('Fuel Efficiency (SFOC)', [
@@ -7698,6 +7793,13 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
       {label:'Period Hrs', value:fmtP(row.hrs, 2)},
       {label:'Total Fuel', value:row.total==null?'—':`${fmtFuel(row.total)} MT`}
     ];
+    if (isSea){
+      voyageSection = printSection('Voyage / Period', [
+        printRow('Period Hours', `${fmtP(row.hrs, 2)} hrs`),
+        printRow('Ship\'s Distance', `${fmtP(entry.distanceShip,2)} nm`),
+        printRow('Main Engine', 'Not in use this period')
+      ].join(''));
+    }
   }
 
   const portSection = !isSea ? printSection('Port Details', [
@@ -7706,11 +7808,13 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
   ].join('')) : '';
 
   const perfTable = report.perfTable || {};
+  /* Hide M/E column when main engine was not running this period. */
+  const perfUnits = meRunning ? PERF_UNITS : PERF_UNITS.filter(u=>u!=='ME');
   const perfSection = printSection('Performance Readings', `
     <table class="pr-table">
-      <tr><th></th>${PERF_UNITS.map(u=>`<th>${PERF_UNIT_LABELS[u]}</th>`).join('')}</tr>
+      <tr><th></th>${perfUnits.map(u=>`<th>${PERF_UNIT_LABELS[u]}</th>`).join('')}</tr>
       ${PERF_ROWS.map(([key,label])=>
-        `<tr><td class="row-lbl">${label}</td>${PERF_UNITS.map(u=>`<td>${fmtP(perfTable[u]?perfTable[u][key]:null, 2)}</td>`).join('')}</tr>`
+        `<tr><td class="row-lbl">${label}</td>${perfUnits.map(u=>`<td>${fmtP(perfTable[u]?perfTable[u][key]:null, 2)}</td>`).join('')}</tr>`
       ).join('')}
     </table>`);
 
@@ -7728,9 +7832,12 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
     ${printRow('A/E Sys. Oil', `${fmtLube(row.geLoCons)} L`)}`);
 
   const routeStr = `${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}`;
+  const subtitle = noonOp
+    ? (isSea ? 'Noon Report — At Sea' : 'Noon Report — Port / Anchorage')
+    : (isSea ? 'At Sea Report' : 'Port / Anchorage Report');
 
   return `<div class="pr-sheet">
-    ${printDocHeader({ title: entry.operation, subtitle: isSea ? 'At Sea Report' : 'Port / Anchorage Report', badge: entry.condition })}
+    ${printDocHeader({ title: entry.operation, subtitle, badge: entry.condition })}
     ${printMetaGrid([
       {label:'Date & Time', value:dtStr},
       {label:'Condition', value:entry.condition},
@@ -7744,12 +7851,12 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
       ${printSection('Fuel R.O.B.', fuelInner)}
       ${printSection('Lube Oil R.O.B.', lubeInner)}
       ${fwSection}
+      ${weatherSection}
       ${engineRoomSection}
       ${portSection}
       ${voyageSection}
       ${sfocSection}
       ${cylSection}
-      ${turboSection}
       ${consSection}
       <div class="pr-span2">${perfSection}</div>
     </div>
@@ -8352,9 +8459,11 @@ function openVoyageSummary(entryId){
 
   const r = entry.report || {};
   const isSea = SEA_TYPE_OPS.has(entry.operation);
-  document.getElementById('vsSeaReportBlock').style.display = isSea ? '' : 'none';
+  const meRunning = mainEngineInUse(entry, row);
+  const showMeDetail = isSea && meRunning;
+  document.getElementById('vsSeaReportBlock').style.display = showMeDetail ? '' : 'none';
 
-  // Others (ex-Common ER/tank + scavenge) — always available
+  // Others (ER/tank) always available; scavenge / pump mark / fuel temp only with M/E in use
   document.getElementById('vs_erTemp').value = r.erTemp ?? '';
   document.getElementById('vs_swTemp').value = r.swTemp ?? '';
   document.getElementById('vs_stTemp').value = r.stTemp ?? '';
@@ -8366,13 +8475,18 @@ function openVoyageSummary(entryId){
   document.getElementById('vs_fuelTemp').value = r.fuelTemp ?? '';
   document.getElementById('vs_pressDiff').value = r.pressDiff ?? '';
   document.getElementById('vs_remarks').value = r.remarks ?? '';
+  ['vs_scavTemp','vs_scavPress','vs_pumpMark','vs_fuelTemp','vs_pressDiff'].forEach(id=>{
+    const el = document.getElementById(id);
+    const wrap = el?.closest('.field');
+    if (wrap) wrap.style.display = showMeDetail ? '' : 'none';
+  });
 
-  // Sea: cylinders + turbos; Others stays beside T/C boxes
+  // Sea + M/E in use: cylinders + turbos; ER others always stay beside
   const cylBox = document.getElementById('vsCylFields');
   const turboBox = document.getElementById('vsTurboFields');
   const turboRow = document.getElementById('vsTurboScavRow');
   const cylN = meCylinderCount();
-  if (isSea){
+  if (showMeDetail){
     cylBox.innerHTML = Array.from({length:cylN}, (_,i)=>{
       const n = i+1;
       return `<div class="unit-box"><h3>Cyl ${n}</h3>
@@ -9083,8 +9197,17 @@ function printVoyageSummary(entryId){
       }).join('')}
     </table>`);
 
+  const report = entry.report || {};
+  const noonOp = isNoonReportOp(entry.operation);
+  const isSea = SEA_TYPE_OPS.has(entry.operation);
+  const meRunning = mainEngineInUse(entry, row);
+  const weatherSection = noonOp ? printWeatherSection(entry) : '';
+  const cylSection = (isSea && meRunning) ? printMeCylinderSection(report) : '';
+  const turboOthersSection = printTurboOthersSection(report, { includeMeAux: isSea && meRunning });
+  const meSectionPrint = meRunning ? meSection : '';
+
   const sheetHtml = `<div class="pr-sheet">
-    ${printDocHeader({ title: 'Voyage Summary', subtitle: entry.operation, badge: entry.condition })}
+    ${printDocHeader({ title: noonOp ? 'Noon Report — Voyage Summary' : 'Voyage Summary', subtitle: entry.operation, badge: entry.condition })}
     ${printMetaGrid([
       {label:'Date & Time', value:dtStr},
       {label:'Voyage No.', value:state.setup.voyageNumber||'—'},
@@ -9096,7 +9219,10 @@ function printVoyageSummary(entryId){
       ${voyageSection}
       ${fuelSection}
       ${fwSection}
-      ${meSection}
+      ${weatherSection}
+      ${meSectionPrint}
+      ${cylSection}
+      ${turboOthersSection}
       ${geSection}
       ${blrIncSection}
       ${voyageAvgSection}
