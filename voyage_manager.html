@@ -707,6 +707,40 @@
     font-family:'Inter',sans-serif; font-size:8.5px; color:var(--pr-ink,#0a1420); line-height:1.25;
   }
   .pr-sheet.pr-dense{ font-size:7.5px; line-height:1.2; }
+  /* Noon / voyage summary portrait — readable office sizes (body 10 / headings 11) */
+  .pr-sheet.pr-sheet-noon{
+    font-size:10px; line-height:1.35;
+  }
+  .pr-sheet.pr-sheet-noon.pr-dense{ font-size:10px; line-height:1.3; }
+  .pr-sheet.pr-sheet-noon .pr-doc-title{ font-size:15px; }
+  .pr-sheet.pr-sheet-noon .pr-doc-vessel{ font-size:12px; }
+  .pr-sheet.pr-sheet-noon .pr-doc-voy-num{ font-size:11px; }
+  .pr-sheet.pr-sheet-noon .pr-doc-badge,
+  .pr-sheet.pr-sheet-noon .pr-doc-dept,
+  .pr-sheet.pr-sheet-noon .pr-doc-subtitle{ font-size:9px; }
+  .pr-sheet.pr-sheet-noon .pr-meta-lbl,
+  .pr-sheet.pr-sheet-noon .pr-kpi-lbl,
+  .pr-sheet.pr-sheet-noon .pr-doc-voy-label{ font-size:9px; }
+  .pr-sheet.pr-sheet-noon .pr-meta-val{ font-size:10px; }
+  .pr-sheet.pr-sheet-noon .pr-kpi-val{ font-size:11px; }
+  .pr-sheet.pr-sheet-noon .pr-section-title{ font-size:11px; padding:1mm 1.4mm; }
+  .pr-sheet.pr-sheet-noon .pr-section-body{ padding:1.2mm 1.4mm; }
+  .pr-sheet.pr-sheet-noon .pr-row{ padding:0.45mm 0; }
+  .pr-sheet.pr-sheet-noon .pr-row-lbl,
+  .pr-sheet.pr-sheet-noon .pr-row-val{ font-size:10px; }
+  .pr-sheet.pr-sheet-noon .pr-table,
+  .pr-sheet.pr-sheet-noon .pr-table td{ font-size:10px; }
+  .pr-sheet.pr-sheet-noon .pr-table th{ font-size:10px; padding:0.7mm 0.9mm; }
+  .pr-sheet.pr-sheet-noon .pr-table.pr-table-wide th,
+  .pr-sheet.pr-sheet-noon .pr-table.pr-table-wide td{ font-size:10px; padding:0.55mm 0.7mm; }
+  .pr-sheet.pr-sheet-noon .pr-table.pr-table-xl th,
+  .pr-sheet.pr-sheet-noon .pr-table.pr-table-xl td{ font-size:9px; padding:0.45mm 0.55mm; }
+  .pr-sheet.pr-sheet-noon .pr-remarks-title{ font-size:10px; }
+  .pr-sheet.pr-sheet-noon .pr-remarks-body{ font-size:10px; }
+  .pr-sheet.pr-sheet-noon .pr-sign-name{ font-size:11px; }
+  .pr-sheet.pr-sheet-noon .pr-sign-role{ font-size:9px; }
+  .pr-sheet.pr-sheet-noon .pr-grid{ gap:2mm; margin-bottom:2mm; }
+  .pr-sheet.pr-sheet-noon .pr-kpi{ gap:1.5mm; margin-bottom:2mm; }
   .pr-doc-header{
     display:grid; grid-template-columns:1fr auto 1fr; align-items:end; gap:1.5mm;
     padding-bottom:1.2mm; margin-bottom:1.2mm; border-bottom:1.5px solid #122238;
@@ -1461,7 +1495,7 @@
 
       <div class="btn-row">
         <button class="primary" id="btnSaveVoyageSummary">Save Summary &amp; Report Data</button>
-        <button class="ghost" id="btnPrintVoyageSummary">Print Voyage Summary (A4, 2-Up)</button>
+        <button class="ghost" id="btnPrintVoyageSummary">Print Noon / Voyage Summary (A4 Portrait)</button>
         <button class="ghost" id="btnCloseVoyageSummary">Close</button>
       </div>
       <div class="hint">Edit distance, RPM, boiler/incinerator, freshwater, misc., unit fuel cons, and ROB consumption here. Consumption cells default from meter readings — override any cell as needed. Saving updates this entry and recalculates every later entry.</div>
@@ -6920,10 +6954,74 @@ function formatDouglasSea(state){
   return labels[n] != null ? `${n} — ${labels[n]}` : String(n);
 }
 
+/** Read open Voyage Summary form into a print snapshot so unsaved weather / M/E detail are not dropped. */
+function snapshotVoyageSummaryForPrint(entry){
+  if (!entry) return entry;
+  const e = {
+    ...entry,
+    weather: { ...(entry.weather || {}) },
+    report: { ...(entry.report || {}) }
+  };
+  if (!(isVoyageSummaryOpen() && currentVsEntryId === entry.id)) return e;
+
+  const num = (id)=>{
+    const el = document.getElementById(id);
+    if (!el || el.value === '') return null;
+    const v = parseFloat(el.value);
+    return isNaN(v) ? null : v;
+  };
+  const str = (id)=> document.getElementById(id)?.value || '';
+
+  e.weather = {
+    windDir: str('vs_windDir'),
+    windBft: num('vs_windBft'),
+    seaState: num('vs_seaState'),
+    swellDir: str('vs_swellDir'),
+    airTemp: num('vs_airTemp'),
+    seaTemp: num('vs_seaTemp')
+  };
+
+  const cylN = meCylinderCount();
+  const pumpRack = Array.from({length:cylN}, (_,i)=> num(`vs_pumpRack${i+1}`));
+  const exhaustTemp = Array.from({length:cylN}, (_,i)=> num(`vs_exhaust${i+1}`));
+  if (pumpRack.some(v=>v!=null) || exhaustTemp.some(v=>v!=null)){
+    e.report.pumpRack = pumpRack;
+    e.report.exhaustTemp = exhaustTemp;
+  }
+  const turboN = turboCount();
+  const turbos = Array.from({length:turboN}, (_,i)=>({
+    in: num(`vs_t${i+1}in`), out: num(`vs_t${i+1}out`), rpm: num(`vs_t${i+1}rpm`)
+  }));
+  if (turbos.some(t=>t.in!=null || t.out!=null || t.rpm!=null)){
+    e.report.turbos = turbos;
+    e.report.turbo1 = turbos[0] || null;
+    e.report.turbo2 = turbos[1] || null;
+  }
+  ['erTemp','swTemp','stTemp','bilgeRob','sludgeRob','scavTemp','scavPress','pumpMark','fuelTemp','pressDiff',
+   'airCoolerIn','airCoolerOut','meLoTemp','meLoPress','geLoTemp','purifierHrs','foVisc','foDens','shaftKw'
+  ].forEach((key, idx)=>{
+    const idMap = {
+      erTemp:'vs_erTemp', swTemp:'vs_swTemp', stTemp:'vs_stTemp', bilgeRob:'vs_bilgeRob', sludgeRob:'vs_sludgeRob',
+      scavTemp:'vs_scavTemp', scavPress:'vs_scavPress', pumpMark:'vs_pumpMark', fuelTemp:'vs_fuelTemp', pressDiff:'vs_pressDiff',
+      airCoolerIn:'vs_acIn', airCoolerOut:'vs_acOut', meLoTemp:'vs_meLoTemp', meLoPress:'vs_meLoPress',
+      geLoTemp:'vs_geLoTemp', purifierHrs:'vs_purifierHrs', foVisc:'vs_foVisc', foDens:'vs_foDens', shaftKw:'vs_shaftKw'
+    };
+    const v = num(idMap[key]);
+    if (v != null) e.report[key] = v;
+  });
+  const remarks = document.getElementById('vs_remarks')?.value;
+  if (remarks != null) e.report.remarks = remarks;
+  return e;
+}
+
 function printWeatherSection(entry){
   const w = entry?.weather || {};
-  const hasAny = w.windDir || w.windBft != null && w.windBft !== '' || w.seaState != null && w.seaState !== ''
-    || w.swellDir || w.airTemp != null || w.seaTemp != null;
+  const hasAny = !!(w.windDir
+    || (w.windBft != null && w.windBft !== '')
+    || (w.seaState != null && w.seaState !== '')
+    || w.swellDir
+    || (w.airTemp != null && w.airTemp !== '')
+    || (w.seaTemp != null && w.seaTemp !== ''));
   if (!hasAny) return '';
   return printSection('Weather &amp; Sea State', [
     printRow('Wind Direction', escPrint(w.windDir || '—')),
@@ -7999,13 +8097,14 @@ function fitPrintPortraitRoot(doc){
     return Math.max(0.75, Math.min(1, Math.min(availH / contentH, availW / contentW) * 0.98));
   };
 
+  const isNoon = !!inner.querySelector('.pr-sheet-noon');
   let scale = measure();
-  /* Keep bunker leg tables at Calibri 11px — do not densify/shrink those cells */
-  if (!isBunker && scale < 0.92){
+  /* Keep bunker / noon body at readable sizes — densify only for dense non-noon sheets */
+  if (!isBunker && !isNoon && scale < 0.92){
     inner.querySelector('.pr-sheet')?.classList.add('pr-dense');
     scale = measure();
   }
-  if (!isBunker && scale < 0.82){
+  if (!isBunker && !isNoon && scale < 0.82){
     doc.querySelectorAll('table.pr-table').forEach(t=>{
       if (t.classList.contains('pr-bunker-entry-table')) return;
       t.classList.remove('pr-table-wide');
@@ -8013,7 +8112,8 @@ function fitPrintPortraitRoot(doc){
     });
     scale = measure();
   }
-  if (!isBunker) scale = Math.max(0.75, scale);
+  if (isNoon) scale = Math.max(0.82, scale);
+  else if (!isBunker) scale = Math.max(0.75, scale);
 
   inner.style.zoom = String(scale);
   doc.documentElement.style.height = '297mm';
@@ -8221,7 +8321,7 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
     ? (isSea ? 'Noon Report — At Sea' : 'Noon Report — Port / Anchorage')
     : (isSea ? 'At Sea Report' : 'Port / Anchorage Report');
 
-  return `<div class="pr-sheet">
+  return `<div class="pr-sheet${noonOp ? ' pr-sheet-noon' : ''}">
     ${printDocHeader({ title: entry.operation, subtitle, badge: entry.condition })}
     ${printMetaGrid([
       {label:'Date & Time', value:dtStr},
@@ -8233,17 +8333,17 @@ function buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr){
     ])}
     ${printKpiRow(kpiItems)}
     <div class="pr-grid">
+      ${weatherSection}
+      ${cylSection}
       ${printSection('Fuel R.O.B.', fuelInner)}
       ${printSection('Lube Oil R.O.B.', lubeInner)}
       ${fwSection}
-      ${weatherSection}
       ${engineRoomSection}
       ${printEcaSection(report)}
       ${printSoundingsSection(report)}
       ${portSection}
       ${voyageSection}
       ${sfocSection}
-      ${cylSection}
       ${consSection}
       <div class="pr-span2">${perfSection}</div>
     </div>
@@ -8262,7 +8362,8 @@ function printSupplementaryReport(entry, isSea, report){
   const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 
   const sheetHTML = buildReportSheetHTML(entry, isSea, report, row, asOf, dtStr);
-  printSinglePage(sheetHTML);
+  if (isNoonReportOp(entry.operation)) printPortraitSinglePage(sheetHTML);
+  else printSinglePage(sheetHTML);
 }
 
 function loadEntryIntoForm(id){
@@ -9546,9 +9647,10 @@ function renderPrintHistoryList(){
 }
 
 function printVoyageSummary(entryId){
-  const entry = state.entries.find(e=>e.id===entryId);
+  const baseEntry = state.entries.find(e=>e.id===entryId);
   const row = getComputedRow(entryId);
-  if (!entry || !row) return;
+  if (!baseEntry || !row) return;
+  const entry = snapshotVoyageSummaryForPrint(baseEntry);
 
   const {perf} = computeDerived();
   const sorted = sortedEntries();
@@ -9676,13 +9778,16 @@ function printVoyageSummary(entryId){
   const noonOp = isNoonReportOp(entry.operation);
   const isSea = SEA_TYPE_OPS.has(entry.operation);
   const meRunning = mainEngineInUse(entry, row);
-  const showMeDetail = canShowMeDetailOp(entry.operation) && meRunning;
-  const weatherSection = (noonOp || isSea) ? printWeatherSection(entry) : '';
+  /* Prefer showing M/E cyl detail whenever the open form (or saved report) has readings. */
+  const hasCylData = !!(report.pumpRack?.some(v=>v!=null&&v!=='') || report.exhaustTemp?.some(v=>v!=null&&v!==''));
+  const showMeDetail = (canShowMeDetailOp(entry.operation) && meRunning) || hasCylData;
+  const weatherHtml = printWeatherSection(entry);
+  const weatherSection = (noonOp || isSea || weatherHtml) ? weatherHtml : '';
   const cylSection = showMeDetail ? printMeCylinderSection(report) : '';
   const turboOthersSection = printTurboOthersSection(report, { includeMeAux: showMeDetail });
   const meSectionPrint = meRunning ? meSection : '';
 
-  const sheetHtml = `<div class="pr-sheet">
+  const sheetHtml = `<div class="pr-sheet pr-sheet-noon">
     ${printDocHeader({ title: noonOp ? 'Noon Report — Voyage Summary' : 'Voyage Summary', subtitle: entry.operation, badge: entry.condition })}
     ${printMetaGrid([
       {label:'Date & Time', value:dtStr},
@@ -9692,12 +9797,12 @@ function printVoyageSummary(entryId){
     ], 4)}
     ${printKpiRow(kpiItems)}
     <div class="pr-grid">
+      ${weatherSection}
+      ${cylSection}
       ${voyageSection}
       ${fuelSection}
       ${fwSection}
-      ${weatherSection}
       ${meSectionPrint}
-      ${cylSection}
       ${turboOthersSection}
       ${printEcaSection(report)}
       ${printSoundingsSection(report)}
@@ -9709,8 +9814,8 @@ function printVoyageSummary(entryId){
     ${printSignatory()}
   </div>`;
 
-  const fittedHtml = printSinglePage(sheetHtml);
-  recordPrintHistory('voyage-summary', entry, fittedHtml);
+  const fittedHtml = printPortraitSinglePage(sheetHtml);
+  recordPrintHistory(noonOp ? 'noon-report' : 'voyage-summary', entry, fittedHtml);
 }
 document.getElementById('btnPrintVoyageSummary').addEventListener('click', ()=>{
   if (!currentVsEntryId) return;
