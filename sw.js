@@ -1,6 +1,7 @@
-const CACHE = 'noon-report-v66';
+const CACHE = 'noon-report-v67';
 const PRECACHE = [
   './voyage_manager.html',
+  './sw.js',
   './manifest.webmanifest',
   './icons/logoBG.png',
   './icons/apple-touch-icon.png',
@@ -8,16 +9,30 @@ const PRECACHE = [
   './icons/icon-512.png'
 ];
 
+async function notifyClients(message){
+  const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  clients.forEach((client) => {
+    try{ client.postMessage(message); }catch(_){}
+  });
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE).then(async (cache) => {
+      const total = PRECACHE.length;
+      let done = 0;
+      await notifyClients({ type: 'INSTALL_PROGRESS', phase: 'start', done: 0, total, pct: 0 });
       for (const url of PRECACHE) {
         try {
           await cache.add(url);
         } catch (_) {
           /* optional assets (icons) should not block install */
         }
+        done += 1;
+        const pct = Math.round((done / total) * 100);
+        await notifyClients({ type: 'INSTALL_PROGRESS', phase: 'file', url, done, total, pct });
       }
+      await notifyClients({ type: 'INSTALL_PROGRESS', phase: 'done', done: total, total, pct: 100 });
       await self.skipWaiting();
     })
   );
@@ -58,8 +73,12 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
+  const data = event.data || {};
+  if (data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+  }
+  if (data.type === 'GET_CACHE_NAME' && event.source) {
+    try{ event.source.postMessage({ type: 'CACHE_NAME', cache: CACHE, precache: PRECACHE }); }catch(_){}
   }
 });
 

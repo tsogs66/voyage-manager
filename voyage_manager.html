@@ -266,6 +266,35 @@
   .receipt-row span.desc{overflow:hidden; text-overflow:ellipsis;}
 
   .hint{font-size:11px; color:var(--paper-dim); margin-top:4px; line-height:1.5;}
+  .install-progress-wrap{margin-top:12px;}
+  .install-progress-meta{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--paper-dim);
+    display:flex; justify-content:space-between; gap:10px; margin-bottom:6px; flex-wrap:wrap;
+  }
+  .install-progress-track{
+    height:12px; border-radius:4px; background:rgba(0,0,0,0.28);
+    border:1px solid var(--line-strong); overflow:hidden; position:relative;
+  }
+  .install-progress-bar{
+    height:100%; width:0%;
+    background:linear-gradient(90deg, var(--brass-dim), var(--brass-bright), var(--teal));
+    transition:width 0.18s ease;
+  }
+  .install-progress-track.indeterminate .install-progress-bar{
+    width:38% !important; transition:none;
+    animation:install-progress-slide 1.15s ease-in-out infinite;
+  }
+  @keyframes install-progress-slide{
+    0%{transform:translateX(-120%);}
+    100%{transform:translateX(320%);}
+  }
+  /* Keep install progress visible even when short landscape hides .hint */
+  html.short-viewport #androidInstallProgressWrap{display:block !important;}
+  html.short-viewport #androidInstallProgressWrap .install-progress-meta{display:flex !important;}
+  @media (orientation: landscape) and (max-height:560px){
+    #androidInstallProgressWrap{display:block !important;}
+    #androidInstallProgressWrap .install-progress-meta{display:flex !important;}
+  }
   .bunker-plan-head{display:flex; flex-wrap:wrap; gap:12px 18px; align-items:end; margin-bottom:14px;}
   .bunker-plan-head .field{min-width:140px; flex:1 1 140px;}
   .bunker-plan-head .btn-row{flex:1 1 100%;}
@@ -2050,20 +2079,30 @@
     </div>
     <div class="panel" id="androidInstallPanel">
       <h2>Install on Android / tablet</h2>
-      <div class="hint" id="androidInstallHint">Install Noon Report on this device for offline use and a home-screen icon. Works on Android phones, Android tablets, and iPad (Safari).</div>
+      <div class="hint" id="androidInstallHint">Install Noon Report on this device for offline use and a home-screen icon. Works on Android phones, Android tablets, and iPad (Safari). On slow ship internet, wait for the progress bar to finish before leaving this page.</div>
       <div class="btn-row" style="margin-top:10px;">
         <button class="primary small" type="button" id="btnInstallApp">Install App</button>
         <button class="ghost small" type="button" id="btnInstallHelp">How to install</button>
+      </div>
+      <div class="install-progress-wrap" id="androidInstallProgressWrap" style="display:none;" aria-live="polite">
+        <div class="install-progress-meta">
+          <span id="androidInstallProgressLabel">Preparing offline files…</span>
+          <span id="androidInstallProgressPct">0%</span>
+        </div>
+        <div class="install-progress-track" id="androidInstallProgressTrack" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="install-progress-bar" id="androidInstallProgressBar"></div>
+        </div>
       </div>
       <div class="hint" id="androidInstallStatus" style="margin-top:8px;"></div>
       <div class="hint" id="androidInstallSteps" style="display:none; margin-top:8px;">
         <strong>Android (Chrome / Edge / Samsung Internet)</strong><br>
         1. Open this page over <strong>HTTPS</strong> (or localhost).<br>
-        2. Tap the browser menu (⋮) → <strong>Install app</strong> or <strong>Add to Home screen</strong>.<br>
-        3. Confirm. Open from the home screen icon for full offline use.<br><br>
+        2. Tap <strong>Install App</strong> above and wait for the progress bar to reach 100%.<br>
+        3. If no install popup appears: browser menu (⋮) → <strong>Install app</strong> or <strong>Add to Home screen</strong>.<br>
+        4. Confirm. Open from the home screen icon for full offline use.<br><br>
         <strong>iPad / iPhone (Safari)</strong><br>
-        1. Tap the Share button.<br>
-        2. Choose <strong>Add to Home Screen</strong> → Add.
+        1. Tap <strong>Install App</strong> and wait for the progress bar.<br>
+        2. Tap Share → <strong>Add to Home Screen</strong> → Add.
       </div>
     </div>
     <div class="panel">
@@ -11457,10 +11496,20 @@ function registerServiceWorker(){
     });
   }).catch(err=>console.warn('SW registration failed', err));
   navigator.serviceWorker.addEventListener('message', (event)=>{
-    if (event.data && event.data.type === 'SYNC_REQUESTED'){
+    const data = event.data || {};
+    if (data.type === 'SYNC_REQUESTED'){
       if (ensureSyncConfig().autoSync && ensureSyncConfig().pendingChanges && navigator.onLine){
         queueBackgroundSync();
       }
+    }
+    if (data.type === 'INSTALL_PROGRESS'){
+      applyAndroidInstallProgress(data.pct || 0, data.phase === 'done'
+        ? 'Offline files ready.'
+        : (`Caching ${data.done || 0}/${data.total || 0}…`), { indeterminate: false });
+    }
+    if (data.type === 'CACHE_NAME' && data.cache){
+      androidInstallCacheName = data.cache;
+      if (Array.isArray(data.precache) && data.precache.length) androidInstallAssets = data.precache.slice();
     }
   });
   if (navigator.storage && navigator.storage.persist){
@@ -11471,6 +11520,17 @@ function registerServiceWorker(){
 }
 
 let deferredInstallPrompt = null;
+let androidInstallBusy = false;
+let androidInstallCacheName = 'noon-report-v67';
+let androidInstallAssets = [
+  './voyage_manager.html',
+  './sw.js',
+  './manifest.webmanifest',
+  './icons/logoBG.png',
+  './icons/apple-touch-icon.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
+];
 
 function isStandalonePwa(){
   try{
@@ -11489,6 +11549,123 @@ function isTouchInstallDevice(){
     return window.matchMedia('(hover: none) and (pointer: coarse)').matches
       || ((navigator.maxTouchPoints||0) > 0 && Math.min(screen.width, screen.height) <= 1200);
   }catch(_){ return isAndroidUa() || isAppleMobileUa(); }
+}
+
+function setAndroidInstallProgressVisible(show){
+  const wrap = document.getElementById('androidInstallProgressWrap');
+  if (wrap) wrap.style.display = show ? 'block' : 'none';
+}
+
+function applyAndroidInstallProgress(pct, label, opts){
+  const wrap = document.getElementById('androidInstallProgressWrap');
+  const bar = document.getElementById('androidInstallProgressBar');
+  const track = document.getElementById('androidInstallProgressTrack');
+  const pctEl = document.getElementById('androidInstallProgressPct');
+  const labelEl = document.getElementById('androidInstallProgressLabel');
+  if (!wrap || !bar) return;
+  wrap.style.display = 'block';
+  const n = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+  const indeterminate = !!(opts && opts.indeterminate);
+  if (track){
+    track.classList.toggle('indeterminate', indeterminate);
+    track.setAttribute('aria-valuenow', String(n));
+  }
+  bar.style.width = indeterminate ? '38%' : (n + '%');
+  if (pctEl) pctEl.textContent = indeterminate ? '…' : (n + '%');
+  if (labelEl && label) labelEl.textContent = label;
+}
+
+function formatBytes(n){
+  if (!(n > 0)) return '0 B';
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+async function fetchAssetForCache(url, onBytes){
+  const res = await fetch(url, { cache: 'reload', credentials: 'same-origin' });
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + url);
+  const total = Number(res.headers.get('content-length')) || 0;
+  if (!res.body || !total || !res.body.getReader){
+    const buf = await res.arrayBuffer();
+    if (onBytes) onBytes(buf.byteLength, buf.byteLength || 1);
+    return new Response(buf, { status: res.status, statusText: res.statusText, headers: res.headers });
+  }
+  const reader = res.body.getReader();
+  const chunks = [];
+  let received = 0;
+  while (true){
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.byteLength;
+    if (onBytes) onBytes(received, total);
+  }
+  const headers = new Headers(res.headers);
+  return new Response(new Blob(chunks), { status: res.status, statusText: res.statusText, headers });
+}
+
+async function prepareAndroidOfflineInstall(){
+  if (!('caches' in window)){
+    applyAndroidInstallProgress(100, 'Browser cache unavailable — continue with home-screen install.', { indeterminate: false });
+    return;
+  }
+  try{
+    if (navigator.serviceWorker && navigator.serviceWorker.controller){
+      navigator.serviceWorker.controller.postMessage({ type: 'GET_CACHE_NAME' });
+    }
+  }catch(_){}
+
+  const assets = androidInstallAssets.slice();
+  const cache = await caches.open(androidInstallCacheName);
+  let completedBytes = 0;
+  let knownTotal = 0;
+  const sizes = new Array(assets.length).fill(0);
+
+  /* Head probes for better total when Content-Length is available */
+  await Promise.all(assets.map(async (url, i)=>{
+    try{
+      const head = await fetch(url, { method: 'HEAD', cache: 'reload', credentials: 'same-origin' });
+      const len = Number(head.headers.get('content-length')) || 0;
+      if (len > 0){ sizes[i] = len; knownTotal += len; }
+    }catch(_){}
+  }));
+
+  applyAndroidInstallProgress(1, 'Downloading offline files…', { indeterminate: knownTotal <= 0 });
+
+  for (let i = 0; i < assets.length; i++){
+    const url = assets[i];
+    const name = url.replace(/^\.\//, '');
+    try{
+      const response = await fetchAssetForCache(url, (received, total)=>{
+        const fileTotal = sizes[i] || total || 0;
+        const otherKnown = knownTotal - (sizes[i] || 0);
+        const overallTotal = (knownTotal > 0 ? knownTotal : (otherKnown + fileTotal)) || 1;
+        const overallDone = completedBytes + received;
+        const pct = Math.max(1, Math.min(99, Math.round((overallDone / overallTotal) * 100)));
+        applyAndroidInstallProgress(
+          pct,
+          `Downloading ${name} (${formatBytes(received)}${fileTotal ? ' / ' + formatBytes(fileTotal) : ''})…`,
+          { indeterminate: false }
+        );
+      });
+      await cache.put(url, response.clone());
+      /* Also store absolute URL form used by some navigations */
+      try{
+        const abs = new URL(url, location.href).href;
+        await cache.put(abs, response.clone());
+      }catch(_){}
+      const finalSize = sizes[i] || Number(response.headers.get('content-length')) || 0;
+      completedBytes += finalSize || 1;
+      if (!sizes[i] && finalSize){ sizes[i] = finalSize; knownTotal += finalSize; }
+    }catch(err){
+      console.warn('Install cache failed for', url, err);
+    }
+    const pct = Math.max(1, Math.min(99, Math.round(((i + 1) / assets.length) * 100)));
+    applyAndroidInstallProgress(pct, `Cached ${i + 1}/${assets.length}: ${name}`, { indeterminate: false });
+  }
+
+  applyAndroidInstallProgress(100, 'Offline files ready. Continuing install…', { indeterminate: false });
 }
 
 function updateAndroidInstallUi(){
@@ -11511,27 +11688,29 @@ function updateAndroidInstallUi(){
     btn.classList.add('ghost');
     if (status) status.textContent = 'Running as installed app on this device. Data stays local; use Sync if you need multi-device.';
     if (steps) steps.style.display = 'none';
+    setAndroidInstallProgressVisible(false);
     return;
   }
 
-  btn.disabled = false;
-  btn.classList.add('primary');
-  btn.classList.remove('ghost');
-  if (deferredInstallPrompt){
+  if (!androidInstallBusy){
+    btn.disabled = false;
+    btn.classList.add('primary');
+    btn.classList.remove('ghost');
     btn.textContent = 'Install App';
-    if (status) status.textContent = 'Tap Install App to add Noon Report to your home screen.';
-  } else {
-    btn.textContent = 'Install App';
-    if (status){
-      if (insecure){
-        status.textContent = 'Open this page with HTTPS (or localhost) so Android can offer Install. Meanwhile use browser menu → Add to Home screen.';
-      } else if (isAndroidUa() || isTouchInstallDevice()){
-        status.textContent = 'Tap Install App for steps. On many tablets: browser menu (⋮) → Install app / Add to Home screen.';
-      } else if (isAppleMobileUa()){
-        status.textContent = 'On iPad/iPhone: Safari Share → Add to Home Screen.';
-      } else {
-        status.textContent = 'On phone/tablet: tap Install App (or How to install). Chrome may also offer Install from the address bar.';
-      }
+  }
+  if (status){
+    if (androidInstallBusy){
+      status.textContent = 'Keep this page open until the progress bar finishes — ship internet can take several minutes.';
+    } else if (deferredInstallPrompt){
+      status.textContent = 'Tap Install App — files download first (progress bar), then the home-screen prompt appears.';
+    } else if (insecure){
+      status.textContent = 'Open this page with HTTPS (or localhost) so Android can offer Install. Meanwhile use browser menu → Add to Home screen.';
+    } else if (isAndroidUa() || isTouchInstallDevice()){
+      status.textContent = 'Tap Install App and wait for the progress bar. If no popup appears: browser menu (⋮) → Install app / Add to Home screen.';
+    } else if (isAppleMobileUa()){
+      status.textContent = 'Tap Install App and wait for the progress bar, then Safari Share → Add to Home Screen.';
+    } else {
+      status.textContent = 'Tap Install App — progress bar shows offline file download, then follow home-screen steps if needed.';
     }
   }
 }
@@ -11543,6 +11722,7 @@ window.addEventListener('beforeinstallprompt', (e)=>{
 });
 window.addEventListener('appinstalled', ()=>{
   deferredInstallPrompt = null;
+  applyAndroidInstallProgress(100, 'Installed on this device.', { indeterminate: false });
   updateAndroidInstallUi();
 });
 
@@ -11551,25 +11731,44 @@ document.getElementById('btnInstallApp')?.addEventListener('click', async ()=>{
     alert('Noon Report is already installed on this device.');
     return;
   }
+  if (androidInstallBusy) return;
+
+  const btn = document.getElementById('btnInstallApp');
+  const steps = document.getElementById('androidInstallSteps');
+  androidInstallBusy = true;
+  if (btn){ btn.disabled = true; btn.textContent = 'Installing…'; }
+  updateAndroidInstallUi();
+  applyAndroidInstallProgress(0, 'Starting install — downloading offline files…', { indeterminate: true });
+
+  try{
+    await prepareAndroidOfflineInstall();
+  }catch(err){
+    console.warn(err);
+    applyAndroidInstallProgress(100, 'Download finished with warnings — continue home-screen install.', { indeterminate: false });
+  }
+
   if (deferredInstallPrompt){
+    applyAndroidInstallProgress(100, 'Offline files ready — confirm the browser install prompt…', { indeterminate: true });
     try{
       deferredInstallPrompt.prompt();
       await deferredInstallPrompt.userChoice;
     }catch(_){}
     deferredInstallPrompt = null;
-    updateAndroidInstallUi();
-    return;
-  }
-  /* Tablet/Android often never fires beforeinstallprompt — show manual steps */
-  const steps = document.getElementById('androidInstallSteps');
-  if (steps) steps.style.display = '';
-  if (isAndroidUa()){
-    alert('Android install:\n\n1. Tap the browser menu (⋮)\n2. Choose “Install app” or “Add to Home screen”\n3. Confirm\n\nTip: use Chrome/Edge over HTTPS for the Install option.');
-  } else if (isAppleMobileUa()){
-    alert('iPad / iPhone install:\n\n1. Tap Share\n2. Add to Home Screen\n3. Add');
+    applyAndroidInstallProgress(100, 'Install prompt closed. If needed, use browser menu → Add to Home screen.', { indeterminate: false });
   } else {
-    alert('Install from your browser menu:\n\n• Android: ⋮ → Install app / Add to Home screen\n• iPad: Share → Add to Home Screen\n\nPage must be served over HTTPS (or localhost).');
+    applyAndroidInstallProgress(100, 'Offline files ready. Use browser menu to add to Home screen.', { indeterminate: false });
+    if (steps) steps.style.display = '';
+    if (isAndroidUa()){
+      alert('Offline files are ready (see progress bar).\n\nNext:\n1. Tap the browser menu (⋮)\n2. Choose “Install app” or “Add to Home screen”\n3. Confirm\n\nTip: use Chrome/Edge over HTTPS.');
+    } else if (isAppleMobileUa()){
+      alert('Offline files are ready (see progress bar).\n\nNext:\n1. Tap Share\n2. Add to Home Screen\n3. Add');
+    } else {
+      alert('Offline files are ready (see progress bar).\n\nUse your browser menu → Install app / Add to Home screen.\nPage must be HTTPS (or localhost).');
+    }
   }
+
+  androidInstallBusy = false;
+  updateAndroidInstallUi();
 });
 document.getElementById('btnInstallHelp')?.addEventListener('click', ()=>{
   const steps = document.getElementById('androidInstallSteps');
