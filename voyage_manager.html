@@ -2122,11 +2122,12 @@
       </div>
       <div class="panel">
         <h2>IOPP / ORB Tanks</h2>
-        <div class="hint">Sludge tanks = IOPP item 3.1. Bilge holding tanks = IOPP item 3.3. Add cargo/slop/CBT tanks when ship type is tanker.</div>
+        <div class="hint">Sludge / oil residue tanks = IOPP item 3.1 (weekly C.11). Oily bilge water holding = IOPP item 3.3 (voluntary weekly under Code I). Bilge tanks/wells = other bilge spaces for voluntary weekly Code I. Add cargo/slop/CBT when ship type is tanker.</div>
         <div id="orbTankEditors"></div>
         <div class="btn-row">
-          <button class="ghost small" type="button" data-orb-tank-add="sludge">+ Sludge tank</button>
-          <button class="ghost small" type="button" data-orb-tank-add="bilge">+ Bilge holding</button>
+          <button class="ghost small" type="button" data-orb-tank-add="sludge">+ Sludge (3.1)</button>
+          <button class="ghost small" type="button" data-orb-tank-add="bilge">+ Oily bilge holding (3.3)</button>
+          <button class="ghost small" type="button" data-orb-tank-add="bilgeWells">+ Bilge tank / wells</button>
           <button class="ghost small" type="button" data-orb-tank-add="fuel">+ Fuel oil tank</button>
           <button class="ghost small" type="button" data-orb-tank-add="cargo">+ Cargo tank</button>
           <button class="ghost small" type="button" data-orb-tank-add="slop">+ Slop tank</button>
@@ -2143,8 +2144,29 @@
           <div class="field"><label>Date of operation</label><input type="date" id="orb_entryDate"></div>
           <div class="field"><label>Ship position / place (optional default)</label><input id="orb_defaultPos" placeholder="Lat/Long or port"></div>
         </div>
-        <div class="hint" id="orbNewHint">Select an operation code. Required item fields appear next — the app composes the ORB wording for you.</div>
+        <div class="hint" id="orbNewHint">Start with <strong>Weekly Inventory</strong> for sludge (C.11) and oily bilge / bilge tanks (Code I), or pick another operation code.</div>
         <div class="orb-op-grid" id="orbOpGrid"></div>
+      </div>
+      <div class="panel" id="orbWeeklyWizard" style="display:none;">
+        <h2>Weekly Tank Inventory</h2>
+        <div class="hint">MARPOL / MEPC.1/Circ.736: sludge / oil residue tanks (IOPP 3.1) → Code <strong>C 11.1 / 11.2 / 11.3</strong> for each tank. Oily bilge water holding (IOPP 3.3) and other bilge tanks/wells → Code <strong>I</strong> (voluntary). Enter retained m³ for every tank to include.</div>
+        <div id="orbWeeklyTankFields" style="margin-top:10px;"></div>
+        <label class="hint" style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;">
+          <input type="checkbox" id="orb_weeklyIncludeBilge" checked style="margin-top:3px;">
+          <span>Also save voluntary Code I weekly inventory for oily bilge holding + bilge tanks/wells (recommended for SMS / PSC clarity).</span>
+        </label>
+        <div class="form-grid cols3" style="margin-top:10px;">
+          <div class="field"><label>Officer in charge — name</label><input id="orb_weeklyOfficerName"></div>
+          <div class="field"><label>Rank</label><input id="orb_weeklyOfficerRank" placeholder="e.g. 2/E, 3/E, C/E"></div>
+          <div class="field"><label>Signature date</label><input type="date" id="orb_weeklyOfficerSignDate"></div>
+        </div>
+        <div class="field" style="margin-top:10px;"><label>Preview</label></div>
+        <div class="orb-preview" id="orbWeeklyPreview"></div>
+        <div class="btn-row">
+          <button class="primary small" type="button" id="btnOrbSaveWeekly">Save Weekly Inventory</button>
+          <button class="ghost small" type="button" id="btnOrbPreviewWeekly">Refresh Preview</button>
+          <button class="ghost small" type="button" id="btnOrbCancelWeekly">Cancel</button>
+        </div>
       </div>
       <div class="panel" id="orbEntryWizard" style="display:none;">
         <h2 id="orbWizardTitle">Operation</h2>
@@ -11764,7 +11786,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v70';
+let androidInstallCacheName = 'noon-report-v71';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -12527,8 +12549,9 @@ function renderOrbTankEditors(){
   if (!host || !window.EORB) return;
   const setup = orbSetup();
   const groups = [
-    ['sludge','Sludge tanks (IOPP 3.1)'],
-    ['bilge','Bilge holding tanks (IOPP 3.3)'],
+    ['sludge','Sludge / oil residue tanks (IOPP 3.1) — weekly C.11'],
+    ['bilge','Oily bilge water holding tanks (IOPP 3.3) — voluntary weekly Code I'],
+    ['bilgeWells','Bilge tanks / wells — voluntary weekly Code I'],
     ['fuel','Fuel oil tanks'],
     ['cargo','Cargo tanks (tankers)'],
     ['slop','Slop tanks (tankers)'],
@@ -12568,7 +12591,7 @@ function readOrbSetupFromForm(){
   setup.equipment.odmeFitted = document.getElementById('orb_odme')?.value === 'true';
   setup.disclaimerAck = !!document.getElementById('orb_disclaimer')?.checked;
   /* tanks from editors */
-  const tanks = { sludge:[], bilge:[], fuel:[], cargo:[], slop:[], cbt:[], dirtyBallast: setup.tanks.dirtyBallast || [] };
+  const tanks = { sludge:[], bilge:[], bilgeWells:[], fuel:[], cargo:[], slop:[], cbt:[], dirtyBallast: setup.tanks.dirtyBallast || [] };
   document.querySelectorAll('#orbTankEditors [data-orb-tank-row]').forEach(row=>{
     const key = row.getAttribute('data-orb-tank-row');
     if (!tanks[key]) tanks[key] = [];
@@ -12615,12 +12638,114 @@ function renderOrbOpGrid(){
   const part = Number(document.getElementById('orb_part')?.value || 1);
   const grid = document.getElementById('orbOpGrid');
   if (!grid) return;
+  const weeklyCard = part === 1 ? `
+    <button type="button" class="orb-op-card" id="btnOrbWeeklyInventory" data-orb-weekly="1" style="border-color:var(--brass);">
+      <div class="code">C.11 + I</div>
+      <div class="title"><strong>Weekly Inventory</strong> — sludge (IOPP 3.1), oily bilge holding (3.3), bilge tanks/wells</div>
+    </button>` : '';
   const ops = EORB.getPartOps(part).slice().sort((a,b)=> (b.common?1:0)-(a.common?1:0) || a.code.localeCompare(b.code));
-  grid.innerHTML = ops.map(op => `
+  grid.innerHTML = weeklyCard + ops.map(op => `
     <button type="button" class="orb-op-card" data-orb-code="${op.code}">
       <div class="code">${op.code}</div>
       <div class="title">${op.title}</div>
     </button>`).join('');
+}
+
+function collectWeeklySoundings(){
+  const rows = [];
+  document.querySelectorAll('#orbWeeklyTankFields [data-weekly-tank]').forEach(row=>{
+    const include = row.querySelector('[data-weekly-include]')?.checked !== false;
+    const robEl = row.querySelector('[data-weekly-rob]');
+    const capEl = row.querySelector('[data-weekly-cap]');
+    const robRaw = robEl?.value;
+    const capRaw = capEl?.value;
+    rows.push({
+      id: row.getAttribute('data-weekly-tank'),
+      group: row.getAttribute('data-weekly-group'),
+      name: row.getAttribute('data-weekly-name') || '',
+      capacityM3: capRaw === '' || capRaw == null ? null : parseFloat(capRaw),
+      robM3: robRaw === '' || robRaw == null ? null : parseFloat(robRaw),
+      include: include && robRaw !== '' && robRaw != null
+    });
+  });
+  return rows;
+}
+
+function renderWeeklyPreview(){
+  if (!window.EORB) return;
+  const setup = orbSetup();
+  const includeBilge = !!document.getElementById('orb_weeklyIncludeBilge')?.checked;
+  const built = EORB.buildWeeklyInventory(setup, collectWeeklySoundings(), { requireBilge: false });
+  const prev = document.getElementById('orbWeeklyPreview');
+  if (!prev) return;
+  if (!built.entries.some(e => e.code === 'C')){
+    prev.textContent = built.errors.join('\n') || 'Enter retained m³ for sludge tanks to preview C.11 lines.';
+    return;
+  }
+  const date = document.getElementById('orb_entryDate')?.value || '';
+  let text = '';
+  built.entries.forEach(ent => {
+    if (ent.code === 'I' && !includeBilge) return;
+    text += (ent.title || (ent.code)) + '\n';
+    (ent.lines || []).forEach(ln => {
+      text += `${EORB.formatOrbDate(date)}\t${ent.code}\t${ln.itemNo}\t${ln.text}\n`;
+    });
+    text += '\n';
+  });
+  if (includeBilge && !built.entries.some(e => e.code === 'I')){
+    text += 'Note: tick tanks and enter retained m³ under oily bilge / bilge wells to add voluntary Code I lines.';
+  }
+  prev.textContent = text.trim();
+}
+
+function openWeeklyInventoryWizard(){
+  if (!window.EORB) return;
+  const setup = orbSetup();
+  if (!setup.disclaimerAck){
+    alert('Acknowledge the e-ORB disclaimer in Vessel Setup before logging entries.');
+    return;
+  }
+  document.getElementById('orbEntryWizard').style.display = 'none';
+  const wiz = document.getElementById('orbWeeklyWizard');
+  if (wiz) wiz.style.display = '';
+  const host = document.getElementById('orbWeeklyTankFields');
+  const sections = [
+    ['sludge', 'Sludge / oil residue tanks (IOPP 3.1) — Code C 11.1 / 11.2 / 11.3'],
+    ['bilge', 'Oily bilge water holding tanks (IOPP 3.3) — Code I (voluntary)'],
+    ['bilgeWells', 'Bilge tanks / wells — Code I (voluntary)']
+  ];
+  host.innerHTML = sections.map(([group, label])=>{
+    const tanks = EORB.tanksForGroup(setup, group);
+    if (!tanks.length){
+      return `<h3 class="sub">${label}</h3><div class="hint">No tanks in setup — add them under Vessel Setup → IOPP / ORB Tanks.</div>`;
+    }
+    const rows = tanks.map(t => `
+      <div class="form-grid cols3" data-weekly-tank="${t.id}" data-weekly-group="${group}" data-weekly-name="${(t.name||'').replace(/"/g,'&quot;')}" style="margin-bottom:8px;align-items:end;">
+        <div class="field"><label>Tank</label>
+          <div style="display:flex;gap:8px;align-items:center;min-height:34px;">
+            <input type="checkbox" data-weekly-include checked>
+            <span style="font-size:13px;">${t.name || t.id}</span>
+          </div>
+        </div>
+        <div class="field"><label>Capacity (m³) — item 11.2</label>
+          <input type="number" step="0.001" data-weekly-cap value="${t.capacityM3!=null?t.capacityM3:''}">
+        </div>
+        <div class="field"><label>Retained ROB (m³) — item 11.3</label>
+          <input type="number" step="0.001" data-weekly-rob value="${t.robM3!=null?t.robM3:''}" placeholder="required to include">
+        </div>
+      </div>`).join('');
+    return `<h3 class="sub">${label}</h3>${rows}`;
+  }).join('');
+  const today = new Date(); today.setMinutes(today.getMinutes()-today.getTimezoneOffset());
+  const iso = today.toISOString().slice(0,10);
+  if (!document.getElementById('orb_entryDate')?.value) document.getElementById('orb_entryDate').value = iso;
+  const sign = document.getElementById('orb_weeklyOfficerSignDate');
+  if (sign && !sign.value) sign.value = iso;
+  const name = document.getElementById('orb_weeklyOfficerName');
+  if (name && !name.value) name.value = setup.chiefEng || document.getElementById('orb_officerName')?.value || '';
+  const rank = document.getElementById('orb_weeklyOfficerRank');
+  if (rank && !rank.value) rank.value = document.getElementById('orb_officerRank')?.value || '';
+  renderWeeklyPreview();
 }
 
 function orbCollectValues(){
@@ -12668,14 +12793,21 @@ function openOrbWizard(code){
   const part = Number(document.getElementById('orb_part')?.value || 1);
   const op = EORB.getOperation(part, code);
   if (!op) return;
-  _orbWizard = { part, code, selected: op.items.map(i => i.no) };
+  /* For Code C, default to weekly inventory items 11.1–11.3 (not disposal 12.x). */
+  const defaultSelected = (part === 1 && code === 'C')
+    ? op.items.map(i => i.no).filter(n => String(n).startsWith('11'))
+    : op.items.map(i => i.no);
+  _orbWizard = { part, code, selected: defaultSelected };
+  document.getElementById('orbWeeklyWizard').style.display = 'none';
   const wiz = document.getElementById('orbEntryWizard');
   if (wiz) wiz.style.display = '';
   document.getElementById('orbWizardTitle').textContent = `Code ${code} — ${op.title}`;
-  document.getElementById('orbWizardGuide').textContent = op.guide || '';
+  document.getElementById('orbWizardGuide').textContent = (op.guide || '') +
+    (part === 1 && code === 'C' ? ' Tip: use the Weekly Inventory card to sound all sludge + bilge tanks at once.' : '');
   const chips = document.getElementById('orbItemChips');
+  const selectedSet = new Set(defaultSelected);
   chips.innerHTML = op.items.map(it => `
-    <label class="orb-item-chip"><input type="checkbox" value="${it.no}" checked> <strong>${it.no}</strong> ${it.label}</label>`).join('');
+    <label class="orb-item-chip"><input type="checkbox" value="${it.no}" ${selectedSet.has(it.no)?'checked':''}> <strong>${it.no}</strong> ${it.label}</label>`).join('');
   const defaultPos = document.getElementById('orb_defaultPos')?.value || '';
   const fieldGrid = document.getElementById('orbFieldGrid');
   const seen = new Set();
@@ -12839,12 +12971,85 @@ document.getElementById('orbTankEditors')?.addEventListener('click', (e)=>{
 });
 document.getElementById('orb_part')?.addEventListener('change', ()=>{
   document.getElementById('orbEntryWizard').style.display = 'none';
+  document.getElementById('orbWeeklyWizard').style.display = 'none';
   renderOrbOpGrid();
 });
 document.getElementById('orbOpGrid')?.addEventListener('click', (e)=>{
+  if (e.target.closest('[data-orb-weekly]')){
+    openWeeklyInventoryWizard();
+    return;
+  }
   const card = e.target.closest('[data-orb-code]');
   if (!card) return;
   openOrbWizard(card.getAttribute('data-orb-code'));
+});
+document.getElementById('orbWeeklyTankFields')?.addEventListener('input', renderWeeklyPreview);
+document.getElementById('orbWeeklyTankFields')?.addEventListener('change', renderWeeklyPreview);
+document.getElementById('orb_weeklyIncludeBilge')?.addEventListener('change', renderWeeklyPreview);
+document.getElementById('btnOrbPreviewWeekly')?.addEventListener('click', renderWeeklyPreview);
+document.getElementById('btnOrbCancelWeekly')?.addEventListener('click', ()=>{
+  document.getElementById('orbWeeklyWizard').style.display = 'none';
+});
+document.getElementById('btnOrbSaveWeekly')?.addEventListener('click', async ()=>{
+  if (!window.EORB) return;
+  const setup = readOrbSetupFromForm();
+  const includeBilge = !!document.getElementById('orb_weeklyIncludeBilge')?.checked;
+  const soundings = collectWeeklySoundings();
+  /* Persist ROB values back into tank setup for next week */
+  soundings.forEach(s => {
+    const list = setup.tanks[s.group] || [];
+    const tank = list.find(t => t.id === s.id);
+    if (!tank) return;
+    if (s.capacityM3 != null && !isNaN(s.capacityM3)) tank.capacityM3 = s.capacityM3;
+    if (s.robM3 != null && !isNaN(s.robM3)) tank.robM3 = s.robM3;
+  });
+  state.setup.orb = setup;
+  const built = EORB.buildWeeklyInventory(setup, soundings, { requireBilge: false });
+  const entriesToSave = built.entries.filter(ent => ent.code !== 'I' || includeBilge);
+  if (!entriesToSave.some(e => e.code === 'C')){
+    alert('Cannot save weekly inventory:\n\n• ' + (built.errors.join('\n• ') || 'Enter retained m³ for at least one sludge tank (IOPP 3.1).'));
+    return;
+  }
+  if (includeBilge && !entriesToSave.some(e => e.code === 'I')){
+    if (!confirm('No oily bilge / bilge tank retained quantities entered.\n\nSave sludge weekly inventory (Code C) only?')) return;
+  }
+  const officerName = document.getElementById('orb_weeklyOfficerName')?.value?.trim();
+  if (!officerName){ alert('Officer in charge name is required.'); return; }
+  const date = document.getElementById('orb_entryDate')?.value;
+  if (!date){ alert('Date of operation is required.'); return; }
+  const officerRank = document.getElementById('orb_weeklyOfficerRank')?.value?.trim() || '';
+  const signDate = document.getElementById('orb_weeklyOfficerSignDate')?.value || date;
+  const now = new Date().toISOString();
+  let saved = 0;
+  for (const draft of entriesToSave){
+    const entry = {
+      id: 'orb_' + uid() + '_' + Date.now().toString(36) + '_' + saved,
+      vesselId: state.activeVesselId,
+      part: draft.part,
+      code: draft.code,
+      date,
+      selectedItems: draft.selectedItems,
+      values: draft.values,
+      lines: draft.lines,
+      officerName,
+      officerRank,
+      officerSignedAt: signDate + 'T12:00:00',
+      createdAt: now,
+      updatedAt: now,
+      voided: false,
+      weeklyInventory: true
+    };
+    state.orbEntries.push(entry);
+    await dbPut('orbEntries', entry);
+    saved += 1;
+  }
+  await saveSetup();
+  document.getElementById('orbWeeklyWizard').style.display = 'none';
+  renderOrbBrowse();
+  fillOrbSetupForm();
+  alert('Weekly inventory saved: ' + saved + ' ORB operation(s).\n\n• Code C — sludge tanks (IOPP 3.1)\n' +
+    (includeBilge && entriesToSave.some(e => e.code === 'I') ? '• Code I — oily bilge / bilge tanks (voluntary)\n' : '') +
+    '\nOpen Browse / Print to review.');
 });
 document.getElementById('orbItemChips')?.addEventListener('change', renderOrbPreview);
 document.getElementById('orbFieldGrid')?.addEventListener('input', renderOrbPreview);

@@ -20,7 +20,8 @@
       language: 'English',
       erbNote: 'Liberian vessels may only use Administration-approved ERBs and must carry a Declaration of MARPOL Electronic Record Book (Marine Notice POL-012).',
       tips: [
-        'Weekly C.11 inventory of IOPP Form A/B item 3.1 sludge tanks is expected even on long voyages.',
+        'Weekly C.11 inventory of IOPP Form A/B item 3.1 sludge tanks is expected even on long voyages (record each tank 11.1 / 11.2 / 11.3).',
+        'Recording retained quantity in IOPP 3.3 oily bilge water holding tanks is voluntary (MEPC.1/Circ.736) — use Code I if your SMS requires it.',
         'Keep reception-facility receipts with the ORB for C.12.1 / D.15.2 transfers.',
         'Use D (manual start) vs E (automatic mode) carefully — mode of starting, not equipment capability.'
       ]
@@ -31,6 +32,7 @@
       erbNote: 'RMI publishes approved ERB vendors (Marine Notice 7-041-5). Ship must hold ERB Declaration(s) from the registry portal.',
       tips: [
         'ORB Part I entries for IOPP ships shall be in English.',
+        'Weekly sludge inventory: C 11.1 tank identity, 11.2 capacity m³, 11.3 retention m³ — repeat for each 3.1 tank.',
         'Follow MI-402A item list and MEPC.1/Circ.736 example wording for PSC consistency.',
         'Incineration of sludge: record under C.12.3 with total time of operation.'
       ]
@@ -472,7 +474,8 @@
       }, seed.equipment || {}),
       tanks: {
         sludge: (seed.tanks && seed.tanks.sludge) || [{ id: 'sludge1', name: 'Sludge Tank', capacityM3: 5, robM3: 0 }],
-        bilge: (seed.tanks && seed.tanks.bilge) || [{ id: 'bilge1', name: 'Bilge Holding Tank', capacityM3: 10, robM3: 0 }],
+        bilge: (seed.tanks && seed.tanks.bilge) || [{ id: 'bilge1', name: 'Oily Bilge Water Holding Tank', capacityM3: 10, robM3: 0 }],
+        bilgeWells: (seed.tanks && seed.tanks.bilgeWells) || [{ id: 'bilgewell1', name: 'Engine Room Bilge Wells', capacityM3: null, robM3: 0 }],
         fuel: (seed.tanks && seed.tanks.fuel) || [],
         dirtyBallast: (seed.tanks && seed.tanks.dirtyBallast) || [],
         cargo: (seed.tanks && seed.tanks.cargo) || [],
@@ -499,13 +502,96 @@
     const t = (setup && setup.tanks) || {};
     if (group === 'sludge') return t.sludge || [];
     if (group === 'bilge') return t.bilge || [];
+    if (group === 'bilgeWells') return t.bilgeWells || [];
     if (group === 'fuel') return t.fuel || [];
     if (group === 'cargo') return t.cargo || [];
     if (group === 'slop') return t.slop || [];
     if (group === 'cbt') return t.cbt || [];
     if (group === 'dirtyBallast') return t.dirtyBallast || [];
     /* any */
-    return [].concat(t.sludge || [], t.bilge || [], t.fuel || [], t.cargo || [], t.slop || [], t.cbt || [], t.dirtyBallast || []);
+    return [].concat(t.sludge || [], t.bilge || [], t.bilgeWells || [], t.fuel || [], t.cargo || [], t.slop || [], t.cbt || [], t.dirtyBallast || []);
+  }
+
+  /**
+   * Weekly inventory builder (MEPC.1/Circ.736 Example #1).
+   * - Sludge / oil residue tanks (IOPP 3.1) → Code C items 11.1 / 11.2 / 11.3 per tank (mandatory weekly).
+   * - Oily bilge water holding (IOPP 3.3) + other bilge tanks/wells → Code I (voluntary per Circ.736).
+   * soundings: [{ id, group, name, capacityM3, robM3, include }]
+   */
+  function buildWeeklyInventory(setup, soundings, options) {
+    options = options || {};
+    const list = Array.isArray(soundings) ? soundings : [];
+    const sludgeLines = [];
+    const sludgeTanks = [];
+    const bilgeParts = [];
+    const bilgeWellParts = [];
+
+    list.forEach(row => {
+      if (!row || row.include === false) return;
+      const name = row.name || tankName(setup, row.id) || row.id;
+      const cap = row.capacityM3;
+      const rob = row.robM3;
+      if (row.group === 'sludge') {
+        if (rob == null || rob === '') return;
+        sludgeTanks.push({ id: row.id, name, capacityM3: cap, robM3: rob });
+        sludgeLines.push({ itemNo: '11.1', text: String(name) });
+        sludgeLines.push({ itemNo: '11.2', text: (cap != null && cap !== '' ? fmtVal(Number(cap)) : '—') + ' m³' });
+        sludgeLines.push({ itemNo: '11.3', text: fmtVal(Number(rob)) + ' m³' });
+      } else if (row.group === 'bilge') {
+        if (rob == null || rob === '') return;
+        bilgeParts.push(
+          name + ' — capacity ' + (cap != null && cap !== '' ? fmtVal(Number(cap)) + ' m³' : 'n/a') +
+          ', retained ' + fmtVal(Number(rob)) + ' m³'
+        );
+      } else if (row.group === 'bilgeWells') {
+        if (rob == null || rob === '') return;
+        bilgeWellParts.push(
+          name + ' — ' + (cap != null && cap !== '' ? ('capacity ' + fmtVal(Number(cap)) + ' m³, ') : '') +
+          'retained ' + fmtVal(Number(rob)) + ' m³'
+        );
+      }
+    });
+
+    const out = { entries: [], errors: [] };
+    if (!sludgeLines.length) {
+      out.errors.push('Enter retained quantity (m³) for at least one sludge / oil residue tank (IOPP 3.1) — weekly C.11 inventory.');
+    } else {
+      out.entries.push({
+        part: 1,
+        code: 'C',
+        selectedItems: ['11.1', '11.2', '11.3'],
+        values: {
+          weeklyInventory: true,
+          sludgeTanks,
+          inventoryKind: 'weekly-sludge'
+        },
+        lines: sludgeLines,
+        title: 'Weekly inventory — oil residue (sludge) tanks (IOPP 3.1)'
+      });
+    }
+
+    const bilgeTextParts = [];
+    if (bilgeParts.length) {
+      bilgeTextParts.push('Weekly inventory of oily bilge water holding tank(s) (IOPP Supplement item 3.3 — voluntary per MEPC.1/Circ.736): ' + bilgeParts.join('; ') + '.');
+    }
+    if (bilgeWellParts.length) {
+      bilgeTextParts.push('Weekly inventory of bilge tank(s) / wells: ' + bilgeWellParts.join('; ') + '.');
+    }
+    if (bilgeTextParts.length) {
+      const remarks = bilgeTextParts.join(' ');
+      out.entries.push({
+        part: 1,
+        code: 'I',
+        selectedItems: ['I'],
+        values: { remarks, weeklyInventory: true, inventoryKind: 'weekly-bilge' },
+        lines: [{ itemNo: 'I', text: remarks }],
+        title: 'Weekly inventory — oily bilge / bilge tanks (Code I, voluntary)'
+      });
+    } else if (options.requireBilge) {
+      out.errors.push('Enter retained quantity for oily bilge holding and/or bilge tanks, or untick “Require bilge inventory”.');
+    }
+
+    return out;
   }
 
   function tankName(setup, id) {
@@ -709,6 +795,7 @@
     tanksForGroup,
     tankName,
     buildItemLines,
+    buildWeeklyInventory,
     validateEntry,
     formatOrbDate,
     buildPrintHtml,
