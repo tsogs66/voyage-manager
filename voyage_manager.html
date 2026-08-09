@@ -5715,6 +5715,7 @@ function computeDerived(){
   const rows = list.map(e=>{
     let hrs=null, meCons=null, geCons=null, blrCons=null, total=null;
     let cylCons=null, meLoCons=null, geLoCons=null, dailyRevs=null, fwProdD=null, fwConsD=null;
+    let meStopped=false;
     let distEngine=null, speedEngine=null, speedShip=null, slip=null, mcrPct=null, kwEst=null;
     let sfocRef=null, sfocActual=null, sfocDelta=null, meFuelMtDay=null, meFuelExpected=null;
     const gePeriod = [{hrs:null,kw:null,loadPct:null},{hrs:null,kw:null,loadPct:null},{hrs:null,kw:null,loadPct:null}];
@@ -5728,6 +5729,13 @@ function computeDerived(){
     if (prev){
       hrs = (new Date(e.datetime) - new Date(prev.datetime)) / 3600000;
 
+      /* Rev counter unchanged over the period means the main engine never turned —
+         the ship was alongside, at anchor or drifting on auxiliaries. Every M/E figure
+         is then meaningless, so it is left blank rather than reported as zero, and it
+         is kept out of the voyage averages. Generators and boiler are unaffected. */
+      dailyRevs = meterDelta(e.revCounter, prev.revCounter, rolls.rc);
+      meStopped = (dailyRevs === 0);
+
       const {meRaw, geRaw} = meGeRawLitres(e, prev, rolls);
       const blrD = meterDelta(e.blr.meter, prev.blr.meter, rolls.boiler);
       meCons = meRaw!==null ? (meRaw*e.me.sg)/1000 : null;
@@ -5737,6 +5745,9 @@ function computeDerived(){
       if (unitOv.ME!=null) meCons = unitOv.ME;
       if (unitOv.GE!=null) geCons = unitOv.GE;
       if (unitOv.BLR!=null) blrCons = unitOv.BLR;
+      /* Engine stopped: blank a nil M/E burn. A non-zero figure is kept and still
+         shown, because it is real fuel that the ROB chain has to account for. */
+      if (meStopped && !(meCons > 0)) meCons = null;
       const miscMdo = misc['MDO/MGO']||0;
       const miscLsmgo = misc['LSMGO']||0;
       const miscTotal = miscMdo + miscLsmgo;
@@ -5757,6 +5768,12 @@ function computeDerived(){
       const meLoD = meterDelta(e.meLo, prev.meLo, rolls.generic);
       const geLoD = meterDelta(e.geLo, prev.geLo, rolls.generic);
       cylCons = cylD; meLoCons = meLoD; geLoCons = geLoD;
+      /* Cylinder oil and M/E system oil are only consumed while the engine turns.
+         G/E system oil is left alone — the generators are still running. */
+      if (meStopped){
+        if (!(cylCons > 0)) cylCons = null;
+        if (!(meLoCons > 0)) meLoCons = null;
+      }
       const rawLube = {"CYL HIGH":0,"CYL LOW":0,"ME SYS OIL":0,"GE SYS OIL":0};
       if (cylCons) rawLube[e.tbn==='LOW' ? 'CYL LOW' : 'CYL HIGH'] += cylCons;
       if (meLoCons) rawLube["ME SYS OIL"] += meLoCons;
@@ -5781,9 +5798,15 @@ function computeDerived(){
       if (fwConsD!=null) consByLube["FRESH WATER"] += fwConsD;
 
       // performance — prefer rev-counter distance (pitch × Δrevs / 1852); RPM from Δrevs when available
-      dailyRevs = meterDelta(e.revCounter, prev.revCounter, rolls.rc);
-      rpmEff = effectiveRpm(rpmEff, dailyRevs, hrs);
-      distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
+      if (meStopped){
+        /* No revolutions: RPM, engine distance/speed, load and SFOC do not exist.
+           Leaving rpmEff null also keeps this period out of the voyage averages,
+           which zeros would otherwise drag down. */
+        rpmEff = null;
+      } else {
+        rpmEff = effectiveRpm(rpmEff, dailyRevs, hrs);
+        distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
+      }
       if (hrs>0) speedShip = e.distanceShip / hrs;
       if (distEngine!=null && distEngine>0 && e.distanceShip!==null){
         slip = ((distEngine - e.distanceShip)/distEngine)*100;
@@ -5810,7 +5833,7 @@ function computeDerived(){
       sfocActual = isoCorrectedSfoc(sfocMeas);
       sfocDelta = sfocDeltaPct(sfocActual, sfocRef);
       meFuelExpected = expectedMeFuelMtFromSfoc(sfocRef, kwEst, hrs);
-      if (hrs>0 && meCons!=null) meFuelMtDay = (meCons / hrs) * 24;
+      if (hrs>0 && meCons!=null && !meStopped) meFuelMtDay = (meCons / hrs) * 24;
       if (mcrPct!=null && hrs>0) sumMcrHrs += mcrPct * hrs;
       if (sfocRef!=null && hrs>0){
         sumSfocRefWeighted += sfocRef * hrs;
@@ -5865,8 +5888,12 @@ function computeDerived(){
 
     prev = e;
     return {...e, hrs, meCons, geCons, blrCons, total, cylCons, meLoCons, geLoCons, fwProdD, fwConsD,
-             consByType, lubeByType, miscCons: misc,
-             distEngine, speedEngine, speedShip, slip, mcrPct, kwEst, dailyRevs, rpmEff,
+             consByType, lubeByType, miscCons: misc, meStopped,
+             /* Δrevs of exactly zero is reported blank alongside the other M/E figures;
+                the printout carries an explicit "M/E stopped" note so the empty M/E
+                block reads as deliberate rather than as missing data. */
+             distEngine, speedEngine, speedShip, slip, mcrPct, kwEst,
+             dailyRevs: meStopped ? null : dailyRevs, rpmEff,
              sfocRef, sfocActual, sfocDelta, meFuelMtDay, meFuelExpected, gePeriod,
              cumFuel: {...consByFuel}, cumLube: {...consByLube}, cumDistShip: totalDistShip};
   });
@@ -6534,12 +6561,15 @@ function abstractRowValues(r, robMap){
     ...rob,
     datetime: dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}),
     operation: r.operation,
-    hrs: r.hrs, rpm: r.rpm,
+    /* Engine stopped → the typed RPM is stale; show the M/E columns blank.
+       Raw counter readings (flowmeter, rev counter) are kept: they are recorded
+       observations, and the unchanged rev counter is the evidence itself. */
+    hrs: r.hrs, rpm: r.meStopped ? null : r.rpm,
     distEngine: r.distEngine, speedEngine: r.speedEngine,
     distanceShip: r.distanceShip, speedShip: r.speedShip,
     slip: r.slip, mcrPct: r.mcrPct, kwEst: r.kwEst,
     condition: r.condition,
-    hrs2: r.hrs, distanceShip2: r.distanceShip, rpm2: r.rpm,
+    hrs2: r.hrs, distanceShip2: r.distanceShip, rpm2: r.meStopped ? null : r.rpm,
     revCounter: r.revCounter, dailyRevs: r.dailyRevs,
     meRun: r.me, geRun: r.ge, blrRun: r.blr?.meter,
     meCons: r.meCons, geCons: r.geCons, blrCons: r.blrCons, total: r.total,
@@ -7712,6 +7742,9 @@ function isNoonReportOp(op){
 /** Main engine was turning / burning this period — prefer measured Δrevs / cons over stale typed RPM. */
 function mainEngineInUse(entry, row){
   if (!entry) return false;
+  /* An unchanged rev counter is decisive: the engine did not turn, whatever a
+     stale typed RPM or a twitching flowmeter might suggest. */
+  if (row?.meStopped) return false;
   if (row?.dailyRevs != null && row.dailyRevs > 0) return true;
   if (row?.meCons != null && row.meCons > 0) return true;
   if (row?.distEngine != null && row.distEngine > 0) return true;
@@ -8123,6 +8156,10 @@ function showReportList(category){
 
 function computeMePerf(entryId){
   const row = getComputedRow(entryId);
+  /* Engine stopped for the whole period → no power, no load, no running hours. */
+  if (row?.meStopped){
+    return { avgPower: null, avgLoad: null, minLoad: null, maxLoad: null, runTime: null };
+  }
   const avgLoad = row ? row.mcrPct : null;
   return {
     avgPower: row ? row.kwEst : null,
@@ -9617,7 +9654,7 @@ function openVoyageSummary(entryId){
     ${stat('Load %', fmt(row.mcrPct,2))}
     ${stat('Engine Distance', fmt(row.distEngine,2))}
     ${stat('Engine Speed', row.speedEngine==null?'—':fmt(row.speedEngine,2)+' kn')}
-    ${stat('RPM', fmt(row.rpmEff!=null?row.rpmEff:entry.rpm,2))}
+    ${stat('RPM', fmt(row.meStopped ? null : (row.rpmEff!=null?row.rpmEff:entry.rpm), 2))}
     ${stat('Ave. kW', fmt(perf.avgKw, 2))}
     ${stat('Slip %', fmt(row.slip,2))}
     ${stat('ETA', etaStr)}
@@ -10340,10 +10377,12 @@ function buildVoyageNoonSheetHTML(entry){
   const eta = (daysToGoVal!=null) ? new Date(new Date(entry.datetime).getTime() + daysToGoVal*24*3600000) : null;
   const etaStr = eta ? eta.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
 
+  /* With the engine stopped a stored RPM is stale — do not fall back to it. */
+  const printRpm = row.meStopped ? null : (row.rpmEff!=null ? row.rpmEff : entry.rpm);
   const kpiItems = [
     {label:'Run Hrs', value:fmt(row.hrs, 2)},
     {label:'Ship Dist (nm)', value:fmt(entry.distanceShip, 2)},
-    {label:'RPM', value:fmt(row.rpmEff!=null?row.rpmEff:entry.rpm, 2)},
+    {label:'RPM', value:fmt(printRpm, 2)},
     {label:'Speed (kn)', value:fmt(row.speedShip,2)},
     {label:'% MCR', value:fmt(row.mcrPct, 2)},
     {label:'Est. kW', value:fmt(row.kwEst, 2)}
@@ -10374,7 +10413,7 @@ function buildVoyageNoonSheetHTML(entry){
   const deltaCls = sfocDeltaClass(row.sfocDelta);
   const deltaStr = row.sfocDelta==null ? '—' : `${row.sfocDelta>0?'+':''}${fmt(row.sfocDelta, 2)}%`;
   const meSection = printSection('M/E Performance', [
-    printRow('RPM', fmt(row.rpmEff!=null?row.rpmEff:entry.rpm, 2)),
+    printRow('RPM', fmt(printRpm, 2)),
     printRow('% MCR', fmt(row.mcrPct, 2)),
     printRow('Est. kW', fmt(row.kwEst, 2)),
     printRow('Engine Speed', row.speedEngine==null?'—':`${fmt(row.speedEngine,2)} kn`),
@@ -10452,7 +10491,13 @@ function buildVoyageNoonSheetHTML(entry){
   const weatherSection = (noonOp || isSea || weatherHtml) ? weatherHtml : '';
   const cylSection = showMeDetail ? printMeCylinderSection(report) : '';
   const turboOthersSection = printTurboOthersSection(report, { includeMeAux: showMeDetail });
-  const meSectionPrint = meRunning ? meSection : '';
+  /* Engine stopped: replace the M/E block with a one-line statement of fact, so an
+     inspector reads "not running" rather than wondering about a missing section. */
+  const meSectionPrint = meRunning
+    ? meSection
+    : (row.meStopped
+        ? printSection('M/E Performance', printRow('Main Engine', 'STOPPED — no revolutions this period'))
+        : '');
 
   const ecaSection = printEcaSection(report);
   const soundingsSection = printSoundingsSection(report);
@@ -10621,17 +10666,28 @@ function syncMeRuntimeFromPeriod(){
   const prevRt = (prevRef && prevRef.meRuntime != null && !isNaN(prevRef.meRuntime))
     ? Number(prevRef.meRuntime) : null;
 
-  /* New entry, counter untouched → follow the clock. */
+  /* The M/E hour counter only advances while the engine turns. If the rev counter
+     has not moved from the previous entry the ship is on auxiliaries, so the runtime
+     counter must hold its previous reading rather than follow the clock. */
+  const curRevs = parseFloat(document.getElementById('in_revCounter')?.value);
+  const prevRevs = (prevRef && prevRef.revCounter != null) ? Number(prevRef.revCounter) : null;
+  const meStopped = (prevRevs != null && !isNaN(curRevs))
+    ? (meterDelta(curRevs, prevRevs, meterRollovers().rc) === 0)
+    : false;
+
+  /* New entry, counter untouched → follow the clock (or hold, if the engine is stopped). */
   if (rtEl && editingId === null && !meRuntimeIsUserEdited()
-      && document.activeElement !== rtEl && prevRt != null && elapsed != null){
-    rtEl.value = (prevRt + elapsed).toFixed(1);
+      && document.activeElement !== rtEl && prevRt != null){
+    if (meStopped) rtEl.value = String(prevRt);
+    else if (elapsed != null) rtEl.value = (prevRt + elapsed).toFixed(1);
   }
 
   if (periodEl){
     const cur = parseFloat(rtEl?.value);
     let period = (prevRt != null && !isNaN(cur)) ? runtimeDelta(cur, prevRt) : null;
-    if (period == null) period = elapsed;
-    periodEl.value = period == null ? '—' : fmt(period, 2);
+    if (period == null && !meStopped) period = elapsed;
+    periodEl.value = (meStopped && !(period > 0)) ? 'M/E stopped'
+      : (period == null ? '—' : fmt(period, 2));
   }
 }
 
@@ -10701,11 +10757,15 @@ function updateVsRunCalcDisplays(){
     const rolls = meterRollovers();
     dailyRevs = meterDelta(curEntry.revCounter, prevRef.revCounter, rolls.rc);
   }
-  const rpmEff = effectiveRpm(curEntry.rpm, dailyRevs, hrs);
-  if (rpmEff!=null) speedEngine = rpmEff * propConstant;
-  distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
-  /* Keep speed consistent with distance when Δrevs drove the distance */
-  if (distEngine!=null && hrs>0 && dailyRevs!=null) speedEngine = distEngine / hrs;
+  /* Rev counter unchanged → engine stopped; leave the M/E figures blank. */
+  const meStopped = (dailyRevs === 0);
+  const rpmEff = meStopped ? null : effectiveRpm(curEntry.rpm, dailyRevs, hrs);
+  if (!meStopped){
+    if (rpmEff!=null) speedEngine = rpmEff * propConstant;
+    distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
+    /* Keep speed consistent with distance when Δrevs drove the distance */
+    if (distEngine!=null && hrs>0 && dailyRevs!=null) speedEngine = distEngine / hrs;
+  }
   if (hrs>0 && curEntry.distanceShip!=null) shipSpeed = curEntry.distanceShip / hrs;
   if (distEngine!=null && distEngine>0 && curEntry.distanceShip!=null){
     slip = ((distEngine - curEntry.distanceShip) / distEngine) * 100;
@@ -10737,7 +10797,13 @@ function updateVsFwDisplays(){
   set('vs_fwConsumed', fwCons);
 }
 ['vs_rpm','vs_revCounter','in_revCounter'].forEach(id=>{
-  document.getElementById(id)?.addEventListener('input', ()=> syncRpmRevCounter(id));
+  document.getElementById(id)?.addEventListener('input', ()=>{
+    syncRpmRevCounter(id);
+    /* A rev counter equal to the previous entry means the engine never turned —
+       the runtime counter and every M/E figure must react to that immediately. */
+    syncMeRuntimeFromPeriod();
+    updateLivePreview();
+  });
 });
 document.getElementById('me_runtime')?.addEventListener('input', (e)=>{
   /* Typing a real counter reading stops the date/time auto-tracking for this entry. */
@@ -10815,6 +10881,7 @@ function updateLivePreview(){
 
   let hrs=null, meCons=null, geCons=null, blrCons=null, distEngine=null, slip=null, kwEst=null, mcrPct=null, dailyRevs=null, speedEngine=null;
   let rpmEff = curEntry.rpm;
+  let meStopped = false;
 
   if (prevRef && curEntry.datetime){
     const formRt = parseFloat(document.getElementById('me_runtime')?.value);
@@ -10822,7 +10889,9 @@ function updateLivePreview(){
     if (curEntry.revCounter!=null && prevRef.revCounter!=null){
       dailyRevs = meterDelta(curEntry.revCounter, prevRef.revCounter, rolls.rc);
     }
-    rpmEff = effectiveRpm(rpmEff, dailyRevs, hrs);
+    /* Rev counter unchanged → engine stopped; M/E stats stay blank. */
+    meStopped = (dailyRevs === 0);
+    rpmEff = meStopped ? null : effectiveRpm(rpmEff, dailyRevs, hrs);
     if (hrs>0){
       const {meRaw, geRaw} = meGeRawLitres(curEntry, prevRef, rolls);
       const blrD = meterDelta(curEntry.blr.meter, prevRef.blr.meter, rolls.boiler);
@@ -10835,10 +10904,14 @@ function updateLivePreview(){
       if (unitMe && unitMe.value!=='') meCons = parseFloat(unitMe.value);
       if (unitGe && unitGe.value!=='') geCons = parseFloat(unitGe.value);
       if (unitBlr && unitBlr.value!=='') blrCons = parseFloat(unitBlr.value);
-      distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
-      if (distEngine!=null && dailyRevs!=null) speedEngine = distEngine / hrs;
-      if (distEngine!=null && distEngine>0 && curEntry.distanceShip!=null){
-        slip = ((distEngine - curEntry.distanceShip)/distEngine)*100;
+      if (meStopped){
+        if (!(meCons > 0)) meCons = null;
+      } else {
+        distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
+        if (distEngine!=null && dailyRevs!=null) speedEngine = distEngine / hrs;
+        if (distEngine!=null && distEngine>0 && curEntry.distanceShip!=null){
+          slip = ((distEngine - curEntry.distanceShip)/distEngine)*100;
+        }
       }
     }
   }
@@ -12799,7 +12872,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v82';
+let androidInstallCacheName = 'noon-report-v83';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
