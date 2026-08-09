@@ -3128,12 +3128,72 @@ async function ensureDB(){
   if (!db) await openDB();
   return db;
 }
+/* Serialize writes — overlapping readwrite txs on tablets often stall or look "busy". */
+let _dbWriteChain = Promise.resolve();
+function enqueueDbWrite(fn){
+  const run = _dbWriteChain.then(fn, fn);
+  _dbWriteChain = run.then(()=>{}, ()=>{});
+  return run;
+}
 async function txStore(name, mode){ const d = await ensureDB(); return d.transaction(name, mode).objectStore(name); }
-async function dbPut(store, obj){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.put(obj); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
-async function dbDelete(store, key){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.delete(key); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+async function dbPut(store, obj){
+  return enqueueDbWrite(async ()=>{
+    const d = await ensureDB();
+    return new Promise((res,rej)=>{
+      const tx = d.transaction(store, 'readwrite');
+      tx.oncomplete = ()=> res();
+      tx.onerror = ()=> rej(tx.error || new Error('IndexedDB write failed'));
+      tx.onabort = ()=> rej(tx.error || new Error('IndexedDB write aborted'));
+      try{ tx.objectStore(store).put(obj); }
+      catch(err){ rej(err); }
+    });
+  });
+}
+async function dbPutMany(store, objs){
+  const list = (objs || []).filter(Boolean);
+  if (!list.length) return;
+  return enqueueDbWrite(async ()=>{
+    const d = await ensureDB();
+    return new Promise((res,rej)=>{
+      const tx = d.transaction(store, 'readwrite');
+      tx.oncomplete = ()=> res();
+      tx.onerror = ()=> rej(tx.error || new Error('IndexedDB write failed'));
+      tx.onabort = ()=> rej(tx.error || new Error('IndexedDB write aborted'));
+      try{
+        const os = tx.objectStore(store);
+        list.forEach(obj=> os.put(obj));
+      }catch(err){ rej(err); }
+    });
+  });
+}
+async function dbDelete(store, key){
+  return enqueueDbWrite(async ()=>{
+    const d = await ensureDB();
+    return new Promise((res,rej)=>{
+      const tx = d.transaction(store, 'readwrite');
+      tx.oncomplete = ()=> res();
+      tx.onerror = ()=> rej(tx.error || new Error('IndexedDB delete failed'));
+      tx.onabort = ()=> rej(tx.error || new Error('IndexedDB delete aborted'));
+      try{ tx.objectStore(store).delete(key); }
+      catch(err){ rej(err); }
+    });
+  });
+}
 async function dbGet(store, key){ const s = await txStore(store,'readonly'); return new Promise((res,rej)=>{ const r = s.get(key); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function dbGetAll(store){ const s = await txStore(store,'readonly'); return new Promise((res,rej)=>{ const r = s.getAll(); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
-async function dbClear(store){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+async function dbClear(store){
+  return enqueueDbWrite(async ()=>{
+    const d = await ensureDB();
+    return new Promise((res,rej)=>{
+      const tx = d.transaction(store, 'readwrite');
+      tx.oncomplete = ()=> res();
+      tx.onerror = ()=> rej(tx.error || new Error('IndexedDB clear failed'));
+      tx.onabort = ()=> rej(tx.error || new Error('IndexedDB clear aborted'));
+      try{ tx.objectStore(store).clear(); }
+      catch(err){ rej(err); }
+    });
+  });
+}
 
 /* ---------------- state ---------------- */
 const state = {
@@ -6777,10 +6837,15 @@ function renderCiiStrip(consByFuel, perf){
 /* ---------------- persistence helpers ---------------- */
 async function saveSetup(){
   if (!state.activeVesselId) state.activeVesselId = LEGACY_VESSEL_ID;
-  await dbPut('meta', {key:`setup:${state.activeVesselId}`, value: state.setup});
   const v = activeVessel();
   if (v && state.setup.vesselName) v.name = state.setup.vesselName;
-  await saveVesselRegistry();
+  /* One meta transaction for setup + vessel registry — fewer tablet IDB stalls. */
+  const rows = [
+    { key:`setup:${state.activeVesselId}`, value: state.setup },
+    { key:'vessels', value: state.vessels }
+  ];
+  if (state.activeVesselId) rows.push({ key:'activeVesselId', value: state.activeVesselId });
+  await dbPutMany('meta', rows);
 }
 
 /* ---------------- tabs ---------------- */
@@ -11413,9 +11478,11 @@ async function flushSyncSettingsFromForm(){
     /* Form not filled yet — keep already-saved URL instead of wiping it. */
     return existing;
   }
+  if (_syncSaveInFlight){
+    try{ await _syncSaveInFlight; }catch(_){}
+  }
   const sync = readSyncSettingsFromForm();
-  await saveSetup();
-  await persistSyncCredentialsMirror(sync);
+  await persistSyncSettingsToDb(sync);
   _syncFormDirty = false;
   return sync;
 }
@@ -11551,23 +11618,37 @@ function readSyncSettingsFromForm(sync){
   return s;
 }
 
+function syncCredentialsMirrorValue(sync){
+  return {
+    serverUrl: sync.serverUrl || '',
+    apiToken: sync.apiToken || '',
+    vesselId: sync.vesselId || '',
+    deviceName: sync.deviceName || '',
+    autoSync: !!sync.autoSync,
+    conflictPolicy: sync.conflictPolicy || 'merge',
+    deviceId: sync.deviceId || null,
+    updatedAt: new Date().toISOString()
+  };
+}
+
 async function persistSyncCredentialsMirror(sync){
   /* Device-level copy so credentials survive vessel switches / empty setups on mobile. */
   try{
-    await dbPut('meta', {
-      key: 'syncCredentials',
-      value: {
-        serverUrl: sync.serverUrl || '',
-        apiToken: sync.apiToken || '',
-        vesselId: sync.vesselId || '',
-        deviceName: sync.deviceName || '',
-        autoSync: !!sync.autoSync,
-        conflictPolicy: sync.conflictPolicy || 'merge',
-        deviceId: sync.deviceId || null,
-        updatedAt: new Date().toISOString()
-      }
-    });
+    await dbPut('meta', { key: 'syncCredentials', value: syncCredentialsMirrorValue(sync) });
   }catch(_){}
+}
+
+async function persistSyncSettingsToDb(sync){
+  /* Single queued meta write: setup + vessels + sync credentials. */
+  if (!state.activeVesselId) state.activeVesselId = LEGACY_VESSEL_ID;
+  const v = activeVessel();
+  if (v && state.setup.vesselName) v.name = state.setup.vesselName;
+  await dbPutMany('meta', [
+    { key:`setup:${state.activeVesselId}`, value: state.setup },
+    { key:'vessels', value: state.vessels },
+    { key:'activeVesselId', value: state.activeVesselId },
+    { key:'syncCredentials', value: syncCredentialsMirrorValue(sync) }
+  ]);
 }
 
 async function applyMirroredSyncCredentials(){
@@ -11591,11 +11672,11 @@ async function applyMirroredSyncCredentials(){
 async function saveSyncSettingsFromForm(options = {}){
   const silent = !!options.silent;
   const fromAutosave = !!options.fromAutosave;
-  /* Manual Save must not get stuck behind a hung/in-flight autosave. */
+  clearTimeout(_syncAutosaveTimer);
+  /* Coalesce: wait for the current save, then write latest form values once. */
   if (_syncSaveInFlight){
     if (fromAutosave) return _syncSaveInFlight;
-    try{ await Promise.race([_syncSaveInFlight, new Promise(r=>setTimeout(r, 1500))]); }catch(_){}
-    _syncSaveInFlight = null;
+    try{ await _syncSaveInFlight; }catch(_){}
   }
   const btn = document.getElementById('btnSaveSyncSettings');
   const defaultLabel = (btn && (btn.dataset.defaultLabel || btn.textContent)) || 'Save Sync Settings';
@@ -11603,21 +11684,12 @@ async function saveSyncSettingsFromForm(options = {}){
 
   _syncSaveInFlight = (async ()=>{
     let finished = false;
-    const reenable = ()=>{
-      if (btn){
-        btn.disabled = false;
-        btn.removeAttribute('aria-busy');
-        if (btn.dataset.defaultLabel && (btn.textContent === 'Saving…' || btn.textContent === 'Saved' || btn.textContent === 'Save failed — retry')){
-          /* leave success/fail label to setSyncSaveStatus; only clear busy wait */
-        }
-      }
-    };
     const watchdog = setTimeout(()=>{
       if (finished) return;
-      _syncSaveInFlight = null;
+      /* Do not cancel the write — only surface progress so the button is not stuck forever. */
       if (btn){ btn.disabled = false; btn.removeAttribute('aria-busy'); }
-      setSyncSaveStatus('Save is taking too long — tap Save Sync Settings again.', 'err');
-    }, 10000);
+      setSyncSaveStatus('Still saving to IndexedDB… please wait.', 'pending');
+    }, 12000);
     try{
       try{
         const ae = document.activeElement;
@@ -11629,13 +11701,7 @@ async function saveSyncSettingsFromForm(options = {}){
       }
       setSyncSaveStatus(fromAutosave ? 'auto-save in progress' : 'writing to local database', 'saving');
       const sync = readSyncSettingsFromForm();
-      await Promise.race([
-        (async ()=>{
-          await saveSetup();
-          await persistSyncCredentialsMirror(sync);
-        })(),
-        new Promise((_, rej)=> setTimeout(()=> rej(new Error('Save timed out after 8s (IndexedDB busy?)')), 8000))
-      ]);
+      await persistSyncSettingsToDb(sync);
       _syncFormDirty = false;
       renderSyncUi();
       setSyncSaveStatus(
@@ -11659,8 +11725,10 @@ async function saveSyncSettingsFromForm(options = {}){
     }finally{
       finished = true;
       clearTimeout(watchdog);
-      reenable();
-      if (btn) btn.disabled = false;
+      if (btn){
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+      }
       _syncSaveInFlight = null;
     }
   })();
@@ -11673,7 +11741,7 @@ function queueSyncSettingsAutosave(){
   clearTimeout(_syncAutosaveTimer);
   _syncAutosaveTimer = setTimeout(()=>{
     saveSyncSettingsFromForm({ silent: true, fromAutosave: true });
-  }, 450);
+  }, 900);
 }
 
 function bindMobileSafeAction(el, handler){
@@ -12225,7 +12293,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v76';
+let androidInstallCacheName = 'noon-report-v77';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
