@@ -567,7 +567,17 @@
       margin-top:12px; padding:8px 0 4px;
       background:linear-gradient(to bottom, var(--panel) 75%, transparent);
     }
-    #page-data #btnSaveSyncSettings{flex:1 1 100%; min-height:48px; font-size:13px;}
+    #page-data #btnSaveSyncSettings{
+      flex:1 1 100%; min-height:52px; font-size:13px;
+      position:relative; z-index:6;
+      touch-action:manipulation;
+      -webkit-user-select:none; user-select:none;
+    }
+    #page-data .sync-action-row{z-index:6;}
+  }
+
+  #btnSaveSyncSettings:disabled{
+    opacity:0.75; cursor:wait;
   }
 
   .sync-save-status{
@@ -2291,7 +2301,8 @@
       </div>
       <div class="sync-save-status" id="syncSaveStatus" role="status" aria-live="polite"></div>
       <div class="btn-row sync-action-row" id="syncActionRow">
-        <button type="button" class="primary small" id="btnSaveSyncSettings">Save Sync Settings</button>
+        <button type="button" class="primary small" id="btnSaveSyncSettings"
+          onclick="if(window.__saveSyncSettingsClick){window.__saveSyncSettingsClick(event);return false;}">Save Sync Settings</button>
         <button type="button" class="ghost small" id="btnTestSync">Test Connection</button>
         <button type="button" class="ghost small" id="btnSyncNow">Sync Now (active leg)</button>
         <button type="button" class="ghost small" id="btnPullRemote">Pull Active Leg</button>
@@ -11580,15 +11591,51 @@ async function applyMirroredSyncCredentials(){
 async function saveSyncSettingsFromForm(options = {}){
   const silent = !!options.silent;
   const fromAutosave = !!options.fromAutosave;
-  if (_syncSaveInFlight) return _syncSaveInFlight;
+  /* Manual Save must not get stuck behind a hung/in-flight autosave. */
+  if (_syncSaveInFlight){
+    if (fromAutosave) return _syncSaveInFlight;
+    try{ await Promise.race([_syncSaveInFlight, new Promise(r=>setTimeout(r, 1500))]); }catch(_){}
+    _syncSaveInFlight = null;
+  }
   const btn = document.getElementById('btnSaveSyncSettings');
+  const defaultLabel = (btn && (btn.dataset.defaultLabel || btn.textContent)) || 'Save Sync Settings';
+  if (btn && !btn.dataset.defaultLabel) btn.dataset.defaultLabel = defaultLabel;
+
   _syncSaveInFlight = (async ()=>{
+    let finished = false;
+    const reenable = ()=>{
+      if (btn){
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+        if (btn.dataset.defaultLabel && (btn.textContent === 'Saving…' || btn.textContent === 'Saved' || btn.textContent === 'Save failed — retry')){
+          /* leave success/fail label to setSyncSaveStatus; only clear busy wait */
+        }
+      }
+    };
+    const watchdog = setTimeout(()=>{
+      if (finished) return;
+      _syncSaveInFlight = null;
+      if (btn){ btn.disabled = false; btn.removeAttribute('aria-busy'); }
+      setSyncSaveStatus('Save is taking too long — tap Save Sync Settings again.', 'err');
+    }, 10000);
     try{
-      if (btn) btn.disabled = true;
+      try{
+        const ae = document.activeElement;
+        if (ae && typeof ae.blur === 'function' && ae !== btn) ae.blur();
+      }catch(_){}
+      if (btn){
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+      }
       setSyncSaveStatus(fromAutosave ? 'auto-save in progress' : 'writing to local database', 'saving');
       const sync = readSyncSettingsFromForm();
-      await saveSetup();
-      await persistSyncCredentialsMirror(sync);
+      await Promise.race([
+        (async ()=>{
+          await saveSetup();
+          await persistSyncCredentialsMirror(sync);
+        })(),
+        new Promise((_, rej)=> setTimeout(()=> rej(new Error('Save timed out after 8s (IndexedDB busy?)')), 8000))
+      ]);
       _syncFormDirty = false;
       renderSyncUi();
       setSyncSaveStatus(
@@ -11597,6 +11644,10 @@ async function saveSyncSettingsFromForm(options = {}){
           : 'Sync settings saved successfully',
         'ok'
       );
+      if (!silent && !fromAutosave){
+        /* Backup feedback on tablets where the status banner is easy to miss. */
+        try{ alert('SUCCESS — Sync settings saved.'); }catch(_){}
+      }
       return true;
     }catch(err){
       const msg = err && err.message ? err.message : String(err);
@@ -11606,6 +11657,9 @@ async function saveSyncSettingsFromForm(options = {}){
       }
       return false;
     }finally{
+      finished = true;
+      clearTimeout(watchdog);
+      reenable();
       if (btn) btn.disabled = false;
       _syncSaveInFlight = null;
     }
@@ -11626,30 +11680,62 @@ function bindMobileSafeAction(el, handler){
   if (!el || el.dataset.mobileSafeBound === '1') return;
   el.dataset.mobileSafeBound = '1';
   let lastRun = 0;
+  let armed = false;
   const run = (e)=>{
     const now = Date.now();
-    if (now - lastRun < 600){
-      if (e){ e.preventDefault(); e.stopPropagation(); }
+    if (now - lastRun < 700){
+      if (e){
+        try{ e.preventDefault(); }catch(_){}
+        try{ e.stopPropagation(); }catch(_){}
+      }
       return;
     }
     lastRun = now;
-    if (e){ e.preventDefault(); }
-    handler(e);
+    armed = false;
+    if (e){
+      try{ e.preventDefault(); }catch(_){}
+      try{ e.stopPropagation(); }catch(_){}
+    }
+    try{ handler(e); }
+    catch(err){
+      console.error(err);
+      setSyncSaveStatus('Save handler error: ' + (err && err.message ? err.message : err), 'err');
+    }
   };
-  /* pointerup fires before keyboard-dismiss scroll steals the click on iOS/Android */
+  el.addEventListener('pointerdown', (e)=>{
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    armed = true;
+  });
+  el.addEventListener('pointercancel', ()=>{ armed = false; });
   el.addEventListener('pointerup', (e)=>{
+    if (!armed) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     run(e);
   });
+  /* Older Android WebViews: touchend is more reliable than click after keyboard dismiss */
+  el.addEventListener('touchend', (e)=>{
+    if (Date.now() - lastRun < 700) return;
+    run(e);
+  }, { passive:false });
   el.addEventListener('click', (e)=>{
-    if (Date.now() - lastRun < 600){
-      e.preventDefault();
-      e.stopPropagation();
+    if (Date.now() - lastRun < 700){
+      try{ e.preventDefault(); }catch(_){}
+      try{ e.stopPropagation(); }catch(_){}
       return;
     }
     run(e);
   });
 }
+
+async function handleSaveSyncSettingsClick(ev){
+  if (ev){
+    try{ ev.preventDefault(); }catch(_){}
+    try{ ev.stopPropagation(); }catch(_){}
+  }
+  setSyncSaveStatus('Save tapped — writing settings…', 'saving');
+  return saveSyncSettingsFromForm({ silent: false, fromAutosave: false });
+}
+window.__saveSyncSettingsClick = handleSaveSyncSettingsClick;
 
 function renderSyncUi(){
   const sync = ensureSyncConfig();
@@ -11903,9 +11989,13 @@ function queueBackgroundSync(){
   }, 1200);
 }
 
-bindMobileSafeAction(document.getElementById('btnSaveSyncSettings'), ()=>{
-  saveSyncSettingsFromForm({ silent: false });
-});
+(function bindSaveSyncSettingsButton(){
+  const btn = document.getElementById('btnSaveSyncSettings');
+  if (!btn) return;
+  bindMobileSafeAction(btn, handleSaveSyncSettingsClick);
+  /* Extra capture-phase click — survives some WebView quirks that drop bubble handlers */
+  btn.addEventListener('click', handleSaveSyncSettingsClick, true);
+})();
 (function bindSyncSettingsAutosave(){
   SYNC_FORM_IDS.forEach(id=>{
     const el = document.getElementById(id);
