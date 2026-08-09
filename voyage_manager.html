@@ -11394,6 +11394,14 @@ function syncApiBase(){
 async function flushSyncSettingsFromForm(){
   /* Copy the on-screen sync fields into state (+ IndexedDB) before any sync action. */
   clearTimeout(_syncAutosaveTimer);
+  const urlEl = document.getElementById('sync_serverUrl');
+  if (!urlEl) return ensureSyncConfig();
+  const formUrl = normalizeSyncServerUrl(urlEl.value || '');
+  const existing = ensureSyncConfig();
+  if (!formUrl && (existing.serverUrl || '').trim() && !_syncFormDirty){
+    /* Form not filled yet — keep already-saved URL instead of wiping it. */
+    return existing;
+  }
   const sync = readSyncSettingsFromForm();
   await saveSetup();
   await persistSyncCredentialsMirror(sync);
