@@ -3130,21 +3130,52 @@ async function ensureDB(){
 }
 /* Serialize writes — overlapping readwrite txs on tablets often stall or look "busy". */
 let _dbWriteChain = Promise.resolve();
+function withDbTimeout(promise, ms, msg){
+  return new Promise((resolve, reject)=>{
+    const t = setTimeout(()=> reject(new Error(msg || 'IndexedDB operation timed out')), ms);
+    Promise.resolve(promise).then(
+      (v)=>{ clearTimeout(t); resolve(v); },
+      (e)=>{ clearTimeout(t); reject(e); }
+    );
+  });
+}
+async function resetDbConnection(){
+  try{ if (db) db.close(); }catch(_){}
+  db = null;
+  dbOpenPromise = null;
+}
 function enqueueDbWrite(fn){
-  const run = _dbWriteChain.then(fn, fn);
-  _dbWriteChain = run.then(()=>{}, ()=>{});
+  const run = _dbWriteChain.catch(()=>{}).then(async ()=>{
+    try{
+      return await withDbTimeout(Promise.resolve().then(fn), 20000, 'IndexedDB write timed out');
+    }catch(err){
+      /* Recover the queue after a stuck/failed transaction so later saves still work. */
+      await resetDbConnection();
+      throw err;
+    }
+  });
+  _dbWriteChain = run.catch(()=>{});
   return run;
+}
+function safeCloneForIdb(value){
+  if (value == null) return value;
+  try{
+    if (typeof structuredClone === 'function') return structuredClone(value);
+  }catch(_){}
+  try{ return JSON.parse(JSON.stringify(value)); }
+  catch(err){ throw new Error('Data could not be saved (not serializable): ' + (err.message || err)); }
 }
 async function txStore(name, mode){ const d = await ensureDB(); return d.transaction(name, mode).objectStore(name); }
 async function dbPut(store, obj){
   return enqueueDbWrite(async ()=>{
     const d = await ensureDB();
+    const payload = safeCloneForIdb(obj);
     return new Promise((res,rej)=>{
       const tx = d.transaction(store, 'readwrite');
       tx.oncomplete = ()=> res();
       tx.onerror = ()=> rej(tx.error || new Error('IndexedDB write failed'));
       tx.onabort = ()=> rej(tx.error || new Error('IndexedDB write aborted'));
-      try{ tx.objectStore(store).put(obj); }
+      try{ tx.objectStore(store).put(payload); }
       catch(err){ rej(err); }
     });
   });
@@ -3154,6 +3185,7 @@ async function dbPutMany(store, objs){
   if (!list.length) return;
   return enqueueDbWrite(async ()=>{
     const d = await ensureDB();
+    const payload = list.map(obj => safeCloneForIdb(obj));
     return new Promise((res,rej)=>{
       const tx = d.transaction(store, 'readwrite');
       tx.oncomplete = ()=> res();
@@ -3161,7 +3193,7 @@ async function dbPutMany(store, objs){
       tx.onabort = ()=> rej(tx.error || new Error('IndexedDB write aborted'));
       try{
         const os = tx.objectStore(store);
-        list.forEach(obj=> os.put(obj));
+        payload.forEach(obj=> os.put(obj));
       }catch(err){ rej(err); }
     });
   });
@@ -11479,10 +11511,24 @@ async function flushSyncSettingsFromForm(){
     return existing;
   }
   if (_syncSaveInFlight){
-    try{ await _syncSaveInFlight; }catch(_){}
+    try{ await withDbTimeout(_syncSaveInFlight, 22000, 'Previous sync save is still running'); }catch(_){}
+    _syncSaveInFlight = null;
   }
   const sync = readSyncSettingsFromForm();
-  await persistSyncSettingsToDb(sync);
+  try{
+    await persistSyncSettingsToDb(sync);
+  }catch(err){
+    /* At least keep credentials + in-memory sync for Test Connection. */
+    await persistSyncCredentialsMirror(sync);
+    const live = ensureSyncConfig();
+    live.serverUrl = sync.serverUrl || '';
+    live.apiToken = sync.apiToken || '';
+    live.vesselId = sync.vesselId || '';
+    live.deviceName = sync.deviceName || '';
+    live.autoSync = !!sync.autoSync;
+    live.conflictPolicy = sync.conflictPolicy || 'merge';
+    console.warn('flushSyncSettingsFromForm partial save:', err);
+  }
   _syncFormDirty = false;
   return sync;
 }
@@ -11638,16 +11684,58 @@ async function persistSyncCredentialsMirror(sync){
   }catch(_){}
 }
 
+async function ensureActiveVesselForPersist(){
+  if (!Array.isArray(state.vessels)) state.vessels = [];
+  if (state.activeVesselId && state.vessels.some(v => v && v.id === state.activeVesselId)) return state.activeVesselId;
+  if (state.vessels.length){
+    state.activeVesselId = state.vessels[0].id;
+    return state.activeVesselId;
+  }
+  /* Fresh install / empty fleet — create a blank vessel so sync settings can be stored. */
+  const name = ((state.setup && state.setup.vesselName) || '').trim() || 'New Vessel';
+  const id = 'v-' + uid();
+  const slug = vesselSlugFromName(name);
+  const vessel = { id, name, slug, createdAt: new Date().toISOString() };
+  state.vessels = [vessel];
+  state.activeVesselId = id;
+  if (!state.setup || typeof state.setup !== 'object'){
+    state.setup = defaultSetupTemplate({ vesselName: name, sync: { vesselId: slug } });
+  } else {
+    state.setup = migrateSetup(state.setup);
+    if (!state.setup.vesselName) state.setup.vesselName = name;
+    const sync = ensureSyncConfig();
+    if (!(sync.vesselId || '').trim()) sync.vesselId = slug;
+  }
+  ensureTankStores();
+  try{ renderVesselSelector(); }catch(_){}
+  return id;
+}
+
 async function persistSyncSettingsToDb(sync){
-  /* Single queued meta write: setup + vessels + sync credentials. */
-  if (!state.activeVesselId) state.activeVesselId = LEGACY_VESSEL_ID;
+  /*
+   * Credentials first (device-level, small, always required).
+   * Then attach sync onto the active vessel setup — create a blank vessel if the fleet is empty.
+   */
+  const creds = syncCredentialsMirrorValue(sync);
+  await dbPut('meta', { key: 'syncCredentials', value: creds });
+
+  await ensureActiveVesselForPersist();
+  const live = ensureSyncConfig();
+  live.serverUrl = sync.serverUrl || '';
+  live.apiToken = sync.apiToken || '';
+  live.vesselId = sync.vesselId || '';
+  live.deviceName = sync.deviceName || '';
+  live.autoSync = !!sync.autoSync;
+  live.conflictPolicy = sync.conflictPolicy || 'merge';
+  live.lastModifiedAt = sync.lastModifiedAt || new Date().toISOString();
+
   const v = activeVessel();
   if (v && state.setup.vesselName) v.name = state.setup.vesselName;
+
   await dbPutMany('meta', [
     { key:`setup:${state.activeVesselId}`, value: state.setup },
-    { key:'vessels', value: state.vessels },
-    { key:'activeVesselId', value: state.activeVesselId },
-    { key:'syncCredentials', value: syncCredentialsMirrorValue(sync) }
+    { key:'vessels', value: state.vessels || [] },
+    { key:'activeVesselId', value: state.activeVesselId }
   ]);
 }
 
@@ -11676,7 +11764,8 @@ async function saveSyncSettingsFromForm(options = {}){
   /* Coalesce: wait for the current save, then write latest form values once. */
   if (_syncSaveInFlight){
     if (fromAutosave) return _syncSaveInFlight;
-    try{ await _syncSaveInFlight; }catch(_){}
+    try{ await withDbTimeout(_syncSaveInFlight, 22000, 'Previous sync save is still running'); }catch(_){}
+    _syncSaveInFlight = null;
   }
   const btn = document.getElementById('btnSaveSyncSettings');
   const defaultLabel = (btn && (btn.dataset.defaultLabel || btn.textContent)) || 'Save Sync Settings';
@@ -11686,10 +11775,9 @@ async function saveSyncSettingsFromForm(options = {}){
     let finished = false;
     const watchdog = setTimeout(()=>{
       if (finished) return;
-      /* Do not cancel the write — only surface progress so the button is not stuck forever. */
       if (btn){ btn.disabled = false; btn.removeAttribute('aria-busy'); }
-      setSyncSaveStatus('Still saving to IndexedDB… please wait.', 'pending');
-    }, 12000);
+      setSyncSaveStatus('Still saving… if this persists, hard-refresh and try again.', 'pending');
+    }, 8000);
     try{
       try{
         const ae = document.activeElement;
@@ -11699,9 +11787,42 @@ async function saveSyncSettingsFromForm(options = {}){
         btn.disabled = true;
         btn.setAttribute('aria-busy', 'true');
       }
-      setSyncSaveStatus(fromAutosave ? 'auto-save in progress' : 'writing to local database', 'saving');
+      setSyncSaveStatus(fromAutosave ? 'auto-save in progress' : 'saving sync credentials…', 'saving');
       const sync = readSyncSettingsFromForm();
-      await persistSyncSettingsToDb(sync);
+      /* Fast path: credentials alone — works even with empty vessel / fresh DB. */
+      await dbPut('meta', { key: 'syncCredentials', value: syncCredentialsMirrorValue(sync) });
+      const live = ensureSyncConfig();
+      live.serverUrl = sync.serverUrl || '';
+      live.apiToken = sync.apiToken || '';
+      live.vesselId = sync.vesselId || '';
+      live.deviceName = sync.deviceName || '';
+      live.autoSync = !!sync.autoSync;
+      live.conflictPolicy = sync.conflictPolicy || 'merge';
+      live.lastModifiedAt = sync.lastModifiedAt || new Date().toISOString();
+
+      setSyncSaveStatus(fromAutosave ? 'auto-save: writing vessel setup…' : 'credentials saved — writing vessel setup…', 'saving');
+      try{
+        await ensureActiveVesselForPersist();
+        const v = activeVessel();
+        if (v && state.setup.vesselName) v.name = state.setup.vesselName;
+        await dbPutMany('meta', [
+          { key:`setup:${state.activeVesselId}`, value: state.setup },
+          { key:'vessels', value: state.vessels || [] },
+          { key:'activeVesselId', value: state.activeVesselId }
+        ]);
+      }catch(setupErr){
+        /* Credentials already persisted — do not fail the whole save on empty/broken vessel setup. */
+        console.warn('Sync credentials saved; vessel setup write failed:', setupErr);
+        _syncFormDirty = false;
+        renderSyncUi();
+        const warn = (setupErr && setupErr.message) ? setupErr.message : String(setupErr);
+        setSyncSaveStatus('Sync credentials saved. Vessel setup write deferred: ' + warn, 'pending');
+        if (!silent && !fromAutosave){
+          try{ alert('SUCCESS — Sync credentials saved.\n\nVessel setup write deferred:\n' + warn); }catch(_){}
+        }
+        return true;
+      }
+
       _syncFormDirty = false;
       renderSyncUi();
       setSyncSaveStatus(
@@ -11711,7 +11832,6 @@ async function saveSyncSettingsFromForm(options = {}){
         'ok'
       );
       if (!silent && !fromAutosave){
-        /* Backup feedback on tablets where the status banner is easy to miss. */
         try{ alert('SUCCESS — Sync settings saved.'); }catch(_){}
       }
       return true;
@@ -12293,7 +12413,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v78';
+let androidInstallCacheName = 'noon-report-v79';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
