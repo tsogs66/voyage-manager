@@ -90,7 +90,7 @@ After install, expose the container through Cloudflare:
 pct exec <CTID> -- cloudflared tunnel --url http://127.0.0.1:8080
 ```
 
-Use the tunnel URL in the app **Data → Server Sync** settings.
+Use the tunnel URL in the app **Setup → Server Sync** settings.
 
 ## Android Studio app
 
@@ -208,11 +208,11 @@ API:
 cloudflared tunnel --url http://localhost:8787
 ```
 
-Use the generated `https://….trycloudflare.com` or your custom domain in the app's **Data → Sync Server URL**.
+Use the generated `https://….trycloudflare.com` or your custom domain in the app's **Setup → Sync Server URL**.
 
 ### Configure the App
 
-1. Open **Data** tab
+1. Open **Setup** tab
 2. Set **Sync Server URL** (e.g. `https://sync.yourdomain.com`)
 3. Set **API Token** (same as `SYNC_API_TOKEN`)
 4. Set **Vessel ID** (short slug, e.g. `captain-veniamis`)
@@ -233,11 +233,16 @@ Sync merges records by `id`, keeping the newest `updatedAt` per entry/receipt/do
 | `sync-server/server.py` | Self-hosted sync API |
 | `noonreport_backup.json` | Sample backup data |
 
-## Data Tab
+## Setup Tab
 
+- **Server Sync** — sync server URL, token, vessel slug, push/pull
 - **Export Full Backup** — portable JSON for another device/browser
 - **Import Backup** — restore or migrate data
-- **Export Setup Only** — vessel template without log entries
+- **Export Setup Only** — vessel template without log entries (Vessel Data)
+
+## Vessel Data Tab
+
+- Fleet vessel selection, machinery, tanks, capacities, and related vessel configuration
 
 ## Notes
 

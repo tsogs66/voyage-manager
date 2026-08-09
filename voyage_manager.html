@@ -1149,9 +1149,9 @@
     <div class="tab" data-page="reports">Reports</div>
     <div class="tab" data-page="reference">Reference</div>
     <div class="tab" data-page="orb">e-ORB</div>
-    <div class="tab" data-page="data">Data</div>
+    <div class="tab" data-page="data">Setup</div>
     <div class="tab" data-page="voyagesetup">Voyage Setup</div>
-    <div class="tab" data-page="setup">Setup</div>
+    <div class="tab" data-page="setup">Vessel Data</div>
   </div>
 
   <!-- VOYAGE SETUP -->
@@ -1187,7 +1187,7 @@
     </div>
   </div>
 
-  <!-- SETUP -->
+  <!-- VESSEL DATA (internal page id: setup) -->
   <div class="page" id="page-setup">
     <div class="panel">
       <h2>Fleet — Vessel Selection</h2>
@@ -2286,7 +2286,7 @@
     </div>
   </div>
 
-  <!-- DATA -->
+  <!-- SETUP / SYNC (internal page id: data) -->
   <div class="page" id="page-data">
     <div class="panel">
       <h2>Server Sync</h2>
@@ -2388,7 +2388,7 @@
         <input type="file" id="fileImport" accept="application/json" style="display:none;">
         <input type="file" id="fileImportSetup" accept="application/json" style="display:none;">
       </div>
-      <div class="hint">"Export Setup Only" saves just the Setup tab configuration without log entries. "Replace Active Leg from Backup" replaces this vessel’s current working entries/receipts/documents from a leg JSON file.</div>
+      <div class="hint">"Export Setup Only" saves just the Vessel Data tab configuration without log entries. "Replace Active Leg from Backup" replaces this vessel’s current working entries/receipts/documents from a leg JSON file.</div>
       <div class="hint">"Recalculate All Data" re-derives M/E average RPM from rev-counter deltas (so engine distance &amp; slip % match Pitch × Δrevs ÷ 1852), rebuilds performance tables, and refreshes every saved voyage leg. Manual consumption overrides are kept.</div>
       <div class="hint" id="entryCount"></div>
     </div>
@@ -2799,7 +2799,7 @@
     </div>
   </div>
 
-  <div class="footer-note">Noon Report — offline-capable PWA with local IndexedDB storage and optional self-hosted sync. Install on Android or PC from the Data tab when served over HTTPS.</div>
+  <div class="footer-note">Noon Report — offline-capable PWA with local IndexedDB storage and optional self-hosted sync. Install on Android or PC from the Setup tab when served over HTTPS.</div>
 </div>
 
 <nav class="bottom-nav" id="bottomNav" aria-label="Primary">
@@ -2855,16 +2855,16 @@
         <span>e-ORB</span>
       </button>
       <button type="button" class="bn-more-item" data-page="data">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>
-        <span>Data</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.9 4.9l1.4 1.4"/><path d="M17.7 17.7l1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.9 19.1l1.4-1.4"/><path d="M17.7 6.3l1.4-1.4"/></svg>
+        <span>Setup</span>
       </button>
       <button type="button" class="bn-more-item" data-page="voyagesetup">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17h18"/><path d="M5 17V9l7-5 7 5v8"/><path d="M9 17v-4h6v4"/></svg>
         <span>Voyage</span>
       </button>
       <button type="button" class="bn-more-item" data-page="setup">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.9 4.9l1.4 1.4"/><path d="M17.7 17.7l1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.9 19.1l1.4-1.4"/><path d="M17.7 6.3l1.4-1.4"/></svg>
-        <span>Setup</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>
+        <span>Vessel Data</span>
       </button>
     </div>
   </div>
@@ -4912,7 +4912,7 @@ async function pullVesselFromServer(vesselId){
   const vessel = state.vessels.find(v=>v.id===vesselId);
   if (!vessel) return;
   const sync = ensureSyncConfig();
-  if (!syncApiBase()){ alert('Configure the sync server URL on the Data tab first.'); return; }
+  if (!syncApiBase()){ alert('Configure the sync server URL on the Setup tab first.'); return; }
   const prevSlug = sync.vesselId;
   sync.vesselId = vessel.slug;
   try {
@@ -8983,7 +8983,7 @@ function normalizeEntry(e){
 }
 
 async function saveSetupFromForm(){
-  /* Vessel identity lives on the Setup tab (voyage fields are on Voyage Setup). */
+  /* Vessel identity lives on the Vessel Data tab (voyage fields are on Voyage Setup). */
   state.setup.vesselName = document.getElementById('s_vesselName').value;
   state.setup.chEng = document.getElementById('s_chEng').value;
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value)||null;
@@ -11997,7 +11997,7 @@ async function syncNow(options = {}){
   try{ await flushSyncSettingsFromForm(); }catch(_){}
   const sync = ensureSyncConfig();
   const base = syncApiBase();
-  if (!base) throw new Error('Enter a Sync Server URL on the Data tab first.');
+  if (!base) throw new Error('Enter a Sync Server URL on the Setup tab first.');
   if (syncInFlight) return syncInFlight;
 
   syncInFlight = (async ()=>{
@@ -12293,7 +12293,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v77';
+let androidInstallCacheName = 'noon-report-v78';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -12451,7 +12451,7 @@ function updateAndroidInstallUi(){
   const standalone = isStandalonePwa();
   const insecure = location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1';
 
-  /* Always visible in Data tab — Android tablets often use “Desktop site” and skip beforeinstallprompt */
+  /* Always visible in Setup tab — Android tablets often use “Desktop site” and skip beforeinstallprompt */
   panel.style.display = '';
 
   if (standalone){

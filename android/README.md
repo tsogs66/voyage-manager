@@ -78,5 +78,5 @@ Then rebuild/run in Android Studio. **Required after pulling web UI fixes** (bot
 ## Notes
 
 - Offline IndexedDB storage works inside the WebView the same as the browser PWA.
-- Cleartext HTTP is allowed so LAN sync servers (e.g. `http://192.168.x.x`) can be used from the Data tab.
+- Cleartext HTTP is allowed so LAN sync servers (e.g. `http://192.168.x.x`) can be used from the Setup tab.
 - Service worker registration still runs; for local `https://` Capacitor scheme assets it is best-effort. Core app data does not depend on the SW.

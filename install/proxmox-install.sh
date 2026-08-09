@@ -220,7 +220,7 @@ UNIT
  Sync API:     http://${ip:-localhost}:${WEB_PORT}/api/health
  API token:    ${SYNC_TOKEN}
 
- App sync settings (Data tab):
+ App sync settings (Setup tab):
    Sync Server URL:  http://${ip:-localhost}:${WEB_PORT}
    API Token:        ${SYNC_TOKEN}
 
