@@ -261,12 +261,16 @@
           field('fuelType', 'Fuel type', 'text', { required: true }),
           field('fuelQty', 'Quantity added (t)', 'number', { required: true }),
           field('fuelTank', 'Tank(s)', 'tankMulti', { tankGroup: 'fuel', required: true }),
+          field('fuelSplit', 'Per-tank split (e.g. FO1=120, FO2=80)', 'text',
+            { hint: 'Leave blank when bunkering into a single tank — the whole quantity goes there.' }),
           field('fuelTotal', 'Total content of tank(s) (t)', 'number')
         ]},
         { no: '26.4', label: 'Lubricating oil bunkered', fields: [
           field('lubeType', 'Lube type', 'text'),
           field('lubeQty', 'Quantity added (t)', 'number'),
-          field('lubeTank', 'Tank(s)', 'text'),
+          field('lubeTank', 'Tank(s)', 'tankMulti', { tankGroup: 'lube' }),
+          field('lubeTankOther', 'Tank(s) — if not listed in ORB setup', 'text'),
+          field('lubeSplit', 'Per-tank split (e.g. CYL1=12, SUMP=5)', 'text'),
           field('lubeTotal', 'Total content of tank(s) (t)', 'number')
         ]}
       ]
@@ -461,6 +465,161 @@
     ]}
   ];
 
+  /**
+   * Plain-language operation scenarios mapped to the MARPOL code + item numbers they
+   * require. Engineers think "I transferred sludge from the settling tank to the sludge
+   * tank", not "Code C item 12.2" — this layer does that translation and pre-ticks only
+   * the items that operation actually needs.
+   *
+   * Wording follows the worked examples in MEPC.1/Circ.736/Rev.2.
+   * `requires` gates a scenario on fitted equipment / ship type.
+   */
+  const SCENARIOS = [
+    /* ---- Fuel oil ---- */
+    { id: 'bunker-fuel', group: 'Fuel oil', part: 1, code: 'H',
+      title: 'Bunkering fuel oil',
+      blurb: 'Taking fuel oil bunkers. Records place, time, grade, quantity and tank totals after loading.',
+      items: ['26.1', '26.2', '26.3'] },
+    { id: 'bunker-lube', group: 'Fuel oil', part: 1, code: 'H',
+      title: 'Bunkering lubricating oil',
+      blurb: 'Taking bulk lube oil. Records place, time, grade, quantity and tank totals.',
+      items: ['26.1', '26.2', '26.4'] },
+    { id: 'fo-tank-ballast', group: 'Fuel oil', part: 1, code: 'A',
+      title: 'Ballasting or cleaning a fuel oil tank',
+      blurb: 'Ballasting or internally cleaning an oil fuel tank.',
+      items: ['1', '2', '3.1', '3.2', '3.3', '4.1', '4.2'] },
+    { id: 'fo-dirty-ballast', group: 'Fuel oil', part: 1, code: 'B',
+      title: 'Discharging dirty ballast / cleaning water from a fuel tank',
+      blurb: 'Discharge of dirty ballast or tank-cleaning water from an oil fuel tank.',
+      items: ['5', '6', '7', '8', '9.1', '9.2', '9.3', '10'] },
+
+    /* ---- Sludge / oil residue (IOPP 3.1) ---- */
+    { id: 'sludge-weekly', group: 'Sludge / oil residue', part: 1, code: 'C',
+      title: 'Weekly sludge tank inventory',
+      blurb: 'Routine weekly sounding of every oil residue (sludge) tank. Use the Weekly Inventory card to do all tanks at once.',
+      items: ['11.1', '11.2', '11.3'] },
+    { id: 'sludge-purifier', group: 'Sludge / oil residue', part: 1, code: 'C',
+      title: 'Sludge collected from purifier / separator drain tank',
+      blurb: 'Oil residue drained from fuel or lube oil separators into a sludge tank.',
+      items: ['11.1', '11.2', '11.3'] },
+    { id: 'sludge-sump', group: 'Sludge / oil residue', part: 1, code: 'C',
+      title: 'Sludge collected by draining an engine sump',
+      blurb: 'Oil residue collected by draining engine sump tanks.',
+      items: ['11.1', '11.2', '11.3'] },
+    { id: 'sludge-manual', group: 'Sludge / oil residue', part: 1, code: 'C',
+      title: 'Fuel oil / residue added manually to a sludge tank',
+      blurb: 'Manual collection into a sludge tank — all content of a sludge tank counts as sludge.',
+      items: ['11.1', '11.2', '11.3', '11.4'] },
+    { id: 'sludge-transfer', group: 'Sludge / oil residue', part: 1, code: 'C',
+      title: 'Sludge transfer — tank to tank',
+      blurb: 'Moving oil residue between IOPP 3.1 tanks. Source retained and receiving total are calculated for you.',
+      items: ['12.2'] },
+
+    /* ---- Bilge water ---- */
+    { id: 'bilge-well-to-tank', group: 'Bilge water', part: 1, code: 'D',
+      title: 'Bilge water transfer — bilge well to holding tank',
+      blurb: 'Pumping engine room bilge wells into the oily bilge water holding tank (manual start).',
+      items: ['13', '14', '15.3'] },
+    { id: 'bilge-ows-sea', group: 'Bilge water', part: 1, code: 'D',
+      title: 'Bilge water discharged overboard via 15 ppm equipment',
+      blurb: 'Discharge to sea through the oily water separator / 15 ppm equipment, started manually.',
+      items: ['13', '14', '15.1'], requires: { ows: true } },
+    { id: 'bilge-ows-auto', group: 'Bilge water', part: 1, code: 'E',
+      title: 'Bilge water discharged automatically via 15 ppm equipment',
+      blurb: 'Automatic-mode discharge or transfer of bilge water. Use code D instead when started by hand.',
+      items: ['16', '17', '18'], requires: { ows: true } },
+    { id: 'bilge-ashore', group: 'Bilge water', part: 1, code: 'D',
+      title: 'Bilge water landed ashore to reception facility',
+      blurb: 'Bilge water discharged to a shore reception facility — keep the receipt with the ORB.',
+      items: ['13', '14', '15.2'] },
+    { id: 'bilge-manual-mode', group: 'Bilge water', part: 1, code: 'E',
+      title: 'Bilge system placed in manual mode',
+      blurb: 'Recording the change of the automatic bilge system into manual operation.',
+      items: ['18'] },
+
+    /* ---- Incineration & disposal ---- */
+    { id: 'sludge-incinerated', group: 'Incineration & disposal', part: 1, code: 'C',
+      title: 'Sludge incinerated',
+      blurb: 'Burning oil residue in the incinerator. Records quantity, tank, retained quantity and total burn time.',
+      items: ['12.3'], requires: { incinerator: true } },
+    { id: 'sludge-other-disposal', group: 'Incineration & disposal', part: 1, code: 'C',
+      title: 'Sludge disposed by another method',
+      blurb: 'Any disposal route other than reception facility, transfer or incineration — state the method.',
+      items: ['12.4'] },
+
+    /* ---- Reception facility ---- */
+    { id: 'sludge-ashore', group: 'Reception facility', part: 1, code: 'C',
+      title: 'Sludge discharged ashore to reception facility',
+      blurb: 'Landing oil residue ashore. Retained quantity is calculated from the tank ROB less the quantity landed.',
+      items: ['12.1'] },
+
+    /* ---- Machinery & equipment ---- */
+    { id: 'ows-failure', group: 'Machinery & equipment', part: 1, code: 'F',
+      title: '15 ppm / OWS equipment failure',
+      blurb: 'Any failure of the oil filtering equipment must be recorded, with the reason and the date repaired.',
+      items: ['17'] },
+    { id: 'general-remarks', group: 'Machinery & equipment', part: 1, code: 'I',
+      title: 'Additional procedure or general remark',
+      blurb: 'Additional operational procedures and remarks. Never use this in place of codes A–H.',
+      items: ['I'] },
+
+    /* ---- Exceptional ---- */
+    { id: 'accidental-discharge', group: 'Exceptional', part: 1, code: 'G',
+      title: 'Accidental or exceptional discharge of oil',
+      blurb: 'Time, place, quantity, type of oil and the full circumstances and reasons for the discharge.',
+      items: ['19', '20', '21'] },
+
+    /* ---- Part II — tankers ---- */
+    { id: 'cargo-load', group: 'Cargo (tankers)', part: 2, code: 'A',
+      title: 'Loading oil cargo', blurb: 'Place, type of oil, tanks loaded.', items: ['1', '2', '3'] },
+    { id: 'cargo-internal', group: 'Cargo (tankers)', part: 2, code: 'B',
+      title: 'Internal transfer of oil cargo during voyage', blurb: 'Moving cargo between tanks at sea.', items: ['4', '5', '6'] },
+    { id: 'cargo-unload', group: 'Cargo (tankers)', part: 2, code: 'C',
+      title: 'Unloading oil cargo', blurb: 'Place, tanks unloaded, tanks emptied.', items: ['7', '8', '9'] },
+    { id: 'cargo-cow', group: 'Cargo (tankers)', part: 2, code: 'D',
+      title: 'Crude oil washing (COW)', blurb: 'COW operation record for crude carriers.', items: ['10', '11', '12', '13'], requires: { cow: true } },
+    { id: 'cargo-ballast', group: 'Cargo (tankers)', part: 2, code: 'E',
+      title: 'Ballasting cargo tanks', blurb: 'Taking ballast into cargo tanks.', items: ['14', '15', '16'] },
+    { id: 'slop-decant', group: 'Cargo (tankers)', part: 2, code: 'I',
+      title: 'Discharge of water from slop tanks into the sea', blurb: 'Decanting slop tank water — ODME record required.', items: ['40', '41', '42', '43', '44', '45', '46'] },
+    { id: 'dirty-ballast-discharge', group: 'Cargo (tankers)', part: 2, code: 'H',
+      title: 'Discharge of dirty ballast', blurb: 'Discharge of dirty ballast from cargo tanks.', items: ['33', '34', '35', '36', '37', '38', '39'] },
+    { id: 'residue-transfer', group: 'Cargo (tankers)', part: 2, code: 'J',
+      title: 'Collection / transfer / disposal of residues', blurb: 'Slop and residue movements. Retained and receiving totals are calculated for you.', items: ['55', '56', '57.1', '57.2', '57.3', '57.4'] },
+    { id: 'odme-condition', group: 'Cargo (tankers)', part: 2, code: 'M',
+      title: 'Condition of the ODME system', blurb: 'Failure or condition of the oil discharge monitoring and control system.', items: ['72', '73', '74'], requires: { odme: true } }
+  ];
+
+  /** Scenarios available for a part, filtered by what the ship is actually fitted with. */
+  function getScenarios(setup, part) {
+    const eq = (setup && setup.equipment) || {};
+    const p = Number(part) || 1;
+    return SCENARIOS.filter(s => {
+      if (Number(s.part) !== p) return false;
+      const req = s.requires || {};
+      if (req.ows && eq.owsFitted === false) return false;
+      if (req.incinerator && eq.incineratorFitted === false) return false;
+      if (req.odme && !eq.odmeFitted) return false;
+      if (req.cow && !eq.cowFitted) return false;
+      return true;
+    });
+  }
+
+  function getScenario(id) {
+    return SCENARIOS.find(s => s.id === id) || null;
+  }
+
+  /** Scenarios grouped for display: [{ group, scenarios: [...] }] in catalogue order. */
+  function getScenarioGroups(setup, part) {
+    const groups = [];
+    getScenarios(setup, part).forEach(s => {
+      let g = groups.find(x => x.group === s.group);
+      if (!g) { g = { group: s.group, scenarios: [] }; groups.push(g); }
+      g.scenarios.push(s);
+    });
+    return groups;
+  }
+
   function defaultOrbSetup(seed) {
     seed = seed || {};
     return {
@@ -483,15 +642,19 @@
         capacityWarnTolerancePct: seed.equipment && seed.equipment.capacityWarnTolerancePct != null ? seed.equipment.capacityWarnTolerancePct : 15
       }, seed.equipment || {}),
       tanks: {
-        sludge: (seed.tanks && seed.tanks.sludge) || [{ id: 'sludge1', name: 'Sludge Tank', capacityM3: 5, robM3: 0 }],
-        bilge: (seed.tanks && seed.tanks.bilge) || [{ id: 'bilge1', name: 'Oily Bilge Water Holding Tank', capacityM3: 10, robM3: 0 }],
-        bilgeWells: (seed.tanks && seed.tanks.bilgeWells) || [{ id: 'bilgewell1', name: 'Engine Room Bilge Wells', capacityM3: null, robM3: 0 }],
+        /* frameNo: position in the IOPP Supplement tank list, e.g. "Fr. 42–48 (P)". */
+        sludge: (seed.tanks && seed.tanks.sludge) || [{ id: 'sludge1', name: 'Sludge Tank', frameNo: '', capacityM3: 5, robM3: 0 }],
+        bilge: (seed.tanks && seed.tanks.bilge) || [{ id: 'bilge1', name: 'Oily Bilge Water Holding Tank', frameNo: '', capacityM3: 10, robM3: 0 }],
+        bilgeWells: (seed.tanks && seed.tanks.bilgeWells) || [{ id: 'bilgewell1', name: 'Engine Room Bilge Wells', frameNo: '', capacityM3: null, robM3: 0 }],
         fuel: (seed.tanks && seed.tanks.fuel) || [],
+        lube: (seed.tanks && seed.tanks.lube) || [],
         dirtyBallast: (seed.tanks && seed.tanks.dirtyBallast) || [],
         cargo: (seed.tanks && seed.tanks.cargo) || [],
         slop: (seed.tanks && seed.tanks.slop) || [],
         cbt: (seed.tanks && seed.tanks.cbt) || []
       },
+      /* Engine officers who may sign entries: [{ id, rank, name }]. */
+      officers: Array.isArray(seed.officers) ? seed.officers : [],
       disclaimerAck: !!seed.disclaimerAck
     };
   }
@@ -514,12 +677,36 @@
     if (group === 'bilge') return t.bilge || [];
     if (group === 'bilgeWells') return t.bilgeWells || [];
     if (group === 'fuel') return t.fuel || [];
+    if (group === 'lube') return t.lube || [];
     if (group === 'cargo') return t.cargo || [];
     if (group === 'slop') return t.slop || [];
     if (group === 'cbt') return t.cbt || [];
     if (group === 'dirtyBallast') return t.dirtyBallast || [];
     /* any */
-    return [].concat(t.sludge || [], t.bilge || [], t.bilgeWells || [], t.fuel || [], t.cargo || [], t.slop || [], t.cbt || [], t.dirtyBallast || []);
+    return [].concat(t.sludge || [], t.bilge || [], t.bilgeWells || [], t.fuel || [], t.lube || [], t.cargo || [], t.slop || [], t.cbt || [], t.dirtyBallast || []);
+  }
+
+  /**
+   * Display label for a tank: name, frame position and capacity.
+   * ORB tank-identity items are far more useful to a PSC inspector when the frame
+   * position from the IOPP Supplement is carried alongside the tank name.
+   */
+  function tankLabel(setup, id) {
+    const hit = findTank(setup, id);
+    if (!hit) return String(id == null ? '' : id);
+    const t = hit.tank;
+    const bits = [];
+    if (t.frameNo) bits.push(String(t.frameNo).trim());
+    if (t.capacityM3 != null && t.capacityM3 !== '') bits.push(fmtVal(t.capacityM3) + ' m³');
+    return t.name + (bits.length ? ' (' + bits.join(', ') + ')' : '');
+  }
+
+  /** Tank name plus frame position only — used inside ORB record wording. */
+  function tankIdentity(setup, id) {
+    const hit = findTank(setup, id);
+    if (!hit) return String(id == null ? '' : id);
+    const t = hit.tank;
+    return t.frameNo ? `${t.name} (${String(t.frameNo).trim()})` : t.name;
   }
 
   /**
@@ -538,7 +725,8 @@
 
     list.forEach(row => {
       if (!row || row.include === false) return;
-      const name = row.name || tankName(setup, row.id) || row.id;
+      /* Frame position belongs in the weekly inventory wording too (item 11.1). */
+      const name = tankIdentity(setup, row.id) || row.name || row.id;
       const cap = row.capacityM3;
       const rob = row.robM3;
       if (row.group === 'sludge') {
@@ -642,6 +830,56 @@
     return Math.round(Number(n) * 1000) / 1000;
   }
 
+  /** Normalise a tankMulti value (array, or '|'-joined string) to an array of ids. */
+  function tankIdList(v) {
+    if (Array.isArray(v)) return v.filter(Boolean);
+    if (v == null || v === '') return [];
+    return String(v).split('|').filter(Boolean);
+  }
+
+  /**
+   * Parse a per-tank quantity split like "FO1=120, FO2=80" or "sludge1:2.5".
+   * Keys match a tank id or a tank name, case-insensitively, so the engineer can type
+   * whichever they see on the tank plate. Returns a Map(tankId -> quantity), or null
+   * when nothing usable was written.
+   */
+  function parseTankSplit(setup, raw, allowedIds) {
+    if (raw == null || String(raw).trim() === '') return null;
+    const allow = allowedIds && allowedIds.length ? new Set(allowedIds) : null;
+    const byKey = new Map();
+    (allowedIds || []).forEach(id => {
+      byKey.set(String(id).toLowerCase(), id);
+      const hit = findTank(setup, id);
+      if (hit && hit.tank.name) byKey.set(String(hit.tank.name).trim().toLowerCase(), id);
+    });
+    const out = new Map();
+    String(raw).split(/[;,\n]+/).forEach(part => {
+      const m = String(part).match(/^\s*(.+?)\s*[=:]\s*([-\d.]+)\s*$/);
+      if (!m) return;
+      const key = m[1].trim().toLowerCase();
+      const qty = numOrNull(m[2]);
+      if (qty == null) return;
+      const id = byKey.get(key) || key;
+      if (allow && !allow.has(id)) return;
+      out.set(id, (out.get(id) || 0) + qty);
+    });
+    return out.size ? out : null;
+  }
+
+  /**
+   * How much of `qty` goes into each selected tank.
+   * Explicit split wins; a single selected tank takes the lot; otherwise we cannot
+   * guess and return null so the caller can warn instead of inventing numbers.
+   */
+  function resolveTankShares(setup, tankIds, qty, splitRaw) {
+    const ids = tankIdList(tankIds);
+    if (!ids.length || qty == null) return null;
+    const split = parseTankSplit(setup, splitRaw, ids);
+    if (split) return split;
+    if (ids.length === 1) return new Map([[ids[0], qty]]);
+    return null;
+  }
+
   function tolPct(setup) {
     const t = setup && setup.equipment && Number(setup.equipment.capacityWarnTolerancePct);
     return isFinite(t) && t >= 0 ? t : 15;
@@ -668,6 +906,7 @@
     const v = Object.assign({}, values || {});
     const notes = [];
     const want = new Set(selectedItemNos(selectedItems));
+    if (Number(part) === 2) return autofillPartTwoValues(setup, code, selectedItems, values);
     if (Number(part) !== 1) return { values: v, notes };
 
     function tankRob(id) {
@@ -754,18 +993,67 @@
       }
     }
 
-    if (code === 'H' && want.has('26.3')) {
-      const tanks = Array.isArray(v.fuelTank) ? v.fuelTank : (v.fuelTank ? String(v.fuelTank).split('|') : []);
-      const add = numOrNull(v.fuelQty);
-      if (tanks.length === 1 && add != null && (v.fuelTotal == null || v.fuelTotal === '')) {
-        const prior = tankRob(tanks[0]);
-        if (prior != null) {
-          v.fuelTotal = round3(prior + add);
-          notes.push('Fuel tank total content auto-calculated: prior + bunkered quantity.');
-        }
+    /* Bunkering: total content after = prior ROB + what went into each tank.
+       Works for a split across several tanks, not just a single-tank stem. */
+    function bunkerTotals(tankField, qtyField, splitField, totalField, label) {
+      const ids = tankIdList(v[tankField]);
+      const add = numOrNull(v[qtyField]);
+      if (!ids.length || add == null) return;
+      const shares = resolveTankShares(setup, ids, add, v[splitField]);
+      if (!shares) {
+        notes.push(label + ': ' + ids.length + ' tanks selected — enter a per-tank split to auto-calculate totals.');
+        return;
+      }
+      let total = 0, known = 0;
+      shares.forEach((qty, id) => {
+        const prior = tankRob(id);
+        if (prior != null) { total += prior + qty; known += 1; }
+      });
+      if (known && (v[totalField] == null || v[totalField] === '')) {
+        v[totalField] = round3(total);
+        notes.push(label + ' total content auto-calculated: prior ROB + bunkered quantity'
+          + (shares.size > 1 ? ' across ' + shares.size + ' tanks.' : '.'));
       }
     }
+    if (code === 'H' && want.has('26.3')) bunkerTotals('fuelTank', 'fuelQty', 'fuelSplit', 'fuelTotal', 'Fuel tank');
+    if (code === 'H' && want.has('26.4')) bunkerTotals('lubeTank', 'lubeQty', 'lubeSplit', 'lubeTotal', 'Lube oil tank');
 
+    return { values: v, notes };
+  }
+
+  /**
+   * Part II (tankers) code J — collection/transfer/disposal of residues and oily mixtures.
+   * Mirrors the Part I code C treatment so slop/cargo tank quantities stay consistent.
+   */
+  function autofillPartTwoValues(setup, code, selectedItems, values) {
+    const v = Object.assign({}, values || {});
+    const notes = [];
+    const want = new Set(selectedItemNos(selectedItems));
+    if (code !== 'J') return { values: v, notes };
+
+    function tankRob(id) {
+      const hit = findTank(setup, id);
+      return hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : null;
+    }
+    const qty = numOrNull(v.qty);
+    const ids = tankIdList(v.tanks);
+
+    /* 56 — retained in the source tank(s) after the operation. */
+    if (want.has('56') && qty != null && ids.length === 1 && (v.retained == null || v.retained === '')) {
+      const prior = tankRob(ids[0]);
+      if (prior != null) {
+        v.retained = round3(Math.max(0, prior - qty));
+        notes.push('Retained auto-calculated: ' + fmtVal(prior) + ' − ' + fmtVal(qty) + ' = ' + fmtVal(v.retained) + ' m³.');
+      }
+    }
+    /* 57.3 — quantity moved into another tank. */
+    if (want.has('57.3') && qty != null && v.toTank && (v.toTotal == null || v.toTotal === '')) {
+      const toPrior = tankRob(v.toTank);
+      if (toPrior != null) {
+        v.toTotal = round3(toPrior + qty);
+        notes.push('Receiving tank total auto-calculated from ROB + transferred.');
+      }
+    }
     return { values: v, notes };
   }
 
@@ -843,16 +1131,42 @@
       }
     }
 
-    if (code === 'H' && want.has('26.3')) {
-      const tanks = Array.isArray(v.fuelTank) ? v.fuelTank : (v.fuelTank ? String(v.fuelTank).split('|') : []);
-      const total = numOrNull(v.fuelTotal);
-      if (tanks.length === 1 && total != null) {
-        const hit = findTank(setup, tanks[0]);
+    /* Bunkering: overfill per receiving tank, and flag a split we cannot resolve. */
+    function bunkerWarnings(tankField, qtyField, splitField, totalField, label) {
+      const ids = tankIdList(v[tankField]);
+      const add = numOrNull(v[qtyField]);
+      const total = numOrNull(v[totalField]);
+      if (ids.length === 1 && total != null) {
+        const hit = findTank(setup, ids[0]);
         if (hit && hit.tank.capacityM3 != null && total - Number(hit.tank.capacityM3) > 0.001) {
-          warnings.push({ level: 'error', code: 'OVERFILL', message: 'Bunkered total content (' + fmtVal(total) + ') exceeds capacity of ' + hit.tank.name + ' (' + fmtVal(hit.tank.capacityM3) + ').' });
+          warnings.push({ level: 'error', code: 'OVERFILL', message: label + ' total content (' + fmtVal(total) + ') exceeds capacity of ' + hit.tank.name + ' (' + fmtVal(hit.tank.capacityM3) + ').' });
         }
+        return;
+      }
+      if (ids.length <= 1 || add == null) return;
+      const shares = resolveTankShares(setup, ids, add, v[splitField]);
+      if (!shares) {
+        warnings.push({ level: 'warn', code: 'SPLIT_REQUIRED',
+          message: label + ': ' + ids.length + ' tanks selected. Enter a per-tank split (e.g. "' + ids[0] + '=' + fmtVal(add) + '") so tank ROB can be updated.' });
+        return;
+      }
+      let sum = 0;
+      shares.forEach((qty, id) => {
+        sum += qty;
+        const hit = findTank(setup, id);
+        if (!hit || hit.tank.capacityM3 == null) return;
+        const base = hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
+        if (base + qty - Number(hit.tank.capacityM3) > 0.001) {
+          warnings.push({ level: 'error', code: 'OVERFILL', message: label + ': ' + hit.tank.name + ' would reach ' + fmtVal(base + qty) + ' vs capacity ' + fmtVal(hit.tank.capacityM3) + '.' });
+        }
+      });
+      if (Math.abs(sum - add) > 0.001) {
+        warnings.push({ level: 'error', code: 'SPLIT_MISMATCH',
+          message: label + ': per-tank split totals ' + fmtVal(sum) + ' but quantity added is ' + fmtVal(add) + '.' });
       }
     }
+    if (code === 'H' && want.has('26.3')) bunkerWarnings('fuelTank', 'fuelQty', 'fuelSplit', 'fuelTotal', 'Fuel bunkering');
+    if (code === 'H' && want.has('26.4')) bunkerWarnings('lubeTank', 'lubeQty', 'lubeSplit', 'lubeTotal', 'Lube oil bunkering');
 
     return warnings;
   }
@@ -863,7 +1177,7 @@
    */
   function applyOperationRob(setup, part, code, selectedItems, values) {
     const notes = [];
-    if (!setup || Number(part) !== 1) return notes;
+    if (!setup || (Number(part) !== 1 && Number(part) !== 2)) return notes;
     const v = values || {};
     const want = new Set(selectedItemNos(selectedItems));
 
@@ -874,6 +1188,11 @@
       hit.tank.robM3 = round3(Math.max(0, next));
       notes.push((label || hit.tank.name) + ': ROB ' +
         (prev != null ? fmtVal(prev) : '—') + ' → ' + fmtVal(hit.tank.robM3) + ' m³');
+    }
+
+    if (Number(part) === 2) {
+      applyPartTwoRob(setup, code, selectedItems, v, setRob);
+      return notes;
     }
 
     if (code === 'C') {
@@ -937,19 +1256,54 @@
       }
     }
 
-    if (code === 'H' && want.has('26.3')) {
-      const tanks = Array.isArray(v.fuelTank) ? v.fuelTank : (v.fuelTank ? String(v.fuelTank).split('|') : []);
-      if (tanks.length === 1) {
-        if (v.fuelTotal != null && v.fuelTotal !== '') setRob(tanks[0], Number(v.fuelTotal));
-        else if (numOrNull(v.fuelQty) != null) {
-          const hit = findTank(setup, tanks[0]);
-          const base = hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
-          setRob(tanks[0], base + Number(v.fuelQty));
-        }
+    /* Bunkering adds to each receiving tank — a single stem, or a split across several. */
+    function applyBunker(tankField, qtyField, splitField, totalField) {
+      const ids = tankIdList(v[tankField]);
+      const add = numOrNull(v[qtyField]);
+      if (!ids.length) return;
+      if (ids.length === 1 && v[totalField] != null && v[totalField] !== '') {
+        setRob(ids[0], Number(v[totalField]));
+        return;
       }
+      if (add == null) return;
+      const shares = resolveTankShares(setup, ids, add, v[splitField]);
+      if (!shares) return; /* ambiguous split — capacityWarnings tells the user */
+      shares.forEach((qty, id) => {
+        const hit = findTank(setup, id);
+        if (!hit) return;
+        const base = hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
+        setRob(id, base + qty);
+      });
     }
+    if (code === 'H' && want.has('26.3')) applyBunker('fuelTank', 'fuelQty', 'fuelSplit', 'fuelTotal');
+    if (code === 'H' && want.has('26.4')) applyBunker('lubeTank', 'lubeQty', 'lubeSplit', 'lubeTotal');
 
     return notes;
+  }
+
+  /** Part II code J ROB effects — source tank drawn down, receiving tank topped up. */
+  function applyPartTwoRob(setup, code, selectedItems, values, setRob) {
+    if (code !== 'J') return;
+    const v = values || {};
+    const want = new Set(selectedItemNos(selectedItems));
+    const qty = numOrNull(v.qty);
+    const ids = tankIdList(v.tanks);
+    if (want.has('56') && ids.length === 1) {
+      if (v.retained != null && v.retained !== '') setRob(ids[0], Number(v.retained));
+      else if (qty != null) {
+        const hit = findTank(setup, ids[0]);
+        const base = hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
+        setRob(ids[0], Math.max(0, base - qty));
+      }
+    }
+    if (want.has('57.3') && v.toTank) {
+      if (v.toTotal != null && v.toTotal !== '') setRob(v.toTank, Number(v.toTotal));
+      else if (qty != null) {
+        const hit = findTank(setup, v.toTank);
+        const base = hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
+        setRob(v.toTank, base + qty);
+      }
+    }
   }
 
   function fmtVal(v) {
@@ -973,10 +1327,11 @@
 
     function resolve(fieldDef) {
       let v = val[fieldDef.name];
-      if (fieldDef.type === 'tank') v = tankName(setup, v) || v;
+      /* Tank identity in the record carries the IOPP frame position when known. */
+      if (fieldDef.type === 'tank') v = tankIdentity(setup, v) || v;
       if (fieldDef.type === 'tankMulti') {
         const arr = Array.isArray(v) ? v : (v ? String(v).split('|') : []);
-        v = arr.map(id => tankName(setup, id) || id).filter(Boolean).join(', ');
+        v = arr.map(id => tankIdentity(setup, id) || id).filter(Boolean).join(', ');
       }
       return fmtVal(v);
     }
@@ -1139,12 +1494,21 @@
     FLAGS,
     PART_I,
     PART_II,
+    SCENARIOS,
+    getScenarios,
+    getScenario,
+    getScenarioGroups,
     defaultOrbSetup,
     getFlag,
     getPartOps,
     getOperation,
     tanksForGroup,
     tankName,
+    tankLabel,
+    tankIdentity,
+    tankIdList,
+    parseTankSplit,
+    resolveTankShares,
     buildItemLines,
     buildWeeklyInventory,
     autofillOperationValues,
