@@ -11555,11 +11555,15 @@ async function flushSyncSettingsFromForm(){
 
 function syncRequestHeaders(extra){
   const sync = ensureSyncConfig();
+  const creds = (typeof readSyncCredentialsFromLocalStorage === 'function')
+    ? readSyncCredentialsFromLocalStorage()
+    : null;
   const headers = Object.assign({}, extra || {});
-  const token = (syncFormFieldValue('sync_apiToken').trim() || sync.apiToken || '').trim();
-  const deviceName = (syncFormFieldValue('sync_deviceName').trim() || sync.deviceName || '').trim();
+  const token = (syncFormFieldValue('sync_apiToken').trim() || sync.apiToken || (creds && creds.apiToken) || '').trim();
+  const deviceName = (syncFormFieldValue('sync_deviceName').trim() || sync.deviceName || (creds && creds.deviceName) || '').trim();
+  const deviceId = sync.deviceId || (creds && creds.deviceId) || null;
   if (token) headers.Authorization = 'Bearer ' + token;
-  if (sync.deviceId) headers['X-Device-Id'] = sync.deviceId;
+  if (deviceId) headers['X-Device-Id'] = deviceId;
   if (deviceName) headers['X-Device-Name'] = deviceName;
   return headers;
 }
