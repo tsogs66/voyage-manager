@@ -11727,13 +11727,24 @@ function bindMobileSafeAction(el, handler){
   });
 }
 
+let _saveSyncClickAt = 0;
 async function handleSaveSyncSettingsClick(ev){
   if (ev){
     try{ ev.preventDefault(); }catch(_){}
     try{ ev.stopPropagation(); }catch(_){}
   }
+  const now = Date.now();
+  if (now - _saveSyncClickAt < 900) return false;
+  _saveSyncClickAt = now;
   setSyncSaveStatus('Save tapped — writing settings…', 'saving');
-  return saveSyncSettingsFromForm({ silent: false, fromAutosave: false });
+  try{
+    await saveSyncSettingsFromForm({ silent: false, fromAutosave: false });
+  }catch(err){
+    const msg = err && err.message ? err.message : String(err);
+    setSyncSaveStatus('Could not save sync settings: ' + msg, 'err');
+    try{ alert('FAILED — could not save sync settings:\n' + msg); }catch(_){}
+  }
+  return false;
 }
 window.__saveSyncSettingsClick = handleSaveSyncSettingsClick;
 
@@ -12214,7 +12225,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v75';
+let androidInstallCacheName = 'noon-report-v76';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
