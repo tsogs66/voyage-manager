@@ -184,6 +184,9 @@
     grid-template-columns:repeat(3, minmax(0, 1fr));
     align-items:stretch;
   }
+  /* With no turbocharger boxes alongside it, the readings box is the whole panel —
+     its "Others" sub-heading would just repeat the panel title. */
+  #vsTurboScavRow.no-turbos #vsOthersBox > h3{display:none;}
   #vsTurboScavRow.no-turbos{
     grid-template-columns:minmax(0, 1fr);
   }
@@ -1699,7 +1702,7 @@
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
-        <h3 class="sub" style="margin-top:0;">Turbocharger &amp; Others</h3>
+        <h3 class="sub" style="margin-top:0;">Others</h3>
         <div class="unit-group cols3" id="vsTurboScavRow">
           <div id="vsTurboFields"></div>
           <div class="unit-box" id="vsOthersBox">
@@ -13087,7 +13090,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v85';
+let androidInstallCacheName = 'noon-report-v86';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
