@@ -3198,6 +3198,19 @@ async function dbPutMany(store, objs){
     });
   });
 }
+/* Bypass the write queue for tiny sync-credential puts so Save works during fleet/seed load. */
+async function dbPutMetaDirect(obj){
+  const d = await ensureDB();
+  const payload = safeCloneForIdb(obj);
+  return withDbTimeout(new Promise((res,rej)=>{
+    const tx = d.transaction('meta', 'readwrite');
+    tx.oncomplete = ()=> res();
+    tx.onerror = ()=> rej(tx.error || new Error('IndexedDB write failed'));
+    tx.onabort = ()=> rej(tx.error || new Error('IndexedDB write aborted'));
+    try{ tx.objectStore('meta').put(payload); }
+    catch(err){ rej(err); }
+  }), 10000, 'Sync credential write timed out');
+}
 async function dbDelete(store, key){
   return enqueueDbWrite(async ()=>{
     const d = await ensureDB();
@@ -6868,15 +6881,19 @@ function renderCiiStrip(consByFuel, perf){
 
 /* ---------------- persistence helpers ---------------- */
 async function saveSetup(){
-  if (!state.activeVesselId) state.activeVesselId = LEGACY_VESSEL_ID;
+  if (typeof ensureActiveVesselForPersist === 'function'){
+    await ensureActiveVesselForPersist();
+  } else if (!state.activeVesselId){
+    state.activeVesselId = LEGACY_VESSEL_ID;
+  }
   const v = activeVessel();
   if (v && state.setup.vesselName) v.name = state.setup.vesselName;
   /* One meta transaction for setup + vessel registry — fewer tablet IDB stalls. */
   const rows = [
     { key:`setup:${state.activeVesselId}`, value: state.setup },
-    { key:'vessels', value: state.vessels }
+    { key:'vessels', value: state.vessels || [] },
+    { key:'activeVesselId', value: state.activeVesselId }
   ];
-  if (state.activeVesselId) rows.push({ key:'activeVesselId', value: state.activeVesselId });
   await dbPutMany('meta', rows);
 }
 
@@ -11503,34 +11520,29 @@ async function flushSyncSettingsFromForm(){
   /* Copy the on-screen sync fields into state (+ IndexedDB) before any sync action. */
   clearTimeout(_syncAutosaveTimer);
   const urlEl = document.getElementById('sync_serverUrl');
-  if (!urlEl) return ensureSyncConfig();
+  if (!urlEl){
+    await applyMirroredSyncCredentials();
+    return ensureSyncConfig();
+  }
   const formUrl = normalizeSyncServerUrl(urlEl.value || '');
   const existing = ensureSyncConfig();
   if (!formUrl && (existing.serverUrl || '').trim() && !_syncFormDirty){
-    /* Form not filled yet — keep already-saved URL instead of wiping it. */
     return existing;
   }
+  if (!formUrl && !(existing.serverUrl || '').trim()){
+    await applyMirroredSyncCredentials();
+    return ensureSyncConfig();
+  }
   if (_syncSaveInFlight){
-    try{ await withDbTimeout(_syncSaveInFlight, 22000, 'Previous sync save is still running'); }catch(_){}
+    try{ await withDbTimeout(_syncSaveInFlight, 12000, 'Previous sync save is still running'); }catch(_){}
     _syncSaveInFlight = null;
   }
-  const sync = readSyncSettingsFromForm();
-  try{
-    await persistSyncSettingsToDb(sync);
-  }catch(err){
-    /* At least keep credentials + in-memory sync for Test Connection. */
-    await persistSyncCredentialsMirror(sync);
-    const live = ensureSyncConfig();
-    live.serverUrl = sync.serverUrl || '';
-    live.apiToken = sync.apiToken || '';
-    live.vesselId = sync.vesselId || '';
-    live.deviceName = sync.deviceName || '';
-    live.autoSync = !!sync.autoSync;
-    live.conflictPolicy = sync.conflictPolicy || 'merge';
-    console.warn('flushSyncSettingsFromForm partial save:', err);
-  }
+  const sync = formUrl ? readSyncSettingsFromForm() : existing;
+  await persistSyncCredentialsMirror(sync);
+  applySyncFieldsToLiveConfig(sync);
+  try{ await persistSyncSettingsToDb(sync); }catch(err){ console.warn('flushSyncSettingsFromForm setup attach:', err); }
   _syncFormDirty = false;
-  return sync;
+  return ensureSyncConfig();
 }
 
 function syncRequestHeaders(extra){
@@ -11678,10 +11690,52 @@ function syncCredentialsMirrorValue(sync){
 }
 
 async function persistSyncCredentialsMirror(sync){
-  /* Device-level copy so credentials survive vessel switches / empty setups on mobile. */
-  try{
-    await dbPut('meta', { key: 'syncCredentials', value: syncCredentialsMirrorValue(sync) });
-  }catch(_){}
+  /* Device-level copy — must succeed; used by fresh tablets before any voyage data exists. */
+  await dbPutMetaDirect({ key: 'syncCredentials', value: syncCredentialsMirrorValue(sync) });
+}
+
+function applySyncFieldsToLiveConfig(sync){
+  const live = ensureSyncConfig();
+  live.serverUrl = sync.serverUrl || '';
+  live.apiToken = sync.apiToken || '';
+  live.vesselId = sync.vesselId || '';
+  live.deviceName = sync.deviceName || '';
+  live.autoSync = !!sync.autoSync;
+  live.conflictPolicy = sync.conflictPolicy || 'merge';
+  live.lastModifiedAt = sync.lastModifiedAt || new Date().toISOString();
+  if (sync.deviceId) live.deviceId = sync.deviceId;
+  return live;
+}
+
+function localSyncCredentialSnapshot(){
+  const s = ensureSyncConfig();
+  return {
+    serverUrl: s.serverUrl || '',
+    apiToken: s.apiToken || '',
+    vesselId: s.vesselId || '',
+    deviceName: s.deviceName || '',
+    deviceId: s.deviceId || null,
+    autoSync: !!s.autoSync,
+    conflictPolicy: s.conflictPolicy || 'merge',
+    deletedIds: s.deletedIds || { entries:[], receipts:[], documents:[], abstracts:[], printHistory:[] }
+  };
+}
+
+function preserveLocalSyncOnSetup(nextSetup, localSync){
+  const setup = migrateSetup(nextSetup || {});
+  const keep = localSync || localSyncCredentialSnapshot();
+  setup.sync = {
+    ...(setup.sync || {}),
+    ...keep,
+    serverUrl: keep.serverUrl,
+    apiToken: keep.apiToken,
+    vesselId: keep.vesselId || (setup.sync && setup.sync.vesselId) || '',
+    deviceId: keep.deviceId || (setup.sync && setup.sync.deviceId) || null,
+    deviceName: keep.deviceName,
+    autoSync: keep.autoSync,
+    conflictPolicy: keep.conflictPolicy || 'merge'
+  };
+  return setup;
 }
 
 async function ensureActiveVesselForPersist(){
@@ -11692,9 +11746,10 @@ async function ensureActiveVesselForPersist(){
     return state.activeVesselId;
   }
   /* Fresh install / empty fleet — create a blank vessel so sync settings can be stored. */
-  const name = ((state.setup && state.setup.vesselName) || '').trim() || 'New Vessel';
+  const formVessel = (typeof syncFormFieldValue === 'function' ? syncFormFieldValue('sync_vesselId') : '').trim();
+  const name = ((state.setup && state.setup.vesselName) || '').trim() || formVessel || 'New Vessel';
   const id = 'v-' + uid();
-  const slug = vesselSlugFromName(name);
+  const slug = formVessel ? formVessel.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64) : vesselSlugFromName(name);
   const vessel = { id, name, slug, createdAt: new Date().toISOString() };
   state.vessels = [vessel];
   state.activeVesselId = id;
@@ -11712,49 +11767,50 @@ async function ensureActiveVesselForPersist(){
 }
 
 async function persistSyncSettingsToDb(sync){
-  /*
-   * Credentials first (device-level, small, always required).
-   * Then attach sync onto the active vessel setup — create a blank vessel if the fleet is empty.
-   */
-  const creds = syncCredentialsMirrorValue(sync);
-  await dbPut('meta', { key: 'syncCredentials', value: creds });
-
-  await ensureActiveVesselForPersist();
-  const live = ensureSyncConfig();
-  live.serverUrl = sync.serverUrl || '';
-  live.apiToken = sync.apiToken || '';
-  live.vesselId = sync.vesselId || '';
-  live.deviceName = sync.deviceName || '';
-  live.autoSync = !!sync.autoSync;
-  live.conflictPolicy = sync.conflictPolicy || 'merge';
-  live.lastModifiedAt = sync.lastModifiedAt || new Date().toISOString();
-
-  const v = activeVessel();
-  if (v && state.setup.vesselName) v.name = state.setup.vesselName;
-
-  await dbPutMany('meta', [
-    { key:`setup:${state.activeVesselId}`, value: state.setup },
-    { key:'vessels', value: state.vessels || [] },
-    { key:'activeVesselId', value: state.activeVesselId }
-  ]);
+  /* Credentials first (direct meta write). Vessel setup second (best-effort). */
+  await persistSyncCredentialsMirror(sync);
+  applySyncFieldsToLiveConfig(sync);
+  try{
+    await ensureActiveVesselForPersist();
+    const v = activeVessel();
+    if (v && state.setup.vesselName) v.name = state.setup.vesselName;
+    if (v && (sync.vesselId || '').trim()) v.slug = sync.vesselId.trim();
+    await dbPutMany('meta', [
+      { key:`setup:${state.activeVesselId}`, value: state.setup },
+      { key:'vessels', value: state.vessels || [] },
+      { key:'activeVesselId', value: state.activeVesselId }
+    ]);
+  }catch(err){
+    console.warn('Vessel setup write deferred after sync credential save:', err);
+  }
 }
 
 async function applyMirroredSyncCredentials(){
   try{
     const row = await dbGet('meta', 'syncCredentials');
     const creds = row && row.value;
-    if (!creds || typeof creds !== 'object') return;
+    if (!creds || typeof creds !== 'object') return false;
     const sync = ensureSyncConfig();
-    const empty = !(sync.serverUrl || '').trim() && !(sync.apiToken || '').trim();
-    if (!empty) return;
-    if (creds.serverUrl) sync.serverUrl = creds.serverUrl;
-    if (creds.apiToken) sync.apiToken = creds.apiToken;
-    if (creds.vesselId && !(sync.vesselId || '').trim()) sync.vesselId = creds.vesselId;
-    if (creds.deviceName && !(sync.deviceName || '').trim()) sync.deviceName = creds.deviceName;
+    /* Device-level credentials always win — needed after pull/remote wipe and fresh tablets. */
+    if (creds.serverUrl != null) sync.serverUrl = creds.serverUrl || '';
+    if (creds.apiToken != null) sync.apiToken = creds.apiToken || '';
+    if (creds.vesselId) sync.vesselId = creds.vesselId;
+    if (creds.deviceName != null) sync.deviceName = creds.deviceName || '';
     if (typeof creds.autoSync === 'boolean') sync.autoSync = creds.autoSync;
     if (creds.conflictPolicy) sync.conflictPolicy = creds.conflictPolicy;
-    if (creds.deviceId && !sync.deviceId) sync.deviceId = creds.deviceId;
-  }catch(_){}
+    if (creds.deviceId) sync.deviceId = creds.deviceId;
+    return true;
+  }catch(_){ return false; }
+}
+
+let _appReady = false;
+async function waitUntilAppReady(timeoutMs){
+  if (_appReady) return;
+  const limit = timeoutMs == null ? 60000 : timeoutMs;
+  const start = Date.now();
+  while (!_appReady && (Date.now() - start) < limit){
+    await new Promise(r => setTimeout(r, 40));
+  }
 }
 
 async function saveSyncSettingsFromForm(options = {}){
@@ -11764,7 +11820,7 @@ async function saveSyncSettingsFromForm(options = {}){
   /* Coalesce: wait for the current save, then write latest form values once. */
   if (_syncSaveInFlight){
     if (fromAutosave) return _syncSaveInFlight;
-    try{ await withDbTimeout(_syncSaveInFlight, 22000, 'Previous sync save is still running'); }catch(_){}
+    try{ await withDbTimeout(_syncSaveInFlight, 12000, 'Previous sync save is still running'); }catch(_){}
     _syncSaveInFlight = null;
   }
   const btn = document.getElementById('btnSaveSyncSettings');
@@ -11776,8 +11832,8 @@ async function saveSyncSettingsFromForm(options = {}){
     const watchdog = setTimeout(()=>{
       if (finished) return;
       if (btn){ btn.disabled = false; btn.removeAttribute('aria-busy'); }
-      setSyncSaveStatus('Still saving… if this persists, hard-refresh and try again.', 'pending');
-    }, 8000);
+      setSyncSaveStatus('Still saving sync credentials…', 'pending');
+    }, 5000);
     try{
       try{
         const ae = document.activeElement;
@@ -11787,52 +11843,43 @@ async function saveSyncSettingsFromForm(options = {}){
         btn.disabled = true;
         btn.setAttribute('aria-busy', 'true');
       }
-      setSyncSaveStatus(fromAutosave ? 'auto-save in progress' : 'saving sync credentials…', 'saving');
+      if (!_appReady){
+        setSyncSaveStatus('Waiting for app startup…', 'saving');
+        await waitUntilAppReady(60000);
+      }
+      setSyncSaveStatus(fromAutosave ? 'auto-saving sync credentials…' : 'saving sync credentials…', 'saving');
       const sync = readSyncSettingsFromForm();
-      /* Fast path: credentials alone — works even with empty vessel / fresh DB. */
-      await dbPut('meta', { key: 'syncCredentials', value: syncCredentialsMirrorValue(sync) });
-      const live = ensureSyncConfig();
-      live.serverUrl = sync.serverUrl || '';
-      live.apiToken = sync.apiToken || '';
-      live.vesselId = sync.vesselId || '';
-      live.deviceName = sync.deviceName || '';
-      live.autoSync = !!sync.autoSync;
-      live.conflictPolicy = sync.conflictPolicy || 'merge';
-      live.lastModifiedAt = sync.lastModifiedAt || new Date().toISOString();
+      if (!(sync.serverUrl || '').trim()){
+        throw new Error('Enter a Sync Server URL before saving.');
+      }
+      /* Direct write — does not wait behind voyage/fleet IndexedDB queue. */
+      await persistSyncCredentialsMirror(sync);
+      applySyncFieldsToLiveConfig(sync);
+      _syncFormDirty = false;
+      renderSyncUi();
+      setSyncSaveStatus('Sync credentials saved — ready to pull from server.', 'ok');
 
-      setSyncSaveStatus(fromAutosave ? 'auto-save: writing vessel setup…' : 'credentials saved — writing vessel setup…', 'saving');
+      /* Best-effort vessel setup attach; never fails the credential save. */
       try{
         await ensureActiveVesselForPersist();
         const v = activeVessel();
         if (v && state.setup.vesselName) v.name = state.setup.vesselName;
+        if (v && (sync.vesselId || '').trim()) v.slug = sync.vesselId.trim();
         await dbPutMany('meta', [
           { key:`setup:${state.activeVesselId}`, value: state.setup },
           { key:'vessels', value: state.vessels || [] },
           { key:'activeVesselId', value: state.activeVesselId }
         ]);
+        setSyncSaveStatus(
+          fromAutosave ? 'Sync settings saved automatically' : 'Sync settings saved — ready to pull from server.',
+          'ok'
+        );
       }catch(setupErr){
-        /* Credentials already persisted — do not fail the whole save on empty/broken vessel setup. */
-        console.warn('Sync credentials saved; vessel setup write failed:', setupErr);
-        _syncFormDirty = false;
-        renderSyncUi();
-        const warn = (setupErr && setupErr.message) ? setupErr.message : String(setupErr);
-        setSyncSaveStatus('Sync credentials saved. Vessel setup write deferred: ' + warn, 'pending');
-        if (!silent && !fromAutosave){
-          try{ alert('SUCCESS — Sync credentials saved.\n\nVessel setup write deferred:\n' + warn); }catch(_){}
-        }
-        return true;
+        console.warn('Sync credentials saved; vessel setup write deferred:', setupErr);
       }
 
-      _syncFormDirty = false;
-      renderSyncUi();
-      setSyncSaveStatus(
-        fromAutosave
-          ? 'Sync settings saved automatically'
-          : 'Sync settings saved successfully',
-        'ok'
-      );
       if (!silent && !fromAutosave){
-        try{ alert('SUCCESS — Sync settings saved.'); }catch(_){}
+        try{ alert('SUCCESS — Sync settings saved.\n\nYou can now use Test Connection, List Remote Voyages, or Pull.'); }catch(_){}
       }
       return true;
     }catch(err){
@@ -12046,16 +12093,18 @@ function mergeListsById(serverItems, clientItems){
 }
 
 function applyRemoteSnapshot(remote, policy){
-  const sync = ensureSyncConfig();
+  const localSync = localSyncCredentialSnapshot();
   const remoteData = remote.data || remote;
   if (policy === 'remote'){
-    state.setup = migrateSetup(remoteData.setup || {});
+    /* Never let a server snapshot wipe this device's sync credentials. */
+    state.setup = preserveLocalSyncOnSetup(remoteData.setup || {}, localSync);
     state.entries = (remoteData.entries || []).map(e=> normalizeEntry({...e, vesselId: state.activeVesselId}));
     state.receipts = (remoteData.receipts || []).map(r=> tagVesselId({...r}));
     state.documents = (remoteData.documents || []).map(d=> tagVesselId({...d}));
     state.abstracts = (remoteData.abstracts || []).map(a=> tagVesselId({...a}));
     state.printHistory = (remoteData.printHistory || []).map(p=> tagVesselId({...p}));
-    sync.deletedIds = remoteData.deletedIds || sync.deletedIds || {};
+    const live = ensureSyncConfig();
+    live.deletedIds = remoteData.deletedIds || localSync.deletedIds || live.deletedIds || {};
     return;
   }
   if (policy === 'local'){
@@ -12067,15 +12116,15 @@ function applyRemoteSnapshot(remote, policy){
   const remoteTs = (remoteSetup.sync || {}).lastModifiedAt || '';
   /* Keep local sync credentials; merge other setup fields by newest edit. */
   const chosen = remoteTs > localTs ? remoteSetup : localSetup;
-  const localSync = ensureSyncConfig();
-  state.setup = migrateSetup({ ...chosen, sync: { ...chosen.sync, ...localSync, serverUrl: localSync.serverUrl, apiToken: localSync.apiToken, vesselId: localSync.vesselId, deviceId: localSync.deviceId, deviceName: localSync.deviceName, conflictPolicy: localSync.conflictPolicy, autoSync: localSync.autoSync } });
+  state.setup = preserveLocalSyncOnSetup(chosen, localSync);
   state.entries = filterDeleted(mergeListsById(remoteData.entries, state.entries), remoteData.deletedIds?.entries).map(normalizeEntry);
   state.receipts = filterDeleted(mergeListsById(remoteData.receipts, state.receipts), remoteData.deletedIds?.receipts);
   state.documents = filterDeleted(mergeListsById(remoteData.documents, state.documents), remoteData.deletedIds?.documents);
   state.abstracts = filterDeleted(mergeListsById(remoteData.abstracts, state.abstracts), remoteData.deletedIds?.abstracts);
   state.printHistory = filterDeleted(mergeListsById(remoteData.printHistory, state.printHistory), remoteData.deletedIds?.printHistory);
-  sync.deletedIds = mergeDeletedIds(sync.deletedIds, remoteData.deletedIds);
-  sync.pendingChanges = true;
+  const live = ensureSyncConfig();
+  live.deletedIds = mergeDeletedIds(localSync.deletedIds, remoteData.deletedIds);
+  live.pendingChanges = true;
 }
 
 function filterDeleted(items, deleted){
@@ -12115,12 +12164,13 @@ async function syncNow(options = {}){
   const pullOnly = !!options.pullOnly;
   const forcePolicy = options.policy;
   try{ await flushSyncSettingsFromForm(); }catch(_){}
-  const sync = ensureSyncConfig();
+  await applyMirroredSyncCredentials();
   const base = syncApiBase();
   if (!base) throw new Error('Enter a Sync Server URL on the Setup tab first.');
   if (syncInFlight) return syncInFlight;
 
   syncInFlight = (async ()=>{
+    const syncBefore = ensureSyncConfig();
     const vessel = vesselSyncSlug();
     const voyage = voyageSyncKey();
     const condition = voyageConditionKey();
@@ -12137,14 +12187,15 @@ async function syncNow(options = {}){
       else throw e;
     }
 
-    const policy = forcePolicy || sync.conflictPolicy || 'merge';
-    if (pullOnly && !remote) throw new Error('No remote voyage snapshot found on server');
+    const policy = forcePolicy || syncBefore.conflictPolicy || 'merge';
+    if (pullOnly && !remote) throw new Error('No remote voyage snapshot found on server for ' + vessel + '/' + voyage + '/' + condition + '. Use List Remote Voyages, then Pull Selected Voyage Leg.');
 
     /* Always merge remote peers before push so multi-device offline edits are not lost. */
     if (remote){
       if (pullOnly || policy === 'remote'){
         applyRemoteSnapshot(remote, 'remote');
         await persistAllToDb();
+        await persistSyncCredentialsMirror(ensureSyncConfig());
       } else if (policy === 'merge'){
         applyRemoteSnapshot(remote, 'merge');
         await persistAllToDb();
@@ -12164,14 +12215,17 @@ async function syncNow(options = {}){
     }
 
     await archiveActiveVoyageLeg();
+    const sync = ensureSyncConfig();
     sync.lastSyncedAt = new Date().toISOString();
     sync.pendingChanges = false;
     sync.lastSyncError = null;
     await saveSetup();
+    await persistSyncCredentialsMirror(sync);
     renderSyncUi();
     await renderVoyageLibrary();
     render();
   })().catch(err=>{
+    const sync = ensureSyncConfig();
     sync.lastSyncError = err.message || String(err);
     renderSyncUi();
     throw err;
@@ -12413,7 +12467,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v79';
+let androidInstallCacheName = 'noon-report-v80';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -13880,8 +13934,10 @@ document.getElementById('orb_codesFlag')?.addEventListener('change', renderOrbCo
     registerServiceWorker();
     renderSyncUi();
     document.getElementById('dbStatus').textContent = '● local database ready';
+    _appReady = true;
   } catch(e){
     console.error('Startup error:', e);
+    _appReady = true; /* allow sync credential saves even if demo fleet seed failed */
     document.getElementById('dbStatus').textContent = '● local database error — see console';
     alert('This app could not open its local database on startup: ' + e.message + '\n\nTry closing any other tabs/windows with this same file open, then reload this page. (Check the browser console for full details.)');
   }
