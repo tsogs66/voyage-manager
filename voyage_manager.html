@@ -557,6 +557,18 @@
     #vsTurboScavRow.unit-group.cols3{grid-template-columns:repeat(2, minmax(0, 1fr));}
     .field input,.field select{font-size:14px; min-height:40px; padding:8px 9px;}
     button.small{min-height:36px;}
+    #page-data #btnSaveSyncSettings{min-height:44px;}
+  }
+
+  /* Sync actions stay tappable on phone/tablet when the soft keyboard is open */
+  @media (max-width:1100px){
+    #page-data .sync-action-row{
+      position:sticky; top:0; z-index:5;
+      margin-top:12px; padding:8px 0 4px;
+      background:linear-gradient(to bottom, var(--panel) 75%, transparent);
+    }
+    #page-data #btnSaveSyncSettings{flex:1 1 100%; min-height:48px; font-size:13px;}
+    .sync-save-status{min-height:1.2em; margin-top:4px; font-size:12px; color:var(--muted); display:block !important;}
   }
 
   /* Class fallback when orientation media is sticky after rotate (iOS/Android WebView) */
@@ -2245,14 +2257,15 @@
         <div class="field"><label>Auto-sync</label><select id="sync_auto"><option value="true">On save &amp; when online</option><option value="false">Manual only</option></select></div>
         <div class="field"><label>Conflict policy</label><select id="sync_conflict"><option value="merge">Merge by record (recommended)</option><option value="local">Prefer this device</option><option value="remote">Prefer server</option></select></div>
       </div>
-      <div class="btn-row">
-        <button class="primary small" id="btnSaveSyncSettings">Save Sync Settings</button>
-        <button class="ghost small" id="btnTestSync">Test Connection</button>
-        <button class="ghost small" id="btnSyncNow">Sync Now (active leg)</button>
-        <button class="ghost small" id="btnPullRemote">Pull Active Leg</button>
-        <button class="ghost small" id="btnListRemoteVoyages">List Remote Voyages</button>
-        <button class="ghost small" id="btnRequestPersist">Keep Data Persistent</button>
+      <div class="btn-row sync-action-row" id="syncActionRow">
+        <button type="button" class="primary small" id="btnSaveSyncSettings">Save Sync Settings</button>
+        <button type="button" class="ghost small" id="btnTestSync">Test Connection</button>
+        <button type="button" class="ghost small" id="btnSyncNow">Sync Now (active leg)</button>
+        <button type="button" class="ghost small" id="btnPullRemote">Pull Active Leg</button>
+        <button type="button" class="ghost small" id="btnListRemoteVoyages">List Remote Voyages</button>
+        <button type="button" class="ghost small" id="btnRequestPersist">Keep Data Persistent</button>
       </div>
+      <div class="sync-save-status" id="syncSaveStatus" aria-live="polite"></div>
       <div class="form-grid cols3" style="margin-top:10px;">
         <div class="field"><label>Pull voyage no.</label><select id="sync_pullVoyage"></select></div>
         <div class="field"><label>Pull condition</label><select id="sync_pullCondition"><option value="B">B — Ballast</option><option value="L">L — Laden</option></select></div>
@@ -3075,6 +3088,7 @@ async function ensureDB(){
 async function txStore(name, mode){ const d = await ensureDB(); return d.transaction(name, mode).objectStore(name); }
 async function dbPut(store, obj){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.put(obj); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
 async function dbDelete(store, key){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.delete(key); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+async function dbGet(store, key){ const s = await txStore(store,'readonly'); return new Promise((res,rej)=>{ const r = s.get(key); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function dbGetAll(store){ const s = await txStore(store,'readonly'); return new Promise((res,rej)=>{ const r = s.getAll(); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function dbClear(store){ const s = await txStore(store,'readwrite'); return new Promise((res,rej)=>{ const r = s.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
 
@@ -4662,6 +4676,7 @@ async function loadVesselFromDb(vesselId){
     }
   }
   exitEditMode();
+  await applyMirroredSyncCredentials();
   await renderVoyageLibrary();
 }
 
@@ -11331,6 +11346,159 @@ function markPendingSync(){
   if (sync.autoSync && navigator.onLine) queueBackgroundSync();
 }
 
+const SYNC_FORM_IDS = ['sync_serverUrl','sync_apiToken','sync_vesselId','sync_deviceName','sync_auto','sync_conflict'];
+let _syncFormDirty = false;
+let _syncSaveInFlight = null;
+let _syncAutosaveTimer = null;
+let _syncSaveStatusTimer = null;
+
+function syncFormFieldFocused(){
+  const id = document.activeElement && document.activeElement.id;
+  return !!(id && SYNC_FORM_IDS.includes(id));
+}
+
+function setSyncSaveStatus(msg, kind){
+  const el = document.getElementById('syncSaveStatus');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.style.color = kind === 'err' ? 'var(--danger, #e07070)'
+    : kind === 'ok' ? 'var(--ok, #6bcf8e)'
+    : '';
+  clearTimeout(_syncSaveStatusTimer);
+  if (msg && kind !== 'err'){
+    _syncSaveStatusTimer = setTimeout(()=>{ if (el.textContent === msg) el.textContent = ''; }, 4000);
+  }
+}
+
+function readSyncSettingsFromForm(sync){
+  const s = sync || ensureSyncConfig();
+  const urlEl = document.getElementById('sync_serverUrl');
+  const tokenEl = document.getElementById('sync_apiToken');
+  const vesselEl = document.getElementById('sync_vesselId');
+  const nameEl = document.getElementById('sync_deviceName');
+  const autoEl = document.getElementById('sync_auto');
+  const conflictEl = document.getElementById('sync_conflict');
+  if (!urlEl || !tokenEl || !vesselEl || !autoEl || !conflictEl){
+    throw new Error('Sync settings form is not available');
+  }
+  s.serverUrl = (urlEl.value || '').trim();
+  s.apiToken = (tokenEl.value || '').trim();
+  s.vesselId = (vesselEl.value || '').trim();
+  s.deviceName = nameEl ? (nameEl.value || '').trim() : (s.deviceName || '');
+  s.autoSync = autoEl.value === 'true';
+  s.conflictPolicy = conflictEl.value || 'merge';
+  s.lastModifiedAt = new Date().toISOString();
+  return s;
+}
+
+async function persistSyncCredentialsMirror(sync){
+  /* Device-level copy so credentials survive vessel switches / empty setups on mobile. */
+  try{
+    await dbPut('meta', {
+      key: 'syncCredentials',
+      value: {
+        serverUrl: sync.serverUrl || '',
+        apiToken: sync.apiToken || '',
+        vesselId: sync.vesselId || '',
+        deviceName: sync.deviceName || '',
+        autoSync: !!sync.autoSync,
+        conflictPolicy: sync.conflictPolicy || 'merge',
+        deviceId: sync.deviceId || null,
+        updatedAt: new Date().toISOString()
+      }
+    });
+  }catch(_){}
+}
+
+async function applyMirroredSyncCredentials(){
+  try{
+    const row = await dbGet('meta', 'syncCredentials');
+    const creds = row && row.value;
+    if (!creds || typeof creds !== 'object') return;
+    const sync = ensureSyncConfig();
+    const empty = !(sync.serverUrl || '').trim() && !(sync.apiToken || '').trim();
+    if (!empty) return;
+    if (creds.serverUrl) sync.serverUrl = creds.serverUrl;
+    if (creds.apiToken) sync.apiToken = creds.apiToken;
+    if (creds.vesselId && !(sync.vesselId || '').trim()) sync.vesselId = creds.vesselId;
+    if (creds.deviceName && !(sync.deviceName || '').trim()) sync.deviceName = creds.deviceName;
+    if (typeof creds.autoSync === 'boolean') sync.autoSync = creds.autoSync;
+    if (creds.conflictPolicy) sync.conflictPolicy = creds.conflictPolicy;
+    if (creds.deviceId && !sync.deviceId) sync.deviceId = creds.deviceId;
+  }catch(_){}
+}
+
+async function saveSyncSettingsFromForm(options = {}){
+  const silent = !!options.silent;
+  const fromAutosave = !!options.fromAutosave;
+  if (_syncSaveInFlight) return _syncSaveInFlight;
+  const btn = document.getElementById('btnSaveSyncSettings');
+  _syncSaveInFlight = (async ()=>{
+    try{
+      if (btn) btn.disabled = true;
+      const sync = readSyncSettingsFromForm();
+      await saveSetup();
+      await persistSyncCredentialsMirror(sync);
+      _syncFormDirty = false;
+      renderSyncUi();
+      setSyncSaveStatus(fromAutosave ? 'Sync settings auto-saved.' : 'Sync settings saved.', 'ok');
+      if (!silent && !fromAutosave){
+        try{ alert('Sync settings saved.'); }catch(_){}
+      }
+      return true;
+    }catch(err){
+      const msg = err && err.message ? err.message : String(err);
+      setSyncSaveStatus('Could not save sync settings: ' + msg, 'err');
+      if (!silent){
+        try{ alert('Could not save sync settings: ' + msg); }catch(_){}
+      }
+      return false;
+    }finally{
+      if (btn) btn.disabled = false;
+      _syncSaveInFlight = null;
+    }
+  })();
+  return _syncSaveInFlight;
+}
+
+function queueSyncSettingsAutosave(){
+  _syncFormDirty = true;
+  setSyncSaveStatus('Unsaved sync changes…', '');
+  clearTimeout(_syncAutosaveTimer);
+  _syncAutosaveTimer = setTimeout(()=>{
+    saveSyncSettingsFromForm({ silent: true, fromAutosave: true });
+  }, 450);
+}
+
+function bindMobileSafeAction(el, handler){
+  if (!el || el.dataset.mobileSafeBound === '1') return;
+  el.dataset.mobileSafeBound = '1';
+  let lastRun = 0;
+  const run = (e)=>{
+    const now = Date.now();
+    if (now - lastRun < 600){
+      if (e){ e.preventDefault(); e.stopPropagation(); }
+      return;
+    }
+    lastRun = now;
+    if (e){ e.preventDefault(); }
+    handler(e);
+  };
+  /* pointerup fires before keyboard-dismiss scroll steals the click on iOS/Android */
+  el.addEventListener('pointerup', (e)=>{
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    run(e);
+  });
+  el.addEventListener('click', (e)=>{
+    if (Date.now() - lastRun < 600){
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    run(e);
+  });
+}
+
 function renderSyncUi(){
   const sync = ensureSyncConfig();
   const status = document.getElementById('syncStatus');
@@ -11338,13 +11506,21 @@ function renderSyncUi(){
   const meta = document.getElementById('syncMetaLine');
   if (!status) return;
 
-  document.getElementById('sync_serverUrl').value = sync.serverUrl || '';
-  document.getElementById('sync_apiToken').value = sync.apiToken || '';
-  document.getElementById('sync_vesselId').value = sync.vesselId || '';
-  const nameEl = document.getElementById('sync_deviceName');
-  if (nameEl) nameEl.value = sync.deviceName || '';
-  document.getElementById('sync_auto').value = sync.autoSync ? 'true' : 'false';
-  document.getElementById('sync_conflict').value = sync.conflictPolicy || 'merge';
+  /* Never wipe in-progress edits (common on mobile when online/offline/render refresh). */
+  if (!_syncFormDirty && !syncFormFieldFocused()){
+    const urlEl = document.getElementById('sync_serverUrl');
+    const tokenEl = document.getElementById('sync_apiToken');
+    const vesselEl = document.getElementById('sync_vesselId');
+    const nameEl = document.getElementById('sync_deviceName');
+    const autoEl = document.getElementById('sync_auto');
+    const conflictEl = document.getElementById('sync_conflict');
+    if (urlEl) urlEl.value = sync.serverUrl || '';
+    if (tokenEl) tokenEl.value = sync.apiToken || '';
+    if (vesselEl) vesselEl.value = sync.vesselId || '';
+    if (nameEl) nameEl.value = sync.deviceName || '';
+    if (autoEl) autoEl.value = sync.autoSync ? 'true' : 'false';
+    if (conflictEl) conflictEl.value = sync.conflictPolicy || 'merge';
+  }
 
   const configured = !!syncApiBase();
   let statusText = '○ sync not configured';
@@ -11580,19 +11756,17 @@ function queueBackgroundSync(){
   }, 1200);
 }
 
-document.getElementById('btnSaveSyncSettings').addEventListener('click', async ()=>{
-  const sync = ensureSyncConfig();
-  sync.serverUrl = document.getElementById('sync_serverUrl').value.trim();
-  sync.apiToken = document.getElementById('sync_apiToken').value.trim();
-  sync.vesselId = document.getElementById('sync_vesselId').value.trim();
-  sync.deviceName = document.getElementById('sync_deviceName')?.value.trim() || '';
-  sync.autoSync = document.getElementById('sync_auto').value === 'true';
-  sync.conflictPolicy = document.getElementById('sync_conflict').value;
-  sync.lastModifiedAt = new Date().toISOString();
-  await saveSetup();
-  renderSyncUi();
-  alert('Sync settings saved.');
+bindMobileSafeAction(document.getElementById('btnSaveSyncSettings'), ()=>{
+  saveSyncSettingsFromForm({ silent: false });
 });
+(function bindSyncSettingsAutosave(){
+  SYNC_FORM_IDS.forEach(id=>{
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', queueSyncSettingsAutosave);
+    el.addEventListener('change', queueSyncSettingsAutosave);
+  });
+})();
 
 document.getElementById('btnSyncNow').addEventListener('click', async ()=>{
   try {
@@ -11794,7 +11968,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v72';
+let androidInstallCacheName = 'noon-report-v73';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -13257,6 +13431,7 @@ document.getElementById('orb_codesFlag')?.addEventListener('change', renderOrbCo
     render();
     prefillFromLastEntry();
     ensureSyncConfig();
+    await applyMirroredSyncCredentials();
     registerServiceWorker();
     renderSyncUi();
     document.getElementById('dbStatus').textContent = '● local database ready';
