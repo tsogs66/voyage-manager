@@ -32,6 +32,7 @@ fs.mkdirSync(www, { recursive: true });
 
 copyFile(path.join(root, 'voyage_manager.html'), path.join(www, 'index.html'));
 copyFile(path.join(root, 'voyage_manager.html'), path.join(www, 'voyage_manager.html'));
+copyFile(path.join(root, 'eorb.js'), path.join(www, 'eorb.js'));
 copyFile(path.join(root, 'sw.js'), path.join(www, 'sw.js'));
 copyFile(path.join(root, 'manifest.webmanifest'), path.join(www, 'manifest.webmanifest'));
 copyDir(path.join(root, 'icons'), path.join(www, 'icons'));

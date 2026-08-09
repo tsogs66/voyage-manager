@@ -15,6 +15,7 @@
 <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="eorb.js"></script>
 <script>
 /* Prefer bottom nav in Capacitor/Android and on touch devices (WebView CSS width is often >720). */
 (function(){
@@ -266,6 +267,36 @@
   .receipt-row span.desc{overflow:hidden; text-overflow:ellipsis;}
 
   .hint{font-size:11px; color:var(--paper-dim); margin-top:4px; line-height:1.5;}
+  .orb-subtabs{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px;}
+  .orb-subtab{
+    font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:0.06em; text-transform:uppercase;
+    padding:8px 12px; border:1px solid var(--line-strong); border-radius:4px; background:transparent;
+    color:var(--paper-dim); cursor:pointer;
+  }
+  .orb-subtab.active{color:var(--ink); background:var(--brass); border-color:var(--brass);}
+  .orb-panel{display:none;}
+  .orb-panel.active{display:block;}
+  .orb-op-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:8px; margin-top:10px;}
+  .orb-op-card{
+    text-align:left; border:1px solid var(--line-strong); border-radius:5px; padding:10px 12px;
+    background:rgba(0,0,0,0.12); color:var(--paper); cursor:pointer;
+  }
+  .orb-op-card:hover{border-color:var(--brass);}
+  .orb-op-card .code{font-family:'Oswald',sans-serif; color:var(--brass); font-size:16px; letter-spacing:0.06em;}
+  .orb-op-card .title{font-size:12px; margin-top:4px; line-height:1.35; color:var(--paper-dim);}
+  .orb-item-chip{
+    display:inline-flex; align-items:center; gap:6px; margin:0 8px 8px 0; padding:6px 8px;
+    border:1px solid var(--line-strong); border-radius:4px; font-size:12px; cursor:pointer;
+  }
+  .orb-item-chip input{accent-color:var(--teal);}
+  .orb-preview{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; line-height:1.45;
+    background:rgba(0,0,0,0.18); border:1px solid var(--line); border-radius:4px; padding:10px 12px; white-space:pre-wrap;
+  }
+  .orb-flag-box{border-left:3px solid var(--teal); padding:8px 12px; margin-top:10px; background:rgba(87,179,171,0.08);}
+  .orb-table{width:100%; border-collapse:collapse; font-size:12px;}
+  .orb-table th,.orb-table td{border-bottom:1px solid var(--line); padding:7px 6px; text-align:left; vertical-align:top;}
+  .orb-table th{font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:0.05em; text-transform:uppercase; color:var(--brass);}
   .install-progress-wrap{margin-top:12px;}
   .install-progress-meta{
     font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--paper-dim);
@@ -1063,6 +1094,7 @@
     <div class="tab" data-page="receipts">Receipts</div>
     <div class="tab" data-page="reports">Reports</div>
     <div class="tab" data-page="reference">Reference</div>
+    <div class="tab" data-page="orb">e-ORB</div>
     <div class="tab" data-page="data">Data</div>
     <div class="tab" data-page="voyagesetup">Voyage Setup</div>
     <div class="tab" data-page="setup">Setup</div>
@@ -2045,6 +2077,131 @@
     </div>
   </div>
 
+  <!-- ELECTRONIC OIL RECORD BOOK -->
+  <div class="page" id="page-orb">
+    <div class="panel">
+      <h2>Electronic Oil Record Book (e-ORB)</h2>
+      <div class="hint">Guided MARPOL Annex I Oil Record Book logging (Part I machinery-space operations; Part II for tankers). Entry letter codes and item numbers follow IMO Appendix III. Flag selection loads administration guidance — official hard-copy replacement still requires flag-approved software under MEPC.312(74) plus a ship Declaration.</div>
+      <div class="orb-subtabs" id="orbSubtabs">
+        <button type="button" class="orb-subtab active" data-orb="setup">Vessel Setup</button>
+        <button type="button" class="orb-subtab" data-orb="new">New Entry</button>
+        <button type="button" class="orb-subtab" data-orb="browse">Browse / Print</button>
+        <button type="button" class="orb-subtab" data-orb="codes">Entry Codes</button>
+      </div>
+    </div>
+
+    <div class="orb-panel active" id="orbPanelSetup">
+      <div class="panel">
+        <h2>ORB Vessel Setup</h2>
+        <div class="hint">Tank lists should match the IOPP Certificate Supplement (Form A/B). Flag administration determines language/approval notes shown while logging.</div>
+        <div class="form-grid cols3">
+          <div class="field"><label>Flag State / Administration</label><select id="orb_flag"></select></div>
+          <div class="field"><label>Ship type</label><select id="orb_shipType"><option value="other">Cargo / other (≥400 GT — Part I)</option><option value="tanker">Oil tanker (Part I + Part II)</option></select></div>
+          <div class="field"><label>IOPP Supplement</label><select id="orb_ioppForm"><option value="A">Form A</option><option value="B">Form B</option></select></div>
+          <div class="field"><label>Name of ship</label><input id="orb_shipName"></div>
+          <div class="field"><label>IMO Number</label><input id="orb_imo"></div>
+          <div class="field"><label>Call sign / distinctive letters</label><input id="orb_callSign"></div>
+          <div class="field"><label>Gross tonnage</label><input type="number" step="1" id="orb_gt"></div>
+          <div class="field"><label>Master</label><input id="orb_master"></div>
+          <div class="field"><label>Chief Engineer</label><input id="orb_ce"></div>
+        </div>
+        <div class="orb-flag-box" id="orbFlagInfo"></div>
+        <div class="form-grid cols3" style="margin-top:12px;">
+          <div class="field"><label>OWS / 15 ppm fitted</label><select id="orb_ows"><option value="true">Yes</option><option value="false">No</option></select></div>
+          <div class="field"><label>Incinerator fitted</label><select id="orb_incin"><option value="true">Yes</option><option value="false">No</option></select></div>
+          <div class="field"><label>ODME fitted (tankers)</label><select id="orb_odme"><option value="false">No</option><option value="true">Yes</option></select></div>
+        </div>
+        <label class="hint" style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;">
+          <input type="checkbox" id="orb_disclaimer" style="margin-top:3px;">
+          <span>I understand this guided e-ORB is for operational logging/training/printouts. Using it as the official ORB requires flag-approved software and a ship-specific Declaration.</span>
+        </label>
+        <div class="btn-row">
+          <button class="primary small" type="button" id="btnOrbSaveSetup">Save ORB Setup</button>
+          <button class="ghost small" type="button" id="btnOrbPrefillFromVessel">Prefill from Noon Report vessel</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>IOPP / ORB Tanks</h2>
+        <div class="hint">Sludge tanks = IOPP item 3.1. Bilge holding tanks = IOPP item 3.3. Add cargo/slop/CBT tanks when ship type is tanker.</div>
+        <div id="orbTankEditors"></div>
+        <div class="btn-row">
+          <button class="ghost small" type="button" data-orb-tank-add="sludge">+ Sludge tank</button>
+          <button class="ghost small" type="button" data-orb-tank-add="bilge">+ Bilge holding</button>
+          <button class="ghost small" type="button" data-orb-tank-add="fuel">+ Fuel oil tank</button>
+          <button class="ghost small" type="button" data-orb-tank-add="cargo">+ Cargo tank</button>
+          <button class="ghost small" type="button" data-orb-tank-add="slop">+ Slop tank</button>
+          <button class="ghost small" type="button" data-orb-tank-add="cbt">+ CBT</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="orb-panel" id="orbPanelNew">
+      <div class="panel">
+        <h2>Guided New Entry</h2>
+        <div class="form-grid cols3">
+          <div class="field"><label>ORB Part</label><select id="orb_part"><option value="1">Part I — Machinery space</option><option value="2">Part II — Cargo/ballast (tankers)</option></select></div>
+          <div class="field"><label>Date of operation</label><input type="date" id="orb_entryDate"></div>
+          <div class="field"><label>Ship position / place (optional default)</label><input id="orb_defaultPos" placeholder="Lat/Long or port"></div>
+        </div>
+        <div class="hint" id="orbNewHint">Select an operation code. Required item fields appear next — the app composes the ORB wording for you.</div>
+        <div class="orb-op-grid" id="orbOpGrid"></div>
+      </div>
+      <div class="panel" id="orbEntryWizard" style="display:none;">
+        <h2 id="orbWizardTitle">Operation</h2>
+        <div class="hint" id="orbWizardGuide"></div>
+        <div class="field" style="margin-top:10px;"><label>Items to record (tick all that apply for this operation)</label></div>
+        <div id="orbItemChips"></div>
+        <div class="form-grid cols2" id="orbFieldGrid" style="margin-top:10px;"></div>
+        <div class="form-grid cols3" style="margin-top:10px;">
+          <div class="field"><label>Officer in charge — name</label><input id="orb_officerName"></div>
+          <div class="field"><label>Rank</label><input id="orb_officerRank" placeholder="e.g. 2/E, 3/E, C/E"></div>
+          <div class="field"><label>Signature date</label><input type="date" id="orb_officerSignDate"></div>
+        </div>
+        <div class="field" style="margin-top:10px;"><label>Preview (as recorded in ORB)</label></div>
+        <div class="orb-preview" id="orbPreview"></div>
+        <div class="btn-row">
+          <button class="primary small" type="button" id="btnOrbSaveEntry">Save Entry</button>
+          <button class="ghost small" type="button" id="btnOrbPreviewEntry">Refresh Preview</button>
+          <button class="ghost small" type="button" id="btnOrbCancelEntry">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="orb-panel" id="orbPanelBrowse">
+      <div class="panel">
+        <h2>Browse &amp; Print</h2>
+        <div class="form-grid cols3">
+          <div class="field"><label>From date</label><input type="date" id="orb_from"></div>
+          <div class="field"><label>To date</label><input type="date" id="orb_to"></div>
+          <div class="field"><label>Part filter</label><select id="orb_browsePart"><option value="all">All</option><option value="1">Part I</option><option value="2">Part II</option></select></div>
+        </div>
+        <div class="btn-row">
+          <button class="primary small" type="button" id="btnOrbFilter">Fetch Records</button>
+          <button class="ghost small" type="button" id="btnOrbPrint">Print Selected Period</button>
+          <button class="ghost small" type="button" id="btnOrbExportJson">Export JSON</button>
+        </div>
+        <div class="table-scroll" style="margin-top:12px;">
+          <table class="orb-table">
+            <thead><tr><th></th><th>Date</th><th>Part</th><th>Code</th><th>Items</th><th>Record / Officer</th></tr></thead>
+            <tbody id="orbBrowseBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="orb-panel" id="orbPanelCodes">
+      <div class="panel">
+        <h2>Entry Codes by Operation</h2>
+        <div class="form-grid cols2">
+          <div class="field"><label>Part</label><select id="orb_codesPart"><option value="1">Part I</option><option value="2">Part II</option></select></div>
+          <div class="field"><label>Flag guidance</label><select id="orb_codesFlag"></select></div>
+        </div>
+        <div class="orb-flag-box" id="orbCodesFlagInfo"></div>
+        <div id="orbCodesList" style="margin-top:12px;"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- DATA -->
   <div class="page" id="page-data">
     <div class="panel">
@@ -2120,20 +2277,32 @@
       <div class="hint">After install: use Desktop shortcut <strong>Noon Report</strong>. To update later, run <code>Update-NoonReport.bat</code> in <code>%LOCALAPPDATA%\NoonReport\bin</code> (or paste the same PowerShell command again).</div>
     </div>
     <div class="panel">
-      <h2>Local Database</h2>
-      <p class="hint">All data (setup, every log entry, receipts) is stored automatically in this browser's local database (IndexedDB) — nothing is lost when you close the tab, reload, or reopen this file later <em>in the same browser</em>. Use Export as a portable backup or to move data to another browser/computer.</p>
+      <h2>Database Backup / Restore / Merge</h2>
+      <p class="hint">Full IndexedDB snapshot for this browser — all vessels, voyage library legs, log entries, receipts, documents, abstracts, print history, and e-ORB records. Use <strong>Backup</strong> before a PC change, <strong>Restore</strong> to replace this browser’s database, or <strong>Merge</strong> to combine another device’s backup without wiping local records (newer <code>updatedAt</code> / <code>savedAt</code> wins per id).</p>
       <div class="btn-row">
-        <button class="ghost small" id="btnExportJSON">Export Full Backup (JSON)</button>
+        <button class="primary small" type="button" id="btnDbBackup">Backup Entire Database</button>
+        <button class="ghost small" type="button" id="btnDbRestore">Restore Database…</button>
+        <button class="ghost small" type="button" id="btnDbMerge">Merge Database Backup…</button>
+        <input type="file" id="fileDbRestore" accept="application/json,.json" style="display:none;">
+        <input type="file" id="fileDbMerge" accept="application/json,.json" style="display:none;">
+      </div>
+      <div class="hint" id="dbBackupStatus">No full-database action yet this session.</div>
+    </div>
+    <div class="panel">
+      <h2>Local Database (active voyage)</h2>
+      <p class="hint">All data is stored automatically in this browser's IndexedDB. The buttons below export/import the <em>active vessel’s working voyage</em> only. For every vessel and the voyage library, use Database Backup / Restore / Merge above.</p>
+      <div class="btn-row">
+        <button class="ghost small" id="btnExportJSON">Export Active Leg (JSON)</button>
         <button class="ghost small" id="btnExportSetupJSON">Export Setup Only (JSON)</button>
         <button class="ghost small" id="btnImportSetupJSON">Import Setup Only (JSON)</button>
-        <button class="ghost small" id="btnImportJSON">Import Backup (JSON)</button>
+        <button class="ghost small" id="btnImportJSON">Replace Active Leg from Backup</button>
         <button class="ghost small" id="btnExportCSVLog">Export Voyage Log (CSV)</button>
         <button class="ghost small" id="btnExportCSVCons">Export Consumption (CSV)</button>
         <button class="primary small" id="btnRecalculateAllData" type="button">Recalculate All Data</button>
         <input type="file" id="fileImport" accept="application/json" style="display:none;">
         <input type="file" id="fileImportSetup" accept="application/json" style="display:none;">
       </div>
-      <div class="hint">"Export Setup Only" saves just the Setup tab's configuration (vessel details, engine data, flowmeter arrangement, fuel/lube defaults, opening ROB, tank capacities) without any voyage log entries or receipts — handy as a reusable template for a new voyage. "Import Setup Only" loads just that configuration back in and leaves your current log entries and receipts untouched (unlike "Import Backup", which replaces everything).</div>
+      <div class="hint">"Export Setup Only" saves just the Setup tab configuration without log entries. "Replace Active Leg from Backup" replaces this vessel’s current working entries/receipts/documents from a leg JSON file.</div>
       <div class="hint">"Recalculate All Data" re-derives M/E average RPM from rev-counter deltas (so engine distance &amp; slip % match Pitch × Δrevs ÷ 1852), rebuilds performance tables, and refreshes every saved voyage leg. Manual consumption overrides are kept.</div>
       <div class="hint" id="entryCount"></div>
     </div>
@@ -2595,6 +2764,10 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8"/><path d="M8 11h6"/></svg>
         <span>Reference</span>
       </button>
+      <button type="button" class="bn-more-item" data-page="orb">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>
+        <span>e-ORB</span>
+      </button>
       <button type="button" class="bn-more-item" data-page="data">
         <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>
         <span>Data</span>
@@ -2844,7 +3017,7 @@ let dbOpenPromise = null;
 function openDB(){
   if (dbOpenPromise) return dbOpenPromise;
   dbOpenPromise = new Promise((resolve,reject)=>{
-    const req = indexedDB.open('noonReportDB', 5);
+    const req = indexedDB.open('noonReportDB', 6);
     req.onupgradeneeded = (e)=>{
       const d = e.target.result;
       if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta', {keyPath:'key'});
@@ -2855,6 +3028,8 @@ function openDB(){
       if (!d.objectStoreNames.contains('printHistory')) d.createObjectStore('printHistory', {keyPath:'id'});
       /* One archived leg per vessel + voyage number + B|L — keeps active lists short. */
       if (!d.objectStoreNames.contains('voyageLegs')) d.createObjectStore('voyageLegs', {keyPath:'id'});
+      /* Vessel-lifetime Oil Record Book entries (not voyage-leg scoped). */
+      if (!d.objectStoreNames.contains('orbEntries')) d.createObjectStore('orbEntries', {keyPath:'id'});
     };
     req.onsuccess = (e)=>{ db = e.target.result; db.onversionchange = ()=>{ db.close(); db = null; dbOpenPromise = null; }; resolve(db); };
     req.onerror = (e)=>{ dbOpenPromise = null; reject(req.error || new Error('IndexedDB failed to open')); };
@@ -2919,7 +3094,8 @@ const state = {
   abstracts: [],
   printHistory: [],
   vessels: [],
-  activeVesselId: null
+  activeVesselId: null,
+  orbEntries: []
 };
 
 const LEGACY_VESSEL_ID = 'v-fangcheng';
@@ -4428,6 +4604,10 @@ async function loadVesselFromDb(vesselId){
   state.documents = allDocs.filter(match);
   state.abstracts = allAbstracts.filter(match);
   state.printHistory = allPrint.filter(match);
+  try{
+    const allOrb = await dbGetAll('orbEntries');
+    state.orbEntries = (allOrb || []).filter(match);
+  }catch(_){ state.orbEntries = []; }
 
   /* If working set is empty but a library leg exists, load the preferred leg. */
   if (!state.entries.length){
@@ -6516,7 +6696,7 @@ async function saveSetup(){
 }
 
 /* ---------------- tabs ---------------- */
-const BOTTOM_NAV_MORE = new Set(['consumption', 'voyageabstract', 'receipts', 'reports', 'reference', 'data', 'voyagesetup', 'setup']);
+const BOTTOM_NAV_MORE = new Set(['consumption', 'voyageabstract', 'receipts', 'reports', 'reference', 'orb', 'data', 'voyagesetup', 'setup']);
 const BUNKER_PLAN_LEGS = 10;
 const BUNKER_PLAN_SIDES = [
   { key:'residual', title:'HFO / LSFO', grades:['HFO','LSFO'], defaultGrade:'HFO', qtyLabel:'HFO/LSFO' },
@@ -7025,6 +7205,9 @@ function switchTab(pageName){
   if (pageName === 'bunkerplan'){
     bindBunkerPlanUi();
     renderBunkerPlan();
+  }
+  if (pageName === 'orb'){
+    try{ renderOrbUi(); }catch(err){ console.warn(err); }
   }
   try{ window.scrollTo({ top:0, behavior:'smooth' }); }catch(_){ window.scrollTo(0,0); }
 }
@@ -11584,6 +11767,7 @@ let androidInstallBusy = false;
 let androidInstallCacheName = 'noon-report-v67';
 let androidInstallAssets = [
   './voyage_manager.html',
+  './eorb.js',
   './sw.js',
   './manifest.webmanifest',
   './icons/logoBG.png',
@@ -11851,7 +12035,248 @@ document.getElementById('btnCopyPcInstall')?.addEventListener('click', async ()=
   }
 });
 
-/* ---------------- export / import ---------------- */
+/* ---------------- full database backup / restore / merge ---------------- */
+const DB_BACKUP_FORMAT = 'noon-report-db-v1';
+const DB_BACKUP_STORES = ['entries','receipts','documents','abstracts','printHistory','voyageLegs','orbEntries'];
+
+function downloadJsonFile(filename, obj){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(()=>{ try{ URL.revokeObjectURL(a.href); }catch(_){} }, 2000);
+}
+
+function setDbBackupStatus(msg){
+  const el = document.getElementById('dbBackupStatus');
+  if (el) el.textContent = msg;
+}
+
+async function buildFullDatabaseBackup(){
+  await ensureDB();
+  await saveCurrentVesselState();
+  const meta = await dbGetAll('meta');
+  const stores = {};
+  for (const name of DB_BACKUP_STORES){
+    try{ stores[name] = await dbGetAll(name); }
+    catch(_){ stores[name] = []; }
+  }
+  return {
+    format: DB_BACKUP_FORMAT,
+    app: 'Noon Report',
+    exportedAt: new Date().toISOString(),
+    activeVesselId: state.activeVesselId,
+    vessels: state.vessels.slice(),
+    meta,
+    stores,
+    counts: Object.fromEntries(Object.entries(stores).map(([k,v])=>[k, (v||[]).length]))
+  };
+}
+
+function isFullDatabaseBackup(payload){
+  return !!(payload && payload.format === DB_BACKUP_FORMAT && payload.stores && typeof payload.stores === 'object');
+}
+
+function mergeMetaRows(localRows, incomingRows){
+  const byKey = new Map();
+  (localRows || []).forEach(row => { if (row && row.key != null) byKey.set(row.key, row); });
+  (incomingRows || []).forEach(row => {
+    if (!row || row.key == null) return;
+    const prev = byKey.get(row.key);
+    if (!prev){ byKey.set(row.key, row); return; }
+    /* Prefer richer / newer setup objects; otherwise keep incoming if both plain. */
+    if (row.key.startsWith('setup:') || row.key === 'setup'){
+      const prevVal = prev.value || {};
+      const nextVal = row.value || {};
+      const prevTs = (prevVal.sync && prevVal.sync.lastModifiedAt) || prevVal.updatedAt || '';
+      const nextTs = (nextVal.sync && nextVal.sync.lastModifiedAt) || nextVal.updatedAt || '';
+      byKey.set(row.key, nextTs >= prevTs ? row : prev);
+      return;
+    }
+    if (row.key === 'vessels'){
+      const mergedVessels = mergeListsById(prev.value || [], row.value || []);
+      byKey.set(row.key, { key:'vessels', value: mergedVessels });
+      return;
+    }
+    byKey.set(row.key, row);
+  });
+  return [...byKey.values()];
+}
+
+async function writeMetaRows(rows){
+  for (const row of (rows || [])){
+    if (!row || row.key == null) continue;
+    await dbPut('meta', row);
+  }
+}
+
+async function writeStoreRows(storeName, rows){
+  for (const row of (rows || [])){
+    if (!row || row.id == null) continue;
+    await dbPut(storeName, row);
+  }
+}
+
+async function restoreFullDatabase(payload){
+  if (!isFullDatabaseBackup(payload)) throw new Error('Not a full database backup (expected format noon-report-db-v1).');
+  await ensureDB();
+  for (const name of DB_BACKUP_STORES) await dbClear(name);
+  await dbClear('meta');
+  await writeMetaRows(payload.meta || []);
+  /* Ensure vessel registry + active id exist even if meta omitted them */
+  if (Array.isArray(payload.vessels) && payload.vessels.length){
+    await dbPut('meta', { key:'vessels', value: payload.vessels });
+  }
+  if (payload.activeVesselId){
+    await dbPut('meta', { key:'activeVesselId', value: payload.activeVesselId });
+  }
+  for (const name of DB_BACKUP_STORES){
+    await writeStoreRows(name, (payload.stores && payload.stores[name]) || []);
+  }
+  const metaAll = await dbGetAll('meta');
+  await migrateToMultiVessel(metaAll);
+  const vid = state.activeVesselId || payload.activeVesselId || (state.vessels[0] && state.vessels[0].id) || LEGACY_VESSEL_ID;
+  await loadVesselFromDb(vid);
+  try{
+    const orbAll = await dbGetAll('orbEntries');
+    state.orbEntries = (orbAll || []).filter(e => !e.vesselId || e.vesselId === state.activeVesselId);
+  }catch(_){ state.orbEntries = []; }
+  render();
+  applyEntryDefaults();
+  prefillFromLastEntry();
+  renderSyncUi();
+  try{ if (typeof renderOrbUi === 'function') renderOrbUi(); }catch(_){}
+}
+
+async function mergeFullDatabase(payload){
+  if (!isFullDatabaseBackup(payload)) throw new Error('Not a full database backup (expected format noon-report-db-v1).');
+  await ensureDB();
+  await saveCurrentVesselState();
+
+  const localMeta = await dbGetAll('meta');
+  const mergedMeta = mergeMetaRows(localMeta, payload.meta || []);
+  /* Merge vessels from payload.vessels as well */
+  const vesselsRow = mergedMeta.find(m => m.key === 'vessels');
+  const localVessels = vesselsRow?.value || state.vessels || [];
+  const incomingVessels = payload.vessels || (payload.meta || []).find(m => m.key === 'vessels')?.value || [];
+  const vessels = mergeListsById(localVessels, incomingVessels);
+  await dbPut('meta', { key:'vessels', value: vessels });
+  for (const row of mergedMeta){
+    if (row.key === 'vessels') continue;
+    await dbPut('meta', row);
+  }
+
+  for (const name of DB_BACKUP_STORES){
+    const localRows = await dbGetAll(name);
+    const incoming = (payload.stores && payload.stores[name]) || [];
+    const merged = mergeListsById(localRows, incoming);
+    /* Upsert merged rows (do not delete local-only ids) */
+    await writeStoreRows(name, merged);
+  }
+
+  const metaAll = await dbGetAll('meta');
+  await migrateToMultiVessel(metaAll);
+  await loadVesselFromDb(state.activeVesselId);
+  try{
+    const orbAll = await dbGetAll('orbEntries');
+    state.orbEntries = (orbAll || []).filter(e => !e.vesselId || e.vesselId === state.activeVesselId);
+  }catch(_){ state.orbEntries = []; }
+  render();
+  applyEntryDefaults();
+  prefillFromLastEntry();
+  renderSyncUi();
+  try{ if (typeof renderOrbUi === 'function') renderOrbUi(); }catch(_){}
+}
+
+function readJsonFileInput(file){
+  return new Promise((resolve, reject)=>{
+    if (!file) return reject(new Error('No file selected'));
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      try{ resolve(JSON.parse(reader.result)); }
+      catch(err){ reject(new Error('Invalid JSON: ' + err.message)); }
+    };
+    reader.onerror = ()=> reject(new Error('Could not read file'));
+    reader.readAsText(file);
+  });
+}
+
+document.getElementById('btnDbBackup')?.addEventListener('click', async ()=>{
+  const btn = document.getElementById('btnDbBackup');
+  if (btn) btn.disabled = true;
+  try{
+    setDbBackupStatus('Building full database backup…');
+    const payload = await buildFullDatabaseBackup();
+    const stamp = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+    const name = `noon-report-db-backup_${stamp}.json`;
+    downloadJsonFile(name, payload);
+    const total = Object.values(payload.counts || {}).reduce((a,b)=>a+(b||0),0);
+    setDbBackupStatus(`Backup downloaded: ${name} — ${payload.vessels.length} vessel(s), ${total} store record(s).`);
+    alert('Full database backup downloaded.\n\nFile: ' + name + '\nVessels: ' + payload.vessels.length + '\nRecords: ' + total);
+  }catch(e){
+    console.error(e);
+    setDbBackupStatus('Backup failed: ' + e.message);
+    alert('Database backup failed: ' + e.message);
+  }finally{
+    if (btn) btn.disabled = false;
+  }
+});
+
+document.getElementById('btnDbRestore')?.addEventListener('click', ()=>{
+  if (!confirm('RESTORE replaces ALL local Noon Report data in this browser (every vessel, voyage library, e-ORB).\n\nExport a Backup first if you are unsure.\n\nContinue to choose a backup file?')) return;
+  document.getElementById('fileDbRestore')?.click();
+});
+document.getElementById('fileDbRestore')?.addEventListener('change', async (ev)=>{
+  const file = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!file) return;
+  try{
+    setDbBackupStatus('Reading backup for restore…');
+    const payload = await readJsonFileInput(file);
+    if (!isFullDatabaseBackup(payload)){
+      throw new Error('This file is not a full database backup. Use “Backup Entire Database” to create one (format noon-report-db-v1). Active-leg JSON cannot restore the whole DB.');
+    }
+    if (!confirm('Restore database from:\n' + file.name + '\nExported: ' + (payload.exportedAt || 'unknown') + '\nVessels: ' + ((payload.vessels||[]).length) + '\n\nThis ERASES current local data and cannot be undone except by another backup.')) return;
+    setDbBackupStatus('Restoring database…');
+    await restoreFullDatabase(payload);
+    setDbBackupStatus('Restore complete from ' + file.name + ' (' + (payload.exportedAt || '') + ').');
+    alert('Database restored from backup.\n\nReload complete — active vessel data is loaded.');
+  }catch(e){
+    console.error(e);
+    setDbBackupStatus('Restore failed: ' + e.message);
+    alert('Database restore failed: ' + e.message);
+  }
+});
+
+document.getElementById('btnDbMerge')?.addEventListener('click', ()=>{
+  if (!confirm('MERGE combines a full database backup into this browser.\n\n• Same record id → newer timestamp wins\n• New vessels / legs / ORB entries are added\n• Local-only records are kept\n\nContinue to choose a backup file?')) return;
+  document.getElementById('fileDbMerge')?.click();
+});
+document.getElementById('fileDbMerge')?.addEventListener('change', async (ev)=>{
+  const file = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!file) return;
+  try{
+    setDbBackupStatus('Reading backup for merge…');
+    const payload = await readJsonFileInput(file);
+    if (!isFullDatabaseBackup(payload)){
+      throw new Error('This file is not a full database backup. Use “Backup Entire Database” first (format noon-report-db-v1).');
+    }
+    setDbBackupStatus('Merging backup into local database…');
+    await mergeFullDatabase(payload);
+    const counts = payload.counts || {};
+    const summary = Object.keys(counts).map(k => k + ': ' + counts[k]).join(', ');
+    setDbBackupStatus('Merge complete from ' + file.name + '. Incoming counts — ' + summary);
+    alert('Database merge complete.\n\nIncoming file: ' + file.name + '\n' + summary + '\n\nLocal-only records were kept; conflicts kept the newer timestamp.');
+  }catch(e){
+    console.error(e);
+    setDbBackupStatus('Merge failed: ' + e.message);
+    alert('Database merge failed: ' + e.message);
+  }
+});
+
+/* ---------------- export / import (active voyage leg) ---------------- */
 document.getElementById('btnExportJSON').addEventListener('click', ()=>{
   const payload = { setup: state.setup, entries: state.entries, receipts: state.receipts, documents: state.documents, exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
@@ -12053,8 +12478,451 @@ function migrateSetup(setup){
   if (!setup.bunkerPlan || typeof setup.bunkerPlan !== 'object'){
     setup.bunkerPlan = defaultBunkerPlan();
   }
+  setup.orb = ensureOrbSetup(setup.orb);
   return setup;
 }
+
+/* ---------------- Electronic Oil Record Book (e-ORB) ---------------- */
+let _orbWizard = { part: 1, code: null, selected: [] };
+
+function ensureOrbSetup(raw){
+  if (!window.EORB) return raw || {};
+  const seed = raw && typeof raw === 'object' ? raw : {};
+  if (!seed.shipName && state.setup?.vesselName) seed.shipName = state.setup.vesselName;
+  if (!seed.imo && state.setup?.imoNo) seed.imo = state.setup.imoNo;
+  if (!seed.chiefEng && state.setup?.chEng) seed.chiefEng = state.setup.chEng;
+  return EORB.defaultOrbSetup(seed);
+}
+
+function orbSetup(){
+  state.setup.orb = ensureOrbSetup(state.setup.orb);
+  return state.setup.orb;
+}
+
+function fillOrbFlagSelects(){
+  if (!window.EORB) return;
+  ['orb_flag','orb_codesFlag'].forEach(id=>{
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = EORB.FLAGS.map(f => `<option value="${f.code}">${f.name}</option>`).join('');
+    const prefer = cur || orbSetup().flag || 'LR';
+    if ([...sel.options].some(o => o.value === prefer)) sel.value = prefer;
+  });
+}
+
+function renderOrbFlagInfo(targetId, flagCode){
+  if (!window.EORB) return;
+  const box = document.getElementById(targetId);
+  if (!box) return;
+  const flag = EORB.getFlag(flagCode || orbSetup().flag);
+  box.innerHTML = `<strong>${flag.name}</strong> — ${flag.admin}<br>
+    Language: ${flag.language}<br>
+    <em>${flag.erbNote}</em>
+    <ul style="margin:8px 0 0 18px;padding:0;">${(flag.tips||[]).map(t=>`<li>${t}</li>`).join('')}</ul>`;
+}
+
+function renderOrbTankEditors(){
+  const host = document.getElementById('orbTankEditors');
+  if (!host || !window.EORB) return;
+  const setup = orbSetup();
+  const groups = [
+    ['sludge','Sludge tanks (IOPP 3.1)'],
+    ['bilge','Bilge holding tanks (IOPP 3.3)'],
+    ['fuel','Fuel oil tanks'],
+    ['cargo','Cargo tanks (tankers)'],
+    ['slop','Slop tanks (tankers)'],
+    ['cbt','Dedicated CBT (tankers)']
+  ];
+  host.innerHTML = groups.map(([key,label])=>{
+    const rows = (setup.tanks[key] || []).map((t,i)=>`
+      <div class="form-grid cols3" data-orb-tank-row="${key}" data-idx="${i}" style="margin-bottom:6px;">
+        <div class="field"><label>${label} — name</label><input data-orb-tank-field="name" value="${(t.name||'').replace(/"/g,'&quot;')}"></div>
+        <div class="field"><label>Capacity (m³)</label><input type="number" step="0.01" data-orb-tank-field="capacityM3" value="${t.capacityM3!=null?t.capacityM3:''}"></div>
+        <div class="field"><label>ROB (m³)</label>
+          <div style="display:flex;gap:6px;align-items:end;">
+            <input type="number" step="0.01" data-orb-tank-field="robM3" value="${t.robM3!=null?t.robM3:''}" style="flex:1;">
+            <button type="button" class="ghost small" data-orb-tank-del="${key}" data-idx="${i}">×</button>
+          </div>
+        </div>
+      </div>`).join('') || `<div class="hint">No ${label.toLowerCase()} yet.</div>`;
+    return `<h3 class="sub">${label}</h3>${rows}`;
+  }).join('');
+}
+
+function readOrbSetupFromForm(){
+  const setup = orbSetup();
+  setup.flag = document.getElementById('orb_flag')?.value || setup.flag;
+  setup.shipType = document.getElementById('orb_shipType')?.value || setup.shipType;
+  setup.ioppForm = document.getElementById('orb_ioppForm')?.value || setup.ioppForm;
+  setup.shipName = document.getElementById('orb_shipName')?.value || '';
+  setup.imo = document.getElementById('orb_imo')?.value || '';
+  setup.callSign = document.getElementById('orb_callSign')?.value || '';
+  const gt = parseFloat(document.getElementById('orb_gt')?.value);
+  setup.gt = isFinite(gt) ? gt : null;
+  setup.masterName = document.getElementById('orb_master')?.value || '';
+  setup.chiefEng = document.getElementById('orb_ce')?.value || '';
+  setup.equipment = setup.equipment || {};
+  setup.equipment.owsFitted = document.getElementById('orb_ows')?.value === 'true';
+  setup.equipment.incineratorFitted = document.getElementById('orb_incin')?.value === 'true';
+  setup.equipment.odmeFitted = document.getElementById('orb_odme')?.value === 'true';
+  setup.disclaimerAck = !!document.getElementById('orb_disclaimer')?.checked;
+  /* tanks from editors */
+  const tanks = { sludge:[], bilge:[], fuel:[], cargo:[], slop:[], cbt:[], dirtyBallast: setup.tanks.dirtyBallast || [] };
+  document.querySelectorAll('#orbTankEditors [data-orb-tank-row]').forEach(row=>{
+    const key = row.getAttribute('data-orb-tank-row');
+    if (!tanks[key]) tanks[key] = [];
+    const name = row.querySelector('[data-orb-tank-field="name"]')?.value?.trim() || '';
+    const capacityM3 = parseFloat(row.querySelector('[data-orb-tank-field="capacityM3"]')?.value);
+    const robM3 = parseFloat(row.querySelector('[data-orb-tank-field="robM3"]')?.value);
+    const prev = (setup.tanks[key] || [])[Number(row.getAttribute('data-idx'))] || {};
+    tanks[key].push({
+      id: prev.id || (key + '_' + uid()),
+      name: name || (key + ' tank'),
+      capacityM3: isFinite(capacityM3) ? capacityM3 : null,
+      robM3: isFinite(robM3) ? robM3 : 0
+    });
+  });
+  setup.tanks = tanks;
+  state.setup.orb = setup;
+  return setup;
+}
+
+function fillOrbSetupForm(){
+  const setup = orbSetup();
+  fillOrbFlagSelects();
+  const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.value = v==null?'':v; };
+  set('orb_flag', setup.flag);
+  set('orb_shipType', setup.shipType);
+  set('orb_ioppForm', setup.ioppForm);
+  set('orb_shipName', setup.shipName);
+  set('orb_imo', setup.imo);
+  set('orb_callSign', setup.callSign);
+  set('orb_gt', setup.gt);
+  set('orb_master', setup.masterName);
+  set('orb_ce', setup.chiefEng);
+  set('orb_ows', setup.equipment?.owsFitted !== false ? 'true' : 'false');
+  set('orb_incin', setup.equipment?.incineratorFitted !== false ? 'true' : 'false');
+  set('orb_odme', setup.equipment?.odmeFitted ? 'true' : 'false');
+  const ack = document.getElementById('orb_disclaimer');
+  if (ack) ack.checked = !!setup.disclaimerAck;
+  renderOrbFlagInfo('orbFlagInfo', setup.flag);
+  renderOrbTankEditors();
+}
+
+function renderOrbOpGrid(){
+  if (!window.EORB) return;
+  const part = Number(document.getElementById('orb_part')?.value || 1);
+  const grid = document.getElementById('orbOpGrid');
+  if (!grid) return;
+  const ops = EORB.getPartOps(part).slice().sort((a,b)=> (b.common?1:0)-(a.common?1:0) || a.code.localeCompare(b.code));
+  grid.innerHTML = ops.map(op => `
+    <button type="button" class="orb-op-card" data-orb-code="${op.code}">
+      <div class="code">${op.code}</div>
+      <div class="title">${op.title}</div>
+    </button>`).join('');
+}
+
+function orbCollectValues(){
+  const values = {};
+  document.querySelectorAll('#orbFieldGrid [data-orb-field]').forEach(el=>{
+    const name = el.getAttribute('data-orb-field');
+    if (el.multiple){
+      values[name] = [...el.selectedOptions].map(o=>o.value);
+    } else {
+      values[name] = el.value;
+    }
+  });
+  return values;
+}
+
+function orbSelectedItems(){
+  return [...document.querySelectorAll('#orbItemChips input[type="checkbox"]:checked')].map(c => c.value);
+}
+
+function renderOrbPreview(){
+  if (!window.EORB || !_orbWizard.code) return;
+  const setup = orbSetup();
+  const part = _orbWizard.part;
+  const code = _orbWizard.code;
+  const selected = orbSelectedItems();
+  const values = orbCollectValues();
+  const lines = EORB.buildItemLines(part, code, selected, values, setup);
+  const date = document.getElementById('orb_entryDate')?.value || '';
+  const prev = document.getElementById('orbPreview');
+  if (!prev) return;
+  if (!lines.length){
+    prev.textContent = 'Select item numbers and fill fields to preview the ORB wording.';
+    return;
+  }
+  prev.textContent = lines.map(l => `${EORB.formatOrbDate(date)}\t${code}\t${l.itemNo}\t${l.text}`).join('\n');
+}
+
+function openOrbWizard(code){
+  if (!window.EORB) return;
+  const setup = orbSetup();
+  if (!setup.disclaimerAck){
+    alert('Acknowledge the e-ORB disclaimer in Vessel Setup before logging entries.');
+    return;
+  }
+  const part = Number(document.getElementById('orb_part')?.value || 1);
+  const op = EORB.getOperation(part, code);
+  if (!op) return;
+  _orbWizard = { part, code, selected: op.items.map(i => i.no) };
+  const wiz = document.getElementById('orbEntryWizard');
+  if (wiz) wiz.style.display = '';
+  document.getElementById('orbWizardTitle').textContent = `Code ${code} — ${op.title}`;
+  document.getElementById('orbWizardGuide').textContent = op.guide || '';
+  const chips = document.getElementById('orbItemChips');
+  chips.innerHTML = op.items.map(it => `
+    <label class="orb-item-chip"><input type="checkbox" value="${it.no}" checked> <strong>${it.no}</strong> ${it.label}</label>`).join('');
+  const defaultPos = document.getElementById('orb_defaultPos')?.value || '';
+  const fieldGrid = document.getElementById('orbFieldGrid');
+  const seen = new Set();
+  let html = '';
+  op.items.forEach(it => {
+    (it.fields || []).forEach(f => {
+      if (seen.has(f.name)) return;
+      seen.add(f.name);
+      let control = '';
+      if (f.type === 'select'){
+        control = `<select data-orb-field="${f.name}">${(f.options||[]).map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`;
+      } else if (f.type === 'textarea'){
+        control = `<textarea data-orb-field="${f.name}" rows="3"></textarea>`;
+      } else if (f.type === 'tank' || f.type === 'tankMulti'){
+        const tanks = EORB.tanksForGroup(setup, f.tankGroup || 'any');
+        const opts = tanks.map(t => `<option value="${t.id}">${t.name}${t.capacityM3!=null?` (${t.capacityM3} m³)`:''}</option>`).join('');
+        control = `<select data-orb-field="${f.name}" ${f.type==='tankMulti'?'multiple size="4"':''}><option value="">—</option>${opts}</select>`;
+      } else {
+        const t = f.type === 'number' ? 'number' : (f.type === 'time' ? 'time' : 'text');
+        const ph = (f.name.toLowerCase().includes('pos') || f.name === 'place' || f.name === 'position') ? defaultPos : '';
+        control = `<input type="${t}" data-orb-field="${f.name}" step="any" value="${ph.replace(/"/g,'&quot;')}">`;
+      }
+      html += `<div class="field ${f.type==='textarea'||f.type==='tankMulti'?'span2':''}"><label>${f.label}${f.required?' *':''}</label>${control}</div>`;
+    });
+  });
+  fieldGrid.innerHTML = html || '<div class="hint">No fields for selected items.</div>';
+  const today = new Date(); today.setMinutes(today.getMinutes()-today.getTimezoneOffset());
+  const iso = today.toISOString().slice(0,10);
+  if (!document.getElementById('orb_entryDate')?.value) document.getElementById('orb_entryDate').value = iso;
+  if (!document.getElementById('orb_officerSignDate')?.value) document.getElementById('orb_officerSignDate').value = iso;
+  if (!document.getElementById('orb_officerName')?.value) document.getElementById('orb_officerName').value = setup.chiefEng || '';
+  renderOrbPreview();
+}
+
+function renderOrbCodesList(){
+  if (!window.EORB) return;
+  const part = Number(document.getElementById('orb_codesPart')?.value || 1);
+  const flagCode = document.getElementById('orb_codesFlag')?.value || orbSetup().flag;
+  renderOrbFlagInfo('orbCodesFlagInfo', flagCode);
+  const host = document.getElementById('orbCodesList');
+  if (!host) return;
+  host.innerHTML = EORB.getPartOps(part).map(op => `
+    <div class="panel" style="padding:12px 14px;">
+      <h3 class="sub" style="margin-top:0;">(${op.code}) ${op.title}</h3>
+      <div class="hint">${op.guide || ''}</div>
+      <ul style="margin:8px 0 0 18px;padding:0;font-size:12px;line-height:1.45;">
+        ${op.items.map(it => `<li><strong>${it.no}</strong> — ${it.label}</li>`).join('')}
+      </ul>
+    </div>`).join('');
+}
+
+function filteredOrbEntries(){
+  const from = document.getElementById('orb_from')?.value || '';
+  const to = document.getElementById('orb_to')?.value || '';
+  const part = document.getElementById('orb_browsePart')?.value || 'all';
+  return (state.orbEntries || []).filter(e => {
+    if (e.voided) return false;
+    if (part !== 'all' && String(e.part) !== part) return false;
+    if (from && e.date < from) return false;
+    if (to && e.date > to) return false;
+    return true;
+  }).sort((a,b)=> String(a.date).localeCompare(String(b.date)) || String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
+}
+
+function renderOrbBrowse(){
+  const body = document.getElementById('orbBrowseBody');
+  if (!body) return;
+  const rows = filteredOrbEntries();
+  if (!rows.length){
+    body.innerHTML = `<tr><td colspan="6" class="hint" style="text-align:center;padding:18px;">No ORB entries in this range.</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map(e => {
+    const items = (e.lines||[]).map(l=>l.itemNo).join(', ');
+    const text = (e.lines||[]).map(l=>`${l.itemNo}: ${l.text}`).join(' · ');
+    return `<tr>
+      <td><input type="checkbox" class="orb-browse-check" value="${e.id}" checked></td>
+      <td>${EORB ? EORB.formatOrbDate(e.date) : e.date}</td>
+      <td>Part ${e.part}</td>
+      <td><strong>${e.code}</strong></td>
+      <td>${items}</td>
+      <td>${text}<div class="hint">${e.officerName||''}${e.officerRank?(', '+e.officerRank):''}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderOrbUi(){
+  if (!window.EORB){
+    console.warn('eorb.js not loaded');
+    return;
+  }
+  fillOrbSetupForm();
+  renderOrbOpGrid();
+  renderOrbCodesList();
+  renderOrbBrowse();
+  const hint = document.getElementById('orbNewHint');
+  const flag = EORB.getFlag(orbSetup().flag);
+  if (hint) hint.textContent = `Flag: ${flag.name}. Select an operation code. Common codes (C/D/E/F/H/I) are listed first.`;
+}
+
+function switchOrbPanel(name){
+  document.querySelectorAll('#orbSubtabs .orb-subtab').forEach(b => b.classList.toggle('active', b.dataset.orb === name));
+  const map = { setup:'orbPanelSetup', new:'orbPanelNew', browse:'orbPanelBrowse', codes:'orbPanelCodes' };
+  document.querySelectorAll('.orb-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById(map[name] || 'orbPanelSetup');
+  if (panel) panel.classList.add('active');
+  if (name === 'new') renderOrbOpGrid();
+  if (name === 'browse') renderOrbBrowse();
+  if (name === 'codes') renderOrbCodesList();
+  if (name === 'setup') fillOrbSetupForm();
+}
+
+document.getElementById('orbSubtabs')?.addEventListener('click', (e)=>{
+  const btn = e.target.closest('.orb-subtab');
+  if (!btn) return;
+  switchOrbPanel(btn.dataset.orb);
+});
+document.getElementById('orb_flag')?.addEventListener('change', ()=>{
+  readOrbSetupFromForm();
+  renderOrbFlagInfo('orbFlagInfo', document.getElementById('orb_flag').value);
+});
+document.getElementById('btnOrbPrefillFromVessel')?.addEventListener('click', ()=>{
+  const setup = orbSetup();
+  setup.shipName = state.setup.vesselName || setup.shipName;
+  setup.imo = state.setup.imoNo || setup.imo;
+  setup.chiefEng = state.setup.chEng || setup.chiefEng;
+  setup.gt = state.setup.dwt != null ? setup.gt : setup.gt;
+  if (state.setup.fuelTanks?.length && !(setup.tanks.fuel||[]).length){
+    setup.tanks.fuel = state.setup.fuelTanks.map((t,i)=>({ id:'fuel_'+i, name: t.name || t.label || ('FO Tank '+(i+1)), capacityM3: t.capacity ?? null, robM3: 0 }));
+  }
+  state.setup.orb = setup;
+  fillOrbSetupForm();
+  alert('Prefilled ship name / IMO / C/E (and fuel tanks if empty) from Noon Report setup.');
+});
+document.getElementById('btnOrbSaveSetup')?.addEventListener('click', async ()=>{
+  readOrbSetupFromForm();
+  await saveSetup();
+  alert('ORB vessel setup saved for ' + (orbSetup().shipName || 'this vessel') + '.\nFlag: ' + EORB.getFlag(orbSetup().flag).name);
+});
+document.querySelectorAll('[data-orb-tank-add]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const key = btn.getAttribute('data-orb-tank-add');
+    readOrbSetupFromForm();
+    const setup = orbSetup();
+    if (!setup.tanks[key]) setup.tanks[key] = [];
+    setup.tanks[key].push({ id: key + '_' + uid(), name: key.toUpperCase() + ' Tank', capacityM3: null, robM3: 0 });
+    state.setup.orb = setup;
+    renderOrbTankEditors();
+  });
+});
+document.getElementById('orbTankEditors')?.addEventListener('click', (e)=>{
+  const del = e.target.closest('[data-orb-tank-del]');
+  if (!del) return;
+  readOrbSetupFromForm();
+  const key = del.getAttribute('data-orb-tank-del');
+  const idx = Number(del.getAttribute('data-idx'));
+  const setup = orbSetup();
+  setup.tanks[key] = (setup.tanks[key] || []).filter((_,i)=>i!==idx);
+  state.setup.orb = setup;
+  renderOrbTankEditors();
+});
+document.getElementById('orb_part')?.addEventListener('change', ()=>{
+  document.getElementById('orbEntryWizard').style.display = 'none';
+  renderOrbOpGrid();
+});
+document.getElementById('orbOpGrid')?.addEventListener('click', (e)=>{
+  const card = e.target.closest('[data-orb-code]');
+  if (!card) return;
+  openOrbWizard(card.getAttribute('data-orb-code'));
+});
+document.getElementById('orbItemChips')?.addEventListener('change', renderOrbPreview);
+document.getElementById('orbFieldGrid')?.addEventListener('input', renderOrbPreview);
+document.getElementById('orbFieldGrid')?.addEventListener('change', renderOrbPreview);
+document.getElementById('btnOrbPreviewEntry')?.addEventListener('click', renderOrbPreview);
+document.getElementById('btnOrbCancelEntry')?.addEventListener('click', ()=>{
+  document.getElementById('orbEntryWizard').style.display = 'none';
+  _orbWizard.code = null;
+});
+document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>{
+  if (!window.EORB || !_orbWizard.code) return;
+  const setup = readOrbSetupFromForm();
+  const part = _orbWizard.part;
+  const code = _orbWizard.code;
+  const selected = orbSelectedItems();
+  const values = orbCollectValues();
+  const errors = EORB.validateEntry(part, code, selected, values, setup);
+  if (errors.length){ alert('Cannot save entry:\n\n• ' + errors.join('\n• ')); return; }
+  const officerName = document.getElementById('orb_officerName')?.value?.trim();
+  if (!officerName){ alert('Officer in charge name is required.'); return; }
+  const date = document.getElementById('orb_entryDate')?.value;
+  if (!date){ alert('Date of operation is required.'); return; }
+  const lines = EORB.buildItemLines(part, code, selected, values, setup);
+  const entry = {
+    id: 'orb_' + uid() + '_' + Date.now().toString(36),
+    vesselId: state.activeVesselId,
+    part, code, date,
+    selectedItems: selected,
+    values, lines,
+    officerName,
+    officerRank: document.getElementById('orb_officerRank')?.value?.trim() || '',
+    officerSignedAt: (document.getElementById('orb_officerSignDate')?.value || date) + 'T12:00:00',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    voided: false
+  };
+  state.orbEntries.push(entry);
+  await dbPut('orbEntries', entry);
+  await saveSetup();
+  document.getElementById('orbEntryWizard').style.display = 'none';
+  _orbWizard.code = null;
+  renderOrbBrowse();
+  alert('ORB entry saved: ' + EORB.formatOrbDate(date) + ' code ' + code + ' (' + lines.length + ' item line(s)).');
+});
+document.getElementById('btnOrbFilter')?.addEventListener('click', renderOrbBrowse);
+document.getElementById('btnOrbPrint')?.addEventListener('click', ()=>{
+  if (!window.EORB) return;
+  const checked = new Set([...document.querySelectorAll('.orb-browse-check:checked')].map(c=>c.value));
+  let rows = filteredOrbEntries();
+  if (checked.size) rows = rows.filter(e => checked.has(e.id));
+  const from = document.getElementById('orb_from')?.value || '';
+  const to = document.getElementById('orb_to')?.value || '';
+  const range = (from || to) ? `${from || '…'} → ${to || '…'}` : 'All saved entries';
+  const html = EORB.buildPrintHtml(orbSetup(), rows, range);
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;opacity:0;pointer-events:none;';
+  document.body.appendChild(iframe);
+  const doc = iframe.contentDocument;
+  doc.open();
+  doc.write(html);
+  doc.close();
+  setTimeout(()=>{
+    try{ iframe.contentWindow.focus(); iframe.contentWindow.print(); }
+    finally{ setTimeout(()=> iframe.remove(), 1500); }
+  }, 250);
+});
+document.getElementById('btnOrbExportJson')?.addEventListener('click', ()=>{
+  const rows = filteredOrbEntries();
+  downloadJsonFile(`e-orb_${(orbSetup().shipName||'vessel').replace(/\s+/g,'_')}.json`, {
+    format: 'noon-report-eorb-v1',
+    exportedAt: new Date().toISOString(),
+    setup: orbSetup(),
+    entries: rows
+  });
+});
+document.getElementById('orb_codesPart')?.addEventListener('change', renderOrbCodesList);
+document.getElementById('orb_codesFlag')?.addEventListener('change', renderOrbCodesList);
 
 /* ---------------- init ---------------- */
 (async function init(){
@@ -12073,6 +12941,18 @@ function migrateSetup(setup){
     renderReportCategoryButtons();
     bindReferenceCalculators();
     bindBunkerPlanUi();
+    try{
+      if (window.EORB){
+        state.setup.orb = ensureOrbSetup(state.setup.orb);
+        fillOrbFlagSelects();
+        const today = new Date(); today.setMinutes(today.getMinutes()-today.getTimezoneOffset());
+        const iso = today.toISOString().slice(0,10);
+        const ed = document.getElementById('orb_entryDate'); if (ed && !ed.value) ed.value = iso;
+        const od = document.getElementById('orb_officerSignDate'); if (od && !od.value) od.value = iso;
+        const from = document.getElementById('orb_from'); if (from && !from.value){ const d=new Date(); d.setMonth(d.getMonth()-3); from.value = d.toISOString().slice(0,10); }
+        const to = document.getElementById('orb_to'); if (to && !to.value) to.value = iso;
+      }
+    }catch(orbErr){ console.warn('e-ORB init', orbErr); }
 
     /* One-time (per DATA_RECALC_VERSION) rebuild so existing voyages pick up formula fixes. */
     const recalcMeta = metaAll.find(m => m.key === 'dataRecalcVersion');
