@@ -11486,7 +11486,10 @@ function voyageConditionKey(){
 function vesselSyncSlug(){
   const sync = ensureSyncConfig();
   const fromForm = syncFormFieldValue('sync_vesselId').trim();
-  const fromField = (fromForm || sync.vesselId || '').trim();
+  const creds = (typeof readSyncCredentialsFromLocalStorage === 'function')
+    ? readSyncCredentialsFromLocalStorage()
+    : null;
+  const fromField = (fromForm || sync.vesselId || (creds && creds.vesselId) || '').trim();
   if (fromField) return fromField.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64);
   return (state.setup.vesselName || 'vessel').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64) || 'vessel';
 }
@@ -11510,10 +11513,15 @@ function syncFormFieldValue(id){
 }
 
 function syncApiBase(){
-  /* Prefer the live Data-tab field so Test/Sync work before Save finishes. */
+  /* Prefer live form, then in-memory setup, then localStorage (fresh-tablet save path). */
   const fromForm = normalizeSyncServerUrl(syncFormFieldValue('sync_serverUrl'));
   if (fromForm) return fromForm;
-  return normalizeSyncServerUrl(ensureSyncConfig().serverUrl || '');
+  const fromState = normalizeSyncServerUrl(ensureSyncConfig().serverUrl || '');
+  if (fromState) return fromState;
+  const creds = (typeof readSyncCredentialsFromLocalStorage === 'function')
+    ? readSyncCredentialsFromLocalStorage()
+    : null;
+  return normalizeSyncServerUrl((creds && creds.serverUrl) || '');
 }
 
 async function flushSyncSettingsFromForm(){
@@ -11676,6 +11684,8 @@ function readSyncSettingsFromForm(sync){
   return s;
 }
 
+const SYNC_CREDS_LS_KEY = 'noonReportSyncCredentials';
+
 function syncCredentialsMirrorValue(sync){
   return {
     serverUrl: sync.serverUrl || '',
@@ -11689,9 +11699,34 @@ function syncCredentialsMirrorValue(sync){
   };
 }
 
+function readSyncCredentialsFromLocalStorage(){
+  try{
+    const raw = localStorage.getItem(SYNC_CREDS_LS_KEY);
+    if (!raw) return null;
+    const creds = JSON.parse(raw);
+    return (creds && typeof creds === 'object') ? creds : null;
+  }catch(_){ return null; }
+}
+
+function writeSyncCredentialsToLocalStorage(creds){
+  const value = syncCredentialsMirrorValue(creds || {});
+  localStorage.setItem(SYNC_CREDS_LS_KEY, JSON.stringify(value));
+  try{ sessionStorage.setItem(SYNC_CREDS_LS_KEY, JSON.stringify(value)); }catch(_){}
+  return value;
+}
+
 async function persistSyncCredentialsMirror(sync){
-  /* Device-level copy — must succeed; used by fresh tablets before any voyage data exists. */
-  await dbPutMetaDirect({ key: 'syncCredentials', value: syncCredentialsMirrorValue(sync) });
+  /*
+   * localStorage first — synchronous, works on fresh tablets even while IndexedDB
+   * is busy seeding the demo fleet. IndexedDB mirror is best-effort afterward.
+   */
+  const value = writeSyncCredentialsToLocalStorage(sync);
+  try{
+    await dbPutMetaDirect({ key: 'syncCredentials', value });
+  }catch(err){
+    console.warn('IndexedDB syncCredentials mirror deferred; localStorage saved.', err);
+  }
+  return value;
 }
 
 function applySyncFieldsToLiveConfig(sync){
@@ -11787,8 +11822,20 @@ async function persistSyncSettingsToDb(sync){
 
 async function applyMirroredSyncCredentials(){
   try{
-    const row = await dbGet('meta', 'syncCredentials');
-    const creds = row && row.value;
+    let creds = readSyncCredentialsFromLocalStorage();
+    if (!creds){
+      try{
+        const raw = sessionStorage.getItem(SYNC_CREDS_LS_KEY);
+        if (raw) creds = JSON.parse(raw);
+      }catch(_){}
+    }
+    if (!creds){
+      try{
+        const row = await dbGet('meta', 'syncCredentials');
+        creds = row && row.value;
+        if (creds) writeSyncCredentialsToLocalStorage(creds);
+      }catch(_){}
+    }
     if (!creds || typeof creds !== 'object') return false;
     const sync = ensureSyncConfig();
     /* Device-level credentials always win — needed after pull/remote wipe and fresh tablets. */
@@ -11803,37 +11850,19 @@ async function applyMirroredSyncCredentials(){
   }catch(_){ return false; }
 }
 
-let _appReady = false;
-async function waitUntilAppReady(timeoutMs){
-  if (_appReady) return;
-  const limit = timeoutMs == null ? 60000 : timeoutMs;
-  const start = Date.now();
-  while (!_appReady && (Date.now() - start) < limit){
-    await new Promise(r => setTimeout(r, 40));
-  }
-}
-
 async function saveSyncSettingsFromForm(options = {}){
   const silent = !!options.silent;
   const fromAutosave = !!options.fromAutosave;
   clearTimeout(_syncAutosaveTimer);
-  /* Coalesce: wait for the current save, then write latest form values once. */
   if (_syncSaveInFlight){
     if (fromAutosave) return _syncSaveInFlight;
-    try{ await withDbTimeout(_syncSaveInFlight, 12000, 'Previous sync save is still running'); }catch(_){}
+    try{ await withDbTimeout(_syncSaveInFlight, 5000, 'Previous sync save is still running'); }catch(_){}
     _syncSaveInFlight = null;
   }
   const btn = document.getElementById('btnSaveSyncSettings');
-  const defaultLabel = (btn && (btn.dataset.defaultLabel || btn.textContent)) || 'Save Sync Settings';
-  if (btn && !btn.dataset.defaultLabel) btn.dataset.defaultLabel = defaultLabel;
+  if (btn && !btn.dataset.defaultLabel) btn.dataset.defaultLabel = btn.textContent || 'Save Sync Settings';
 
   _syncSaveInFlight = (async ()=>{
-    let finished = false;
-    const watchdog = setTimeout(()=>{
-      if (finished) return;
-      if (btn){ btn.disabled = false; btn.removeAttribute('aria-busy'); }
-      setSyncSaveStatus('Still saving sync credentials…', 'pending');
-    }, 5000);
     try{
       try{
         const ae = document.activeElement;
@@ -11843,43 +11872,38 @@ async function saveSyncSettingsFromForm(options = {}){
         btn.disabled = true;
         btn.setAttribute('aria-busy', 'true');
       }
-      if (!_appReady){
-        setSyncSaveStatus('Waiting for app startup…', 'saving');
-        await waitUntilAppReady(60000);
-      }
       setSyncSaveStatus(fromAutosave ? 'auto-saving sync credentials…' : 'saving sync credentials…', 'saving');
       const sync = readSyncSettingsFromForm();
       if (!(sync.serverUrl || '').trim()){
         throw new Error('Enter a Sync Server URL before saving.');
       }
-      /* Direct write — does not wait behind voyage/fleet IndexedDB queue. */
-      await persistSyncCredentialsMirror(sync);
+      /* Synchronous localStorage write — must succeed even if IndexedDB/fleet seed is busy. */
+      writeSyncCredentialsToLocalStorage(sync);
       applySyncFieldsToLiveConfig(sync);
       _syncFormDirty = false;
       renderSyncUi();
-      setSyncSaveStatus('Sync credentials saved — ready to pull from server.', 'ok');
+      setSyncSaveStatus('Sync settings saved — ready to pull from server.', 'ok');
 
-      /* Best-effort vessel setup attach; never fails the credential save. */
-      try{
-        await ensureActiveVesselForPersist();
-        const v = activeVessel();
-        if (v && state.setup.vesselName) v.name = state.setup.vesselName;
-        if (v && (sync.vesselId || '').trim()) v.slug = sync.vesselId.trim();
-        await dbPutMany('meta', [
-          { key:`setup:${state.activeVesselId}`, value: state.setup },
-          { key:'vessels', value: state.vessels || [] },
-          { key:'activeVesselId', value: state.activeVesselId }
-        ]);
-        setSyncSaveStatus(
-          fromAutosave ? 'Sync settings saved automatically' : 'Sync settings saved — ready to pull from server.',
-          'ok'
-        );
-      }catch(setupErr){
-        console.warn('Sync credentials saved; vessel setup write deferred:', setupErr);
-      }
+      /* Background mirrors — never block the SUCCESS path. */
+      persistSyncCredentialsMirror(sync).catch(err => console.warn('sync IDB mirror:', err));
+      Promise.resolve().then(async ()=>{
+        try{
+          await ensureActiveVesselForPersist();
+          const v = activeVessel();
+          if (v && state.setup.vesselName) v.name = state.setup.vesselName;
+          if (v && (sync.vesselId || '').trim()) v.slug = sync.vesselId.trim();
+          await dbPutMany('meta', [
+            { key:`setup:${state.activeVesselId}`, value: state.setup },
+            { key:'vessels', value: state.vessels || [] },
+            { key:'activeVesselId', value: state.activeVesselId }
+          ]);
+        }catch(setupErr){
+          console.warn('Vessel setup attach deferred after sync save:', setupErr);
+        }
+      });
 
       if (!silent && !fromAutosave){
-        try{ alert('SUCCESS — Sync settings saved.\n\nYou can now use Test Connection, List Remote Voyages, or Pull.'); }catch(_){}
+        try{ alert('SUCCESS — Sync settings saved.\n\nYou can now Test Connection, List Remote Voyages, or Pull.'); }catch(_){}
       }
       return true;
     }catch(err){
@@ -11890,8 +11914,6 @@ async function saveSyncSettingsFromForm(options = {}){
       }
       return false;
     }finally{
-      finished = true;
-      clearTimeout(watchdog);
       if (btn){
         btn.disabled = false;
         btn.removeAttribute('aria-busy');
@@ -12245,16 +12267,20 @@ function queueBackgroundSync(){
 (function bindSaveSyncSettingsButton(){
   const btn = document.getElementById('btnSaveSyncSettings');
   if (!btn) return;
-  bindMobileSafeAction(btn, handleSaveSyncSettingsClick);
-  /* Extra capture-phase click — survives some WebView quirks that drop bubble handlers */
-  btn.addEventListener('click', handleSaveSyncSettingsClick, true);
+  /* One reliable path: touchend + click. Inline onclick also calls __saveSyncSettingsClick. */
+  btn.addEventListener('click', handleSaveSyncSettingsClick);
+  btn.addEventListener('touchend', (e)=>{
+    try{ e.preventDefault(); }catch(_){}
+    handleSaveSyncSettingsClick(e);
+  }, { passive:false });
 })();
 (function bindSyncSettingsAutosave(){
   SYNC_FORM_IDS.forEach(id=>{
     const el = document.getElementById(id);
     if (!el) return;
-    el.addEventListener('input', queueSyncSettingsAutosave);
     el.addEventListener('change', queueSyncSettingsAutosave);
+    /* Debounced input autosave — localStorage-only path is fast enough. */
+    el.addEventListener('input', queueSyncSettingsAutosave);
   });
 })();
 
@@ -12467,7 +12493,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v80';
+let androidInstallCacheName = 'noon-report-v81';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -13889,6 +13915,12 @@ document.getElementById('orb_codesFlag')?.addEventListener('change', renderOrbCo
 (async function init(){
   try {
     await openDB();
+    /* Restore sync credentials immediately — before fleet seed — so Setup tab Save/Pull work on fresh tablets. */
+    try{
+      ensureSyncConfig();
+      await applyMirroredSyncCredentials();
+      renderSyncUi();
+    }catch(_){}
     const metaAll = await dbGetAll('meta');
     await migrateToMultiVessel(metaAll);
     await loadVesselFromDb(state.activeVesselId);
@@ -13934,10 +13966,13 @@ document.getElementById('orb_codesFlag')?.addEventListener('change', renderOrbCo
     registerServiceWorker();
     renderSyncUi();
     document.getElementById('dbStatus').textContent = '● local database ready';
-    _appReady = true;
   } catch(e){
     console.error('Startup error:', e);
-    _appReady = true; /* allow sync credential saves even if demo fleet seed failed */
+    try{
+      ensureSyncConfig();
+      await applyMirroredSyncCredentials();
+      renderSyncUi();
+    }catch(_){}
     document.getElementById('dbStatus').textContent = '● local database error — see console';
     alert('This app could not open its local database on startup: ' + e.message + '\n\nTry closing any other tabs/windows with this same file open, then reload this page. (Check the browser console for full details.)');
   }
