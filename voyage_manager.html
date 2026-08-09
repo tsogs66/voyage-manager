@@ -157,8 +157,9 @@
   .field-legend i{width:22px; height:12px; border-radius:2px; display:inline-block;}
   .field-legend i.edit{background:var(--ink); border:1px solid var(--line-strong);}
   .field-legend i.calc{background:var(--calc-bg); border:1px dashed var(--brass-dim);}
-  /* Handwriting / pen input: numeric field that could not be parsed */
-  .field input.input-invalid{border-color:var(--alert) !important; box-shadow:0 0 0 2px rgba(224,106,76,0.25);}
+  /* Handwriting / pen input: numeric field that could not be parsed.
+     Not scoped to .field — ORB tank rows use their own grid, without one. */
+  input.input-invalid{border-color:var(--alert) !important; box-shadow:0 0 0 2px rgba(224,106,76,0.25);}
 
   .unit-group{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px;}
   .unit-group.cols2{grid-template-columns:1fr 1fr;}
@@ -360,6 +361,45 @@
     background:rgba(0,0,0,0.18); border:1px solid var(--line); border-radius:4px; padding:10px 12px; white-space:pre-wrap;
   }
   .orb-flag-box{border-left:3px solid var(--teal); padding:8px 12px; margin-top:10px; background:rgba(87,179,171,0.08);}
+  /* ---- IOPP / ORB tank rows ----
+     Name flexes; frame, capacity and ROB take fixed columns so every tank lines up
+     under the header. Deliberately not .form-grid — that collapses to two columns
+     below 900px and would wrap a single tank across several lines on a tablet. */
+  .orb-tank-head, .orb-tank-row{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 132px 96px 96px 34px;
+    gap:6px 8px;
+    align-items:center;
+  }
+  .orb-tank-head{
+    margin:4px 0 4px; font-size:10px; letter-spacing:0.06em; text-transform:uppercase;
+    color:var(--paper-dim);
+  }
+  .orb-tank-head span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .orb-tank-row{margin-bottom:6px;}
+  .orb-tank-row input{
+    background:var(--ink); border:1px solid var(--line-strong); border-radius:3px;
+    color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:13px;
+    padding:7px 8px; width:100%; min-width:0;
+  }
+  .orb-tank-row input:focus{outline:none; border-color:var(--teal); box-shadow:0 0 0 2px rgba(87,179,171,0.28);}
+  .orb-tank-row .orb-tank-del{padding:6px 0; width:100%; min-width:0; font-size:13px; line-height:1;}
+  /* Tablet: tighten the fixed columns rather than letting the row wrap. */
+  @media (max-width:900px){
+    .orb-tank-head, .orb-tank-row{grid-template-columns:minmax(0,1fr) 104px 78px 78px 30px; gap:5px 6px;}
+    .orb-tank-row input{font-size:12px; padding:6px 6px;}
+  }
+  @media (max-width:640px){
+    .orb-tank-head, .orb-tank-row{grid-template-columns:minmax(0,1fr) 84px 64px 64px 28px; gap:4px 5px;}
+    .orb-tank-head{font-size:9px; letter-spacing:0.03em;}
+    .orb-tank-row input{font-size:11px; padding:5px 4px;}
+  }
+  @media (max-width:420px){
+    .orb-tank-head, .orb-tank-row{grid-template-columns:minmax(0,1fr) 62px 52px 52px 24px; gap:3px 4px;}
+    .orb-tank-row input{font-size:10.5px; padding:5px 3px;}
+    .orb-tank-row .orb-tank-del{padding:5px 0;}
+  }
+
   /* Plain-language scenario picker (maps to MARPOL code + item numbers) */
   .orb-scenario-group{margin-top:14px;}
   .orb-scenario-group > h4{
@@ -13099,7 +13139,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v87';
+let androidInstallCacheName = 'noon-report-v88';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -13956,20 +13996,26 @@ function renderOrbTankEditors(){
     ['slop','Slop tanks (tankers)'],
     ['cbt','Dedicated CBT (tankers)']
   ];
+  /* One aligned row per tank with a single column header per group, rather than
+     repeating field labels on every row. The row grid keeps its columns at every
+     width — .form-grid would collapse to two columns below 900px and wrap a tank
+     across several lines on a tablet. */
   host.innerHTML = groups.map(([key,label])=>{
-    const rows = (setup.tanks[key] || []).map((t,i)=>`
-      <div class="form-grid cols4" data-orb-tank-row="${key}" data-idx="${i}" style="margin-bottom:6px;">
-        <div class="field"><label>${label} — name</label><input data-orb-tank-field="name" value="${escAttr(t.name||'')}"></div>
-        <div class="field"><label>Frame no. / position</label><input data-orb-tank-field="frameNo" placeholder="e.g. Fr. 42–48 (P)" value="${escAttr(t.frameNo||'')}"></div>
-        <div class="field"><label>Capacity (m³)</label><input type="number" step="0.01" data-orb-tank-field="capacityM3" value="${t.capacityM3!=null?t.capacityM3:''}"></div>
-        <div class="field"><label>ROB (m³)</label>
-          <div style="display:flex;gap:6px;align-items:end;">
-            <input type="number" step="0.01" data-orb-tank-field="robM3" value="${t.robM3!=null?t.robM3:''}" style="flex:1;">
-            <button type="button" class="ghost small" data-orb-tank-del="${key}" data-idx="${i}">×</button>
-          </div>
-        </div>
-      </div>`).join('') || `<div class="hint">No ${label.toLowerCase()} yet.</div>`;
-    return `<h3 class="sub">${label}</h3>${rows}`;
+    const list = setup.tanks[key] || [];
+    if (!list.length) return `<h3 class="sub">${label}</h3><div class="hint">No ${label.toLowerCase()} yet.</div>`;
+    const head = `
+      <div class="orb-tank-head">
+        <span>Tank name</span><span>Frame no. / position</span><span>Cap. (m³)</span><span>ROB (m³)</span><span></span>
+      </div>`;
+    const rows = list.map((t,i)=>`
+      <div class="orb-tank-row" data-orb-tank-row="${key}" data-idx="${i}">
+        <input data-orb-tank-field="name" aria-label="Tank name" title="Tank name" value="${escAttr(t.name||'')}">
+        <input data-orb-tank-field="frameNo" aria-label="Frame number or position" title="Frame no. / position" placeholder="Fr. 42–48 (P)" value="${escAttr(t.frameNo||'')}">
+        <input type="number" step="0.01" data-orb-tank-field="capacityM3" aria-label="Capacity in cubic metres" title="Capacity (m³)" value="${t.capacityM3!=null?t.capacityM3:''}">
+        <input type="number" step="0.01" data-orb-tank-field="robM3" aria-label="Remaining on board in cubic metres" title="ROB (m³)" value="${t.robM3!=null?t.robM3:''}">
+        <button type="button" class="ghost small orb-tank-del" data-orb-tank-del="${key}" data-idx="${i}" aria-label="Remove tank" title="Remove tank">×</button>
+      </div>`).join('');
+    return `<h3 class="sub">${label}</h3>${head}${rows}`;
   }).join('');
 }
 
