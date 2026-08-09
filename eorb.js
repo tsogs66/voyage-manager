@@ -155,14 +155,18 @@
           field('qtyDisposed', 'Quantity disposed (m³)', 'number'),
           field('tankEmptied', 'Tank(s) emptied', 'tank', { tankGroup: 'sludge' }),
           field('retained', 'Quantity retained (m³)', 'number'),
-          field('receptionPort', 'Port / facility', 'text', { required: true })
+          field('receptionPort', 'Port / facility', 'text', { required: true }),
+          field('timeStart', 'Pumping start (for capacity check)', 'time'),
+          field('timeStop', 'Pumping stop (for capacity check)', 'time')
         ]},
         { no: '12.2', label: 'Transfer to another tank(s)', fields: [
           field('qtyDisposed', 'Quantity transferred (m³)', 'number', { required: true }),
           field('fromTank', 'From tank', 'tank', { tankGroup: 'sludge', required: true }),
           field('toTank', 'To tank', 'tank', { tankGroup: 'any', required: true }),
           field('toTotal', 'Total content of receiving tank (m³)', 'number'),
-          field('retained', 'Quantity retained in source (m³)', 'number')
+          field('retained', 'Quantity retained in source (m³)', 'number'),
+          field('timeStart', 'Transfer start (for pump capacity check)', 'time'),
+          field('timeStop', 'Transfer stop (for pump capacity check)', 'time')
         ]},
         { no: '12.3', label: 'Incinerated', fields: [
           field('qtyDisposed', 'Quantity incinerated (m³)', 'number', { required: true }),
@@ -470,7 +474,13 @@
       masterName: seed.masterName || '',
       chiefEng: seed.chiefEng || '',
       equipment: Object.assign({
-        owsFitted: true, owsPpm: 15, incineratorFitted: true, odmeFitted: false, cowFitted: false, cbtFitted: false
+        owsFitted: true, owsPpm: 15, incineratorFitted: true, odmeFitted: false, cowFitted: false, cbtFitted: false,
+        /* Capacities used for auto-ROB checks / mismatch warnings */
+        incineratorM3PerH: seed.equipment && seed.equipment.incineratorM3PerH != null ? seed.equipment.incineratorM3PerH : 0.05,
+        sludgePumpM3PerH: seed.equipment && seed.equipment.sludgePumpM3PerH != null ? seed.equipment.sludgePumpM3PerH : 2,
+        bilgePumpM3PerH: seed.equipment && seed.equipment.bilgePumpM3PerH != null ? seed.equipment.bilgePumpM3PerH : 5,
+        transferPumpM3PerH: seed.equipment && seed.equipment.transferPumpM3PerH != null ? seed.equipment.transferPumpM3PerH : 2,
+        capacityWarnTolerancePct: seed.equipment && seed.equipment.capacityWarnTolerancePct != null ? seed.equipment.capacityWarnTolerancePct : 15
       }, seed.equipment || {}),
       tanks: {
         sludge: (seed.tanks && seed.tanks.sludge) || [{ id: 'sludge1', name: 'Sludge Tank', capacityM3: 5, robM3: 0 }],
@@ -599,6 +609,347 @@
     const all = tanksForGroup(setup, 'any');
     const hit = all.find(x => x.id === id || x.name === id);
     return hit ? hit.name : String(id);
+  }
+
+  function findTank(setup, id) {
+    if (!id || !setup || !setup.tanks) return null;
+    const groups = Object.keys(setup.tanks);
+    for (let i = 0; i < groups.length; i++) {
+      const list = setup.tanks[groups[i]] || [];
+      const hit = list.find(t => t && (t.id === id || t.name === id));
+      if (hit) return { tank: hit, group: groups[i] };
+    }
+    return null;
+  }
+
+  function numOrNull(v) {
+    if (v == null || v === '') return null;
+    const n = Number(v);
+    return isFinite(n) ? n : null;
+  }
+
+  function hoursBetween(start, stop) {
+    if (!start || !stop) return null;
+    const [sh, sm] = String(start).split(':').map(Number);
+    const [eh, em] = String(stop).split(':').map(Number);
+    if (![sh, sm, eh, em].every(isFinite)) return null;
+    let mins = (eh * 60 + em) - (sh * 60 + sm);
+    if (mins < 0) mins += 24 * 60; /* crossed midnight */
+    return mins / 60;
+  }
+
+  function round3(n) {
+    return Math.round(Number(n) * 1000) / 1000;
+  }
+
+  function tolPct(setup) {
+    const t = setup && setup.equipment && Number(setup.equipment.capacityWarnTolerancePct);
+    return isFinite(t) && t >= 0 ? t : 15;
+  }
+
+  function mismatchWarning(label, actual, expected, unit, setup) {
+    if (actual == null || expected == null || !(expected > 0)) return null;
+    const pct = Math.abs(actual - expected) / expected * 100;
+    if (pct <= tolPct(setup)) return null;
+    return {
+      level: pct >= 40 ? 'error' : 'warn',
+      code: 'CAPACITY_MISMATCH',
+      message: label + ': recorded ' + fmtVal(actual) + ' ' + unit +
+        ' vs equipment capacity ≈ ' + fmtVal(round3(expected)) + ' ' + unit +
+        ' (' + fmtVal(round3(pct)) + '% difference; tolerance ' + tolPct(setup) + '%). Check quantity, time, or rated capacity in ORB Vessel Setup.'
+    };
+  }
+
+  /**
+   * Auto-fill derived fields (retained, toTotal, capacity) from current tank ROB
+   * without mutating setup. Returns a new values object + notes.
+   */
+  function autofillOperationValues(setup, part, code, selectedItems, values) {
+    const v = Object.assign({}, values || {});
+    const notes = [];
+    const want = new Set(selectedItemNos(selectedItems));
+    if (Number(part) !== 1) return { values: v, notes };
+
+    function tankRob(id) {
+      const hit = findTank(setup, id);
+      return hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : null;
+    }
+    function tankCap(id) {
+      const hit = findTank(setup, id);
+      return hit && hit.tank.capacityM3 != null ? Number(hit.tank.capacityM3) : null;
+    }
+
+    if (code === 'C') {
+      if (want.has('11.1') || want.has('11.2') || want.has('11.3')) {
+        const id = v.tank;
+        if (id) {
+          if (v.capacity == null || v.capacity === '') {
+            const c = tankCap(id);
+            if (c != null) { v.capacity = c; notes.push('Capacity filled from ' + tankName(setup, id) + '.'); }
+          }
+          if (v.retention == null || v.retention === '') {
+            const r = tankRob(id);
+            if (r != null) { v.retention = r; notes.push('Retention filled from current ROB.'); }
+          }
+        }
+      }
+      if (want.has('11.4')) {
+        const id = v.tank;
+        const add = numOrNull(v.manualCollected);
+        const base = tankRob(id);
+        if (id && add != null && (v.retention == null || v.retention === '') && base != null) {
+          v.retention = round3(base + add);
+          if (v.capacity == null || v.capacity === '') {
+            const c = tankCap(id);
+            if (c != null) v.capacity = c;
+          }
+          notes.push('Retention after manual collection = prior ROB + collected.');
+        }
+      }
+      if (want.has('12.1') || want.has('12.3') || want.has('12.4')) {
+        const id = v.tankEmptied;
+        const qty = numOrNull(v.qtyDisposed);
+        const prior = tankRob(id);
+        if (id && qty != null && (v.retained == null || v.retained === '') && prior != null) {
+          v.retained = round3(Math.max(0, prior - qty));
+          notes.push('Retained auto-calculated: ' + fmtVal(prior) + ' − ' + fmtVal(qty) + ' = ' + fmtVal(v.retained) + ' m³.');
+        }
+      }
+      if (want.has('12.2')) {
+        const fromId = v.fromTank;
+        const toId = v.toTank;
+        const qty = numOrNull(v.qtyDisposed);
+        const fromPrior = tankRob(fromId);
+        const toPrior = tankRob(toId);
+        if (fromId && qty != null && (v.retained == null || v.retained === '') && fromPrior != null) {
+          v.retained = round3(Math.max(0, fromPrior - qty));
+          notes.push('Source retained auto-calculated from ROB.');
+        }
+        if (toId && qty != null && (v.toTotal == null || v.toTotal === '') && toPrior != null) {
+          v.toTotal = round3(toPrior + qty);
+          notes.push('Receiving tank total auto-calculated from ROB + transferred.');
+        }
+      }
+    }
+
+    if (code === 'D') {
+      const fromId = v.fromTank;
+      const qty = numOrNull(v.qty);
+      const prior = tankRob(fromId);
+      if (fromId && (v.fromCap == null || v.fromCap === '')) {
+        const c = tankCap(fromId);
+        if (c != null) v.fromCap = c;
+      }
+      if (fromId && qty != null && (v.fromRetained == null || v.fromRetained === '') && prior != null) {
+        v.fromRetained = round3(Math.max(0, prior - qty));
+        notes.push('Bilge holding retained auto-calculated from ROB − quantity.');
+      }
+      if (want.has('15.3')) {
+        const toId = v.toTank;
+        const toPrior = tankRob(toId);
+        if (toId && qty != null && (v.toRetained == null || v.toRetained === '') && toPrior != null) {
+          v.toRetained = round3(toPrior + qty);
+          notes.push('Receiving tank retained auto-calculated from ROB + transferred.');
+        }
+      }
+    }
+
+    if (code === 'H' && want.has('26.3')) {
+      const tanks = Array.isArray(v.fuelTank) ? v.fuelTank : (v.fuelTank ? String(v.fuelTank).split('|') : []);
+      const add = numOrNull(v.fuelQty);
+      if (tanks.length === 1 && add != null && (v.fuelTotal == null || v.fuelTotal === '')) {
+        const prior = tankRob(tanks[0]);
+        if (prior != null) {
+          v.fuelTotal = round3(prior + add);
+          notes.push('Fuel tank total content auto-calculated: prior + bunkered quantity.');
+        }
+      }
+    }
+
+    return { values: v, notes };
+  }
+
+  /**
+   * Capacity / rate warnings (incinerator burn rate, pump transfer rate vs quantity & time).
+   */
+  function capacityWarnings(setup, part, code, selectedItems, values) {
+    const warnings = [];
+    if (Number(part) !== 1) return warnings;
+    const v = values || {};
+    const want = new Set(selectedItemNos(selectedItems));
+    const eq = (setup && setup.equipment) || {};
+
+    if (code === 'C' && want.has('12.3')) {
+      const qty = numOrNull(v.qtyDisposed);
+      const hours = numOrNull(v.incinHours);
+      const rate = numOrNull(eq.incineratorM3PerH);
+      if (qty != null && hours != null && hours > 0 && rate != null && rate > 0) {
+        const expected = rate * hours;
+        const w = mismatchWarning('Incinerator sludge burning capacity', qty, expected, 'm³', setup);
+        if (w) warnings.push(w);
+        else warnings.push({
+          level: 'info',
+          code: 'INCIN_OK',
+          message: 'Incinerator check OK: ' + fmtVal(qty) + ' m³ in ' + fmtVal(hours) +
+            ' h ≈ ' + fmtVal(round3(expected)) + ' m³ at ' + fmtVal(rate) + ' m³/h rated capacity.'
+        });
+      } else if (eq.incineratorFitted !== false && (rate == null || !(rate > 0))) {
+        warnings.push({ level: 'warn', code: 'INCIN_RATE_MISSING', message: 'Set incinerator sludge capacity (m³/h) in ORB Vessel Setup to validate burning quantity vs time.' });
+      }
+      const id = v.tankEmptied;
+      const hit = findTank(setup, id);
+      if (hit && qty != null && hit.tank.robM3 != null && qty - Number(hit.tank.robM3) > 0.001) {
+        warnings.push({ level: 'error', code: 'ROB_EXCEEDED', message: 'Incinerated quantity (' + fmtVal(qty) + ' m³) exceeds current ROB in ' + hit.tank.name + ' (' + fmtVal(hit.tank.robM3) + ' m³).' });
+      }
+    }
+
+    if (code === 'C' && (want.has('12.1') || want.has('12.2') || want.has('12.4'))) {
+      const qty = numOrNull(v.qtyDisposed);
+      const hours = hoursBetween(v.timeStart, v.timeStop);
+      const rate = numOrNull(eq.sludgePumpM3PerH) || numOrNull(eq.transferPumpM3PerH);
+      if (qty != null && hours != null && hours > 0 && rate != null && rate > 0) {
+        const expected = rate * hours;
+        const w = mismatchWarning('Sludge / transfer pump capacity', qty, expected, 'm³', setup);
+        if (w) warnings.push(w);
+      }
+      const fromId = want.has('12.2') ? v.fromTank : v.tankEmptied;
+      const hit = findTank(setup, fromId);
+      if (hit && qty != null && hit.tank.robM3 != null && qty - Number(hit.tank.robM3) > 0.001) {
+        warnings.push({ level: 'error', code: 'ROB_EXCEEDED', message: 'Transferred/disposed quantity (' + fmtVal(qty) + ' m³) exceeds ROB in ' + hit.tank.name + ' (' + fmtVal(hit.tank.robM3) + ' m³).' });
+      }
+      if (want.has('12.2')) {
+        const toHit = findTank(setup, v.toTank);
+        const toTotal = numOrNull(v.toTotal);
+        if (toHit && toTotal != null && toHit.tank.capacityM3 != null && toTotal - Number(toHit.tank.capacityM3) > 0.001) {
+          warnings.push({ level: 'error', code: 'OVERFILL', message: 'Receiving tank total (' + fmtVal(toTotal) + ' m³) exceeds capacity of ' + toHit.tank.name + ' (' + fmtVal(toHit.tank.capacityM3) + ' m³).' });
+        }
+      }
+    }
+
+    if (code === 'D') {
+      const qty = numOrNull(v.qty);
+      const hours = hoursBetween(v.timeStart, v.timeStop);
+      const rate = numOrNull(eq.bilgePumpM3PerH) || numOrNull(eq.transferPumpM3PerH);
+      if (qty != null && hours != null && hours > 0 && rate != null && rate > 0) {
+        const expected = rate * hours;
+        const w = mismatchWarning('Bilge pump capacity', qty, expected, 'm³', setup);
+        if (w) warnings.push(w);
+      } else if (qty != null && hours != null && hours > 0 && !(rate > 0)) {
+        warnings.push({ level: 'warn', code: 'BILGE_RATE_MISSING', message: 'Set bilge pump capacity (m³/h) in ORB Vessel Setup to validate quantity vs pumping time.' });
+      }
+      const hit = findTank(setup, v.fromTank);
+      if (hit && qty != null && hit.tank.robM3 != null && qty - Number(hit.tank.robM3) > 0.001) {
+        warnings.push({ level: 'error', code: 'ROB_EXCEEDED', message: 'Bilge quantity (' + fmtVal(qty) + ' m³) exceeds ROB in ' + hit.tank.name + ' (' + fmtVal(hit.tank.robM3) + ' m³).' });
+      }
+    }
+
+    if (code === 'H' && want.has('26.3')) {
+      const tanks = Array.isArray(v.fuelTank) ? v.fuelTank : (v.fuelTank ? String(v.fuelTank).split('|') : []);
+      const total = numOrNull(v.fuelTotal);
+      if (tanks.length === 1 && total != null) {
+        const hit = findTank(setup, tanks[0]);
+        if (hit && hit.tank.capacityM3 != null && total - Number(hit.tank.capacityM3) > 0.001) {
+          warnings.push({ level: 'error', code: 'OVERFILL', message: 'Bunkered total content (' + fmtVal(total) + ') exceeds capacity of ' + hit.tank.name + ' (' + fmtVal(hit.tank.capacityM3) + ').' });
+        }
+      }
+    }
+
+    return warnings;
+  }
+
+  /**
+   * Apply ROB side-effects after a successful save. Mutates setup.tanks robM3 values.
+   * Returns list of human-readable ROB change notes.
+   */
+  function applyOperationRob(setup, part, code, selectedItems, values) {
+    const notes = [];
+    if (!setup || Number(part) !== 1) return notes;
+    const v = values || {};
+    const want = new Set(selectedItemNos(selectedItems));
+
+    function setRob(id, next, label) {
+      const hit = findTank(setup, id);
+      if (!hit) return;
+      const prev = hit.tank.robM3 != null ? Number(hit.tank.robM3) : null;
+      hit.tank.robM3 = round3(Math.max(0, next));
+      notes.push((label || hit.tank.name) + ': ROB ' +
+        (prev != null ? fmtVal(prev) : '—') + ' → ' + fmtVal(hit.tank.robM3) + ' m³');
+    }
+
+    if (code === 'C') {
+      if (want.has('11.3') && v.tank != null && v.retention != null && v.retention !== '') {
+        setRob(v.tank, Number(v.retention), tankName(setup, v.tank));
+      }
+      if (want.has('11.4') && v.tank && numOrNull(v.manualCollected) != null) {
+        const hit = findTank(setup, v.tank);
+        const base = hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
+        /* If retention also set, prefer retention; else add collected */
+        if (want.has('11.3') && v.retention != null && v.retention !== '') {
+          setRob(v.tank, Number(v.retention), tankName(setup, v.tank));
+        } else {
+          setRob(v.tank, base + Number(v.manualCollected), tankName(setup, v.tank));
+        }
+      }
+      if ((want.has('12.1') || want.has('12.3') || want.has('12.4')) && v.tankEmptied) {
+        if (v.retained != null && v.retained !== '') setRob(v.tankEmptied, Number(v.retained));
+        else if (numOrNull(v.qtyDisposed) != null) {
+          const hit = findTank(setup, v.tankEmptied);
+          const base = hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
+          setRob(v.tankEmptied, Math.max(0, base - Number(v.qtyDisposed)));
+        }
+      }
+      if (want.has('12.2')) {
+        if (v.fromTank) {
+          if (v.retained != null && v.retained !== '') setRob(v.fromTank, Number(v.retained));
+          else if (numOrNull(v.qtyDisposed) != null) {
+            const hit = findTank(setup, v.fromTank);
+            const base = hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
+            setRob(v.fromTank, Math.max(0, base - Number(v.qtyDisposed)));
+          }
+        }
+        if (v.toTank) {
+          if (v.toTotal != null && v.toTotal !== '') setRob(v.toTank, Number(v.toTotal));
+          else if (numOrNull(v.qtyDisposed) != null) {
+            const hit = findTank(setup, v.toTank);
+            const base = hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
+            setRob(v.toTank, base + Number(v.qtyDisposed));
+          }
+        }
+      }
+    }
+
+    if (code === 'D') {
+      if (v.fromTank) {
+        if (v.fromRetained != null && v.fromRetained !== '') setRob(v.fromTank, Number(v.fromRetained));
+        else if (numOrNull(v.qty) != null) {
+          const hit = findTank(setup, v.fromTank);
+          const base = hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
+          setRob(v.fromTank, Math.max(0, base - Number(v.qty)));
+        }
+      }
+      if (want.has('15.3') && v.toTank) {
+        if (v.toRetained != null && v.toRetained !== '') setRob(v.toTank, Number(v.toRetained));
+        else if (numOrNull(v.qty) != null) {
+          const hit = findTank(setup, v.toTank);
+          const base = hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
+          setRob(v.toTank, base + Number(v.qty));
+        }
+      }
+    }
+
+    if (code === 'H' && want.has('26.3')) {
+      const tanks = Array.isArray(v.fuelTank) ? v.fuelTank : (v.fuelTank ? String(v.fuelTank).split('|') : []);
+      if (tanks.length === 1) {
+        if (v.fuelTotal != null && v.fuelTotal !== '') setRob(tanks[0], Number(v.fuelTotal));
+        else if (numOrNull(v.fuelQty) != null) {
+          const hit = findTank(setup, tanks[0]);
+          const base = hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
+          setRob(tanks[0], base + Number(v.fuelQty));
+        }
+      }
+    }
+
+    return notes;
   }
 
   function fmtVal(v) {
@@ -796,6 +1147,10 @@
     tankName,
     buildItemLines,
     buildWeeklyInventory,
+    autofillOperationValues,
+    capacityWarnings,
+    applyOperationRob,
+    findTank,
     validateEntry,
     formatOrbDate,
     buildPrintHtml,
