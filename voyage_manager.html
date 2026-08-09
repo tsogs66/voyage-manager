@@ -41,6 +41,15 @@
     --teal:#57b3ab; --alert:#e06a4c; --good:#5f9e6e;
     --line:rgba(233,228,214,0.12); --line-strong:rgba(233,228,214,0.24);
     --pr-ink:#0a1420; --pr-muted:#5a6578; --pr-accent:#2a6b7a; --pr-rule:#cfd6e0;
+    /* Bottom navigation — themed so the bar stays legible in bright mode. */
+    --nav-bg:rgba(10,20,32,0.98);
+    --nav-shadow:0 -8px 24px rgba(0,0,0,0.35);
+    --nav-panel-shadow:0 -12px 40px rgba(0,0,0,0.45);
+    --nav-scrim:rgba(4,10,18,0.55);
+    --nav-item-bg:rgba(0,0,0,0.18);
+    --nav-active-bg:rgba(201,154,83,0.12);
+    /* Read-only / calculated field treatment */
+    --calc-bg:rgba(0,0,0,0.22);
   }
   html.bright{
     --ink:#f4f1ea; --panel:#ffffff; --panel2:#f7f5ef;
@@ -48,6 +57,13 @@
     --brass:#8a5a1a; --brass-dim:#a67c3a; --brass-bright:#b8862d;
     --teal:#1f7a72; --alert:#b33a22; --good:#2f7a45;
     --line:rgba(18,34,56,0.12); --line-strong:rgba(18,34,56,0.28);
+    --nav-bg:rgba(255,255,255,0.98);
+    --nav-shadow:0 -8px 24px rgba(18,34,56,0.14);
+    --nav-panel-shadow:0 -12px 40px rgba(18,34,56,0.18);
+    --nav-scrim:rgba(18,34,56,0.35);
+    --nav-item-bg:rgba(18,34,56,0.04);
+    --nav-active-bg:rgba(138,90,26,0.14);
+    --calc-bg:rgba(18,34,56,0.05);
   }
   html.bright body{
     background:linear-gradient(180deg, #efebe3 0%, #f7f5ef 40%, #ffffff 100%);
@@ -96,6 +112,43 @@
   .field input, .field select{background:var(--ink); border:1px solid var(--line-strong); border-radius:3px; color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:7px 8px; width:100%;}
   .field input:focus, .field select:focus{outline:none; border-color:var(--teal); box-shadow:0 0 0 2px rgba(87,179,171,0.28);}
   button:focus-visible, .tab:focus-visible, .bn-item:focus-visible{outline:2px solid var(--teal); outline-offset:2px;}
+
+  /* ---- Editable vs calculated fields ----
+     Solid border on --ink = you type here.
+     Dashed brass on --calc-bg = calculated by the app, not editable. */
+  .field input[readonly], .field input:disabled,
+  .field select[readonly], .field select:disabled,
+  .field textarea[readonly], .field textarea:disabled,
+  .field.calc input, .field.calc select{
+    background:var(--calc-bg);
+    border:1px dashed var(--brass-dim);
+    color:var(--brass);
+    cursor:default;
+    box-shadow:none;
+  }
+  .field input[readonly]:focus, .field input:disabled:focus,
+  .field select[readonly]:focus, .field select:disabled:focus,
+  .field textarea[readonly]:focus,
+  .field.calc input:focus, .field.calc select:focus{
+    outline:none; border-color:var(--brass-dim); box-shadow:none;
+  }
+  .field input[readonly] + .calc-tag{display:inline;}
+  /* File pickers are editable controls even though they look unusual — keep them solid. */
+  .field input[type="file"]{background:var(--ink); border:1px solid var(--line-strong); color:var(--paper); cursor:pointer;}
+  /* Which entry the Voyage Summary belongs to — must stay visible on phones,
+     so it deliberately does not use .hint (which is display:none on small screens). */
+  .vs-entry-context{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--teal);
+    border-left:3px solid var(--teal); padding:6px 10px; margin:-4px 0 10px;
+    background:var(--nav-item-bg); border-radius:0 3px 3px 0;
+  }
+  .field-legend{display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin:2px 0 10px; font-size:11px; color:var(--paper-dim);}
+  .field-legend span{display:inline-flex; align-items:center; gap:6px;}
+  .field-legend i{width:22px; height:12px; border-radius:2px; display:inline-block;}
+  .field-legend i.edit{background:var(--ink); border:1px solid var(--line-strong);}
+  .field-legend i.calc{background:var(--calc-bg); border:1px dashed var(--brass-dim);}
+  /* Handwriting / pen input: numeric field that could not be parsed */
+  .field input.input-invalid{border-color:var(--alert) !important; box-shadow:0 0 0 2px rgba(224,106,76,0.25);}
 
   .unit-group{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px;}
   .unit-group.cols2{grid-template-columns:1fr 1fr;}
@@ -279,7 +332,7 @@
   .orb-op-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:8px; margin-top:10px;}
   .orb-op-card{
     text-align:left; border:1px solid var(--line-strong); border-radius:5px; padding:10px 12px;
-    background:rgba(0,0,0,0.12); color:var(--paper); cursor:pointer;
+    background:var(--nav-item-bg); color:var(--paper); cursor:pointer;
   }
   .orb-op-card:hover{border-color:var(--brass);}
   .orb-op-card .code{font-family:'Oswald',sans-serif; color:var(--brass); font-size:16px; letter-spacing:0.06em;}
@@ -294,6 +347,33 @@
     background:rgba(0,0,0,0.18); border:1px solid var(--line); border-radius:4px; padding:10px 12px; white-space:pre-wrap;
   }
   .orb-flag-box{border-left:3px solid var(--teal); padding:8px 12px; margin-top:10px; background:rgba(87,179,171,0.08);}
+  /* Plain-language scenario picker (maps to MARPOL code + item numbers) */
+  .orb-scenario-group{margin-top:14px;}
+  .orb-scenario-group > h4{
+    font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--teal); margin:0 0 8px;
+  }
+  .orb-scenario-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:8px;}
+  .orb-scenario-card{
+    text-align:left; padding:10px 12px; border:1px solid var(--line) !important; border-radius:6px;
+    background:var(--nav-item-bg); color:var(--paper); cursor:pointer; min-height:0;
+    /* Sentence-length labels — override the global uppercase button styling. */
+    font-family:'Inter',sans-serif; text-transform:none; letter-spacing:normal;
+  }
+  .orb-scenario-card:hover{border-color:var(--brass) !important; color:var(--paper);}
+  .orb-scenario-card .title{font-size:13px; font-weight:600; line-height:1.3;}
+  .orb-scenario-card .blurb{font-size:11px; color:var(--paper-dim); margin-top:4px; line-height:1.35;}
+  .orb-scenario-card .codetag{
+    display:inline-block; margin-top:6px; font-family:'IBM Plex Mono',monospace; font-size:10px;
+    color:var(--brass); border:1px solid var(--brass-dim); border-radius:10px; padding:1px 7px;
+  }
+  /* Chronology guidance for ORB dates — must stay visible on phones, so not .hint */
+  .orb-date-note{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--teal);
+    border-left:3px solid var(--teal); padding:6px 10px; margin:10px 0 0;
+    background:var(--nav-item-bg); border-radius:0 3px 3px 0;
+  }
+  .orb-date-note.warn{color:var(--alert); border-left-color:var(--alert);}
   .orb-table{width:100%; border-collapse:collapse; font-size:12px;}
   .orb-table th,.orb-table td{border-bottom:1px solid var(--line); padding:7px 6px; text-align:left; vertical-align:top;}
   .orb-table th{font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:0.05em; text-transform:uppercase; color:var(--brass);}
@@ -795,11 +875,11 @@
     align-items:stretch; justify-content:space-around;
     gap:2px;
     padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
-    background:rgba(10,20,32,0.98);
+    background:var(--nav-bg);
     border-top:1px solid var(--line-strong);
     backdrop-filter:blur(12px);
     -webkit-backdrop-filter:blur(12px);
-    box-shadow:0 -8px 24px rgba(0,0,0,0.35);
+    box-shadow:var(--nav-shadow);
   }
   /* Capacitor / Android / coarse-pointer: always use bottom bar (WebView width is often >720px) */
   html.use-bottom-nav .tabs{display:none !important;}
@@ -826,13 +906,13 @@
     transition:color .15s ease, background .15s ease;
   }
   .bn-item svg{width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0;}
-  .bn-item.active{color:var(--brass); background:rgba(201,154,83,0.12);}
+  .bn-item.active{color:var(--brass); background:var(--nav-active-bg);}
   .bn-item:hover{color:var(--paper); border-color:transparent;}
   .bn-item.active:hover{color:var(--brass);}
   .bn-item:active{transform:scale(0.96);}
   .bn-more-sheet{
     display:none; position:fixed; inset:0; z-index:1100;
-    background:rgba(4,10,18,0.55);
+    background:var(--nav-scrim);
     backdrop-filter:blur(2px);
     -webkit-backdrop-filter:blur(2px);
   }
@@ -843,7 +923,7 @@
     background:linear-gradient(180deg, var(--panel), var(--panel2));
     border-top:1px solid var(--line-strong);
     border-radius:16px 16px 0 0;
-    box-shadow:0 -12px 40px rgba(0,0,0,0.45);
+    box-shadow:var(--nav-panel-shadow);
     max-height:min(70vh, 480px);
     overflow-y:auto;
     -webkit-overflow-scrolling:touch;
@@ -864,14 +944,14 @@
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:6px; padding:14px 8px; min-height:72px;
     border:1px solid var(--line) !important; border-radius:10px;
-    background:rgba(0,0,0,0.18); color:var(--paper-dim);
+    background:var(--nav-item-bg); color:var(--paper-dim);
     font-family:'Oswald',sans-serif; font-size:10px; letter-spacing:0.05em;
     text-transform:uppercase; cursor:pointer;
     touch-action:manipulation; -webkit-tap-highlight-color:transparent;
     transition:color .15s ease, background .15s ease, border-color .15s ease;
   }
   .bn-more-item svg{width:24px; height:24px; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round;}
-  .bn-more-item.active{color:var(--brass); border-color:var(--brass-dim) !important; background:rgba(201,154,83,0.12);}
+  .bn-more-item.active{color:var(--brass); border-color:var(--brass-dim) !important; background:var(--nav-active-bg);}
   .bn-more-item:hover{color:var(--paper); border-color:var(--line-strong) !important;}
   .bn-more-item.active:hover{color:var(--brass);}
   .bn-more-item:active{transform:scale(0.97);}
@@ -1407,6 +1487,10 @@
     </div>
     <div class="panel" id="logEntryFormPanel">
       <h2 id="logEntryTitle">New Log Entry</h2>
+      <div class="field-legend">
+        <span><i class="edit"></i> Editable — enter your reading</span>
+        <span><i class="calc"></i> Calculated — filled by the app</span>
+      </div>
       <h3 class="sub" style="margin-top:0;">Live Calculation Preview</h3>
       <div class="stat-strip cols4" id="livePreviewBox" style="margin-bottom:14px;"></div>
       <!-- Hidden bridges: distance/RPM edited on Voyage Summary; kept here for live preview & save -->
@@ -1456,7 +1540,9 @@
         <div class="unit-box">
           <h3>Main Engine</h3>
           <div class="field"><label>Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="me_runtime"></div>
+          <div class="field"><label>Period Runtime (hrs, calc)</label><input type="text" id="me_runtime_period" readonly tabindex="-1"></div>
           <div class="field"><label>Rev. Counter (cumulative)</label><input type="number" step="1" id="in_revCounter"></div>
+          <div class="hint" id="meRuntimeHint" style="margin:0;">Period runtime = hours between the previous entry's date/time and the date/time selected above. On a new entry the cumulative counter tracks that period automatically until you type your own reading.</div>
         </div>
         <div class="unit-box">
           <h3>Linked from Voyage Summary</h3>
@@ -1505,6 +1591,11 @@
 
     <div class="panel" id="voyageSummaryPanel" style="display:none;">
       <h2>Voyage Summary — Reference &amp; Consumption Review</h2>
+      <div class="vs-entry-context" id="vsEntryContext"></div>
+      <div class="field-legend">
+        <span><i class="edit"></i> Editable — enter your reading</span>
+        <span><i class="calc"></i> Calculated — filled by the app</span>
+      </div>
       <div class="panel" style="margin:0 0 16px; padding:16px;">
         <h3 class="sub" style="margin-top:0;">Voyage Summary — Reference</h3>
         <div class="stat-strip cols4" id="vsTopStrip"></div>
@@ -2182,16 +2273,25 @@
       </div>
       <div class="panel">
         <h2>IOPP / ORB Tanks</h2>
-        <div class="hint">Sludge / oil residue tanks = IOPP item 3.1 (weekly C.11). Oily bilge water holding = IOPP item 3.3 (voluntary weekly under Code I). Bilge tanks/wells = other bilge spaces for voluntary weekly Code I. Add cargo/slop/CBT when ship type is tanker.</div>
+        <div class="hint">Sludge / oil residue tanks = IOPP item 3.1 (weekly C.11). Oily bilge water holding = IOPP item 3.3 (voluntary weekly under Code I). Bilge tanks/wells = other bilge spaces for voluntary weekly Code I. Add cargo/slop/CBT when ship type is tanker. Frame no. should match the tank's position in the IOPP Supplement — it is carried into the ORB record wording and the printout.</div>
         <div id="orbTankEditors"></div>
         <div class="btn-row">
           <button class="ghost small" type="button" data-orb-tank-add="sludge">+ Sludge (3.1)</button>
           <button class="ghost small" type="button" data-orb-tank-add="bilge">+ Oily bilge holding (3.3)</button>
           <button class="ghost small" type="button" data-orb-tank-add="bilgeWells">+ Bilge tank / wells</button>
           <button class="ghost small" type="button" data-orb-tank-add="fuel">+ Fuel oil tank</button>
+          <button class="ghost small" type="button" data-orb-tank-add="lube">+ Lube oil tank</button>
           <button class="ghost small" type="button" data-orb-tank-add="cargo">+ Cargo tank</button>
           <button class="ghost small" type="button" data-orb-tank-add="slop">+ Slop tank</button>
           <button class="ghost small" type="button" data-orb-tank-add="cbt">+ CBT</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Engine Officers</h2>
+        <div class="hint">Officers who sign ORB entries. Once listed they can be picked from a dropdown on every entry, and Browse / Print can produce a report for one officer.</div>
+        <div id="orbOfficerEditors"></div>
+        <div class="btn-row">
+          <button class="ghost small" type="button" id="btnOrbAddOfficer">+ Add engine officer</button>
         </div>
       </div>
     </div>
@@ -2204,8 +2304,20 @@
           <div class="field"><label>Date of operation</label><input type="date" id="orb_entryDate"></div>
           <div class="field"><label>Ship position / place (optional default)</label><input id="orb_defaultPos" placeholder="Lat/Long or port"></div>
         </div>
-        <div class="hint" id="orbNewHint">Start with <strong>Weekly Inventory</strong> for sludge (C.11) and oily bilge / bilge tanks (Code I), or pick another operation code.</div>
-        <div class="orb-op-grid" id="orbOpGrid"></div>
+        <div class="orb-date-note" id="orbDateNote"></div>
+        <div class="hint" id="orbNewHint">Start with <strong>Weekly Inventory</strong> for sludge (C.11) and oily bilge / bilge tanks (Code I), or pick an operation below.</div>
+
+        <h3 class="sub">What operation did you carry out?</h3>
+        <div class="hint">Pick the operation in plain language — the correct MARPOL code and item numbers are selected for you.</div>
+        <div id="orbScenarioGroups"></div>
+
+        <div class="btn-row" style="margin-top:14px;">
+          <button class="ghost small" type="button" id="btnOrbToggleCodes">Advanced — choose by MARPOL code</button>
+        </div>
+        <div id="orbCodeGridWrap" style="display:none;">
+          <div class="hint">Raw MARPOL Appendix III codes. Every item for the code is ticked by default — untick what does not apply.</div>
+          <div class="orb-op-grid" id="orbOpGrid"></div>
+        </div>
       </div>
       <div class="panel" id="orbWeeklyWizard" style="display:none;">
         <h2>Weekly Tank Inventory</h2>
@@ -2215,6 +2327,10 @@
           <input type="checkbox" id="orb_weeklyIncludeBilge" checked style="margin-top:3px;">
           <span>Also save voluntary Code I weekly inventory for oily bilge holding + bilge tanks/wells (recommended for SMS / PSC clarity).</span>
         </label>
+        <div class="form-grid cols2" style="margin-top:10px;">
+          <div class="field"><label>Date of operation</label><input type="date" id="orb_weeklyEntryDate"></div>
+          <div class="field"><label>Officer in charge</label><select id="orb_weeklyOfficerSelect"></select></div>
+        </div>
         <div class="form-grid cols3" style="margin-top:10px;">
           <div class="field"><label>Officer in charge — name</label><input id="orb_weeklyOfficerName"></div>
           <div class="field"><label>Rank</label><input id="orb_weeklyOfficerRank" placeholder="e.g. 2/E, 3/E, C/E"></div>
@@ -2234,6 +2350,11 @@
         <div class="field" style="margin-top:10px;"><label>Items to record (tick all that apply for this operation)</label></div>
         <div id="orbItemChips"></div>
         <div class="form-grid cols2" id="orbFieldGrid" style="margin-top:10px;"></div>
+        <div class="form-grid cols2" style="margin-top:10px;">
+          <div class="field"><label>Date of operation</label><input type="date" id="orb_wizardEntryDate"></div>
+          <div class="field"><label>Officer in charge</label><select id="orb_officerSelect"></select></div>
+        </div>
+        <div class="orb-date-note" id="orbWizardDateNote"></div>
         <div class="form-grid cols3" style="margin-top:10px;">
           <div class="field"><label>Officer in charge — name</label><input id="orb_officerName"></div>
           <div class="field"><label>Rank</label><input id="orb_officerRank" placeholder="e.g. 2/E, 3/E, C/E"></div>
@@ -2258,6 +2379,7 @@
           <div class="field"><label>From date</label><input type="date" id="orb_from"></div>
           <div class="field"><label>To date</label><input type="date" id="orb_to"></div>
           <div class="field"><label>Part filter</label><select id="orb_browsePart"><option value="all">All</option><option value="1">Part I</option><option value="2">Part II</option></select></div>
+          <div class="field"><label>Officer filter</label><select id="orb_browseOfficer"><option value="all">All officers</option></select></div>
         </div>
         <div class="btn-row">
           <button class="primary small" type="button" id="btnOrbFilter">Fetch Records</button>
@@ -5298,7 +5420,7 @@ async function deleteEntryById(id, { confirmMsg } = {}){
   markPendingSync();
   if (editingId === id){
     exitEditMode();
-    document.getElementById('voyageSummaryPanel').style.display = 'none';
+    closeVoyageSummaryPanel();
     prefillFromLastEntry();
   }
   render();
@@ -5852,7 +5974,15 @@ function getComputedRow(entryId){
 
 /* ROB as it stood at the time of a specific entry (not the voyage's final/current ROB) */
 function robAsOfEntry(entryId){
-  const row = getComputedRow(entryId);
+  return robAsOfComputedRow(getComputedRow(entryId));
+}
+
+/**
+ * Same as robAsOfEntry but takes an already-computed row, so callers that need ROB for
+ * many entries (Voyage Abstract, CSV export) can run computeDerived() once instead of
+ * once per row.
+ */
+function robAsOfComputedRow(row){
   if (!row) return null;
   const cutoff = new Date(row.datetime);
   const rob = {};
@@ -6307,7 +6437,7 @@ function renderFlowmeterCounterRows(){
 }
 
 /* ---------------- render ---------------- */
-const ABSTRACT_COLS = [
+const ABSTRACT_BASE_COLS = [
   { key:'datetime', label:'Date/Time', always:true, kind:'text' },
   { key:'operation', label:'Operation', always:true, kind:'text' },
   { key:'hrs', label:'Run Hrs', kind:'num' },
@@ -6342,9 +6472,66 @@ const ABSTRACT_COLS = [
   { key:'actions', label:'', always:true, kind:'actions' }
 ];
 
-function abstractRowValues(r){
+/** Stable per-entry key for a tank's ROB column. */
+function abstractRobKey(cat, tankId){ return `rob_${cat}_${tankId}`; }
+
+/**
+ * Abstract columns for the vessel as currently configured: the fixed set above plus a
+ * remaining-on-board column per fuel grade and per lube oil, inserted before the actions
+ * column. Grades a vessel does not carry are dropped later by visibleAbstractCols().
+ */
+function abstractCols(){
+  const cols = ABSTRACT_BASE_COLS.filter(c => c.kind !== 'actions');
+  fuelTankList().forEach(t=>{
+    cols.push({ key: abstractRobKey('fuel', t.id), label: `${t.name} ROB`, kind:'fuel' });
+  });
+  lubeTankList().forEach(t=>{
+    cols.push({ key: abstractRobKey('lube', t.id), label: `${t.name} ROB`, kind:'lube' });
+  });
+  const actions = ABSTRACT_BASE_COLS.find(c => c.kind === 'actions');
+  if (actions) cols.push(actions);
+  return cols;
+}
+
+/**
+ * ROB per entry id for every configured fuel grade / lube oil, from a single
+ * computeDerived() pass. Building this once keeps the abstract linear rather than
+ * quadratic in the number of entries.
+ */
+function abstractRobMap(){
+  const map = new Map();
+  try{
+    const {rows} = computeDerived();
+    const fuelTanks = fuelTankList();
+    const lubeTanks = lubeTankList();
+    rows.forEach(row=>{
+      const asOf = robAsOfComputedRow(row);
+      if (!asOf) return;
+      const cells = {};
+      fuelTanks.forEach(t=>{ cells[abstractRobKey('fuel', t.id)] = asOf.rob?.[t.id] ?? null; });
+      lubeTanks.forEach(t=>{ cells[abstractRobKey('lube', t.id)] = asOf.robLube?.[t.id] ?? null; });
+      map.set(row.id, cells);
+    });
+  }catch(_e){ /* setup incomplete — abstract still renders without ROB columns */ }
+  return map;
+}
+
+function abstractRowValues(r, robMap){
   const dt = new Date(r.datetime);
+  /* ROB as of this entry, per fuel grade and per lube oil. */
+  let rob = robMap ? robMap.get(r.id) : null;
+  if (!rob){
+    try{
+      const asOf = robAsOfEntry(r.id);
+      rob = {};
+      if (asOf){
+        fuelTankList().forEach(t=>{ rob[abstractRobKey('fuel', t.id)] = asOf.rob?.[t.id] ?? null; });
+        lubeTankList().forEach(t=>{ rob[abstractRobKey('lube', t.id)] = asOf.robLube?.[t.id] ?? null; });
+      }
+    }catch(_e){ rob = {}; /* saved abstracts may reference entries no longer present */ }
+  }
   return {
+    ...rob,
     datetime: dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}),
     operation: r.operation,
     hrs: r.hrs, rpm: r.rpm,
@@ -6402,9 +6589,10 @@ function formatAbstractCell(col, v){
   return v ?? '—';
 }
 
-function visibleAbstractCols(rows, { withActions=false } = {}){
-  const data = rows.map(abstractRowValues);
-  return ABSTRACT_COLS.filter(col=>{
+function visibleAbstractCols(rows, { withActions=false, robMap=null } = {}){
+  const map = robMap || abstractRobMap();
+  const data = rows.map(r=> abstractRowValues(r, map));
+  return abstractCols().filter(col=>{
     if (col.kind==='actions') return withActions;
     if (col.always) return true;
     return data.some(row => abstractCellHasValue(col, row[col.key]));
@@ -6416,14 +6604,16 @@ function renderVoyageAbstractTable(rows, { headId, bodyId, withActions=false } =
   const head = document.getElementById(headId);
   const body = document.getElementById(bodyId);
   if (!head || !body) return;
-  const cols = withActions ? ABSTRACT_COLS : ABSTRACT_COLS.filter(c=>c.kind!=='actions');
+  const all = abstractCols();
+  const cols = withActions ? all : all.filter(c=>c.kind!=='actions');
   if (!rows.length){
     head.innerHTML = cols.map(c=>`<th>${c.label}</th>`).join('');
     body.innerHTML = `<tr class="empty-row"><td colspan="${cols.length}">No entries yet.</td></tr>`;
     return;
   }
-  const data = rows.map(abstractRowValues);
-  const visible = visibleAbstractCols(rows, { withActions });
+  const robMap = abstractRobMap();
+  const data = rows.map(r=> abstractRowValues(r, robMap));
+  const visible = visibleAbstractCols(rows, { withActions, robMap });
   head.innerHTML = visible.map(c=>`<th>${c.label}</th>`).join('');
   body.innerHTML = data.map(row=>{
     const cells = visible.map(col=>{
@@ -6442,17 +6632,27 @@ function renderVoyageAbstractTable(rows, { headId, bodyId, withActions=false } =
 /** @deprecated Prefer renderVoyageAbstractTable — kept for CSV path compatibility. */
 function abstractRowCells(r){
   const row = abstractRowValues(r);
-  return ABSTRACT_COLS.filter(c=>c.kind!=='actions').map(col=>`<td>${formatAbstractCell(col, row[col.key])}</td>`).join('');
+  return abstractCols().filter(c=>c.kind!=='actions').map(col=>`<td>${formatAbstractCell(col, row[col.key])}</td>`).join('');
 }
 
-const ABSTRACT_CSV_HEADER = ["DateTime","Operation","RunHrs","RPM","DistEngine","SpeedEngine","DistShip","SpeedShip","Slip%","%MCR","EstKW",
+const ABSTRACT_CSV_BASE_HEADER = ["DateTime","Operation","RunHrs","RPM","DistEngine","SpeedEngine","DistShip","SpeedShip","Slip%","%MCR","EstKW",
   "Cond","Hrs","DistShip2","RPM2","RevCounter","DailyRevs","MERun","GERun","BlrRun","MECons","GECons","BlrCons","TotalCons",
   "CylOilCons","CylGrade","MELO","GELO","FWMeter","FWProduced","FWRob","FWCons"];
-function abstractRowToCsv(r){
+/** CSV header including one ROB column per configured fuel grade and lube oil. */
+function abstractCsvHeader(){
+  return ABSTRACT_CSV_BASE_HEADER
+    .concat(fuelTankList().map(t=>`${t.name} ROB`))
+    .concat(lubeTankList().map(t=>`${t.name} ROB`));
+}
+function abstractRowToCsv(r, robMap){
+  const row = abstractRowValues(r, robMap);
+  const robCells = fuelTankList().map(t=> fmtNum(row[abstractRobKey('fuel', t.id)], 3))
+    .concat(lubeTankList().map(t=> fmtNum(row[abstractRobKey('lube', t.id)], 0)));
   return [r.datetime, r.operation, fmtNum(r.hrs,2), fmtNum(r.rpm,2), fmtNum(r.distEngine,2), fmtNum(r.speedEngine,2), fmtNum(r.distanceShip,2), fmtNum(r.speedShip,2),
     fmtNum(r.slip,2), fmtNum(r.mcrPct,2), fmtNum(r.kwEst,2), r.condition, fmtNum(r.hrs,2), fmtNum(r.distanceShip,2), fmtNum(r.rpm,2), fmtNum(r.revCounter,2), fmtNum(r.dailyRevs,2),
     meterCellText(r.me), meterCellText(r.ge), fmtNum(r.blr.meter,2), fmtNum(r.meCons,3), fmtNum(r.geCons,3), fmtNum(r.blrCons,3), fmtNum(r.total,3),
-    fmtNum(r.cylCons,0), r.tbn, fmtNum(r.meLoCons,0), fmtNum(r.geLoCons,0), fmtNum(r.fwProd,0), fmtNum(r.fwProdD,0), fmtNum(r.fwRob,0), fmtNum(r.fwConsD,0)];
+    fmtNum(r.cylCons,0), r.tbn, fmtNum(r.meLoCons,0), fmtNum(r.geLoCons,0), fmtNum(r.fwProd,0), fmtNum(r.fwProdD,0), fmtNum(r.fwRob,0), fmtNum(r.fwConsD,0)]
+    .concat(robCells);
 }
 function csvEscape(v){
   const s = (v===null||v===undefined) ? '' : String(v);
@@ -7411,6 +7611,10 @@ function switchTab(pageName){
   if (pageName === 'orb'){
     try{ renderOrbUi(); }catch(err){ console.warn(err); }
   }
+  if (pageName === 'reports'){
+    /* Land on the full list instead of an empty page waiting for a category click. */
+    showReportList(REPORT_CATEGORIES[activeReportCatIdx] || REPORT_CATEGORIES[0]);
+  }
   try{ window.scrollTo({ top:0, behavior:'smooth' }); }catch(_){ window.scrollTo(0,0); }
 }
 document.getElementById('tabs').addEventListener('click', (e)=>{
@@ -7864,16 +8068,23 @@ function exportWeeklyAbstractCsv(){
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
-function renderReportCategoryButtons(){
+/** Index of the report category currently listed — drives the active button state. */
+let activeReportCatIdx = 0;
+
+function renderReportCategoryButtons(selectedIdx){
   const box = document.getElementById('reportCategoryButtons');
   if (!box) return;
-  box.innerHTML = REPORT_CATEGORIES.map((c,i)=>`<button class="ghost small" data-cat="${i}">${c.label}</button>`).join('');
+  if (selectedIdx != null) activeReportCatIdx = selectedIdx;
+  box.innerHTML = REPORT_CATEGORIES.map((c,i)=>
+    `<button class="${i===activeReportCatIdx?'primary':'ghost'} small" data-cat="${i}">${c.label}</button>`).join('');
   box.querySelectorAll('[data-cat]').forEach(btn=>{
     btn.addEventListener('click', ()=> showReportList(REPORT_CATEGORIES[parseInt(btn.dataset.cat)]));
   });
 }
 
 function showReportList(category){
+  const idx = REPORT_CATEGORIES.indexOf(category);
+  if (idx >= 0) renderReportCategoryButtons(idx);
   const list = sortedEntries().slice().reverse().filter(e=>{
     if (!category.keyword) return true;
     return (e.operation||'').toUpperCase().includes(category.keyword);
@@ -8866,6 +9077,8 @@ function loadEntryIntoForm(id){
   document.getElementById('editingBadge').style.display = '';
   updateEntryActionButtons();
   switchTab('entry');
+  /* Editing an existing entry: show its period hrs, never overwrite the stored counter. */
+  syncMeRuntimeFromPeriod();
   updateLivePreview();
   updateVsRunCalcDisplays();
   openVoyageSummary(id);
@@ -9659,6 +9872,7 @@ function openVoyageSummary(entryId){
 
   updateVsRobLiveFromCons();
 
+  renderVsEntryContext(entry);
   document.getElementById('voyageSummaryPanel').style.display = '';
   switchTab('entry');
   document.getElementById('voyageSummaryPanel').scrollIntoView({behavior:'smooth', block:'start'});
@@ -10028,8 +10242,7 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   }
   markPendingSync();
   render();
-  document.getElementById('voyageSummaryPanel').style.display = 'none';
-  currentVsEntryId = null;
+  closeVoyageSummaryPanel();
   /* Reset next-watch distance/RPM bridges so the last summary does not leak into the new log entry */
   prefillFromLastEntry();
   ['vs_distanceShip','vs_rpm','vs_revCounter','vs_engineDist','vs_engineSpeed','vs_shipSpeed','vs_slip'].forEach(id=>{
@@ -10304,7 +10517,7 @@ document.getElementById('btnPrintVoyageSummary').addEventListener('click', ()=>{
 });
 
 document.getElementById('btnCloseVoyageSummary').addEventListener('click', ()=>{
-  document.getElementById('voyageSummaryPanel').style.display = 'none';
+  closeVoyageSummaryPanel();
 });
 
 /* Find the chronologically previous entry (or carryover) relative to a given datetime,
@@ -10320,6 +10533,30 @@ function getPrevReferenceFor(dtValue, excludeId){
 function isVoyageSummaryOpen(){
   const p = document.getElementById('voyageSummaryPanel');
   return !!(p && p.style.display !== 'none' && currentVsEntryId);
+}
+
+/**
+ * Hide the Voyage Summary and forget which entry it described.
+ * The panel is only ever meaningful for a selected entry, so leaving it up with no
+ * selection (very visible on phones/tablets where it stacks under the form) is wrong.
+ */
+function closeVoyageSummaryPanel(){
+  const p = document.getElementById('voyageSummaryPanel');
+  if (p) p.style.display = 'none';
+  currentVsEntryId = null;
+  const ctx = document.getElementById('vsEntryContext');
+  if (ctx) ctx.textContent = '';
+}
+
+/** Label the summary with the entry it belongs to — critical on stacked mobile layouts. */
+function renderVsEntryContext(entry){
+  const ctx = document.getElementById('vsEntryContext');
+  if (!ctx) return;
+  if (!entry){ ctx.textContent = ''; return; }
+  const dt = new Date(entry.datetime);
+  const dtStr = isNaN(dt) ? (entry.datetime || '—')
+    : dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  ctx.textContent = `Summary for: ${dtStr} — ${entry.operation || '—'}`;
 }
 /** When Voyage Summary is open, period math must use that entry — not the next-entry form. */
 function getActivePeriodContext(){
@@ -10350,6 +10587,52 @@ function periodRunHours(prevRef, curDt, curMeRuntime){
     if (d!=null && d>0) return d;
   }
   return null;
+}
+
+/** Wall-clock hours between the previous reference entry and the selected date/time. */
+function elapsedHoursFromPrev(prevRef, curDt){
+  if (!prevRef || !prevRef.datetime || !curDt) return null;
+  const h = (new Date(curDt) - new Date(prevRef.datetime)) / 3600000;
+  return (isFinite(h) && h > 0) ? h : null;
+}
+
+/** True once the engineer types their own counter reading — stops auto-tracking. */
+function meRuntimeIsUserEdited(){
+  return document.getElementById('me_runtime')?.dataset.userEdited === '1';
+}
+function clearMeRuntimeUserEdit(){
+  const el = document.getElementById('me_runtime');
+  if (el) delete el.dataset.userEdited;
+}
+
+/**
+ * Keep the M/E runtime fields tied to the selected date/time.
+ * On a NEW entry the cumulative counter auto-tracks (previous counter + elapsed hours)
+ * until the engineer types a real reading; the period box always shows the delta so the
+ * hours displayed are for this watch, never the voyage total.
+ */
+function syncMeRuntimeFromPeriod(){
+  const rtEl = document.getElementById('me_runtime');
+  const periodEl = document.getElementById('me_runtime_period');
+  if (!rtEl && !periodEl) return;
+  const dt = document.getElementById('in_datetime')?.value || null;
+  const prevRef = getPrevReferenceFor(dt, editingId);
+  const elapsed = elapsedHoursFromPrev(prevRef, dt);
+  const prevRt = (prevRef && prevRef.meRuntime != null && !isNaN(prevRef.meRuntime))
+    ? Number(prevRef.meRuntime) : null;
+
+  /* New entry, counter untouched → follow the clock. */
+  if (rtEl && editingId === null && !meRuntimeIsUserEdited()
+      && document.activeElement !== rtEl && prevRt != null && elapsed != null){
+    rtEl.value = (prevRt + elapsed).toFixed(1);
+  }
+
+  if (periodEl){
+    const cur = parseFloat(rtEl?.value);
+    let period = (prevRt != null && !isNaN(cur)) ? runtimeDelta(cur, prevRt) : null;
+    if (period == null) period = elapsed;
+    periodEl.value = period == null ? '—' : fmt(period, 2);
+  }
 }
 
 let rpmSyncGuard = false;
@@ -10456,11 +10739,14 @@ function updateVsFwDisplays(){
 ['vs_rpm','vs_revCounter','in_revCounter'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input', ()=> syncRpmRevCounter(id));
 });
-document.getElementById('me_runtime')?.addEventListener('input', ()=>{
+document.getElementById('me_runtime')?.addEventListener('input', (e)=>{
+  /* Typing a real counter reading stops the date/time auto-tracking for this entry. */
+  if (e.isTrusted) e.target.dataset.userEdited = '1';
   if (document.getElementById('vs_rpm')?.value)
     syncRpmRevCounter('vs_rpm');
   else if (document.getElementById('in_revCounter')?.value)
     syncRpmRevCounter('in_revCounter');
+  syncMeRuntimeFromPeriod();
   updateVsRunCalcDisplays();
   updateLivePreview();
 });
@@ -10469,12 +10755,18 @@ document.getElementById('vs_distanceShip')?.addEventListener('input', ()=>{
   updateVsRunCalcDisplays();
   updateLivePreview();
 });
-document.getElementById('in_datetime').addEventListener('change', ()=>{
-  if (document.getElementById('vs_rpm')?.value || document.getElementById('in_rpm')?.value)
-    syncRpmRevCounter(document.getElementById('vs_rpm')?.value ? 'vs_rpm' : 'in_rpm');
-  else if (document.getElementById('in_revCounter')?.value)
-    syncRpmRevCounter('in_revCounter');
-  updateVsRunCalcDisplays();
+/* 'input' as well as 'change': mobile/tablet date pickers commit via 'input'. */
+['change','input'].forEach(evt=>{
+  document.getElementById('in_datetime').addEventListener(evt, ()=>{
+    /* Runtime must follow the selected date/time before anything derived from it. */
+    syncMeRuntimeFromPeriod();
+    if (document.getElementById('vs_rpm')?.value || document.getElementById('in_rpm')?.value)
+      syncRpmRevCounter(document.getElementById('vs_rpm')?.value ? 'vs_rpm' : 'in_rpm');
+    else if (document.getElementById('in_revCounter')?.value)
+      syncRpmRevCounter('in_revCounter');
+    updateVsRunCalcDisplays();
+    updateLivePreview();
+  });
 });
 
 /* ---------------- live calculation preview ---------------- */
@@ -11182,6 +11474,8 @@ function exitEditMode(){
   document.getElementById('editingBadge').style.display = 'none';
   const sel = document.getElementById('in_selectEntry');
   if (sel) sel.value = '';
+  /* No entry is selected any more, so the summary must not linger. */
+  closeVoyageSummaryPanel();
   updateEntryActionButtons();
 }
 
@@ -11218,6 +11512,7 @@ function applyEntryDefaults(){
   set('me_type', d.meType); set('me_sg', d.meSg);
   set('ge_type', d.geType); set('ge_sg', d.geSg);
   set('blr_type', d.blrType); set('blr_sg', d.blrSg);
+  syncMeRuntimeFromPeriod();
   updateLivePreview();
   updateVsRunCalcDisplays();
 }
@@ -11225,8 +11520,10 @@ function applyEntryDefaults(){
 /** Prefill a new log entry from the last saved entry (meters, types, condition) — not consumption. */
 function prefillFromLastEntry(){
   const last = sortedEntries().slice(-1)[0] || state.setup.carryover;
+  /* Fresh form → the runtime counter goes back to tracking the selected date/time. */
+  clearMeRuntimeUserEdit();
   applyEntryDefaults();
-  if (!last) return;
+  if (!last){ syncMeRuntimeFromPeriod(); return; }
 
   const set = (id, val) => { const el = document.getElementById(id); if (el && val!=null && val!==undefined) el.value = val; };
   set('in_condition', last.condition || state.setup.shipCondition);
@@ -11253,11 +11550,15 @@ function prefillFromLastEntry(){
   document.getElementById('in_rpm').value = '';
   const rpmDisp = document.getElementById('in_rpm_display');
   if (rpmDisp) rpmDisp.value = '—';
+  /* Runs after me_runtime was seeded from `last`, so the counter re-tracks the clock. */
+  syncMeRuntimeFromPeriod();
   updateLivePreview();
   updateVsRunCalcDisplays();
 }
 
 document.getElementById('btnClearForm').addEventListener('click', ()=>{
+  /* Back to a blank new entry — nothing is selected, so drop the summary. */
+  closeVoyageSummaryPanel();
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
   document.getElementById('in_datetime').value = now.toISOString().slice(0,16);
@@ -11324,7 +11625,8 @@ document.getElementById('btnCloseAbstractViewer').addEventListener('click', ()=>
   document.getElementById('abstractViewerPanel').style.display = 'none';
 });
 function downloadAbstractCsv(a){
-  const lines = [ABSTRACT_CSV_HEADER.map(csvEscape).join(',')].concat(a.rows.map(r=> abstractRowToCsv(r).map(csvEscape).join(',')));
+  const csvRobMap = abstractRobMap();
+  const lines = [abstractCsvHeader().map(csvEscape).join(',')].concat(a.rows.map(r=> abstractRowToCsv(r, csvRobMap).map(csvEscape).join(',')));
   const blob = new Blob([lines.join('\n')], {type:'text/csv'});
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
@@ -12497,7 +12799,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v81';
+let androidInstallCacheName = 'noon-report-v82';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -13232,6 +13534,91 @@ function orbSetup(){
   return state.setup.orb;
 }
 
+/* ---- ORB entry dating -------------------------------------------------
+   Entries are recorded in chronological order, so a new operation may be
+   back-dated only as far as the most recent entry already in the book, and
+   never dated in the future. */
+
+function orbTodayIso(){
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0,10);
+}
+
+/** Date of the most recent non-voided ORB entry for the active vessel, or null. */
+function orbLastEntryDate(){
+  let last = null;
+  (state.orbEntries || []).forEach(e=>{
+    if (!e || e.voided) return;
+    if (e.vesselId && e.vesselId !== state.activeVesselId) return;
+    if (!e.date) return;
+    if (!last || String(e.date) > last) last = String(e.date);
+  });
+  return last;
+}
+
+/** Apply min/max to every ORB date input so the picker itself blocks bad dates. */
+function applyOrbDateBounds(){
+  const min = orbLastEntryDate();
+  const max = orbTodayIso();
+  ['orb_entryDate','orb_wizardEntryDate','orb_weeklyEntryDate'].forEach(id=>{
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (min) el.min = min; else el.removeAttribute('min');
+    el.max = max;
+  });
+  renderOrbDateNotes();
+}
+
+function renderOrbDateNotes(){
+  const min = orbLastEntryDate();
+  const text = min
+    ? `Last ORB entry: ${EORB ? EORB.formatOrbDate(min) : min}. Entries are chronological — a new operation may be dated on or after that date, and not in the future.`
+    : 'No ORB entries yet. The first operation may be dated any day up to today.';
+  ['orbDateNote','orbWizardDateNote'].forEach(id=>{
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove('warn');
+  });
+}
+
+/**
+ * Validate a chosen operation date. Returns an error string, or null when acceptable.
+ * Enforced here as well as via input min/max, because attributes alone do not stop a
+ * pasted value or a browser without date-input support.
+ */
+function orbDateError(date){
+  if (!date) return 'Date of operation is required.';
+  const today = orbTodayIso();
+  if (date > today) return `Date of operation (${date}) is in the future. Operations are recorded as they are carried out.`;
+  const last = orbLastEntryDate();
+  if (last && date < last){
+    return `Date of operation (${date}) is before the last ORB entry (${last}).\n\n`
+      + 'The Oil Record Book must run in chronological order, so an entry cannot be inserted ahead of one already recorded.';
+  }
+  return null;
+}
+
+/** Read the operation date from whichever wizard is open, keeping all pickers in step. */
+function syncOrbEntryDate(sourceId){
+  const src = document.getElementById(sourceId);
+  if (!src) return;
+  const v = src.value;
+  ['orb_entryDate','orb_wizardEntryDate','orb_weeklyEntryDate'].forEach(id=>{
+    if (id === sourceId) return;
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  });
+  const err = orbDateError(v);
+  ['orbDateNote','orbWizardDateNote'].forEach(id=>{
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (err){ el.textContent = err.split('\n')[0]; el.classList.add('warn'); }
+  });
+  if (!err) renderOrbDateNotes();
+}
+
 function fillOrbFlagSelects(){
   if (!window.EORB) return;
   ['orb_flag','orb_codesFlag'].forEach(id=>{
@@ -13264,14 +13651,16 @@ function renderOrbTankEditors(){
     ['bilge','Oily bilge water holding tanks (IOPP 3.3) — voluntary weekly Code I'],
     ['bilgeWells','Bilge tanks / wells — voluntary weekly Code I'],
     ['fuel','Fuel oil tanks'],
+    ['lube','Lubricating oil tanks'],
     ['cargo','Cargo tanks (tankers)'],
     ['slop','Slop tanks (tankers)'],
     ['cbt','Dedicated CBT (tankers)']
   ];
   host.innerHTML = groups.map(([key,label])=>{
     const rows = (setup.tanks[key] || []).map((t,i)=>`
-      <div class="form-grid cols3" data-orb-tank-row="${key}" data-idx="${i}" style="margin-bottom:6px;">
-        <div class="field"><label>${label} — name</label><input data-orb-tank-field="name" value="${(t.name||'').replace(/"/g,'&quot;')}"></div>
+      <div class="form-grid cols4" data-orb-tank-row="${key}" data-idx="${i}" style="margin-bottom:6px;">
+        <div class="field"><label>${label} — name</label><input data-orb-tank-field="name" value="${escAttr(t.name||'')}"></div>
+        <div class="field"><label>Frame no. / position</label><input data-orb-tank-field="frameNo" placeholder="e.g. Fr. 42–48 (P)" value="${escAttr(t.frameNo||'')}"></div>
         <div class="field"><label>Capacity (m³)</label><input type="number" step="0.01" data-orb-tank-field="capacityM3" value="${t.capacityM3!=null?t.capacityM3:''}"></div>
         <div class="field"><label>ROB (m³)</label>
           <div style="display:flex;gap:6px;align-items:end;">
@@ -13282,6 +13671,38 @@ function renderOrbTankEditors(){
       </div>`).join('') || `<div class="hint">No ${label.toLowerCase()} yet.</div>`;
     return `<h3 class="sub">${label}</h3>${rows}`;
   }).join('');
+}
+
+/** Engine officers who may be selected as officer in charge of an ORB entry. */
+function renderOrbOfficerEditors(){
+  const host = document.getElementById('orbOfficerEditors');
+  if (!host || !window.EORB) return;
+  const setup = orbSetup();
+  const list = setup.officers || [];
+  host.innerHTML = list.map((o,i)=>`
+    <div class="form-grid cols3" data-orb-officer-row data-idx="${i}" style="margin-bottom:6px;">
+      <div class="field"><label>Rank</label><input data-orb-officer-field="rank" placeholder="e.g. C/E, 2/E, 3/E" value="${escAttr(o.rank||'')}"></div>
+      <div class="field"><label>Name</label><input data-orb-officer-field="name" value="${escAttr(o.name||'')}"></div>
+      <div class="field" style="justify-content:flex-end;">
+        <button type="button" class="ghost small" data-orb-officer-del="${i}">Remove</button>
+      </div>
+    </div>`).join('') || `<div class="hint">No engine officers listed yet — add the officers who sign ORB entries.</div>`;
+}
+
+/** Fill an officer picker; keeps the current value where it is still valid. */
+function fillOrbOfficerSelect(selectId){
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const setup = orbSetup();
+  const prev = sel.value;
+  const list = setup.officers || [];
+  sel.innerHTML = `<option value="">— type manually —</option>` +
+    list.map(o=>`<option value="${escAttr(o.id)}">${escHtml(o.rank ? `${o.rank} — ${o.name}` : o.name)}</option>`).join('');
+  if (prev && list.some(o=>o.id===prev)) sel.value = prev;
+}
+
+function escHtml(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function readOrbSetupFromForm(){
@@ -13309,22 +13730,34 @@ function readOrbSetupFromForm(){
   setup.equipment.capacityWarnTolerancePct = tol != null ? tol : 15;
   setup.disclaimerAck = !!document.getElementById('orb_disclaimer')?.checked;
   /* tanks from editors */
-  const tanks = { sludge:[], bilge:[], bilgeWells:[], fuel:[], cargo:[], slop:[], cbt:[], dirtyBallast: setup.tanks.dirtyBallast || [] };
+  const tanks = { sludge:[], bilge:[], bilgeWells:[], fuel:[], lube:[], cargo:[], slop:[], cbt:[], dirtyBallast: setup.tanks.dirtyBallast || [] };
   document.querySelectorAll('#orbTankEditors [data-orb-tank-row]').forEach(row=>{
     const key = row.getAttribute('data-orb-tank-row');
     if (!tanks[key]) tanks[key] = [];
     const name = row.querySelector('[data-orb-tank-field="name"]')?.value?.trim() || '';
+    const frameNo = row.querySelector('[data-orb-tank-field="frameNo"]')?.value?.trim() || '';
     const capacityM3 = parseFloat(row.querySelector('[data-orb-tank-field="capacityM3"]')?.value);
     const robM3 = parseFloat(row.querySelector('[data-orb-tank-field="robM3"]')?.value);
     const prev = (setup.tanks[key] || [])[Number(row.getAttribute('data-idx'))] || {};
     tanks[key].push({
       id: prev.id || (key + '_' + uid()),
       name: name || (key + ' tank'),
+      frameNo,
       capacityM3: isFinite(capacityM3) ? capacityM3 : null,
       robM3: isFinite(robM3) ? robM3 : 0
     });
   });
   setup.tanks = tanks;
+  /* engine officer roster */
+  const officers = [];
+  document.querySelectorAll('#orbOfficerEditors [data-orb-officer-row]').forEach(row=>{
+    const rank = row.querySelector('[data-orb-officer-field="rank"]')?.value?.trim() || '';
+    const name = row.querySelector('[data-orb-officer-field="name"]')?.value?.trim() || '';
+    if (!rank && !name) return;
+    const prev = (setup.officers || [])[Number(row.getAttribute('data-idx'))] || {};
+    officers.push({ id: prev.id || ('off_' + uid()), rank, name });
+  });
+  setup.officers = officers;
   state.setup.orb = setup;
   return setup;
 }
@@ -13354,6 +13787,7 @@ function fillOrbSetupForm(){
   if (ack) ack.checked = !!setup.disclaimerAck;
   renderOrbFlagInfo('orbFlagInfo', setup.flag);
   renderOrbTankEditors();
+  renderOrbOfficerEditors();
 }
 
 function renderOrbOpGrid(){
@@ -13367,11 +13801,40 @@ function renderOrbOpGrid(){
       <div class="title"><strong>Weekly Inventory</strong> — sludge (IOPP 3.1), oily bilge holding (3.3), bilge tanks/wells</div>
     </button>` : '';
   const ops = EORB.getPartOps(part).slice().sort((a,b)=> (b.common?1:0)-(a.common?1:0) || a.code.localeCompare(b.code));
-  grid.innerHTML = weeklyCard + ops.map(op => `
+  grid.innerHTML = ops.map(op => `
     <button type="button" class="orb-op-card" data-orb-code="${op.code}">
       <div class="code">${op.code}</div>
       <div class="title">${op.title}</div>
     </button>`).join('');
+  renderOrbScenarioGroups(weeklyCard);
+}
+
+/** Plain-language operation picker; each card opens the wizard on the right code + items. */
+function renderOrbScenarioGroups(weeklyCard){
+  const host = document.getElementById('orbScenarioGroups');
+  if (!host || !window.EORB) return;
+  const part = Number(document.getElementById('orb_part')?.value || 1);
+  const setup = orbSetup();
+  const groups = EORB.getScenarioGroups(setup, part);
+  const weekly = weeklyCard
+    ? `<div class="orb-scenario-group"><h4>Routine</h4><div class="orb-op-grid">${weeklyCard}</div></div>`
+    : '';
+  if (!groups.length){
+    host.innerHTML = weekly + `<div class="hint">No scenarios for this part with the equipment configured in Vessel Setup.</div>`;
+    return;
+  }
+  host.innerHTML = weekly + groups.map(g=>`
+    <div class="orb-scenario-group">
+      <h4>${escHtml(g.group)}</h4>
+      <div class="orb-scenario-grid">
+        ${g.scenarios.map(s=>`
+          <button type="button" class="orb-scenario-card" data-orb-scenario="${escAttr(s.id)}">
+            <div class="title">${escHtml(s.title)}</div>
+            <div class="blurb">${escHtml(s.blurb || '')}</div>
+            <span class="codetag">Code ${escHtml(s.code)} · ${escHtml((s.items||[]).join(', '))}</span>
+          </button>`).join('')}
+      </div>
+    </div>`).join('');
 }
 
 function collectWeeklySoundings(){
@@ -13405,7 +13868,8 @@ function renderWeeklyPreview(){
     prev.textContent = built.errors.join('\n') || 'Enter retained m³ for sludge tanks to preview C.11 lines.';
     return;
   }
-  const date = document.getElementById('orb_entryDate')?.value || '';
+  const date = document.getElementById('orb_weeklyEntryDate')?.value
+    || document.getElementById('orb_entryDate')?.value || '';
   let text = '';
   built.entries.forEach(ent => {
     if (ent.code === 'I' && !includeBilge) return;
@@ -13459,11 +13923,17 @@ function openWeeklyInventoryWizard(){
       </div>`).join('');
     return `<h3 class="sub">${label}</h3>${rows}`;
   }).join('');
-  const today = new Date(); today.setMinutes(today.getMinutes()-today.getTimezoneOffset());
-  const iso = today.toISOString().slice(0,10);
-  if (!document.getElementById('orb_entryDate')?.value) document.getElementById('orb_entryDate').value = iso;
+  const iso = orbTodayIso();
+  const lastDate = orbLastEntryDate();
+  const suggested = (lastDate && lastDate > iso) ? lastDate : iso;
+  const topDate = document.getElementById('orb_entryDate');
+  if (topDate && !topDate.value) topDate.value = suggested;
+  const wkDate = document.getElementById('orb_weeklyEntryDate');
+  if (wkDate) wkDate.value = topDate?.value || suggested;
+  applyOrbDateBounds();
   const sign = document.getElementById('orb_weeklyOfficerSignDate');
   if (sign && !sign.value) sign.value = iso;
+  fillOrbOfficerSelect('orb_weeklyOfficerSelect');
   const name = document.getElementById('orb_weeklyOfficerName');
   if (name && !name.value) name.value = setup.chiefEng || document.getElementById('orb_officerName')?.value || '';
   const rank = document.getElementById('orb_weeklyOfficerRank');
@@ -13527,7 +13997,8 @@ function renderOrbPreview(){
   const warnings = EORB.capacityWarnings(setup, part, code, selected, values);
   renderOrbCapacityWarnings(warnings);
   const lines = EORB.buildItemLines(part, code, selected, values, setup);
-  const date = document.getElementById('orb_entryDate')?.value || '';
+  const date = document.getElementById('orb_wizardEntryDate')?.value
+    || document.getElementById('orb_entryDate')?.value || '';
   const prev = document.getElementById('orbPreview');
   if (!prev) return;
   if (!lines.length){
@@ -13537,8 +14008,9 @@ function renderOrbPreview(){
   prev.textContent = lines.map(l => `${EORB.formatOrbDate(date)}\t${code}\t${l.itemNo}\t${l.text}`).join('\n');
 }
 
-function openOrbWizard(code){
+function openOrbWizard(code, opts){
   if (!window.EORB) return;
+  opts = opts || {};
   const setup = orbSetup();
   if (!setup.disclaimerAck){
     alert('Acknowledge the e-ORB disclaimer in Vessel Setup before logging entries.');
@@ -13547,17 +14019,23 @@ function openOrbWizard(code){
   const part = Number(document.getElementById('orb_part')?.value || 1);
   const op = EORB.getOperation(part, code);
   if (!op) return;
-  /* For Code C, default to weekly inventory items 11.1–11.3 (not disposal 12.x). */
-  const defaultSelected = (part === 1 && code === 'C')
-    ? op.items.map(i => i.no).filter(n => String(n).startsWith('11'))
-    : op.items.map(i => i.no);
-  _orbWizard = { part, code, selected: defaultSelected };
+  const valid = new Set(op.items.map(i => i.no));
+  /* A scenario knows exactly which item numbers its operation needs.
+     Otherwise: Code C defaults to weekly inventory 11.1–11.3, not disposal 12.x. */
+  const scenarioItems = (opts.items || []).filter(n => valid.has(n));
+  const defaultSelected = scenarioItems.length ? scenarioItems
+    : (part === 1 && code === 'C')
+      ? op.items.map(i => i.no).filter(n => String(n).startsWith('11'))
+      : op.items.map(i => i.no);
+  _orbWizard = { part, code, selected: defaultSelected, scenarioId: opts.scenarioId || null };
   document.getElementById('orbWeeklyWizard').style.display = 'none';
   const wiz = document.getElementById('orbEntryWizard');
   if (wiz) wiz.style.display = '';
-  document.getElementById('orbWizardTitle').textContent = `Code ${code} — ${op.title}`;
-  document.getElementById('orbWizardGuide').textContent = (op.guide || '') +
-    (part === 1 && code === 'C' ? ' Tip: use the Weekly Inventory card to sound all sludge + bilge tanks at once.' : '');
+  document.getElementById('orbWizardTitle').textContent = opts.title
+    ? `${opts.title} — Code ${code}`
+    : `Code ${code} — ${op.title}`;
+  document.getElementById('orbWizardGuide').textContent = (opts.blurb ? opts.blurb + ' ' : '') + (op.guide || '') +
+    (part === 1 && code === 'C' && !scenarioItems.length ? ' Tip: use the Weekly Inventory card to sound all sludge + bilge tanks at once.' : '');
   const chips = document.getElementById('orbItemChips');
   const selectedSet = new Set(defaultSelected);
   chips.innerHTML = op.items.map(it => `
@@ -13577,21 +14055,33 @@ function openOrbWizard(code){
         control = `<textarea data-orb-field="${f.name}" rows="3"></textarea>`;
       } else if (f.type === 'tank' || f.type === 'tankMulti'){
         const tanks = EORB.tanksForGroup(setup, f.tankGroup || 'any');
-        const opts = tanks.map(t => `<option value="${t.id}">${t.name}${t.capacityM3!=null?` (${t.capacityM3} m³)`:''}</option>`).join('');
-        control = `<select data-orb-field="${f.name}" ${f.type==='tankMulti'?'multiple size="4"':''}><option value="">—</option>${opts}</select>`;
+        /* Frame position in the option text — matches the IOPP Supplement tank list. */
+        const opts = tanks.map(t => `<option value="${escAttr(t.id)}">${escHtml(EORB.tankLabel(setup, t.id))}</option>`).join('');
+        const empty = tanks.length ? '' : `<option value="" disabled>No tanks configured — add them in Vessel Setup</option>`;
+        control = `<select data-orb-field="${f.name}" ${f.type==='tankMulti'?'multiple size="4"':''}><option value="">—</option>${empty}${opts}</select>`;
       } else {
         const t = f.type === 'number' ? 'number' : (f.type === 'time' ? 'time' : 'text');
-        const ph = (f.name.toLowerCase().includes('pos') || f.name === 'place' || f.name === 'position') ? defaultPos : '';
-        control = `<input type="${t}" data-orb-field="${f.name}" step="any" value="${ph.replace(/"/g,'&quot;')}">`;
+        const preset = opts.presets && opts.presets[f.name] != null ? String(opts.presets[f.name]) : '';
+        const ph = preset || ((f.name.toLowerCase().includes('pos') || f.name === 'place' || f.name === 'position') ? defaultPos : '');
+        control = `<input type="${t}" data-orb-field="${f.name}" step="any" value="${escAttr(ph)}">`;
       }
-      html += `<div class="field ${f.type==='textarea'||f.type==='tankMulti'?'span2':''}"><label>${f.label}${f.required?' *':''}</label>${control}</div>`;
+      html += `<div class="field ${f.type==='textarea'||f.type==='tankMulti'?'span2':''}"><label>${f.label}${f.required?' *':''}</label>${control}`
+        + (f.hint ? `<div class="hint" style="margin:2px 0 0;">${escHtml(f.hint)}</div>` : '')
+        + `</div>`;
     });
   });
   fieldGrid.innerHTML = html || '<div class="hint">No fields for selected items.</div>';
-  const today = new Date(); today.setMinutes(today.getMinutes()-today.getTimezoneOffset());
-  const iso = today.toISOString().slice(0,10);
-  if (!document.getElementById('orb_entryDate')?.value) document.getElementById('orb_entryDate').value = iso;
+  const iso = orbTodayIso();
+  const lastDate = orbLastEntryDate();
+  /* Default to today, but never earlier than the last entry already in the book. */
+  const suggested = (lastDate && lastDate > iso) ? lastDate : iso;
+  const topDate = document.getElementById('orb_entryDate');
+  if (topDate && !topDate.value) topDate.value = suggested;
+  const wizDate = document.getElementById('orb_wizardEntryDate');
+  if (wizDate) wizDate.value = topDate?.value || suggested;
+  applyOrbDateBounds();
   if (!document.getElementById('orb_officerSignDate')?.value) document.getElementById('orb_officerSignDate').value = iso;
+  fillOrbOfficerSelect('orb_officerSelect');
   if (!document.getElementById('orb_officerName')?.value) document.getElementById('orb_officerName').value = setup.chiefEng || '';
   renderOrbPreview();
 }
@@ -13617,13 +14107,33 @@ function filteredOrbEntries(){
   const from = document.getElementById('orb_from')?.value || '';
   const to = document.getElementById('orb_to')?.value || '';
   const part = document.getElementById('orb_browsePart')?.value || 'all';
+  const officer = document.getElementById('orb_browseOfficer')?.value || 'all';
   return (state.orbEntries || []).filter(e => {
     if (e.voided) return false;
     if (part !== 'all' && String(e.part) !== part) return false;
     if (from && e.date < from) return false;
     if (to && e.date > to) return false;
+    /* Officer report: match the roster id, falling back to the recorded name for
+       entries saved before the roster existed. */
+    if (officer !== 'all'){
+      const roster = (orbSetup().officers || []).find(o => o.id === officer);
+      const nameMatch = roster && roster.name && e.officerName
+        && String(e.officerName).trim().toLowerCase() === String(roster.name).trim().toLowerCase();
+      if (e.officerId !== officer && !nameMatch) return false;
+    }
     return true;
   }).sort((a,b)=> String(a.date).localeCompare(String(b.date)) || String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
+}
+
+/** Officer filter options for Browse / Print. */
+function fillOrbBrowseOfficerSelect(){
+  const sel = document.getElementById('orb_browseOfficer');
+  if (!sel) return;
+  const prev = sel.value;
+  const list = orbSetup().officers || [];
+  sel.innerHTML = `<option value="all">All officers</option>` +
+    list.map(o=>`<option value="${escAttr(o.id)}">${escHtml(o.rank ? `${o.rank} — ${o.name}` : o.name)}</option>`).join('');
+  if (prev && (prev === 'all' || list.some(o=>o.id===prev))) sel.value = prev;
 }
 
 function renderOrbBrowse(){
@@ -13656,10 +14166,12 @@ function renderOrbUi(){
   fillOrbSetupForm();
   renderOrbOpGrid();
   renderOrbCodesList();
+  fillOrbBrowseOfficerSelect();
   renderOrbBrowse();
+  applyOrbDateBounds();
   const hint = document.getElementById('orbNewHint');
   const flag = EORB.getFlag(orbSetup().flag);
-  if (hint) hint.textContent = `Flag: ${flag.name}. Select an operation code. Common codes (C/D/E/F/H/I) are listed first.`;
+  if (hint) hint.textContent = `Flag: ${flag.name}. Pick the operation you carried out — the MARPOL code and item numbers are chosen for you.`;
 }
 
 function switchOrbPanel(name){
@@ -13707,10 +14219,28 @@ document.querySelectorAll('[data-orb-tank-add]').forEach(btn=>{
     readOrbSetupFromForm();
     const setup = orbSetup();
     if (!setup.tanks[key]) setup.tanks[key] = [];
-    setup.tanks[key].push({ id: key + '_' + uid(), name: key.toUpperCase() + ' Tank', capacityM3: null, robM3: 0 });
+    setup.tanks[key].push({ id: key + '_' + uid(), name: key.toUpperCase() + ' Tank', frameNo: '', capacityM3: null, robM3: 0 });
     state.setup.orb = setup;
     renderOrbTankEditors();
   });
+});
+document.getElementById('btnOrbAddOfficer')?.addEventListener('click', ()=>{
+  readOrbSetupFromForm();
+  const setup = orbSetup();
+  if (!Array.isArray(setup.officers)) setup.officers = [];
+  setup.officers.push({ id: 'off_' + uid(), rank: '', name: '' });
+  state.setup.orb = setup;
+  renderOrbOfficerEditors();
+});
+document.getElementById('orbOfficerEditors')?.addEventListener('click', (e)=>{
+  const del = e.target.closest('[data-orb-officer-del]');
+  if (!del) return;
+  readOrbSetupFromForm();
+  const idx = Number(del.getAttribute('data-orb-officer-del'));
+  const setup = orbSetup();
+  setup.officers = (setup.officers || []).filter((_,i)=>i!==idx);
+  state.setup.orb = setup;
+  renderOrbOfficerEditors();
 });
 document.getElementById('orbTankEditors')?.addEventListener('click', (e)=>{
   const del = e.target.closest('[data-orb-tank-del]');
@@ -13729,14 +14259,57 @@ document.getElementById('orb_part')?.addEventListener('change', ()=>{
   renderOrbOpGrid();
 });
 document.getElementById('orbOpGrid')?.addEventListener('click', (e)=>{
-  if (e.target.closest('[data-orb-weekly]')){
-    openWeeklyInventoryWizard();
-    return;
-  }
   const card = e.target.closest('[data-orb-code]');
   if (!card) return;
   openOrbWizard(card.getAttribute('data-orb-code'));
 });
+/* Scenario picker — plain-language operation → correct code + item numbers. */
+document.getElementById('orbScenarioGroups')?.addEventListener('click', (e)=>{
+  if (e.target.closest('[data-orb-weekly]')){
+    openWeeklyInventoryWizard();
+    return;
+  }
+  const card = e.target.closest('[data-orb-scenario]');
+  if (!card || !window.EORB) return;
+  const sc = EORB.getScenario(card.getAttribute('data-orb-scenario'));
+  if (!sc) return;
+  const partSel = document.getElementById('orb_part');
+  if (partSel && Number(partSel.value) !== Number(sc.part)){
+    partSel.value = String(sc.part);
+    renderOrbOpGrid();
+  }
+  openOrbWizard(sc.code, { items: sc.items, presets: sc.presets, scenarioId: sc.id, title: sc.title, blurb: sc.blurb });
+  document.getElementById('orbEntryWizard')?.scrollIntoView({ behavior:'smooth', block:'start' });
+});
+document.getElementById('btnOrbToggleCodes')?.addEventListener('click', ()=>{
+  const wrap = document.getElementById('orbCodeGridWrap');
+  const btn = document.getElementById('btnOrbToggleCodes');
+  if (!wrap) return;
+  const open = wrap.style.display !== 'none';
+  wrap.style.display = open ? 'none' : '';
+  if (btn) btn.textContent = open ? 'Advanced — choose by MARPOL code' : 'Hide MARPOL code list';
+});
+/* Keep every date picker and the chronology note in step. */
+['orb_entryDate','orb_wizardEntryDate','orb_weeklyEntryDate'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('change', ()=> syncOrbEntryDate(id));
+  document.getElementById(id)?.addEventListener('input', ()=> syncOrbEntryDate(id));
+});
+/* Picking a rostered officer fills the name/rank actually written into the record. */
+function bindOrbOfficerSelect(selectId, nameId, rankId){
+  document.getElementById(selectId)?.addEventListener('change', (e)=>{
+    const id = e.target.value;
+    if (!id) return; /* "— type manually —" leaves whatever is typed */
+    const off = (orbSetup().officers || []).find(o=>o.id===id);
+    if (!off) return;
+    const nameEl = document.getElementById(nameId);
+    const rankEl = document.getElementById(rankId);
+    if (nameEl) nameEl.value = off.name || '';
+    if (rankEl) rankEl.value = off.rank || '';
+  });
+}
+bindOrbOfficerSelect('orb_officerSelect', 'orb_officerName', 'orb_officerRank');
+bindOrbOfficerSelect('orb_weeklyOfficerSelect', 'orb_weeklyOfficerName', 'orb_weeklyOfficerRank');
+document.getElementById('orb_browseOfficer')?.addEventListener('change', renderOrbBrowse);
 document.getElementById('orbWeeklyTankFields')?.addEventListener('input', renderWeeklyPreview);
 document.getElementById('orbWeeklyTankFields')?.addEventListener('change', renderWeeklyPreview);
 document.getElementById('orb_weeklyIncludeBilge')?.addEventListener('change', renderWeeklyPreview);
@@ -13769,8 +14342,11 @@ document.getElementById('btnOrbSaveWeekly')?.addEventListener('click', async ()=
   }
   const officerName = document.getElementById('orb_weeklyOfficerName')?.value?.trim();
   if (!officerName){ alert('Officer in charge name is required.'); return; }
-  const date = document.getElementById('orb_entryDate')?.value;
-  if (!date){ alert('Date of operation is required.'); return; }
+  const date = document.getElementById('orb_weeklyEntryDate')?.value
+    || document.getElementById('orb_entryDate')?.value;
+  const dateErr = orbDateError(date);
+  if (dateErr){ alert('Cannot save weekly inventory:\n\n' + dateErr); return; }
+  const officerId = document.getElementById('orb_weeklyOfficerSelect')?.value || '';
   const officerRank = document.getElementById('orb_weeklyOfficerRank')?.value?.trim() || '';
   const signDate = document.getElementById('orb_weeklyOfficerSignDate')?.value || date;
   const now = new Date().toISOString();
@@ -13785,6 +14361,7 @@ document.getElementById('btnOrbSaveWeekly')?.addEventListener('click', async ()=
       selectedItems: draft.selectedItems,
       values: draft.values,
       lines: draft.lines,
+      officerId,
       officerName,
       officerRank,
       officerSignedAt: signDate + 'T12:00:00',
@@ -13799,8 +14376,10 @@ document.getElementById('btnOrbSaveWeekly')?.addEventListener('click', async ()=
   }
   await saveSetup();
   document.getElementById('orbWeeklyWizard').style.display = 'none';
+  fillOrbBrowseOfficerSelect();
   renderOrbBrowse();
   fillOrbSetupForm();
+  applyOrbDateBounds();
   alert('Weekly inventory saved: ' + saved + ' ORB operation(s).\n\n• Code C — sludge tanks (IOPP 3.1)\n' +
     (includeBilge && entriesToSave.some(e => e.code === 'I') ? '• Code I — oily bilge / bilge tanks (voluntary)\n' : '') +
     '\nOpen Browse / Print to review.');
@@ -13849,8 +14428,10 @@ document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>
 
   const officerName = document.getElementById('orb_officerName')?.value?.trim();
   if (!officerName){ alert('Officer in charge name is required.'); return; }
-  const date = document.getElementById('orb_entryDate')?.value;
-  if (!date){ alert('Date of operation is required.'); return; }
+  const date = document.getElementById('orb_wizardEntryDate')?.value
+    || document.getElementById('orb_entryDate')?.value;
+  const dateErr = orbDateError(date);
+  if (dateErr){ alert('Cannot save this ORB entry:\n\n' + dateErr); return; }
   const lines = EORB.buildItemLines(part, code, selected, values, setup);
   const robNotes = EORB.applyOperationRob(setup, part, code, selected, values);
   state.setup.orb = setup;
@@ -13863,6 +14444,8 @@ document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>
     values, lines,
     robNotes,
     capacityWarnings: warnings,
+    scenarioId: _orbWizard.scenarioId || null,
+    officerId: document.getElementById('orb_officerSelect')?.value || '',
     officerName,
     officerRank: document.getElementById('orb_officerRank')?.value?.trim() || '',
     officerSignedAt: (document.getElementById('orb_officerSignDate')?.value || date) + 'T12:00:00',
@@ -13875,8 +14458,10 @@ document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>
   await saveSetup();
   document.getElementById('orbEntryWizard').style.display = 'none';
   _orbWizard.code = null;
+  fillOrbBrowseOfficerSelect();
   renderOrbBrowse();
   fillOrbSetupForm();
+  applyOrbDateBounds();
   alert('ORB entry saved: ' + EORB.formatOrbDate(date) + ' code ' + code + ' (' + lines.length + ' item line(s)).' +
     (robNotes.length ? ('\n\nTank ROB updated:\n• ' + robNotes.join('\n• ')) : ''));
 });
@@ -13888,7 +14473,13 @@ document.getElementById('btnOrbPrint')?.addEventListener('click', ()=>{
   if (checked.size) rows = rows.filter(e => checked.has(e.id));
   const from = document.getElementById('orb_from')?.value || '';
   const to = document.getElementById('orb_to')?.value || '';
-  const range = (from || to) ? `${from || '…'} → ${to || '…'}` : 'All saved entries';
+  let range = (from || to) ? `${from || '…'} → ${to || '…'}` : 'All saved entries';
+  /* Name the officer on the printout when the report is filtered to one. */
+  const officerId = document.getElementById('orb_browseOfficer')?.value || 'all';
+  if (officerId !== 'all'){
+    const off = (orbSetup().officers || []).find(o=>o.id===officerId);
+    if (off) range += ` — officer in charge: ${off.rank ? off.rank + ' ' : ''}${off.name}`;
+  }
   const html = EORB.buildPrintHtml(orbSetup(), rows, range);
   const iframe = document.createElement('iframe');
   iframe.setAttribute('aria-hidden', 'true');
@@ -13916,8 +14507,107 @@ document.getElementById('orb_codesPart')?.addEventListener('change', renderOrbCo
 document.getElementById('orb_codesFlag')?.addEventListener('change', renderOrbCodesList);
 
 /* ---------------- init ---------------- */
+/* ---------------- tablet pen / handwriting input ----------------
+   Tablet stylus handwriting-to-text refuses to write into <input type="number">
+   on most platforms (Windows Ink, S-Pen, Scribble). On pen/touch devices we swap
+   those to type="text" with inputmode="decimal", so the pad still shows a numeric
+   keyboard and the pen can write digits. Fields whose purpose is text — names,
+   positions, ports, remarks — are already type="text" and are left alone, as are
+   date/time pickers. Every reader in this app uses parseFloat(el.value), which is
+   unaffected by the type swap (there are no valueAsNumber call sites). */
+
+/** Only convert on devices that can actually take pen/touch input. */
+function penInputLikely(){
+  try{
+    if (window.matchMedia('(hover: none) and (pointer: coarse)').matches) return true;
+    if (window.matchMedia('(any-pointer: fine) and (any-hover: none)').matches) return true;
+    return (navigator.maxTouchPoints || 0) > 0 && Math.min(screen.width, screen.height) <= 1400;
+  }catch(_e){ return false; }
+}
+
+function enablePenInputMode(){
+  if (document.documentElement.classList.contains('pen-input')) return;
+  document.documentElement.classList.add('pen-input');
+  enablePenFriendlyInputs(document);
+  observePenFriendlyInputs();
+}
+
+/** Swap numeric inputs under `root` to pen-writable text inputs. */
+function enablePenFriendlyInputs(root){
+  if (!root || !document.documentElement.classList.contains('pen-input')) return;
+  const scope = root.querySelectorAll ? root : document;
+  let list = [];
+  try{ list = [...scope.querySelectorAll('input[type="number"]')]; }catch(_e){ return; }
+  if (root instanceof Element && root.matches?.('input[type="number"]')) list.push(root);
+  list.forEach(el=>{
+    if (el.dataset.vmNumeric === '1') return;
+    /* Preserve the numeric contract for validation after the type swap. */
+    if (el.step != null && el.getAttribute('step')) el.dataset.vmStep = el.getAttribute('step');
+    if (el.getAttribute('min') != null) el.dataset.vmMin = el.getAttribute('min');
+    if (el.getAttribute('max') != null) el.dataset.vmMax = el.getAttribute('max');
+    el.dataset.vmNumeric = '1';
+    el.type = 'text';
+    el.setAttribute('inputmode', 'decimal');
+    el.setAttribute('autocomplete', 'off');
+    el.setAttribute('autocorrect', 'off');
+    el.setAttribute('spellcheck', 'false');
+  });
+}
+
+/** Normalise what the pen wrote: trim, decimal comma → dot, strip stray spaces. */
+function normalisePenNumericField(el){
+  if (!el || el.dataset.vmNumeric !== '1' || el.readOnly || el.disabled) return;
+  const raw = (el.value || '').trim();
+  if (raw === ''){ el.classList.remove('input-invalid'); return; }
+  const cleaned = raw.replace(/\s+/g, '').replace(',', '.');
+  const n = parseFloat(cleaned);
+  if (!isFinite(n) || !/^-?\d*\.?\d*$/.test(cleaned)){
+    /* Keep the raw strokes on screen so the engineer can correct them. */
+    el.classList.add('input-invalid');
+    el.title = 'Not a number — please rewrite this value.';
+    return;
+  }
+  el.classList.remove('input-invalid');
+  el.title = '';
+  const min = el.dataset.vmMin != null ? parseFloat(el.dataset.vmMin) : null;
+  const max = el.dataset.vmMax != null ? parseFloat(el.dataset.vmMax) : null;
+  let out = n;
+  if (min != null && isFinite(min) && out < min) out = min;
+  if (max != null && isFinite(max) && out > max) out = max;
+  if (String(out) !== raw) el.value = String(out);
+}
+
+let _penObserver = null;
+/** Re-run the swap for fields rendered after load (ORB wizard, GE rows, bunker plan…). */
+function observePenFriendlyInputs(){
+  if (_penObserver || typeof MutationObserver === 'undefined') return;
+  let queued = false;
+  _penObserver = new MutationObserver(muts=>{
+    if (queued) return;
+    const touched = muts.some(m => m.addedNodes && m.addedNodes.length);
+    if (!touched) return;
+    queued = true;
+    /* setTimeout, not requestAnimationFrame: rAF is throttled when the page is
+       backgrounded, which would leave freshly rendered fields un-converted. */
+    setTimeout(()=>{ queued = false; enablePenFriendlyInputs(document); }, 0);
+  });
+  _penObserver.observe(document.body, { childList: true, subtree: true });
+}
+
+document.addEventListener('pointerdown', (e)=>{
+  /* A pen touching the glass is proof enough, even on a laptop with a digitiser. */
+  if (e.pointerType === 'pen') enablePenInputMode();
+}, true);
+document.addEventListener('change', (e)=>{
+  if (e.target?.dataset?.vmNumeric === '1') normalisePenNumericField(e.target);
+}, true);
+document.addEventListener('blur', (e)=>{
+  if (e.target?.dataset?.vmNumeric === '1') normalisePenNumericField(e.target);
+}, true);
+
 (async function init(){
   try {
+    if (penInputLikely()) enablePenInputMode();
     await openDB();
     /* Restore sync credentials immediately — before fleet seed — so Setup tab Save/Pull work on fresh tablets. */
     try{
