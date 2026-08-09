@@ -11422,28 +11422,37 @@ function renderVoyageProgress(animateShip){
   const gapToDep = shipX - x0;
   const crowdedEnd = gapToArr <= 150 || gapToDep <= 150 || !isUnderway;
 
-  // Status / speed sit above the ship — keep weather beside the hull, never on those labels.
+  /* Status / speed sit above the ship — keep weather beside the hull, never on it.
+     Each side is taken only when it genuinely fits: clamping a preferred side into
+     the available width is what used to drop the badge straight onto the vessel. */
   const shipHalf = 52;
   let weatherBadgeX = 0;
   let weatherBadgeY = y - Math.floor(wxHeight / 2);
   if (wxLines.length){
-    const preferLeft = nearArr || (!nearDep && gapToArr <= gapToDep);
-    if (preferLeft){
-      weatherBadgeX = Math.max(x0 + 4, shipX - shipHalf - wxWidth - 10);
-      /* If still tight against departure edge, flip to the right of the hull */
-      if (weatherBadgeX < x0 + 4 || (nearDep && weatherBadgeX < shipX - shipHalf)){
-        weatherBadgeX = Math.min(x1 - wxWidth - 4, shipX + shipHalf + 10);
-      }
-    } else {
-      weatherBadgeX = Math.min(x1 - wxWidth - 4, shipX + shipHalf + 10);
-      if (weatherBadgeX + wxWidth > x1 - 4 || (nearArr && weatherBadgeX > shipX)){
-        weatherBadgeX = Math.max(x0 + 4, shipX - shipHalf - wxWidth - 10);
-      }
-    }
-    /* Port bollard / rope sit starboard — keep badge clear of them */
-    if (isPort && weatherBadgeX >= shipX){
-      weatherBadgeX = Math.max(x0 + 4, shipX - shipHalf - wxWidth - 10);
-    }
+    const wxGap = 14;
+    /* The badge may use the whole canvas rather than just the track, so a ship sitting
+       near either end still has somewhere to put it. */
+    const minX = 4;
+    const maxX = 900 - wxWidth - 4;
+    /* Clearances measured off the rendered ship group, not the hull alone: the wake and
+       anchor chain trail ~66px astern, and alongside the quay furniture (rope, bollard)
+       reaches ~79px to starboard. shipHalf covers the bare hull only. */
+    const hullAstern = 70;
+    const hullStarboard = isPort ? 84 : shipHalf;
+    const leftX = shipX - hullAstern - wxGap - wxWidth;
+    const rightX = shipX + hullStarboard + wxGap;
+    const fitsLeft = leftX >= minX;
+    const fitsRight = rightX <= maxX;
+    /* Prefer the port side when alongside (clear of the rope) or when close to the
+       arrival marker; otherwise take whichever side has more open track. */
+    const wantLeft = isPort || nearArr || (!nearDep && gapToArr <= gapToDep);
+    if (wantLeft && fitsLeft) weatherBadgeX = leftX;
+    else if (!wantLeft && fitsRight) weatherBadgeX = rightX;
+    else if (fitsRight) weatherBadgeX = rightX;
+    else if (fitsLeft) weatherBadgeX = leftX;
+    /* Canvas is 900 wide against a ≤200 badge and a 104 hull, so one side always
+       fits; this only guards a future narrower layout. */
+    else weatherBadgeX = Math.max(minX, Math.min(maxX, shipX - wxWidth / 2));
   }
   let weatherTextSvg = '';
   wxLines.forEach((line, i)=>{
@@ -13090,7 +13099,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v86';
+let androidInstallCacheName = 'noon-report-v87';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
