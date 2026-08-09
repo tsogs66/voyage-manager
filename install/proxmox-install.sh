@@ -153,10 +153,20 @@ server {
     location /api/ {
         proxy_pass http://127.0.0.1:${SYNC_PORT};
         proxy_http_version 1.1;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 120s;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        # Return JSON (not HTML) when voyage-sync is down — avoids "Unexpected token <" in the app.
+        proxy_intercept_errors on;
+        error_page 502 503 504 = @api_upstream_down;
+    }
+
+    location @api_upstream_down {
+        default_type application/json;
+        return 502 '{"ok":false,"error":"sync server unavailable"}';
     }
 }
 NGINX

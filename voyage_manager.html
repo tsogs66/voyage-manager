@@ -568,7 +568,39 @@
       background:linear-gradient(to bottom, var(--panel) 75%, transparent);
     }
     #page-data #btnSaveSyncSettings{flex:1 1 100%; min-height:48px; font-size:13px;}
-    .sync-save-status{min-height:1.2em; margin-top:4px; font-size:12px; color:var(--muted); display:block !important;}
+  }
+
+  .sync-save-status{
+    display:none;
+    margin:12px 0 0;
+    padding:10px 12px;
+    border-radius:4px;
+    border:1px solid var(--line-strong);
+    font-size:13px;
+    font-weight:600;
+    line-height:1.4;
+    word-break:break-word;
+  }
+  .sync-save-status.show{display:block !important;}
+  .sync-save-status.ok{
+    border-color:rgba(95,158,110,0.55);
+    color:var(--good);
+    background:rgba(95,158,110,0.12);
+  }
+  .sync-save-status.err{
+    border-color:rgba(224,106,76,0.55);
+    color:var(--alert);
+    background:rgba(224,106,76,0.12);
+  }
+  .sync-save-status.pending{
+    border-color:rgba(201,154,83,0.55);
+    color:var(--brass);
+    background:rgba(201,154,83,0.10);
+  }
+  .sync-save-status.saving{
+    border-color:var(--line-strong);
+    color:var(--ink);
+    background:rgba(127,140,160,0.10);
   }
 
   /* Class fallback when orientation media is sticky after rotate (iOS/Android WebView) */
@@ -2250,13 +2282,14 @@
       <h2>Server Sync</h2>
       <div id="syncBanner" class="sync-banner warn">Configure your self-hosted sync server to back up and merge data when internet is available. Works offline — changes queue locally and upload on reconnect.</div>
       <div class="form-grid cols2">
-        <div class="field span2"><label>Sync Server URL</label><input id="sync_serverUrl" placeholder="https://sync.yourdomain.com or http://192.168.x.x:8787"></div>
+        <div class="field span2"><label>Sync Server URL</label><input id="sync_serverUrl" placeholder="http://192.168.x.x:8080 or https://sync.yourdomain.com (not voyage_manager.html)"></div>
         <div class="field"><label>API Token</label><input id="sync_apiToken" type="password" placeholder="Bearer token"></div>
         <div class="field"><label>Vessel ID (slug)</label><input id="sync_vesselId" placeholder="e.g. captain-veniamis"></div>
         <div class="field"><label>Device name</label><input id="sync_deviceName" placeholder="e.g. ER tablet / Chief PC"></div>
         <div class="field"><label>Auto-sync</label><select id="sync_auto"><option value="true">On save &amp; when online</option><option value="false">Manual only</option></select></div>
         <div class="field"><label>Conflict policy</label><select id="sync_conflict"><option value="merge">Merge by record (recommended)</option><option value="local">Prefer this device</option><option value="remote">Prefer server</option></select></div>
       </div>
+      <div class="sync-save-status" id="syncSaveStatus" role="status" aria-live="polite"></div>
       <div class="btn-row sync-action-row" id="syncActionRow">
         <button type="button" class="primary small" id="btnSaveSyncSettings">Save Sync Settings</button>
         <button type="button" class="ghost small" id="btnTestSync">Test Connection</button>
@@ -2265,7 +2298,6 @@
         <button type="button" class="ghost small" id="btnListRemoteVoyages">List Remote Voyages</button>
         <button type="button" class="ghost small" id="btnRequestPersist">Keep Data Persistent</button>
       </div>
-      <div class="sync-save-status" id="syncSaveStatus" aria-live="polite"></div>
       <div class="form-grid cols3" style="margin-top:10px;">
         <div class="field"><label>Pull voyage no.</label><select id="sync_pullVoyage"></select></div>
         <div class="field"><label>Pull condition</label><select id="sync_pullCondition"><option value="B">B — Ballast</option><option value="L">L — Laden</option></select></div>
@@ -11333,9 +11365,70 @@ function vesselSyncSlug(){
   return (state.setup.vesselName || 'vessel').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64) || 'vessel';
 }
 
-function syncApiBase(){
-  const url = (ensureSyncConfig().serverUrl || '').trim().replace(/\/+$/, '');
+function normalizeSyncServerUrl(raw){
+  let url = (raw || '').trim();
+  if (!url) return '';
+  /* Tolerate pasted app/health URLs so /api/health is not doubled or nested under HTML. */
+  url = url.replace(/\/+$/, '');
+  url = url.replace(/\/voyage_manager\.html(?:[?#].*)?$/i, '');
+  url = url.replace(/\/index\.html(?:[?#].*)?$/i, '');
+  url = url.replace(/\/api\/health\/?$/i, '');
+  url = url.replace(/\/api\/?$/i, '');
+  url = url.replace(/\/+$/, '');
   return url;
+}
+
+function syncApiBase(){
+  return normalizeSyncServerUrl(ensureSyncConfig().serverUrl || '');
+}
+
+function syncRequestHeaders(extra){
+  const sync = ensureSyncConfig();
+  const headers = Object.assign({}, extra || {});
+  if (sync.apiToken) headers.Authorization = 'Bearer ' + sync.apiToken;
+  if (sync.deviceId) headers['X-Device-Id'] = sync.deviceId;
+  if (sync.deviceName) headers['X-Device-Name'] = sync.deviceName;
+  return headers;
+}
+
+async function fetchSyncJson(url, options = {}){
+  const opts = Object.assign({ cache: 'no-store' }, options || {});
+  let res;
+  try{
+    res = await fetch(url, opts);
+  }catch(err){
+    if (!navigator.onLine) throw new Error('No network connection');
+    const msg = err && err.message ? err.message : String(err);
+    if (/Failed to fetch|NetworkError|Load failed/i.test(msg)){
+      throw new Error('Could not reach sync server. Check the URL, HTTPS mixed-content, and that voyage-sync/nginx are running.');
+    }
+    throw err;
+  }
+  const text = await res.text();
+  const trimmed = (text || '').trim();
+  let body = null;
+  if (trimmed){
+    try{
+      body = JSON.parse(trimmed);
+    }catch(_){
+      const snippet = trimmed.replace(/\s+/g, ' ').slice(0, 140);
+      const looksHtml = /^</.test(trimmed) || /<!doctype|<html/i.test(trimmed);
+      if (looksHtml){
+        throw new Error(
+          'Sync server returned a web page instead of JSON (HTTP ' + res.status + '). ' +
+          'Set Sync Server URL to the sync root only (e.g. http://192.168.x.x:8080 or https://sync.example.com) — not voyage_manager.html. ' +
+          'If using Cloudflare Tunnel, open the URL in a browser once to pass any warning page. Preview: ' + snippet
+        );
+      }
+      throw new Error('Invalid JSON from sync server (HTTP ' + res.status + '): ' + snippet);
+    }
+  }
+  if (!res.ok){
+    const detail = (body && (body.error || body.message)) ? String(body.error || body.message) : ('HTTP ' + res.status);
+    throw new Error(detail);
+  }
+  if (body == null) throw new Error('Empty response from sync server (HTTP ' + res.status + ')');
+  return { res, body };
 }
 
 function markPendingSync(){
@@ -11360,13 +11453,39 @@ function syncFormFieldFocused(){
 function setSyncSaveStatus(msg, kind){
   const el = document.getElementById('syncSaveStatus');
   if (!el) return;
-  el.textContent = msg || '';
-  el.style.color = kind === 'err' ? 'var(--danger, #e07070)'
-    : kind === 'ok' ? 'var(--ok, #6bcf8e)'
-    : '';
   clearTimeout(_syncSaveStatusTimer);
-  if (msg && kind !== 'err'){
-    _syncSaveStatusTimer = setTimeout(()=>{ if (el.textContent === msg) el.textContent = ''; }, 4000);
+  const btn = document.getElementById('btnSaveSyncSettings');
+  if (!msg){
+    el.textContent = '';
+    el.className = 'sync-save-status';
+    if (btn && btn.dataset.defaultLabel) btn.textContent = btn.dataset.defaultLabel;
+    return;
+  }
+  const kindKey = kind || 'pending';
+  const stamp = new Date().toLocaleTimeString();
+  let text = msg;
+  if (kindKey === 'ok') text = 'SUCCESS — ' + msg + ' (' + stamp + ')';
+  else if (kindKey === 'err') text = 'FAILED — ' + msg + ' (' + stamp + ')';
+  else if (kindKey === 'saving') text = 'Saving… ' + msg;
+  else if (kindKey === 'pending') text = msg;
+  el.textContent = text;
+  el.className = 'sync-save-status show ' + kindKey;
+  if (btn){
+    if (!btn.dataset.defaultLabel) btn.dataset.defaultLabel = btn.textContent || 'Save Sync Settings';
+    if (kindKey === 'ok') btn.textContent = 'Saved';
+    else if (kindKey === 'err') btn.textContent = 'Save failed — retry';
+    else if (kindKey === 'saving') btn.textContent = 'Saving…';
+    else btn.textContent = btn.dataset.defaultLabel;
+  }
+  /* Keep success visible briefly; keep failures until the next edit/save. */
+  if (kindKey === 'ok'){
+    _syncSaveStatusTimer = setTimeout(()=>{
+      if (el.classList.contains('ok') && el.textContent === text){
+        el.className = 'sync-save-status';
+        el.textContent = '';
+        if (btn && btn.dataset.defaultLabel) btn.textContent = btn.dataset.defaultLabel;
+      }
+    }, 8000);
   }
 }
 
@@ -11381,13 +11500,14 @@ function readSyncSettingsFromForm(sync){
   if (!urlEl || !tokenEl || !vesselEl || !autoEl || !conflictEl){
     throw new Error('Sync settings form is not available');
   }
-  s.serverUrl = (urlEl.value || '').trim();
+  s.serverUrl = normalizeSyncServerUrl(urlEl.value || '');
   s.apiToken = (tokenEl.value || '').trim();
   s.vesselId = (vesselEl.value || '').trim();
   s.deviceName = nameEl ? (nameEl.value || '').trim() : (s.deviceName || '');
   s.autoSync = autoEl.value === 'true';
   s.conflictPolicy = conflictEl.value || 'merge';
   s.lastModifiedAt = new Date().toISOString();
+  if (urlEl.value.trim() !== s.serverUrl) urlEl.value = s.serverUrl;
   return s;
 }
 
@@ -11436,21 +11556,24 @@ async function saveSyncSettingsFromForm(options = {}){
   _syncSaveInFlight = (async ()=>{
     try{
       if (btn) btn.disabled = true;
+      setSyncSaveStatus(fromAutosave ? 'auto-save in progress' : 'writing to local database', 'saving');
       const sync = readSyncSettingsFromForm();
       await saveSetup();
       await persistSyncCredentialsMirror(sync);
       _syncFormDirty = false;
       renderSyncUi();
-      setSyncSaveStatus(fromAutosave ? 'Sync settings auto-saved.' : 'Sync settings saved.', 'ok');
-      if (!silent && !fromAutosave){
-        try{ alert('Sync settings saved.'); }catch(_){}
-      }
+      setSyncSaveStatus(
+        fromAutosave
+          ? 'Sync settings saved automatically'
+          : 'Sync settings saved successfully',
+        'ok'
+      );
       return true;
     }catch(err){
       const msg = err && err.message ? err.message : String(err);
       setSyncSaveStatus('Could not save sync settings: ' + msg, 'err');
-      if (!silent){
-        try{ alert('Could not save sync settings: ' + msg); }catch(_){}
+      if (!silent && !fromAutosave){
+        try{ alert('FAILED — could not save sync settings:\n' + msg); }catch(_){}
       }
       return false;
     }finally{
@@ -11463,7 +11586,7 @@ async function saveSyncSettingsFromForm(options = {}){
 
 function queueSyncSettingsAutosave(){
   _syncFormDirty = true;
-  setSyncSaveStatus('Unsaved sync changes…', '');
+  setSyncSaveStatus('Unsaved sync changes — will auto-save…', 'pending');
   clearTimeout(_syncAutosaveTimer);
   _syncAutosaveTimer = setTimeout(()=>{
     saveSyncSettingsFromForm({ silent: true, fromAutosave: true });
@@ -11686,21 +11809,17 @@ async function syncNow(options = {}){
     const vessel = vesselSyncSlug();
     const voyage = voyageSyncKey();
     const condition = voyageConditionKey();
-    const headers = { 'Content-Type': 'application/json' };
-    if (sync.apiToken) headers.Authorization = 'Bearer ' + sync.apiToken;
-    if (sync.deviceId) headers['X-Device-Id'] = sync.deviceId;
-    if (sync.deviceName) headers['X-Device-Name'] = sync.deviceName;
+    const headers = syncRequestHeaders({ 'Content-Type': 'application/json' });
     const legUrl = `${base}/api/voyage/${encodeURIComponent(vessel)}/${encodeURIComponent(voyage)}/${encodeURIComponent(condition)}`;
 
     let remote = null;
     try {
-      const res = await fetch(legUrl, { headers, cache: 'no-store' });
-      if (res.status === 404) remote = null;
-      else if (!res.ok) throw new Error('Server responded ' + res.status);
-      else remote = await res.json();
+      const { body } = await fetchSyncJson(legUrl, { headers });
+      remote = body;
     } catch (e){
-      if (!navigator.onLine) throw new Error('No network connection');
-      throw e;
+      const msg = e && e.message ? e.message : String(e);
+      if (/^not found$/i.test(msg) || /\b404\b/.test(msg)) remote = null;
+      else throw e;
     }
 
     const policy = forcePolicy || sync.conflictPolicy || 'merge';
@@ -11720,11 +11839,9 @@ async function syncNow(options = {}){
 
     if (!pullOnly){
       const payload = buildSyncPayload();
-      const putRes = await fetch(legUrl, {
+      const { body: merged } = await fetchSyncJson(legUrl, {
         method: 'PUT', headers, body: JSON.stringify(payload)
       });
-      if (!putRes.ok) throw new Error('Upload failed with status ' + putRes.status);
-      const merged = await putRes.json();
       if (policy !== 'local'){
         applyRemoteSnapshot(merged, 'merge');
         await persistAllToDb();
@@ -11791,13 +11908,11 @@ document.getElementById('btnTestSync')?.addEventListener('click', async ()=>{
   const base = syncApiBase();
   if (!base){ alert('Enter a Sync Server URL first.'); return; }
   try {
-    const sync = ensureSyncConfig();
-    const headers = {};
-    if (sync.apiToken) headers.Authorization = 'Bearer ' + sync.apiToken;
-    const res = await fetch(`${base}/api/health`, { headers, cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const body = await res.json();
-    alert('Connection OK.\n' + JSON.stringify(body, null, 2));
+    const { body } = await fetchSyncJson(`${base}/api/health`, { headers: syncRequestHeaders() });
+    if (!body || body.ok !== true){
+      throw new Error('Health check response was JSON but not a Noon Report sync server.');
+    }
+    alert('Connection OK.\nURL: ' + base + '\n' + JSON.stringify(body, null, 2));
   } catch (e){
     alert('Connection failed: ' + e.message);
   }
@@ -11808,13 +11923,11 @@ document.getElementById('btnListRemoteVoyages')?.addEventListener('click', async
   const box = document.getElementById('remoteVoyageList');
   if (!base){ alert('Enter a Sync Server URL first.'); return; }
   try {
-    const sync = ensureSyncConfig();
-    const headers = {};
-    if (sync.apiToken) headers.Authorization = 'Bearer ' + sync.apiToken;
     const vessel = vesselSyncSlug();
-    const res = await fetch(`${base}/api/voyage/${encodeURIComponent(vessel)}`, { headers, cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const body = await res.json();
+    const { body } = await fetchSyncJson(
+      `${base}/api/voyage/${encodeURIComponent(vessel)}`,
+      { headers: syncRequestHeaders() }
+    );
     const voyages = body.voyages || [];
     const pullSel = document.getElementById('sync_pullVoyage');
     if (pullSel){
@@ -11968,7 +12081,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v73';
+let androidInstallCacheName = 'noon-report-v74';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
