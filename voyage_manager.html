@@ -11360,7 +11360,8 @@ function voyageConditionKey(){
 
 function vesselSyncSlug(){
   const sync = ensureSyncConfig();
-  const fromField = (sync.vesselId || '').trim();
+  const fromForm = syncFormFieldValue('sync_vesselId').trim();
+  const fromField = (fromForm || sync.vesselId || '').trim();
   if (fromField) return fromField.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64);
   return (state.setup.vesselName || 'vessel').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64) || 'vessel';
 }
@@ -11378,16 +11379,36 @@ function normalizeSyncServerUrl(raw){
   return url;
 }
 
+function syncFormFieldValue(id){
+  const el = document.getElementById(id);
+  return el ? String(el.value || '') : '';
+}
+
 function syncApiBase(){
+  /* Prefer the live Data-tab field so Test/Sync work before Save finishes. */
+  const fromForm = normalizeSyncServerUrl(syncFormFieldValue('sync_serverUrl'));
+  if (fromForm) return fromForm;
   return normalizeSyncServerUrl(ensureSyncConfig().serverUrl || '');
+}
+
+async function flushSyncSettingsFromForm(){
+  /* Copy the on-screen sync fields into state (+ IndexedDB) before any sync action. */
+  clearTimeout(_syncAutosaveTimer);
+  const sync = readSyncSettingsFromForm();
+  await saveSetup();
+  await persistSyncCredentialsMirror(sync);
+  _syncFormDirty = false;
+  return sync;
 }
 
 function syncRequestHeaders(extra){
   const sync = ensureSyncConfig();
   const headers = Object.assign({}, extra || {});
-  if (sync.apiToken) headers.Authorization = 'Bearer ' + sync.apiToken;
+  const token = (syncFormFieldValue('sync_apiToken').trim() || sync.apiToken || '').trim();
+  const deviceName = (syncFormFieldValue('sync_deviceName').trim() || sync.deviceName || '').trim();
+  if (token) headers.Authorization = 'Bearer ' + token;
   if (sync.deviceId) headers['X-Device-Id'] = sync.deviceId;
-  if (sync.deviceName) headers['X-Device-Name'] = sync.deviceName;
+  if (deviceName) headers['X-Device-Name'] = deviceName;
   return headers;
 }
 
@@ -11800,9 +11821,10 @@ let syncInFlight = null;
 async function syncNow(options = {}){
   const pullOnly = !!options.pullOnly;
   const forcePolicy = options.policy;
+  try{ await flushSyncSettingsFromForm(); }catch(_){}
   const sync = ensureSyncConfig();
   const base = syncApiBase();
-  if (!base) throw new Error('Sync server URL is not configured');
+  if (!base) throw new Error('Enter a Sync Server URL on the Data tab first.');
   if (syncInFlight) return syncInFlight;
 
   syncInFlight = (async ()=>{
@@ -11905,24 +11927,37 @@ document.getElementById('btnPullRemote').addEventListener('click', async ()=>{
 });
 
 document.getElementById('btnTestSync')?.addEventListener('click', async ()=>{
-  const base = syncApiBase();
-  if (!base){ alert('Enter a Sync Server URL first.'); return; }
   try {
+    await flushSyncSettingsFromForm();
+    const base = syncApiBase();
+    if (!base){
+      setSyncSaveStatus('Enter a Sync Server URL in the field above first.', 'err');
+      alert('Enter a Sync Server URL first.');
+      return;
+    }
+    setSyncSaveStatus('Testing connection to ' + base + '…', 'saving');
     const { body } = await fetchSyncJson(`${base}/api/health`, { headers: syncRequestHeaders() });
     if (!body || body.ok !== true){
       throw new Error('Health check response was JSON but not a Noon Report sync server.');
     }
+    setSyncSaveStatus('Connection OK — ' + base, 'ok');
     alert('Connection OK.\nURL: ' + base + '\n' + JSON.stringify(body, null, 2));
   } catch (e){
+    setSyncSaveStatus('Connection failed: ' + e.message, 'err');
     alert('Connection failed: ' + e.message);
   }
 });
 
 document.getElementById('btnListRemoteVoyages')?.addEventListener('click', async ()=>{
-  const base = syncApiBase();
   const box = document.getElementById('remoteVoyageList');
-  if (!base){ alert('Enter a Sync Server URL first.'); return; }
   try {
+    await flushSyncSettingsFromForm();
+    const base = syncApiBase();
+    if (!base){
+      setSyncSaveStatus('Enter a Sync Server URL in the field above first.', 'err');
+      alert('Enter a Sync Server URL first.');
+      return;
+    }
     const vessel = vesselSyncSlug();
     const { body } = await fetchSyncJson(
       `${base}/api/voyage/${encodeURIComponent(vessel)}`,
@@ -12081,7 +12116,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v74';
+let androidInstallCacheName = 'noon-report-v75';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
