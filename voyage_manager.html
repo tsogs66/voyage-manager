@@ -1606,13 +1606,17 @@
         <span><i class="edit"></i> Editable — enter your reading</span>
         <span><i class="calc"></i> Calculated — filled by the app</span>
       </div>
-      <div class="panel" style="margin:0 0 16px; padding:16px;">
+      <div class="vs-entry-context" id="vsMeStoppedNote" style="display:none;">
+        <div>M/E stopped this period — rev counter unchanged. Main engine panels are hidden; generators, boiler, ROB and soundings below still apply.</div>
+        <button type="button" class="ghost small" id="btnVsShowMePanels" style="margin-top:8px;">Show M/E panels anyway</button>
+      </div>
+      <div class="panel" style="margin:0 0 16px; padding:16px;" id="vsReferenceBlock">
         <h3 class="sub" style="margin-top:0;">Voyage Summary — Reference</h3>
         <div class="stat-strip cols4" id="vsTopStrip"></div>
         <div class="hint">Merged voyage reference and main-engine performance. Rows: Voyage/Date/Ship Dist/Ship Speed · Run Time/Load kW/Dist To Go/Days To Go · Total Rev/Load %/Engine Dist/Engine Speed · RPM/Ave kW/Slip/ETA · SFOC 100%/Ref/Actual/Δ%.</div>
       </div>
 
-      <div class="panel" style="margin:0 0 16px; padding:16px;">
+      <div class="panel" style="margin:0 0 16px; padding:16px;" id="vsRunBlock">
         <h3 class="sub" style="margin-top:0;">Voyage Run — Distance &amp; RPM</h3>
         <div class="form-grid cols3">
           <div class="field"><label>Distance Run — Ship/GPS (nm)</label><input type="number" step="0.1" id="vs_distanceShip" value="0"></div>
@@ -1811,7 +1815,7 @@
         </div>
       </div>
 
-      <div class="panel" style="margin:0 0 16px; padding:16px;">
+      <div class="panel" style="margin:0 0 16px; padding:16px;" id="vsMeTotalsBlock">
         <h3 class="sub" style="margin-top:0;">Main Engine Voyage Totals</h3>
         <div class="stat-strip cols4" id="vsMeVoyageStrip"></div>
       </div>
@@ -9732,6 +9736,8 @@ function openVoyageSummary(entryId){
   const entry = state.entries.find(e=>e.id===entryId);
   const row = getComputedRow(entryId);
   if (!entry || !row) return;
+  /* A manual "show anyway" applies to the entry it was clicked on, not the next one. */
+  if (currentVsEntryId !== entryId) vsForceShowMePanels = false;
   currentVsEntryId = entryId;
 
   const {perf} = computeDerived();
@@ -9800,6 +9806,11 @@ function openVoyageSummary(entryId){
   const meRunning = mainEngineInUse(entry, row);
   const showMeDetail = canShowMeDetailOp(entry.operation) && meRunning;
   document.getElementById('vsSeaReportBlock').style.display = showMeDetail ? '' : 'none';
+
+  /* Panels that only describe a main engine under way. With the engine stopped
+     they would be a wall of dashes, so they are hidden entirely and the summary
+     collapses to what is actually running — generators, boiler, ROB, soundings. */
+  setVsMePanelsVisible(meRunning);
 
   // Others (ER/tank) always available; scavenge / pump mark / fuel temp only with M/E in use
   document.getElementById('vs_erTemp').value = r.erTemp ?? '';
@@ -10769,6 +10780,33 @@ function closeVoyageSummaryPanel(){
   const ctx = document.getElementById('vsEntryContext');
   if (ctx) ctx.textContent = '';
 }
+
+/**
+ * Voyage Summary panels that only mean anything with the main engine turning.
+ * Hidden wholesale when it is stopped, rather than left showing rows of dashes.
+ */
+const VS_ME_ONLY_PANELS = ['vsReferenceBlock', 'vsRunBlock', 'vsEcaBlock', 'vsMeTotalsBlock'];
+/* Manual override: the rev counter lives inside one of these panels, so hiding them
+   unconditionally would leave no way to correct a mistyped reading. */
+let vsForceShowMePanels = false;
+
+function setVsMePanelsVisible(show){
+  const visible = show || vsForceShowMePanels;
+  VS_ME_ONLY_PANELS.forEach(id=>{
+    const el = document.getElementById(id);
+    if (el) el.style.display = visible ? '' : 'none';
+  });
+  const note = document.getElementById('vsMeStoppedNote');
+  if (note) note.style.display = show ? 'none' : '';
+  const btn = document.getElementById('btnVsShowMePanels');
+  if (btn) btn.textContent = vsForceShowMePanels ? 'Hide M/E panels' : 'Show M/E panels anyway';
+}
+
+document.getElementById('btnVsShowMePanels')?.addEventListener('click', ()=>{
+  vsForceShowMePanels = !vsForceShowMePanels;
+  const entry = state.entries.find(e=>e.id===currentVsEntryId);
+  setVsMePanelsVisible(entry ? mainEngineInUse(entry, getComputedRow(entry.id)) : false);
+});
 
 /** Label the summary with the entry it belongs to — critical on stacked mobile layouts. */
 function renderVsEntryContext(entry){
@@ -13049,7 +13087,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v84';
+let androidInstallCacheName = 'noon-report-v85';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
