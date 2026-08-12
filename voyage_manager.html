@@ -1567,9 +1567,11 @@
             <optgroup label="Departure">
               <option>LAST LINE - DEPARTURE</option>
               <option>PILOT ONBOARD - DEPARTURE</option>
-              <option>START - PASSAGE</option>
             </optgroup>
             <optgroup label="Sea Passage">
+              <!-- COSP begins the sea passage and is classified in SEA_TYPE_OPS, so it
+                   is grouped with the sea ops rather than with departure manoeuvring. -->
+              <option>START - PASSAGE</option>
               <option selected>AT SEA - NOON</option>
               <option>END - PASSAGE</option>
               <option>CHANGE OF SPEED</option>
@@ -13181,7 +13183,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v89';
+let androidInstallCacheName = 'noon-report-v90';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
