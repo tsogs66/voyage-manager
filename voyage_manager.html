@@ -4953,9 +4953,27 @@ async function activateVoyageLeg(vesselId, voyageNumber, condition){
 
   await clearActiveVesselWorkingData(vid);
 
+  /* Vessel identity belongs to the ship, not to a voyage leg. A leg archived before
+     these were filled in would otherwise blank them on load — and the dbPut below
+     would then persist the blanks over the saved values. Same reasoning as the sync
+     credentials kept just below. */
+  const identity = {
+    vesselName: state.setup?.vesselName,
+    chEng: state.setup?.chEng,
+    dwt: state.setup?.dwt,
+    imoNo: state.setup?.imoNo
+  };
   const setup = migrateSetup(leg.setup || state.setup);
   setup.voyageNumber = vn;
   setup.shipCondition = cond;
+  Object.keys(identity).forEach(k=>{
+    const v = identity[k];
+    if (v != null && v !== '') setup[k] = v;
+  });
+  if (!setup.vesselName){
+    const reg = (state.vessels || []).find(x => x.id === vid);
+    if (reg?.name) setup.vesselName = reg.name;
+  }
   /* Keep live sync credentials from current session. */
   const liveSync = ensureSyncConfig();
   setup.sync = { ...(setup.sync || {}), ...liveSync, vesselId: liveSync.vesselId || setup.sync?.vesselId };
@@ -7016,6 +7034,18 @@ function renderConsumptionTable(rows){
 
 function render(){
   _gaugeUid = 0;
+  /* Vessel identity is painted before anything that computes, so a failure further
+     down cannot leave these boxes blank — a blank box that the user then saves would
+     overwrite the stored Chief Engineer, DWT and IMO with nothing.
+     Guarded with ?? '': assigning undefined puts the literal text "undefined" in the
+     box, which then saves back as the Chief Engineer's name. */
+  document.getElementById('s_vesselName').value = state.setup.vesselName ?? '';
+  document.getElementById('s_chEng').value = state.setup.chEng ?? '';
+  const dwtEl = document.getElementById('s_dwt');
+  if (dwtEl) dwtEl.value = state.setup.dwt ?? '';
+  const imoEl = document.getElementById('s_imoNo');
+  if (imoEl) imoEl.value = state.setup.imoNo || '';
+
   renderVesselSelector();
   renderVoyageLibrary().catch(()=>{});
   const {rows, consByFuel, consByLube, perf} = computeDerived();
@@ -7024,14 +7054,6 @@ function render(){
   renderEntrySelector();
 
   // setup fields reflect state
-  /* Guard the identity fields: assigning undefined puts the literal text
-     "undefined" in the box, which then saves back as the Chief Engineer's name. */
-  document.getElementById('s_vesselName').value = state.setup.vesselName ?? '';
-  document.getElementById('s_chEng').value = state.setup.chEng ?? '';
-  const dwtEl = document.getElementById('s_dwt');
-  if (dwtEl) dwtEl.value = state.setup.dwt ?? '';
-  const imoEl = document.getElementById('s_imoNo');
-  if (imoEl) imoEl.value = state.setup.imoNo || '';
   document.getElementById('s_voyageNumber').value = state.setup.voyageNumber;
   document.getElementById('s_shipCondition').value = normalizeCondition(state.setup.shipCondition);
   document.getElementById('s_departPort').value = state.setup.departPort;
@@ -13407,7 +13429,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v92';
+let androidInstallCacheName = 'noon-report-v93';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
