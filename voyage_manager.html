@@ -1303,7 +1303,9 @@
         <div class="field"><label>Departure</label><input id="s_departPort"></div>
         <div class="field"><label>Arrival</label><input id="s_arrivePort"></div>
         <div class="field"><label>Voyage Distance (nm)</label><input type="number" step="0.1" id="s_voyageDistance"></div>
+        <div class="field span2"><label>Chief Engineer</label><input id="s_chEngVoyage" placeholder="Update at crew change"></div>
       </div>
+      <div class="hint">Chief Engineer is the same record as on Vessel Data — update it here at a crew change and it carries forward to the following voyages. Entries already saved keep the officer who was aboard when they were made, so their reports still print the correct signature.</div>
       <div class="hint">Each voyage number <strong>starts as B (ballast)</strong> and <strong>ends as L (laden)</strong>. Only these two letters mark voyage condition — never any other. Legs are stored separately so the active log stays short.</div>
     </div>
 
@@ -7040,7 +7042,7 @@ function render(){
      Guarded with ?? '': assigning undefined puts the literal text "undefined" in the
      box, which then saves back as the Chief Engineer's name. */
   document.getElementById('s_vesselName').value = state.setup.vesselName ?? '';
-  document.getElementById('s_chEng').value = state.setup.chEng ?? '';
+  setChEngInputs(state.setup.chEng ?? '');
   const dwtEl = document.getElementById('s_dwt');
   if (dwtEl) dwtEl.value = state.setup.dwt ?? '';
   const imoEl = document.getElementById('s_imoNo');
@@ -9358,12 +9360,19 @@ function printRow(label, value, cls){
   return `<div class="pr-row"><span class="pr-row-lbl">${label}</span><span class="pr-row-val${cls?' '+cls:''}">${v}</span></div>`;
 }
 
-function printSignatory(){
+/**
+ * Signature block. For a sheet about one entry, pass it: the name printed is the
+ * Chief Engineer stamped on that entry, so reprinting an old report after a crew
+ * change still shows the officer who actually signed it. Voyage-wide sheets pass
+ * nothing and fall back to the vessel's current Chief Engineer.
+ */
+function printSignatory(entry){
   const now = new Date().toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const signer = (entry && entry.chEng) ? entry.chEng : state.setup.chEng;
   return `<footer class="pr-sign">
     <div class="pr-sign-space" aria-hidden="true"></div>
     <div class="pr-sign-line"></div>
-    <div class="pr-sign-name">${escPrint(state.setup.chEng || '—')}</div>
+    <div class="pr-sign-name">${escPrint(signer || '—')}</div>
     <div class="pr-sign-role">Chief Engineer</div>
     <div class="pr-foot">Printed ${now} · ${escPrint(state.setup.vesselName||'')} · ${escPrint(state.setup.voyageNumber||'')}</div>
   </footer>`;
@@ -9481,6 +9490,28 @@ async function saveVoyageDetails(){
   alert('Voyage Details saved.');
 }
 document.getElementById('btnSaveVoyageDetails').addEventListener('click', saveVoyageDetails);
+
+/* Chief Engineer appears on Vessel Data and on Voyage Setup. Both are views of the
+   same vessel-level record — a crew change is edited wherever the engineer happens to
+   be, and carries forward to following voyages either way. */
+const CH_ENG_INPUT_IDS = ['s_chEng', 's_chEngVoyage'];
+
+function setChEngInputs(value){
+  CH_ENG_INPUT_IDS.forEach(id=>{
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) el.value = value ?? '';
+  });
+}
+CH_ENG_INPUT_IDS.forEach(id=>{
+  document.getElementById(id)?.addEventListener('input', (e)=>{
+    const v = e.target.value;
+    CH_ENG_INPUT_IDS.forEach(other=>{
+      if (other === id) return;
+      const el = document.getElementById(other);
+      if (el) el.value = v;
+    });
+  });
+});
 
 /**
  * Vessel identity — name, Chief Engineer, DWT, IMO number.
@@ -9954,7 +9985,7 @@ function printRobSnapshot(entry, dt, rowsForPrint){
         <tr><th>Item</th><th>Previous</th><th>Consumption</th><th>Present R.O.B.</th></tr>
         ${tableRows}
       </table>`)}
-    ${printSignatory()}
+    ${printSignatory(entry)}
   </div>`;
   printSinglePage(sheetHtml);
 }
@@ -11064,7 +11095,7 @@ function buildVoyageNoonSheetHTML(entry){
       <div class="pr-noon-full">${robTable}</div>
     </div>
     ${remarksSection}
-    ${printSignatory()}
+    ${printSignatory(entry)}
   </div>`;
 }
 
@@ -12061,6 +12092,12 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     consOverride: existing?.consOverride || {},
     miscCons: existing?.miscCons || { 'MDO/MGO':0, 'LSMGO':0 },
     unitOverride: existing?.unitOverride || { ME:null, GE:null, BLR:null },
+    /* Chief Engineer aboard when this entry was made. Stamped once at creation and
+       preserved on later edits, so a crew change cannot rewrite the signatory on
+       reports that were already made — and a mid-voyage relief lands on exactly the
+       entries that follow it. Entries written before this existed carry no stamp and
+       fall back to the vessel's current Chief Engineer when printed. */
+    chEng: existing?.chEng ?? (state.setup.chEng || null),
     updatedAt: new Date().toISOString()
   };
 
@@ -13429,7 +13466,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v93';
+let androidInstallCacheName = 'noon-report-v94';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
