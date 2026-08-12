@@ -2232,8 +2232,8 @@
         <div class="field"><label>Bilge ROB (m³)</label><input type="number" step="0.01" id="rep_bilgeRob"></div>
         <div class="field"><label>Sludge ROB (m³)</label><input type="number" step="0.01" id="rep_sludgeRob"></div>
         <div class="field"><label>S/T Temp — Settling Tank (°C)</label><input type="number" step="0.1" id="rep_stTemp"></div>
-        <div class="field"><label>S/W Temp — Sea Water (°C)</label><input type="number" step="0.1" id="rep_swTemp"></div>
       </div>
+      <div class="hint">Sea water temperature is recorded once under Weather &amp; Sea State on the Voyage Summary and reused on the reports.</div>
 
       <div id="reportSeaFields">
         <h3 class="sub">Voyage / Steaming Details</h3>
@@ -2260,14 +2260,15 @@
 
       <h3 class="sub">Generators, Boiler &amp; Incinerator — Runtime / Load</h3>
       <div class="form-grid cols3">
-        <div class="field"><label>Boiler Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="rep_blrRuntime"></div>
-        <div class="field"><label>Total G/E Fuel Cons (MT)</label><input type="text" id="rep_geTotalCons" readonly></div>
+        <div class="field"><label>Boiler Run Hours (this report)</label><input type="number" step="0.1" id="rep_blrRuntime"></div>
+        <div class="field"><label>Boiler Running Hours (cumulative)</label><input type="number" step="0.1" id="rep_blrCumHours"></div>
+        <div class="field"><label>Total G/E Fuel Cons (MT)</label><input type="number" step="0.001" id="rep_geTotalCons"></div>
         <div class="field"><label>Incinerator Run Time (hrs)</label><input type="number" step="0.1" id="rep_incRuntime"></div>
         <div class="field"><label>Incinerator Avg Load (kW)</label><input type="number" step="1" id="rep_incKw"></div>
         <div class="field"><label>Incinerator Load % (calc)</label><input type="text" id="rep_incLoadPct" readonly></div>
       </div>
       <div class="unit-group cols3" id="reportGeRuntimeFields" style="margin-top:10px;"></div>
-      <div class="hint" id="reportGeSplitHint">Select how many generators ran this period. Enter each unit's cumulative hour-meter and average kW — period hours and fuel share (split of total G/E consumption by running hours) calculate automatically. Incinerator load % = (kW ÷ max kW from Setup) × 100.</div>
+      <div class="hint" id="reportGeSplitHint">Tick each generator that ran this period and enter its run hours and average kW. Cumulative running hours and fuel share calculate from that. Incinerator load % = (kW ÷ max kW from Setup) × 100.</div>
 
       <h3 class="sub">Performance — By Unit</h3>
       <div class="hint">M/E column is calculated from this entry (RPM → %MCR/kW). A/E columns use runtime and average kW entered above — load % = (kW ÷ max kW from Setup) × 100. Fuel cons per A/E is the G/E total split by running hours.</div>
@@ -8509,7 +8510,13 @@ function renderReportGeRuntimeFields(entryId, report){
   const row = getComputedRow(entryId);
   const prev = previousEntryFor(entryId);
   const entry = state.entries.find(e=>e.id===entryId);
-  if (totalEl) totalEl.value = row?.geCons==null ? '—' : fmtFuel(row.geCons);
+  /* Editable here too, honouring any saved override rather than always showing the
+     metered figure. Re-splits across the running generators as it is typed. */
+  if (totalEl){
+    const geTotalVal = entry?.unitOverride?.GE != null ? entry.unitOverride.GE : row?.geCons;
+    totalEl.value = (geTotalVal==null || isNaN(geTotalVal)) ? '' : Number(geTotalVal).toFixed(3);
+    totalEl.oninput = ()=> updateReportGeSplit(entryId);
+  }
 
   const gens = report?.generators || [];
   box.innerHTML = Array.from({length:maxN}, (_,i)=>{
@@ -8608,7 +8615,7 @@ function updateReportGeSplit(entryId){
     if (pfRt && document.activeElement !== pfRt) pfRt.value = runHrs==null ? '' : runHrs;
     if (pfKw) updateAePerfDisplays(`AE${n}`);
   }
-  const shares = splitGeConsByHours(row?.geCons, periodHrs);
+  const shares = splitGeConsByHours(repGeTotalForSplit(row), periodHrs);
   for (let i=0; i<maxN; i++){
     const fuelEl = document.getElementById(`rep_ge${i+1}_fuel`);
     if (fuelEl) fuelEl.value = shares[i]==null ? '—' : fmtFuel(shares[i]);
@@ -8617,8 +8624,10 @@ function updateReportGeSplit(entryId){
   if (hint){
     const running = periodHrs.filter(h=>h!=null && h>0).length;
     const totalHrs = periodHrs.reduce((a,h)=>a+(h>0?h:0),0);
-    hint.textContent = running>1 && row?.geCons!=null
-      ? `G/E fuel ${fmtFuel(row.geCons)} MT split across ${running} generators by their ${fmt(totalHrs,2)} combined running hours.`
+    /* Quote the figure actually being split — the typed total, not the metered one. */
+    const geTotal = repGeTotalForSplit(row);
+    hint.textContent = running>1 && geTotal!=null
+      ? `G/E fuel ${fmtFuel(geTotal)} MT split across ${running} generators by their ${fmt(totalHrs,2)} combined running hours.`
       : running===1
         ? 'One generator in service — it carries the whole G/E consumption, no sharing.'
         : 'Tick each generator that ran this period and enter its run hours and average kW. Cumulative running hours and fuel share calculate from that.';
@@ -8666,11 +8675,9 @@ function rebuildReportPerfTable(entryId, report){
   }).join('');
   // add fuel cons row
   const row = getComputedRow(entryId);
-  const periodHrs = draft.map((g,i)=>{
-    const prevRt = entryGeRuntime(prev, i+1);
-    return (g.runtime!=null && prevRt!=null) ? runtimeDelta(g.runtime, prevRt) : null;
-  });
-  const shares = splitGeConsByHours(row?.geCons, periodHrs);
+  /* Run hours entered for the report drive the split, same as the Voyage Summary. */
+  const periodHrs = draft.map((g)=> g.inService && g.runHours!=null ? g.runHours : null);
+  const shares = splitGeConsByHours(repGeTotalForSplit(row), periodHrs);
   const fuelCells = visibleUnits.map(u=>{
     if (u.startsWith('AE')){
       const idx = parseInt(u.slice(2),10)-1;
@@ -8777,7 +8784,36 @@ function openReportEditor(entryId){
 
   const r = e.report || {};
 
-  document.getElementById('rep_blrRuntime').value = r.blrRuntime ?? e.blrRuntime ?? '';
+  /* Boiler: run hours for the report are the input, cumulative accumulates from them —
+     the same model as the Voyage Summary and the generators. */
+  const repPrevEntry = previousEntryFor(entryId);
+  const repPrevBlrCum = blrCumulativeRunHours(repPrevEntry) ?? entryBlrRuntime(repPrevEntry);
+  document.getElementById('rep_blrRuntime').value = entryBlrRunHours(e, repPrevEntry) ?? '';
+  const repBlrCumEl = document.getElementById('rep_blrCumHours');
+  if (repBlrCumEl){
+    const cum = blrCumulativeRunHours(e);
+    repBlrCumEl.value = cum==null ? '' : fmt(cum, 1);
+    delete repBlrCumEl.dataset.userEdited;
+  }
+  const syncRepBlrHours = (from)=>{
+    const runEl = document.getElementById('rep_blrRuntime');
+    const cumEl = document.getElementById('rep_blrCumHours');
+    if (!runEl || !cumEl) return;
+    const meterTyped = cumEl.dataset.userEdited === '1';
+    if (from === 'cum' && meterTyped && repPrevBlrCum != null && cumEl.value !== ''){
+      const d = runtimeDelta(parseFloat(cumEl.value), repPrevBlrCum);
+      if (d != null) runEl.value = fmt(d, 2);
+    } else if (!meterTyped){
+      const h = runEl.value === '' ? null : parseFloat(runEl.value);
+      const cum = (repPrevBlrCum != null && h != null && !isNaN(h)) ? repPrevBlrCum + h : repPrevBlrCum;
+      cumEl.value = cum == null ? '' : fmt(cum, 1);
+    }
+  };
+  document.getElementById('rep_blrRuntime')?.addEventListener('input', ()=> syncRepBlrHours('run'));
+  document.getElementById('rep_blrCumHours')?.addEventListener('input', (ev)=>{
+    if (ev.isTrusted) ev.target.dataset.userEdited = '1';
+    syncRepBlrHours('cum');
+  });
   document.getElementById('rep_incRuntime').value = entryIncineratorRunTime(e) ?? '';
   document.getElementById('rep_incKw').value = entryIncineratorKw(e) ?? '';
   syncIncineratorLoadPctDisplay('rep_incKw', 'rep_incLoadPct');
@@ -8803,7 +8839,6 @@ function openReportEditor(entryId){
   document.getElementById('rep_bilgeRob').value = r.bilgeRob ?? '';
   document.getElementById('rep_sludgeRob').value = r.sludgeRob ?? '';
   document.getElementById('rep_stTemp').value = r.stTemp ?? '';
-  document.getElementById('rep_swTemp').value = r.swTemp ?? '';
   document.getElementById('rep_remarks').value = r.remarks ?? '';
   if (isSea){
     document.getElementById('rep_eta').value = r.eta || computeEntryEta(entryId) || '';
@@ -8832,11 +8867,18 @@ function openReportEditor(entryId){
 
   function readReportFormValues(){
     const num = id => { const el = document.getElementById(id); if (!el) return null; const v = el.value; return v===''? null : parseFloat(v); };
+    const blrCumEl = document.getElementById('rep_blrCumHours');
+    const blrCumTyped = blrCumEl?.dataset.userEdited === '1' && blrCumEl.value !== '';
     const report = {
       erTemp: num('rep_erTemp'), bilgeRob: num('rep_bilgeRob'), sludgeRob: num('rep_sludgeRob'),
-      stTemp: num('rep_stTemp'), swTemp: num('rep_swTemp'),
+      stTemp: num('rep_stTemp'),
+      /* Sea water temperature comes from the single Weather & Sea State reading. */
+      swTemp: e?.weather?.seaTemp != null && e.weather.seaTemp !== '' ? Number(e.weather.seaTemp) : (e?.report?.swTemp ?? null),
       remarks: document.getElementById('rep_remarks').value,
-      blrRuntime: num('rep_blrRuntime'),
+      /* Run hours for the report; the cumulative meter is stored separately and only
+         pinned when an actual reading was typed. */
+      blrRunHours: num('rep_blrRuntime'),
+      blrRuntime: blrCumTyped ? parseFloat(blrCumEl.value) : null,
       incinerator: {
         runTime: num('rep_incRuntime'),
         avgKw: num('rep_incKw'),
@@ -8855,7 +8897,7 @@ function openReportEditor(entryId){
     });
     /* Count of units in service — kept for readers written before per-unit selection. */
     report.generatorsInUse = report.generators.filter(g=>g.inService).length || 1;
-    const shares = splitGeConsByHours(row?.geCons, report.generators.map(g=>g.periodHrs));
+    const shares = splitGeConsByHours(repGeTotalForSplit(row), report.generators.map(g=>g.periodHrs));
     report.generators.forEach((g,i)=>{ g.fuelCons = shares[i] ?? null; });
 
     const perfTable = { ME: computeMePerf(entryId) };
@@ -8879,9 +8921,8 @@ function openReportEditor(entryId){
         const maxKw = boilerMaxKw();
         const kw = num(`rep_pf_avgPower_${u}`);
         const avgLoad = (kw!=null && maxKw>0) ? (kw/maxKw)*100 : null;
-        const prevBlr = entryBlrRuntime(prev);
-        const cur = report.blrRuntime;
-        const runTime = (cur!=null && prevBlr!=null) ? runtimeDelta(cur, prevBlr) : num(`rep_pf_runTime_${u}`);
+        /* blrRunHours is the period figure itself — no delta needed. */
+        const runTime = report.blrRunHours ?? num(`rep_pf_runTime_${u}`);
         perfTable[u] = {
           avgPower: kw, avgLoad,
           minLoad: avgLoad!=null ? avgLoad*0.90 : null,
@@ -8930,10 +8971,20 @@ function openReportEditor(entryId){
   document.getElementById('btnSaveReport').onclick = async ()=>{
     e.report = readReportFormValues();
     // mirror onto entry for computeDerived / voyage summary compatibility
-    e.blrRuntime = e.report.blrRuntime;
+    const blrCumEl = document.getElementById('rep_blrCumHours');
+    const blrCumShown = blrCumEl && blrCumEl.value !== '' ? parseFloat(blrCumEl.value) : null;
+    e.blrRuntime = (blrCumShown != null && !isNaN(blrCumShown)) ? blrCumShown : null;
+    /* Total G/E fuel typed here is the same override the Voyage Summary writes. */
+    const geTotEl = document.getElementById('rep_geTotalCons');
+    const geTot = geTotEl && geTotEl.value !== '' ? parseFloat(geTotEl.value) : null;
+    e.unitOverride = Object.assign({ ME:null, GE:null, BLR:null }, e.unitOverride || {}, {
+      GE: (geTot != null && !isNaN(geTot)) ? geTot : null
+    });
     for (let i=1; i<=3; i++){
       const g = e.report.generators?.[i-1];
-      e[`ge${i}Runtime`] = g?.runtime ?? null;
+      const cumEl = document.getElementById(`rep_ge${i}_runtime`);
+      const cumShown = cumEl && cumEl.value !== '' ? parseFloat(cumEl.value) : null;
+      e[`ge${i}Runtime`] = g?.runtime ?? (cumShown != null && !isNaN(cumShown) ? cumShown : null);
       e[`ge${i}Kw`] = g?.avgKw ?? null;
     }
     e.updatedAt = new Date().toISOString();
@@ -10421,14 +10472,18 @@ function syncVsBoilerConsReadout(){
  * G/E fuel to apportion across the generators: the figure typed into Total G/E Fuel
  * Cons when present, otherwise the metered consumption for the period.
  */
-function vsGeTotalForSplit(row){
-  const el = document.getElementById('vs_geTotalCons');
+function geTotalForSplit(row, inputId){
+  const el = document.getElementById(inputId || 'vs_geTotalCons');
   if (el && el.value !== ''){
     const v = parseFloat(el.value);
     if (!isNaN(v)) return v;
   }
   return row?.geCons;
 }
+/* Function declarations, not const arrows — these are called from render paths that
+   sit earlier in the file, and a temporal dead zone here would break them. */
+function vsGeTotalForSplit(row){ return geTotalForSplit(row, 'vs_geTotalCons'); }
+function repGeTotalForSplit(row){ return geTotalForSplit(row, 'rep_geTotalCons'); }
 
 /** Accumulated run hours for generator n across every entry BEFORE the given one. */
 function geVoyageRunHoursBefore(entryId, n){
@@ -13352,7 +13407,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v91';
+let androidInstallCacheName = 'noon-report-v92';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
