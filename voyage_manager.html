@@ -152,6 +152,11 @@
     border-left:3px solid var(--teal); padding:6px 10px; margin:10px 0 0;
     background:var(--nav-item-bg); border-radius:0 3px 3px 0;
   }
+  .vessel-save-status{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--good);
+    margin-top:8px; min-height:16px;
+  }
+  .vessel-save-status.err{color:var(--alert);}
   .field-legend{display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin:2px 0 10px; font-size:11px; color:var(--paper-dim);}
   .field-legend span{display:inline-flex; align-items:center; gap:6px;}
   .field-legend i{width:22px; height:12px; border-radius:2px; display:inline-block;}
@@ -1350,6 +1355,11 @@
         <div class="field"><label>DWT (tonnes) — for CII</label><input type="number" step="1" id="s_dwt" placeholder="e.g. 60000"></div>
         <div class="field"><label>IMO No.</label><input id="s_imoNo" placeholder="IMO 1234567"></div>
       </div>
+      <div class="btn-row" style="margin-top:12px;">
+        <button class="primary small" id="btnSaveVesselIdentity">Save Vessel Details</button>
+      </div>
+      <div class="vessel-save-status" id="vesselSaveStatus" role="status" aria-live="polite"></div>
+      <div class="hint">Vessel name, Chief Engineer, DWT and IMO number are stored per vessel and used on printouts, CII and the e-ORB prefill.</div>
     </div>
 
     <div class="panel">
@@ -6945,8 +6955,10 @@ function render(){
   renderEntrySelector();
 
   // setup fields reflect state
-  document.getElementById('s_vesselName').value = state.setup.vesselName;
-  document.getElementById('s_chEng').value = state.setup.chEng;
+  /* Guard the identity fields: assigning undefined puts the literal text
+     "undefined" in the box, which then saves back as the Chief Engineer's name. */
+  document.getElementById('s_vesselName').value = state.setup.vesselName ?? '';
+  document.getElementById('s_chEng').value = state.setup.chEng ?? '';
   const dwtEl = document.getElementById('s_dwt');
   if (dwtEl) dwtEl.value = state.setup.dwt ?? '';
   const imoEl = document.getElementById('s_imoNo');
@@ -9327,6 +9339,36 @@ async function saveVoyageDetails(){
   alert('Voyage Details saved.');
 }
 document.getElementById('btnSaveVoyageDetails').addEventListener('click', saveVoyageDetails);
+
+/**
+ * Vessel identity — name, Chief Engineer, DWT, IMO number.
+ * These live in their own panel at the top of Vessel Data, six panels above the
+ * "Update Ship Details" button, so without a Save of their own they read as fields
+ * that silently discard what you type.
+ */
+async function saveVesselIdentity(){
+  state.setup.vesselName = document.getElementById('s_vesselName').value;
+  state.setup.chEng = document.getElementById('s_chEng').value;
+  state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value) || null;
+  state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
+  const v = activeVessel();
+  if (v) v.name = document.getElementById('s_vesselName').value.trim() || v.name;
+  const status = document.getElementById('vesselSaveStatus');
+  try{
+    await saveSetup();
+    await saveVesselRegistry();
+    render();
+    if (status){
+      status.textContent = `Saved ${new Date().toLocaleTimeString()} — ${state.setup.vesselName || 'vessel'}`;
+      status.classList.remove('err');
+    }
+  }catch(e){
+    console.error('Vessel details save failed:', e);
+    if (status){ status.textContent = 'Save failed: ' + e.message; status.classList.add('err'); }
+    else alert('Vessel details save failed: ' + e.message);
+  }
+}
+document.getElementById('btnSaveVesselIdentity')?.addEventListener('click', saveVesselIdentity);
 
 document.getElementById('btnLoadVessel').addEventListener('click', async ()=>{
   const sel = document.getElementById('s_vesselSelect');
@@ -13139,7 +13181,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v88';
+let androidInstallCacheName = 'noon-report-v89';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
