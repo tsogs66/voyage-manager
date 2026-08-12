@@ -190,11 +190,11 @@
     grid-template-columns:repeat(3, minmax(0, 1fr));
     align-items:stretch;
   }
-  /* With no turbocharger boxes alongside it, the readings box is the whole panel —
-     its "Others" sub-heading would just repeat the panel title. */
-  #vsTurboScavRow.no-turbos #vsOthersBox > h3{display:none;}
-  #vsTurboScavRow.no-turbos{
-    grid-template-columns:minmax(0, 1fr);
+  /* Without turbocharger boxes the row still carries Others and Engine Room & Tanks,
+     which belong side by side rather than stacked. Must carry the same class weight
+     as the cols3 rule above or that one wins and forces three columns. */
+  #vsTurboScavRow.unit-group.cols3.no-turbos{
+    grid-template-columns:repeat(2, minmax(0, 1fr));
   }
   #vsTurboScavRow .unit-box{min-width:0;}
   #vsOthersFields.form-grid.cols2{
@@ -1760,23 +1760,25 @@
           <div class="unit-box" id="vsOthersBox">
             <h3>Others</h3>
             <div class="form-grid cols2" id="vsOthersFields">
-              <div class="field"><label>E/R Temp (°C)</label><input type="number" step="0.1" id="vs_erTemp"></div>
-              <div class="field"><label>S/W Temp — Sea Water (°C)</label><input type="number" step="0.1" id="vs_swTemp"></div>
-              <div class="field"><label>S/T Temp — Settling Tank (°C)</label><input type="number" step="0.1" id="vs_stTemp"></div>
-              <div class="field"><label>Bilge ROB (m³)</label><input type="number" step="0.01" id="vs_bilgeRob"></div>
-              <div class="field"><label>Sludge ROB (m³)</label><input type="number" step="0.01" id="vs_sludgeRob"></div>
               <div class="field"><label>Scavenge Temp (°C)</label><input type="number" step="0.1" id="vs_scavTemp"></div>
               <div class="field"><label>Scavenge Pressure (bar)</label><input type="number" step="0.01" id="vs_scavPress"></div>
               <div class="field"><label>Pump Mark</label><input type="number" step="0.1" id="vs_pumpMark"></div>
               <div class="field"><label>Fuel Temp (°C)</label><input type="number" step="0.1" id="vs_fuelTemp"></div>
-              <div class="field"><label>Pressure Diff. (bar)</label><input type="number" step="0.01" id="vs_pressDiff"></div>
-              <div class="field"><label>T/C Air Cooler In (°C)</label><input type="number" step="0.1" id="vs_acIn"></div>
-              <div class="field"><label>T/C Air Cooler Out (°C)</label><input type="number" step="0.1" id="vs_acOut"></div>
               <div class="field"><label>M/E LO Temp (°C)</label><input type="number" step="0.1" id="vs_meLoTemp"></div>
               <div class="field"><label>M/E LO Press (bar)</label><input type="number" step="0.01" id="vs_meLoPress"></div>
               <div class="field"><label>G/E LO Temp (°C)</label><input type="number" step="0.1" id="vs_geLoTemp"></div>
               <div class="field"><label>LO Purifier Hrs</label><input type="number" step="0.1" id="vs_purifierHrs"></div>
             </div>
+          </div>
+          <div class="unit-box" id="vsErTankBox">
+            <h3>Engine Room &amp; Tanks</h3>
+            <div class="form-grid cols2" id="vsErTankFields">
+              <div class="field"><label>E/R Temp (°C)</label><input type="number" step="0.1" id="vs_erTemp"></div>
+              <div class="field"><label>S/T Temp — Settling Tank (°C)</label><input type="number" step="0.1" id="vs_stTemp"></div>
+              <div class="field"><label>Bilge ROB (m³)</label><input type="number" step="0.01" id="vs_bilgeRob"></div>
+              <div class="field"><label>Sludge ROB (m³)</label><input type="number" step="0.01" id="vs_sludgeRob"></div>
+            </div>
+            <div class="hint" style="margin-top:8px;">Sea water temperature is recorded once under Weather &amp; Sea State and reused on the reports.</div>
           </div>
         </div>
       </div>
@@ -1802,13 +1804,14 @@
       <div class="panel" style="margin:0 0 16px; padding:16px;">
         <h3 class="sub" style="margin-top:0;">Generators, Boiler &amp; Incinerator — Runtime / Load</h3>
         <div class="form-grid cols3">
-          <div class="field"><label>Boiler Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="vs_blrRuntime"></div>
-          <div class="field"><label>Incinerator Run Time (hrs)</label><input type="number" step="0.1" id="vs_incRuntime"></div>
-          <div class="field"><label>Total G/E Fuel Cons (MT)</label><input type="text" id="vs_geTotalCons" readonly></div>
+          <div class="field"><label>Boiler Run Hours (this report)</label><input type="number" step="0.1" id="vs_blrRuntime"></div>
+          <div class="field"><label>Boiler Running Hours (cumulative)</label><input type="number" step="0.1" id="vs_blrCumHours"></div>
+          <div class="field"><label>Total G/E Fuel Cons (MT)</label><input type="number" step="0.001" id="vs_geTotalCons"></div>
           <div class="field"><label>Boiler Avg Load (kW)</label><input type="number" step="1" id="vs_blrKw"></div>
-          <div class="field"><label>Incinerator Avg Load (kW)</label><input type="number" step="1" id="vs_incKw"></div>
-          <div class="field"></div>
           <div class="field"><label>Boiler Load % (calc)</label><input type="text" id="vs_blrLoadPct" readonly></div>
+          <div class="field"></div>
+          <div class="field"><label>Incinerator Run Time (hrs)</label><input type="number" step="0.1" id="vs_incRuntime"></div>
+          <div class="field"><label>Incinerator Avg Load (kW)</label><input type="number" step="1" id="vs_incKw"></div>
           <div class="field"><label>Incinerator Load % (calc)</label><input type="text" id="vs_incLoadPct" readonly></div>
         </div>
         <div class="unit-group cols3" id="vsGeRuntimeFields" style="margin-top:10px;"></div>
@@ -1885,7 +1888,7 @@
         </div>
         <div class="stat-strip cols3" id="vsVoyageAvgStrip" style="margin-top:12px;"></div>
         <div class="form-grid cols3" style="margin-top:12px;">
-          <div class="field"><label>Boiler Period Hrs (calc)</label><input type="text" id="vs_blrPeriod" readonly></div>
+          <div class="field"><label>Boiler Voyage Hrs (total)</label><input type="text" id="vs_blrPeriod" readonly></div>
           <div class="field"><label>Boiler Fuel Cons (MT)</label><input type="text" id="vs_blrCons" readonly></div>
           <div class="field"><label>Arrangement</label><input type="text" id="vsGeArrLabel" readonly></div>
         </div>
@@ -3109,10 +3112,24 @@ const GAUGE_COLORS = {
 const GE_ARR_LABELS = { SINGLE:'Single Generator', PARALLEL_2:'2 Generators in Parallel', PARALLEL_3:'3 Generators in Parallel' };
 const GE_ARR_COUNTS = { SINGLE:1, PARALLEL_2:2, PARALLEL_3:3 };
 const GE_COUNT_TO_ARR = { 1:'SINGLE', 2:'PARALLEL_2', 3:'PARALLEL_3' };
+/** Arrangement label for a given number of generators actually running. */
+function geArrangementLabelFor(n){
+  const count = Math.max(0, Math.min(3, Number(n) || 0));
+  if (count < 1) return 'No generator in service';
+  return GE_ARR_LABELS[GE_COUNT_TO_ARR[count]] || 'Single Generator';
+}
+
 /** Arrangement label derived from the installed generator count, which is the
     authoritative figure — a stored geArrangement can lag behind it. */
 function geArrangementLabel(){
-  return GE_ARR_LABELS[GE_COUNT_TO_ARR[geUnitCount()]] || 'Single Generator';
+  return geArrangementLabelFor(geUnitCount());
+}
+
+/** How many generators are switched in for an entry — what actually ran. */
+function entryActiveGeCount(e){
+  let n = 0;
+  for (let i = 1; i <= geUnitCount(); i++) if (entryGeInService(e, i)) n++;
+  return n;
 }
 
 function fuelTankList(){ return state.setup.fuelTanks?.length ? state.setup.fuelTanks : DEFAULT_FUEL_TANKS; }
@@ -3309,6 +3326,54 @@ function geCumulativeRunHours(entry, n){
     prev = e;
   }
   return sawAny ? cum : null;
+}
+
+/* ---- Boiler run hours ----
+   Same model as the generators: hours run during the report are the input, and the
+   cumulative hour meter accumulates from them unless a real reading is entered. */
+
+/** Hours the boiler ran during this entry's period. */
+function entryBlrRunHours(e, prevEntry){
+  if (!e) return null;
+  const explicit = e.report?.blrRunHours;
+  if (explicit != null && !isNaN(explicit)) return Number(explicit);
+  const cur = entryBlrRuntime(e);
+  const prv = entryBlrRuntime(prevEntry);
+  if (cur != null && prv != null) return runtimeDelta(cur, prv);
+  return null;
+}
+
+/** Cumulative boiler running hours as at `entry`. */
+function blrCumulativeRunHours(entry){
+  if (!entry) return null;
+  const explicit = entry.report?.blrRuntime;
+  if (explicit != null && !isNaN(explicit)) return Number(explicit);
+  const list = sortedEntries();
+  const idx = list.findIndex(x => x.id === entry.id);
+  const upto = idx >= 0 ? list.slice(0, idx + 1) : [];
+  let prev = effectiveCarryover();
+  let cum = entryBlrRuntime(prev);
+  let sawAny = cum != null;
+  for (const e of upto){
+    const meter = e.report?.blrRuntime;
+    if (meter != null && !isNaN(meter)){ cum = Number(meter); sawAny = true; prev = e; continue; }
+    const hrs = entryBlrRunHours(e, prev);
+    if (hrs != null){ cum = (cum || 0) + hrs; sawAny = true; }
+    prev = e;
+  }
+  return sawAny ? cum : null;
+}
+
+/** Total boiler hours across every entry of the active voyage. */
+function blrVoyageRunHours(){
+  let prev = effectiveCarryover();
+  let total = 0, any = false;
+  for (const e of sortedEntries()){
+    const h = entryBlrRunHours(e, prev);
+    if (h != null && h > 0){ total += h; any = true; }
+    prev = e;
+  }
+  return any ? total : null;
 }
 
 /** Total hours generator n has run across every entry of the active voyage. */
@@ -5316,8 +5381,9 @@ async function cascadeSucceedingEntries(startIdx, { clearOverrides = true, persi
     }
     if (e.report?.generators?.length){
       e.report.generators = e.report.generators.map((g, gi)=>{
-        const prevRt = entryGeRuntime(prev, gi+1);
-        const periodHrs = (g.runtime!=null && prevRt!=null) ? runtimeDelta(g.runtime, prevRt) : null;
+        /* Run hours entered for the report are authoritative; only fall back to a
+           cumulative delta for entries that never recorded them. */
+        const periodHrs = entryGeRunHours(e, gi+1, prev);
         return Object.assign({}, g, { periodHrs });
       });
       const row = getComputedRow(e.id);
@@ -5336,12 +5402,12 @@ async function cascadeSucceedingEntries(startIdx, { clearOverrides = true, persi
       });
       changed = true;
     }
-    const prevBlr = entryBlrRuntime(prev);
     const curBlr = entryBlrRuntime(e);
-    if (curBlr!=null || e.report?.perfTable?.BOILER){
+    if (curBlr!=null || e.report?.blrRunHours!=null || e.report?.perfTable?.BOILER){
       e.report = e.report || {};
       e.report.perfTable = e.report.perfTable || {};
-      const blrPeriod = (curBlr!=null && prevBlr!=null) ? runtimeDelta(curBlr, prevBlr) : null;
+      /* Boiler run hours recorded on the report win over a cumulative delta. */
+      const blrPeriod = entryBlrRunHours(e, prev);
       e.report.perfTable.BOILER = Object.assign({}, e.report.perfTable.BOILER || {}, {
         runTime: blrPeriod,
         avgPower: e.report.perfTable.BOILER?.avgPower ?? null
@@ -7978,7 +8044,8 @@ function snapshotVoyageSummaryForPrint(entry){
    'airCoolerIn','airCoolerOut','meLoTemp','meLoPress','geLoTemp','purifierHrs','foVisc','foDens','shaftKw'
   ].forEach((key, idx)=>{
     const idMap = {
-      erTemp:'vs_erTemp', swTemp:'vs_swTemp', stTemp:'vs_stTemp', bilgeRob:'vs_bilgeRob', sludgeRob:'vs_sludgeRob',
+      /* swTemp is sourced from the single Weather & Sea State reading. */
+      erTemp:'vs_erTemp', swTemp:'vs_seaTemp', stTemp:'vs_stTemp', bilgeRob:'vs_bilgeRob', sludgeRob:'vs_sludgeRob',
       scavTemp:'vs_scavTemp', scavPress:'vs_scavPress', pumpMark:'vs_pumpMark', fuelTemp:'vs_fuelTemp', pressDiff:'vs_pressDiff',
       airCoolerIn:'vs_acIn', airCoolerOut:'vs_acOut', meLoTemp:'vs_meLoTemp', meLoPress:'vs_meLoPress',
       geLoTemp:'vs_geLoTemp', purifierHrs:'vs_purifierHrs', foVisc:'vs_foVisc', foDens:'vs_foDens', shaftKw:'vs_shaftKw'
@@ -8109,11 +8176,11 @@ function renderRunningHoursStrip(rows, perf){
     }
     const e = state.entries.find(x=>x.id===r.id) || r;
     const prev = i>0 ? (state.entries.find(x=>x.id===sorted[i-1].id) || sorted[i-1]) : null;
-    const curBlr = entryBlrRuntime(e);
-    const prevBlr = prev ? entryBlrRuntime(prev) : null;
-    if (curBlr!=null && prevBlr!=null){
-      const d = runtimeDelta(curBlr, prevBlr);
-      if (d!=null && d>=0) blrHrs += d;
+    /* Boiler hours are recorded per report; the cumulative-delta path remains as a
+       fallback for entries written before run hours were stored directly. */
+    const blrRun = entryBlrRunHours(e, prev);
+    if (blrRun!=null && blrRun>=0){
+      blrHrs += blrRun;
     } else if (e.report?.perfTable?.BOILER?.runTime!=null){
       blrHrs += e.report.perfTable.BOILER.runTime||0;
     }
@@ -9869,7 +9936,9 @@ function openVoyageSummary(entryId){
     ${stat('SFOC Δ %', sfocDeltaStr)}
   `;
 
-  document.getElementById('vsGeArrLabel').value = geArrangementLabel();
+  /* Arrangement reflects the generators actually in service for this entry, not how
+     many the ship has installed. Refreshed live by updateVsGeSplit. */
+  document.getElementById('vsGeArrLabel').value = geArrangementLabelFor(entryActiveGeCount(entry));
 
   // Voyage run inputs (editable)
   document.getElementById('vs_distanceShip').value = entry.distanceShip ?? 0;
@@ -9899,9 +9968,11 @@ function openVoyageSummary(entryId){
      collapses to what is actually running — generators, boiler, ROB, soundings. */
   setVsMePanelsVisible(meRunning);
 
-  // Others (ER/tank) always available; scavenge / pump mark / fuel temp only with M/E in use
+  /* Engine Room & Tanks are always available; scavenge / pump mark / fuel temp only
+     with M/E in use. Air cooler and pressure diff now live in the T/C boxes and are
+     filled by renderVsCylTurboFields. Sea water temperature is no longer duplicated
+     here — Weather & Sea State is the single record of it. */
   document.getElementById('vs_erTemp').value = r.erTemp ?? '';
-  document.getElementById('vs_swTemp').value = r.swTemp ?? '';
   document.getElementById('vs_stTemp').value = r.stTemp ?? '';
   document.getElementById('vs_bilgeRob').value = r.bilgeRob ?? '';
   document.getElementById('vs_sludgeRob').value = r.sludgeRob ?? '';
@@ -9909,9 +9980,6 @@ function openVoyageSummary(entryId){
   document.getElementById('vs_scavPress').value = r.scavPress ?? '';
   document.getElementById('vs_pumpMark').value = r.pumpMark ?? '';
   document.getElementById('vs_fuelTemp').value = r.fuelTemp ?? '';
-  document.getElementById('vs_pressDiff').value = r.pressDiff ?? '';
-  document.getElementById('vs_acIn').value = r.airCoolerIn ?? '';
-  document.getElementById('vs_acOut').value = r.airCoolerOut ?? '';
   document.getElementById('vs_meLoTemp').value = r.meLoTemp ?? '';
   document.getElementById('vs_meLoPress').value = r.meLoPress ?? '';
   document.getElementById('vs_geLoTemp').value = r.geLoTemp ?? '';
@@ -9942,7 +10010,7 @@ function openVoyageSummary(entryId){
       </tr>`;
     }).join('');
   }
-  ['vs_scavTemp','vs_scavPress','vs_pumpMark','vs_fuelTemp','vs_pressDiff','vs_acIn','vs_acOut','vs_meLoTemp','vs_meLoPress','vs_geLoTemp','vs_purifierHrs'].forEach(id=>{
+  ['vs_scavTemp','vs_scavPress','vs_pumpMark','vs_fuelTemp','vs_meLoTemp','vs_meLoPress','vs_geLoTemp','vs_purifierHrs'].forEach(id=>{
     const el = document.getElementById(id);
     const wrap = el?.closest('.field');
     if (wrap) wrap.style.display = showMeDetail ? '' : 'none';
@@ -9963,6 +10031,14 @@ function openVoyageSummary(entryId){
     }).join('');
     const turboN = turboCount();
     const turbos = r.turbos || (r.turbo1 ? [r.turbo1, r.turbo2].filter(Boolean) : []);
+    /* Air cooler and pressure differential are turbocharger readings shared across the
+       units, so they close out the T/C boxes rather than sitting under Others. */
+    const turboCommon = `
+      <div class="unit-box"><h3>T/C — Air Cooler</h3>
+        <div class="field"><label>Air Cooler In (°C)</label><input type="number" step="0.1" id="vs_acIn" value="${r.airCoolerIn??''}"></div>
+        <div class="field"><label>Air Cooler Out (°C)</label><input type="number" step="0.1" id="vs_acOut" value="${r.airCoolerOut??''}"></div>
+        <div class="field"><label>Pressure Diff. (bar)</label><input type="number" step="0.01" id="vs_pressDiff" value="${r.pressDiff??''}"></div>
+      </div>`;
     turboBox.innerHTML = Array.from({length:turboN}, (_,i)=>{
       const n = i+1;
       const t = turbos[i] || {};
@@ -9971,8 +10047,8 @@ function openVoyageSummary(entryId){
         <div class="field"><label>Out Temp (°C)</label><input type="number" step="0.1" id="vs_t${n}out" value="${t.out??''}"></div>
         <div class="field"><label>RPM</label><input type="number" step="1" id="vs_t${n}rpm" value="${t.rpm??''}"></div>
       </div>`;
-    }).join('');
-    turboRow?.classList.toggle('no-turbos', turboN < 1);
+    }).join('') + turboCommon;
+    turboRow?.classList.remove('no-turbos');
   } else {
     cylBox.innerHTML = '';
     turboBox.innerHTML = '';
@@ -10027,13 +10103,22 @@ function openVoyageSummary(entryId){
 
   // Generators / Boiler / Incinerator (same fields as Reports tab)
   const prevForRt = previousEntryFor(entryId);
-  const prevBlr = entryBlrRuntime(prevForRt);
-  const curBlr = entryBlrRuntime(entry);
-  const blrPeriod = (curBlr!=null && prevBlr!=null) ? runtimeDelta(curBlr, prevBlr) : null;
-  document.getElementById('vs_blrRuntime').value = curBlr ?? '';
-  document.getElementById('vs_blrPeriod').value = blrPeriod==null ? '—' : fmt(blrPeriod, 2);
+  const prevBlr = blrCumulativeRunHours(prevForRt) ?? entryBlrRuntime(prevForRt);
+  /* Run hours for the report are the input; the cumulative meter follows from them. */
+  const blrRunHrs = entryBlrRunHours(entry, prevForRt);
+  document.getElementById('vs_blrRuntime').value = blrRunHrs ?? '';
+  const blrCumEl = document.getElementById('vs_blrCumHours');
+  if (blrCumEl){
+    const cum = blrCumulativeRunHours(entry);
+    blrCumEl.value = cum==null ? '' : fmt(cum, 1);
+    delete blrCumEl.dataset.userEdited;
+  }
+  document.getElementById('vs_blrPeriod').value = (()=>{ const t = blrVoyageRunHours(); return t==null ? '—' : fmt(t, 2); })();
   document.getElementById('vs_blrCons').value = row.blrCons==null ? '—' : fmtFuel(row.blrCons);
-  document.getElementById('vs_geTotalCons').value = row.geCons==null ? '—' : fmtFuel(row.geCons);
+  /* Total G/E fuel is entered here and mirrors down to D/G under Fuel Cons, so it
+     honours any saved override rather than always showing the metered figure. */
+  const geTotalVal = entry.unitOverride?.GE != null ? entry.unitOverride.GE : row.geCons;
+  document.getElementById('vs_geTotalCons').value = (geTotalVal==null || isNaN(geTotalVal)) ? '' : Number(geTotalVal).toFixed(3);
   document.getElementById('vs_blrKw').value = entry?.report?.perfTable?.BOILER?.avgPower ?? '';
   syncBoilerLoadPctDisplay('vs_blrKw', 'vs_blrLoadPct');
   document.getElementById('vs_incRuntime').value = entryIncineratorRunTime(entry) ?? '';
@@ -10041,11 +10126,27 @@ function openVoyageSummary(entryId){
   syncIncineratorLoadPctDisplay('vs_incKw', 'vs_incLoadPct');
   renderVsPhotoPreview(r.photo || null);
   renderVsGeRuntimeFields(entryId, r);
-  document.getElementById('vs_blrRuntime').oninput = ()=>{
-    const cur = parseFloat(document.getElementById('vs_blrRuntime').value);
-    const period = (!isNaN(cur) && prevBlr!=null) ? runtimeDelta(cur, prevBlr) : null;
-    document.getElementById('vs_blrPeriod').value = period==null ? '—' : fmt(period, 2);
+  /* Boiler: run hours drive the cumulative meter, or a typed meter reading derives
+     the run hours — the same two-way link used for the generators. */
+  const syncBlrHours = (from)=>{
+    const runEl = document.getElementById('vs_blrRuntime');
+    const cumEl = document.getElementById('vs_blrCumHours');
+    if (!runEl || !cumEl) return;
+    const meterTyped = cumEl.dataset.userEdited === '1';
+    if (from === 'cum' && meterTyped && prevBlr != null && cumEl.value !== ''){
+      const d = runtimeDelta(parseFloat(cumEl.value), prevBlr);
+      if (d != null) runEl.value = fmt(d, 2);
+    } else if (!meterTyped){
+      const h = runEl.value === '' ? null : parseFloat(runEl.value);
+      const cum = (prevBlr != null && h != null && !isNaN(h)) ? prevBlr + h : prevBlr;
+      cumEl.value = cum == null ? '' : fmt(cum, 1);
+    }
     renderVsPerfTable(entryId);
+  };
+  document.getElementById('vs_blrRuntime').oninput = ()=> syncBlrHours('run');
+  document.getElementById('vs_blrCumHours').oninput = (e)=>{
+    if (e.isTrusted) e.target.dataset.userEdited = '1';
+    syncBlrHours('cum');
   };
   document.getElementById('vs_blrKw').oninput = ()=>{
     syncBoilerLoadPctDisplay('vs_blrKw', 'vs_blrLoadPct');
@@ -10056,6 +10157,12 @@ function openVoyageSummary(entryId){
     syncIncineratorLoadPctDisplay('vs_incKw', 'vs_incLoadPct');
     renderVsPerfTable(entryId);
   };
+  /* Typing the G/E total re-splits it across the running generators and mirrors it
+     into the read-only D/G box under Fuel Cons. */
+  document.getElementById('vs_geTotalCons').oninput = ()=>{
+    if (window.__syncVsGeTotal) window.__syncVsGeTotal();
+    updateVsGeSplit(entryId);
+  };
   renderVsPerfTable(entryId);
 
   const unitOv = entry.unitOverride || {};
@@ -10065,7 +10172,7 @@ function openVoyageSummary(entryId){
   const unitVal = v => (v==null || isNaN(v)) ? '' : Number(v).toFixed(3);
   document.getElementById('vsFuelConsBox').innerHTML = `
     <div class="field"><label>M/E (MT)</label><input class="pf-input" type="number" step="0.001" id="vs_unit_me" value="${unitVal(meConsVal)}"></div>
-    <div class="field"><label>D/G (MT)</label><input class="pf-input" type="number" step="0.001" id="vs_unit_ge" value="${unitVal(geConsVal)}"></div>
+    <div class="field calc"><label>D/G (MT)</label><input class="pf-input" type="text" id="vs_unit_ge" value="${unitVal(geConsVal)}" readonly tabindex="-1" title="Enter the G/E total under Generators, Boiler &amp; Incinerator"></div>
     <div class="field"><label>Boiler (MT)</label><input class="pf-input" type="number" step="0.001" id="vs_unit_blr" value="${unitVal(blrConsVal)}"></div>
     <div class="field"><label>TOTAL (MT)</label><input type="text" id="vs_unit_total" value="${fmtFuel((meConsVal||0)+(geConsVal||0)+(blrConsVal||0))}" readonly></div>
   `;
@@ -10076,12 +10183,28 @@ function openVoyageSummary(entryId){
     const tot = document.getElementById('vs_unit_total');
     if (tot) tot.value = fmtFuel(a+b+c);
   };
-  ['vs_unit_me','vs_unit_ge','vs_unit_blr'].forEach(id=>{
+  ['vs_unit_me','vs_unit_blr'].forEach(id=>{
     document.getElementById(id)?.addEventListener('input', ()=>{
       refreshVsUnitTotal();
       updateVsRobLiveFromCons();
+      /* Boiler Fuel Cons under Generator Voyage Totals reads back the figure typed
+         here, so it has to follow every keystroke rather than the saved value. */
+      syncVsBoilerConsReadout();
     });
   });
+  syncVsBoilerConsReadout();
+  /* D/G is driven from the Total G/E Fuel Cons box above, so the figure is entered
+     once beside the generators that burned it and mirrors down here read-only. */
+  window.__syncVsGeTotal = ()=>{
+    const src = document.getElementById('vs_geTotalCons');
+    const dst = document.getElementById('vs_unit_ge');
+    if (!src || !dst) return;
+    const v = src.value==='' ? null : parseFloat(src.value);
+    dst.value = (v==null || isNaN(v)) ? '' : Number(v).toFixed(3);
+    refreshVsUnitTotal();
+    updateVsRobLiveFromCons();
+  };
+  window.__syncVsGeTotal();
 
   document.getElementById('vs_fwProdMeter').value = entry.fwProd ?? '';
   document.getElementById('vs_fwRob').value = entry.fwRob ?? '';
@@ -10256,12 +10379,19 @@ function updateVsGeSplit(entryId){
     const loadEl = document.getElementById(`vs_ge${n}_loadpct`);
     if (loadEl) loadEl.value = (on && !isNaN(kw) && max>0) ? fmt((kw/max)*100, 2)+' %' : '—';
   }
-  const shares = splitGeConsByHours(row?.geCons, periodHrs);
+  const shares = splitGeConsByHours(vsGeTotalForSplit(row), periodHrs);
   const runningCount = periodHrs.filter(h=>h!=null && h>0).length;
   for (let i=0; i<maxN; i++){
     const fuelEl = document.getElementById(`vs_ge${i+1}_fuel`);
     if (fuelEl) fuelEl.value = shares[i]==null ? '—' : fmtFuel(shares[i]);
   }
+  /* Arrangement follows the in-service ticks, so switching a unit out immediately
+     reads as "Single Generator" rather than the installed arrangement. */
+  const arrEl = document.getElementById('vsGeArrLabel');
+  if (arrEl) arrEl.value = geArrangementLabelFor(
+    Array.from({length:maxN}, (_,i)=> document.getElementById(`vs_ge${i+1}_on`)?.checked !== false)
+      .filter(Boolean).length
+  );
   const note = document.getElementById('vsGeSplitNote');
   if (note){
     const totalHrs = periodHrs.reduce((a,h)=> a + (h||0), 0);
@@ -10272,6 +10402,32 @@ function updateVsGeSplit(entryId){
         : 'Tick the generators that were in service and enter their run hours for this report.';
   }
   renderVsPerfTable(entryId);
+}
+
+/** Mirror the boiler figure typed under Fuel Cons into Generator Voyage Totals. */
+function syncVsBoilerConsReadout(){
+  const src = document.getElementById('vs_unit_blr');
+  const dst = document.getElementById('vs_blrCons');
+  if (!dst) return;
+  let v = (src && src.value !== '') ? parseFloat(src.value) : null;
+  if (v == null || isNaN(v)){
+    const row = currentVsEntryId ? getComputedRow(currentVsEntryId) : null;
+    v = row?.blrCons ?? null;
+  }
+  dst.value = (v == null || isNaN(v)) ? '—' : fmtFuel(v);
+}
+
+/**
+ * G/E fuel to apportion across the generators: the figure typed into Total G/E Fuel
+ * Cons when present, otherwise the metered consumption for the period.
+ */
+function vsGeTotalForSplit(row){
+  const el = document.getElementById('vs_geTotalCons');
+  if (el && el.value !== ''){
+    const v = parseFloat(el.value);
+    if (!isNaN(v)) return v;
+  }
+  return row?.geCons;
 }
 
 /** Accumulated run hours for generator n across every entry BEFORE the given one. */
@@ -10348,12 +10504,14 @@ function renderVsPerfTable(entryId){
 
   const mePerf = computeMePerf(entryId);
   const periodHrs = draft.map((g,i)=> g.inService && g.runHours!=null ? g.runHours : null);
-  const shares = splitGeConsByHours(row?.geCons, periodHrs);
+  const shares = splitGeConsByHours(vsGeTotalForSplit(row), periodHrs);
 
   const blrRt = (()=>{
+    /* vs_blrRuntime now holds the hours run this report, not a cumulative reading. */
     const cur = parseFloat(document.getElementById('vs_blrRuntime')?.value);
-    const prevBlr = entryBlrRuntime(prev);
-    if (!isNaN(cur) && prevBlr!=null) return runtimeDelta(cur, prevBlr);
+    if (!isNaN(cur)) return cur;
+    const stored = entryBlrRunHours(entry, prev);
+    if (stored != null) return stored;
     return entry?.report?.perfTable?.BOILER?.runTime ?? null;
   })();
   const blrKw = (()=>{
@@ -10421,7 +10579,8 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   entry.miscCons = { 'MDO/MGO': num0('vs_misc_mdomgo'), 'LSMGO': num0('vs_misc_lsmgo') };
   entry.unitOverride = {
     ME: num('vs_unit_me'),
-    GE: num('vs_unit_ge'),
+    /* G/E total is typed under Generators, Boiler & Incinerator; D/G below mirrors it. */
+    GE: num('vs_geTotalCons') ?? num('vs_unit_ge'),
     BLR: num('vs_unit_blr')
   };
   // Persist only lube oil cons overrides — fuel grades and FW are derived, not edited here.
@@ -10450,10 +10609,10 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   entry.report.bilgeRob = num('vs_bilgeRob');
   entry.report.sludgeRob = num('vs_sludgeRob');
   entry.report.stTemp = num('vs_stTemp');
-  entry.report.swTemp = num('vs_swTemp');
+  /* Sea water temperature is recorded once, under Weather & Sea State. Mirrored onto
+     the report so existing readers and printouts keep working unchanged. */
+  entry.report.swTemp = num('vs_seaTemp');
   entry.report.remarks = document.getElementById('vs_remarks')?.value || '';
-  entry.report.airCoolerIn = num('vs_acIn');
-  entry.report.airCoolerOut = num('vs_acOut');
   entry.report.meLoTemp = num('vs_meLoTemp');
   entry.report.meLoPress = num('vs_meLoPress');
   entry.report.geLoTemp = num('vs_geLoTemp');
@@ -10480,8 +10639,15 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
       entry.report.soundings[tk.id] = { soundingCm, tempC, volume };
     }
   });
-  entry.report.blrRuntime = blrRuntime;
-  entry.blrRuntime = blrRuntime;
+  /* vs_blrRuntime is the hours run this report; the cumulative meter is stored
+     separately and only pinned when the engineer typed an actual reading. */
+  entry.report.blrRunHours = blrRuntime;
+  const blrCumEl = document.getElementById('vs_blrCumHours');
+  const blrCumTyped = blrCumEl?.dataset.userEdited === '1' && blrCumEl.value !== '';
+  entry.report.blrRuntime = blrCumTyped ? parseFloat(blrCumEl.value) : null;
+  /* Entry-level mirror keeps the resolved cumulative for legacy readers. */
+  const blrCumShown = blrCumEl && blrCumEl.value !== '' ? parseFloat(blrCumEl.value) : null;
+  entry.blrRuntime = (blrCumShown != null && !isNaN(blrCumShown)) ? blrCumShown : null;
   entry.report.generators = readVsGeGeneratorsDraft().map((g,i)=>{
     /* Run hours are what the engineer entered (or accepted); period hours mirror
        them so older readers of the report keep working. */
@@ -10491,7 +10657,7 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   /* Kept in step for backward compatibility with reports written before per-unit
      selection existed — it is the count of units in service, not a range. */
   entry.report.generatorsInUse = entry.report.generators.filter(g=>g.inService).length || 1;
-  const shares = splitGeConsByHours(row?.geCons, entry.report.generators.map(g=>g.periodHrs));
+  const shares = splitGeConsByHours(vsGeTotalForSplit(row), entry.report.generators.map(g=>g.periodHrs));
   entry.report.generators.forEach((g,i)=>{ g.fuelCons = shares[i] ?? null; });
   for (let i=1; i<=3; i++){
     const g = entry.report.generators?.[i-1];
@@ -10520,7 +10686,11 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
     entry.report.scavPress = num('vs_scavPress');
     entry.report.fuelTemp = num('vs_fuelTemp');
     entry.report.pumpMark = num('vs_pumpMark');
+    /* Air cooler and pressure differential live in the T/C boxes, which only exist
+       while the M/E detail block is rendered. */
     entry.report.pressDiff = num('vs_pressDiff');
+    entry.report.airCoolerIn = num('vs_acIn');
+    entry.report.airCoolerOut = num('vs_acOut');
   }
 
   const perfTable = { ME: computeMePerf(entry.id) };
@@ -10534,11 +10704,10 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
       runTime: g.periodHrs, fuelCons: g.fuelCons
     };
   });
-  const prevBlr = entryBlrRuntime(prev);
-  const blrPeriod = (blrRuntime!=null && prevBlr!=null) ? runtimeDelta(blrRuntime, prevBlr) : null;
+  /* blrRuntime now holds the hours run this report — it is the period figure itself. */
   perfTable.BOILER = Object.assign({}, entry.report.perfTable?.BOILER || {}, computeKwPerf({
     avgPower: blrKw,
-    runTime: blrPeriod
+    runTime: blrRuntime
   }, boilerMaxKw()));
   perfTable.INCINERATOR = buildIncineratorPerf(incRunTime, incKw);
   entry.report.perfTable = Object.assign({}, entry.report.perfTable || {}, perfTable);
@@ -10712,7 +10881,7 @@ function buildVoyageNoonSheetHTML(entry){
     </tr>`;
   }).join('');
   /* Compact period-only generator table fits a 3-column portrait sheet. */
-  const geSection = geN>0 ? printSection(`Generators — ${geArrangementLabel()}`, `
+  const geSection = geN>0 ? printSection(`Generators — ${geArrangementLabelFor(entryActiveGeCount(entry))}`, `
     <table class="pr-table">
       <tr><th>Unit</th><th>Hrs</th><th>kW</th><th>Load%</th><th>Fuel</th></tr>
       ${geRows}
@@ -10720,9 +10889,9 @@ function buildVoyageNoonSheetHTML(entry){
     ${printRow('Voy Avg Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct, 2)}%`)}
     ${printRow('Voy Avg kW', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted, 2))}`) : '';
 
-  const blrPrev = entryBlrRuntime(previousEntryFor(entryId));
-  const blrCur = entryBlrRuntime(entry);
-  const blrPeriodPrint = (blrCur!=null && blrPrev!=null) ? runtimeDelta(blrCur, blrPrev) : (entry.report?.perfTable?.BOILER?.runTime ?? null);
+  const blrCur = blrCumulativeRunHours(entry) ?? entryBlrRuntime(entry);
+  const blrPeriodPrint = entryBlrRunHours(entry, previousEntryFor(entryId))
+    ?? (entry.report?.perfTable?.BOILER?.runTime ?? null);
   const incRtPrint = entryIncineratorRunTime(entry);
   const incKwPrint = entryIncineratorKw(entry);
   const incLoadPrint = incineratorLoadPct(incKwPrint);
@@ -13183,7 +13352,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v90';
+let androidInstallCacheName = 'noon-report-v91';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
