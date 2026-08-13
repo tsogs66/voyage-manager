@@ -1861,8 +1861,15 @@
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
-        <h3 class="sub" style="margin-top:0;">Remarks</h3>
+        <h3 class="sub" style="margin-top:0;">Remarks &amp; Signatory</h3>
         <div class="field"><textarea id="vs_remarks" rows="3" style="width:100%; background:var(--ink); border:1px solid var(--line-strong); border-radius:3px; color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:8px;"></textarea></div>
+        <div class="form-grid cols2" style="margin-top:12px;">
+          <div class="field"><label>Chief Engineer (this entry)</label><input id="vs_entryChEng" placeholder="Signatory on this entry's reports"></div>
+          <div class="field" style="justify-content:flex-end;">
+            <button type="button" class="ghost small" id="btnVsResetEntryChEng">Use vessel's current Chief Engineer</button>
+          </div>
+        </div>
+        <div class="hint">This is the officer printed on this entry's reports. It was stamped when the entry was made and is kept as-is, so a later crew change does not rewrite signatures already issued — correct it here only if the wrong name was recorded. To change who is aboard from now on, edit Chief Engineer on Vessel Data or Voyage Setup.</div>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -10099,6 +10106,10 @@ function openVoyageSummary(entryId){
   document.getElementById('vs_ecaRobOut').value = eca.robOut ?? '';
   document.getElementById('vs_ecaDist').value = eca.distNm ?? '';
   document.getElementById('vs_remarks').value = r.remarks ?? '';
+  /* Signatory stamped on this entry; unstamped entries show the vessel's current
+     Chief Engineer, which is what their reports already print. */
+  const entryCeEl = document.getElementById('vs_entryChEng');
+  if (entryCeEl) entryCeEl.value = entry.chEng ?? state.setup.chEng ?? '';
   // Tank soundings
   const sndBody = document.getElementById('vsSoundingsBody');
   if (sndBody){
@@ -10721,6 +10732,10 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
      the report so existing readers and printouts keep working unchanged. */
   entry.report.swTemp = num('vs_seaTemp');
   entry.report.remarks = document.getElementById('vs_remarks')?.value || '';
+  /* Correcting the signatory affects this entry only — the vessel's current Chief
+     Engineer is edited on Vessel Data / Voyage Setup, not here. */
+  const entryCe = document.getElementById('vs_entryChEng')?.value?.trim();
+  entry.chEng = entryCe ? entryCe : null;
   entry.report.meLoTemp = num('vs_meLoTemp');
   entry.report.meLoPress = num('vs_meLoPress');
   entry.report.geLoTemp = num('vs_geLoTemp');
@@ -11165,6 +11180,11 @@ function setVsMePanelsVisible(show){
   const btn = document.getElementById('btnVsShowMePanels');
   if (btn) btn.textContent = vsForceShowMePanels ? 'Hide M/E panels' : 'Show M/E panels anyway';
 }
+
+document.getElementById('btnVsResetEntryChEng')?.addEventListener('click', ()=>{
+  const el = document.getElementById('vs_entryChEng');
+  if (el) el.value = state.setup.chEng ?? '';
+});
 
 document.getElementById('btnVsShowMePanels')?.addEventListener('click', ()=>{
   vsForceShowMePanels = !vsForceShowMePanels;
@@ -13466,7 +13486,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v94';
+let androidInstallCacheName = 'noon-report-v95';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
