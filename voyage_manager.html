@@ -158,7 +158,20 @@
     flex:0 0 auto; width:190px; min-height:90px; display:flex; align-items:center; justify-content:center;
     border:1px dashed var(--line-strong); border-radius:4px; background:var(--calc-bg); padding:8px;
   }
-  .stamp-preview img{max-width:100%; max-height:120px; object-fit:contain; display:block;}
+  /* Checkerboard so a transparent cut-out is visibly transparent rather than
+     looking like it still has a white background. */
+  .stamp-preview img{
+    max-width:100%; max-height:120px; object-fit:contain; display:block;
+    background-image:
+      linear-gradient(45deg, rgba(128,128,128,0.22) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(128,128,128,0.22) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(128,128,128,0.22) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(128,128,128,0.22) 75%);
+    background-size:12px 12px;
+    background-position:0 0, 0 6px, 6px -6px, -6px 0;
+  }
+  .stamp-check{display:flex; align-items:center; gap:7px; font-size:11px; color:var(--paper-dim); cursor:pointer;}
+  .stamp-check input{accent-color:var(--teal); width:14px; height:14px; cursor:pointer;}
   .stamp-preview .stamp-empty{font-size:11px; color:var(--paper-dim); text-align:center; line-height:1.4;}
   .stamp-controls{flex:1 1 240px; min-width:0; display:flex; flex-direction:column; gap:8px;}
   @media (max-width:640px){
@@ -1338,11 +1351,15 @@
         <div class="stamp-preview" id="chEngSignaturePreview"></div>
         <div class="stamp-controls">
           <div class="field"><label>Signature image (PNG or JPG)</label><input type="file" accept="image/*" id="chEngSignatureFile"></div>
+          <label class="stamp-check"><input type="checkbox" id="chEngSignatureCutout" checked> Remove white background</label>
           <div class="hint" id="chEngSignatureFor" style="margin:0;"></div>
-          <button type="button" class="ghost small" id="btnRemoveChEngSignature" style="display:none;">Remove signature</button>
+          <div class="btn-row" style="margin:0;">
+            <button type="button" class="ghost small" id="btnCutoutChEngSignature" style="display:none;">Remove white background now</button>
+            <button type="button" class="ghost small" id="btnRemoveChEngSignature" style="display:none;">Remove signature</button>
+          </div>
         </div>
       </div>
-      <div class="hint">Printed on the signature line above the Chief Engineer's name on every document. Stored against the name above, so after a crew change each officer keeps their own signature and earlier reports still print theirs. Held on this device only.</div>
+      <div class="hint">Printed on the signature line above the Chief Engineer's name on every document. Sign on white paper and photograph it — the paper is made transparent and the image trimmed to the signature. Stored against the name above, so after a crew change each officer keeps their own signature and earlier reports still print theirs. Held on this device only.</div>
       <div class="hint">Each voyage number <strong>starts as B (ballast)</strong> and <strong>ends as L (laden)</strong>. Only these two letters mark voyage condition — never any other. Legs are stored separately so the active log stays short.</div>
     </div>
 
@@ -1405,10 +1422,14 @@
         <div class="stamp-preview" id="vesselStampPreview"></div>
         <div class="stamp-controls">
           <div class="field"><label>Stamp image (PNG or JPG)</label><input type="file" accept="image/*" id="vesselStampFile"></div>
-          <button type="button" class="ghost small" id="btnRemoveVesselStamp" style="display:none;">Remove stamp</button>
+          <label class="stamp-check"><input type="checkbox" id="vesselStampCutout" checked> Remove white background</label>
+          <div class="btn-row" style="margin:0;">
+            <button type="button" class="ghost small" id="btnCutoutVesselStamp" style="display:none;">Remove white background now</button>
+            <button type="button" class="ghost small" id="btnRemoveVesselStamp" style="display:none;">Remove stamp</button>
+          </div>
         </div>
       </div>
-      <div class="hint">Printed to the left of the Chief Engineer on every document. A PNG with a transparent background prints cleanest; the image is saved with this vessel and stored on the device only.</div>
+      <div class="hint">Printed to the left of the Chief Engineer on every document. A photo or scan on white paper is converted to a transparent PNG and trimmed to the stamp, so it prints over the sheet instead of as a white box. Saved with this vessel, on this device only.</div>
     </div>
 
     <div class="panel">
@@ -10012,6 +10033,66 @@ async function compressImageFileToPngDataUrl(file, maxEdge=900){
   try { return canvas.toDataURL('image/png'); } catch { return raw; }
 }
 
+/**
+ * Turn the white paper behind a scanned or photographed signature/stamp transparent,
+ * so it prints over the signature line instead of covering it with a white box.
+ *
+ * Paper scans sit around 245–255; anti-aliased stroke edges fall in between; ink is
+ * well below. Pixels are ramped rather than hard-thresholded, otherwise every stroke
+ * comes out with jagged edges. The result is cropped to the ink, because the print
+ * slot is only 42mm x 14mm and a signature floating in a big white field would be
+ * scaled down to nothing.
+ *
+ * Returns the original unchanged if no ink is found, so a mis-detected image is never
+ * silently blanked.
+ */
+async function removeWhiteBackgroundDataUrl(srcDataUrl, { opaqueBelow = 190, clearAbove = 240, pad = 6 } = {}){
+  if (!srcDataUrl || typeof srcDataUrl !== 'string' || !srcDataUrl.startsWith('data:image/')) return srcDataUrl;
+  const img = new Image();
+  await new Promise((resolve, reject)=>{
+    img.onload = resolve;
+    img.onerror = ()=> reject(new Error('Invalid image'));
+    img.src = srcDataUrl;
+  });
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  if (!(w > 0 && h > 0)) return srcDataUrl;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  const data = ctx.getImageData(0, 0, w, h);
+  const px = data.data;
+  const span = Math.max(1, clearAbove - opaqueBelow);
+  let minX = w, minY = h, maxX = -1, maxY = -1;
+
+  for (let i = 0; i < px.length; i += 4){
+    if (px[i+3] === 0) continue;
+    const luma = 0.299*px[i] + 0.587*px[i+1] + 0.114*px[i+2];
+    let a = px[i+3];
+    if (luma >= clearAbove) a = 0;
+    else if (luma > opaqueBelow) a = Math.round(a * (1 - (luma - opaqueBelow) / span));
+    px[i+3] = a;
+    if (a > 8){
+      const p = i / 4, x = p % w, y = (p / w) | 0;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (maxX < 0) return srcDataUrl; /* nothing looked like ink — leave it alone */
+
+  ctx.putImageData(data, 0, 0);
+  const x0 = Math.max(0, minX - pad), y0 = Math.max(0, minY - pad);
+  const cw = Math.min(w, maxX + pad + 1) - x0;
+  const ch = Math.min(h, maxY + pad + 1) - y0;
+  const out = document.createElement('canvas');
+  out.width = cw; out.height = ch;
+  out.getContext('2d').drawImage(canvas, x0, y0, cw, ch, 0, 0, cw, ch);
+  try { return out.toDataURL('image/png'); } catch { return srcDataUrl; }
+}
+
 function chEngSignatureMap(){
   if (!state.setup.chEngSignatures || typeof state.setup.chEngSignatures !== 'object'){
     state.setup.chEngSignatures = {};
@@ -10044,6 +10125,8 @@ function renderVesselStampPreview(){
     : `<span class="stamp-empty">No stamp uploaded — printed documents show the signature line only.</span>`;
   const btn = document.getElementById('btnRemoveVesselStamp');
   if (btn) btn.style.display = url ? '' : 'none';
+  const cut = document.getElementById('btnCutoutVesselStamp');
+  if (cut) cut.style.display = url ? '' : 'none';
 }
 
 function renderChEngSignaturePreview(){
@@ -10056,6 +10139,8 @@ function renderChEngSignaturePreview(){
     : `<span class="stamp-empty">${name ? 'No signature stored for ' + escHtml(name) + '.' : 'Enter the Chief Engineer name first, then upload their signature.'}</span>`;
   const btn = document.getElementById('btnRemoveChEngSignature');
   if (btn) btn.style.display = url ? '' : 'none';
+  const cut = document.getElementById('btnCutoutChEngSignature');
+  if (cut) cut.style.display = url ? '' : 'none';
   const who = document.getElementById('chEngSignatureFor');
   if (who) who.textContent = name ? `Signature on file for: ${name}` : '';
 }
@@ -10064,7 +10149,11 @@ document.getElementById('vesselStampFile')?.addEventListener('change', async (e)
   const file = e.target.files && e.target.files[0];
   if (!file) return;
   try{
-    state.setup.vesselStamp = await compressImageFileToPngDataUrl(file, 900);
+    let url = await compressImageFileToPngDataUrl(file, 900);
+    if (document.getElementById('vesselStampCutout')?.checked){
+      url = await removeWhiteBackgroundDataUrl(url);
+    }
+    state.setup.vesselStamp = url;
     await saveSetup();
     renderVesselStampPreview();
   }catch(err){
@@ -10072,6 +10161,14 @@ document.getElementById('vesselStampFile')?.addEventListener('change', async (e)
     alert('Could not load that image. Use a PNG or JPG of the ship’s stamp.');
   }
   e.target.value = '';
+});
+document.getElementById('btnCutoutVesselStamp')?.addEventListener('click', async ()=>{
+  if (!state.setup.vesselStamp) return;
+  try{
+    state.setup.vesselStamp = await removeWhiteBackgroundDataUrl(state.setup.vesselStamp);
+    await saveSetup();
+    renderVesselStampPreview();
+  }catch(err){ console.error(err); alert('Could not process that image.'); }
 });
 document.getElementById('btnRemoveVesselStamp')?.addEventListener('click', async ()=>{
   state.setup.vesselStamp = null;
@@ -10089,7 +10186,11 @@ document.getElementById('chEngSignatureFile')?.addEventListener('change', async 
     return;
   }
   try{
-    chEngSignatureMap()[name] = await compressImageFileToPngDataUrl(file, 900);
+    let url = await compressImageFileToPngDataUrl(file, 900);
+    if (document.getElementById('chEngSignatureCutout')?.checked){
+      url = await removeWhiteBackgroundDataUrl(url);
+    }
+    chEngSignatureMap()[name] = url;
     state.setup.chEng = name;
     await saveSetup();
     renderChEngSignaturePreview();
@@ -10098,6 +10199,16 @@ document.getElementById('chEngSignatureFile')?.addEventListener('change', async 
     alert('Could not load that image. Use a PNG or JPG of the signature, ideally on a transparent or white background.');
   }
   e.target.value = '';
+});
+document.getElementById('btnCutoutChEngSignature')?.addEventListener('click', async ()=>{
+  const name = (document.getElementById('s_chEng')?.value || state.setup.chEng || '').trim();
+  const cur = signatureForChEng(name);
+  if (!cur) return;
+  try{
+    chEngSignatureMap()[name] = await removeWhiteBackgroundDataUrl(cur);
+    await saveSetup();
+    renderChEngSignaturePreview();
+  }catch(err){ console.error(err); alert('Could not process that image.'); }
 });
 document.getElementById('btnRemoveChEngSignature')?.addEventListener('click', async ()=>{
   const name = (document.getElementById('s_chEng')?.value || state.setup.chEng || '').trim();
@@ -13674,7 +13785,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v96';
+let androidInstallCacheName = 'noon-report-v97';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
