@@ -1403,11 +1403,13 @@
         <button class="ghost small" id="btnAddVessel">Add New Vessel…</button>
         <button class="ghost small" id="btnExportVessel">Export Selected Vessel (JSON)</button>
         <button class="ghost small" id="btnImportVessel">Import Vessel from File…</button>
+        <button class="ghost small" id="btnPushVesselRemote">Push Selected to Server</button>
         <button class="ghost small" id="btnPullVesselRemote">Pull Selected from Server</button>
         <button class="ghost small" id="btnInstallTestFleet">Install / Reset Test Fleet</button>
         <input type="file" id="fileImportVessel" accept="application/json,.json" style="display:none;">
       </div>
       <div class="hint" id="vesselSwitchHint">Each vessel keeps its own setup, voyage log, receipts, and documents in this browser. Switch vessels here to review or continue another ship's records. Use Pull from Server when sync is configured for that vessel's slug.</div>
+      <div class="hint"><strong>Push Selected to Server</strong> uploads that ship — every saved B/L voyage leg — into its own server folder, named by its slug. This is how a vessel added on this device first reaches the server. <strong>Pull Selected from Server</strong> replaces the local copy with the server's. Both act on the ship chosen above, whatever the Setup tab's sync slug says.</div>
       <div class="hint" id="vesselExportStatus">Export writes <strong>one ship's complete data</strong> to a JSON file — vessel details, stamp, engine &amp; tank setup, every log entry, receipt, document, abstract, print history, saved B/L voyage legs and e-ORB records. Import brings that file back on another PC or tablet, replacing only that vessel. The sync API token is never written to the file. For every vessel at once, use Database Backup / Restore / Merge on the Setup tab.</div>
       <div class="hint">Test Fleet loads four scenario vessels for formula checks: <strong>M/V HARBOUR KEY</strong> (port ops), <strong>M/V ROADSTEAD</strong> (anchorage/drifting), <strong>M/V CIRCUMNAV</strong> (full voyage), <strong>M/V PACIFIC TRADER</strong> (three succeeding voyages 40/41/42). Re-running replaces only those four ships' data — your other vessels are left alone.</div>
     </div>
@@ -5295,7 +5297,21 @@ async function createNewVessel(name){
   const slug = vesselSlugFromName(trimmed);
   const vessel = { id, name: trimmed, slug, createdAt: new Date().toISOString() };
   state.vessels.push(vessel);
-  const setup = defaultSetupTemplate({ vesselName: trimmed, sync: { vesselId: slug } });
+  /* Inherit this device's server + token so the new ship can be pushed straight
+     away, but give it its own slug — never the previous vessel's folder. */
+  const creds = (typeof readSyncCredentialsFromLocalStorage === 'function' ? readSyncCredentialsFromLocalStorage() : null) || {};
+  const setup = defaultSetupTemplate({
+    vesselName: trimmed,
+    sync: {
+      vesselId: slug,
+      serverUrl: creds.serverUrl || '',
+      apiToken: creds.apiToken || '',
+      deviceName: creds.deviceName || '',
+      autoSync: typeof creds.autoSync === 'boolean' ? creds.autoSync : true,
+      conflictPolicy: creds.conflictPolicy || 'merge',
+      deviceId: creds.deviceId || null
+    }
+  });
   await dbPut('meta', { key:`setup:${id}`, value: setup });
   await saveVesselRegistry();
   return vessel;
@@ -5383,15 +5399,27 @@ async function clearVesselStore(storeName, vesselId){
   }
 }
 
+/** The server folder this vessel owns: its own setup slug, else its registry slug. */
+function vesselOwnSyncSlug(vesselId){
+  const vessel = state.vessels.find(v=>v.id===vesselId);
+  if (!vessel) return '';
+  if (vesselId === state.activeVesselId){
+    const own = (ensureSyncConfig().vesselId || '').trim();
+    if (own) return sanitizeSyncSlug(own);
+  }
+  return sanitizeSyncSlug(vessel.slug || vesselSlugFromName(vessel.name));
+}
+
 async function pullVesselFromServer(vesselId){
   const vessel = state.vessels.find(v=>v.id===vesselId);
   if (!vessel) return;
-  const sync = ensureSyncConfig();
   if (!syncApiBase()){ alert('Configure the sync server URL on the Setup tab first.'); return; }
-  const prevSlug = sync.vesselId;
-  sync.vesselId = vessel.slug;
+  const prevOverride = _syncSlugOverride;
   try {
     if (vesselId !== state.activeVesselId) await switchVessel(vesselId);
+    /* Pin the target after the switch — syncNow re-reads the Setup form, which would
+       otherwise point the pull at whichever slug that form happens to show. */
+    _syncSlugOverride = vesselOwnSyncSlug(vesselId);
     for (const store of ['entries','receipts','documents','abstracts','printHistory']){
       await clearVesselStore(store, vesselId);
     }
@@ -5399,11 +5427,89 @@ async function pullVesselFromServer(vesselId){
     await persistAllToDb();
     await loadVesselFromDb(vesselId);
     render();
-    alert(`Pulled records for ${vessel.name} from server.`);
+    alert(`Pulled records for ${vessel.name} from server (${_syncSlugOverride}).`);
   } catch(err){
     alert('Pull failed: ' + err.message);
   } finally {
-    sync.vesselId = prevSlug || vessel.slug;
+    _syncSlugOverride = prevOverride;
+  }
+}
+
+/**
+ * Upload a vessel — including one just added on this device — to the sync server
+ * under its own slug. Every saved B/L leg is pushed, not just the working one, so
+ * a new ship arrives complete instead of as a single voyage.
+ */
+async function pushVesselToServer(vesselId){
+  const vessel = state.vessels.find(v=>v.id===vesselId);
+  if (!vessel) return;
+  if (!syncApiBase()){ alert('Configure the sync server URL on the Setup tab first.'); return; }
+
+  const prevVesselId = state.activeVesselId;
+  const prevOverride = _syncSlugOverride;
+  const pushed = [];
+  const failed = [];
+  let slug = '';
+  let prevVoyage = '';
+  let prevCondition = 'B';
+
+  try {
+    if (vesselId !== state.activeVesselId) await switchVessel(vesselId);
+    prevVoyage = (state.setup.voyageNumber || '').trim();
+    prevCondition = normalizeCondition(state.setup.shipCondition);
+    slug = vesselOwnSyncSlug(vesselId);
+    _syncSlugOverride = slug;
+
+    /* Get the working leg into the library so the loop below covers it too. */
+    if (prevVoyage) await archiveActiveVoyageLeg();
+
+    const index = await getVoyageLibraryIndex(vesselId);
+    const legs = [];
+    index.forEach(row => {
+      ['B','L'].forEach(cond => { if (row[cond]) legs.push({ voyageNumber: row.voyageNumber, condition: cond }); });
+    });
+    if (!legs.length){
+      if (!prevVoyage){
+        throw new Error('This vessel has no voyage yet. Set a Voyage No. in Voyage Setup, then push.');
+      }
+      legs.push({ voyageNumber: prevVoyage, condition: prevCondition });
+    }
+
+    for (const leg of legs){
+      const label = `${leg.voyageNumber}/${leg.condition}`;
+      try{
+        await activateVoyageLeg(vesselId, leg.voyageNumber, leg.condition);
+        _syncSlugOverride = slug;   /* leg setup may carry another ship's slug */
+        await syncNow();
+        pushed.push(label);
+      }catch(err){
+        failed.push(`${label}: ${err.message || err}`);
+      }
+    }
+  } catch(err){
+    failed.push(err.message || String(err));
+  } finally {
+    _syncSlugOverride = prevOverride;
+    try{
+      if (state.activeVesselId !== prevVesselId){
+        await switchVessel(prevVesselId);
+      } else if (prevVoyage){
+        await activateVoyageLeg(vesselId, prevVoyage, prevCondition);
+      }
+    }catch(_){}
+    renderVesselSelector();
+    renderSyncUi();
+    try{ await renderVoyageLibrary(); }catch(_){}
+    render();
+  }
+
+  const head = `${vessel.name} → server folder "${slug || vessel.slug}"`;
+  if (pushed.length && !failed.length){
+    alert(`Pushed ${head}.\n\nVoyage legs uploaded (${pushed.length}): ${pushed.join(', ')}`);
+  } else if (pushed.length){
+    alert(`Partly pushed ${head}.\n\nUploaded (${pushed.length}): ${pushed.join(', ')}\n\nFailed (${failed.length}):\n${failed.join('\n')}`);
+  } else {
+    alert(`Push failed for ${head}.\n\n${failed.join('\n') || 'Nothing to upload.'}`);
   }
 }
 
@@ -9688,6 +9794,20 @@ document.getElementById('btnInstallTestFleet').addEventListener('click', async (
   alert(`Test fleet ready (${created.length} vessels). Active: ${state.setup.vesselName}. Use Setup → Active Vessel to switch scenarios.`);
 });
 
+document.getElementById('btnPushVesselRemote')?.addEventListener('click', async ()=>{
+  const btn = document.getElementById('btnPushVesselRemote');
+  const sel = document.getElementById('s_vesselSelect');
+  const vesselId = sel?.value || state.activeVesselId;
+  if (!vesselId) return;
+  const vessel = state.vessels.find(v=>v.id===vesselId);
+  if (!vessel) return;
+  const slug = vesselOwnSyncSlug(vesselId) || vessel.slug;
+  if (!confirm(`Upload "${vessel.name}" to the sync server?\n\nServer folder: ${slug}\nEvery saved B/L voyage leg for this ship is pushed under that folder.\n\nUse this after adding a new vessel on this device.`)) return;
+  if (btn) btn.disabled = true;
+  try{ await pushVesselToServer(vesselId); }
+  finally{ if (btn) btn.disabled = false; }
+});
+
 document.getElementById('btnPullVesselRemote').addEventListener('click', async ()=>{
   const sel = document.getElementById('s_vesselSelect');
   const vesselId = sel?.value || state.activeVesselId;
@@ -12946,8 +13066,17 @@ function voyageConditionKey(){
   return normalizeCondition(state.setup.shipCondition);
 }
 
+/* Set while a per-vessel push/pull runs, so the operation targets that ship's own
+   slug instead of whatever the Setup form currently shows. */
+let _syncSlugOverride = null;
+
+function sanitizeSyncSlug(raw){
+  return String(raw || '').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 64);
+}
+
 function vesselSyncSlug(){
   const sync = ensureSyncConfig();
+  if (_syncSlugOverride) return sanitizeSyncSlug(_syncSlugOverride);
   const fromForm = syncFormFieldValue('sync_vesselId').trim();
   const creds = (typeof readSyncCredentialsFromLocalStorage === 'function')
     ? readSyncCredentialsFromLocalStorage()
@@ -13140,14 +13269,30 @@ function readSyncSettingsFromForm(sync){
   if (!urlEl || !tokenEl || !vesselEl || !autoEl || !conflictEl){
     throw new Error('Sync settings form is not available');
   }
-  s.serverUrl = normalizeSyncServerUrl(urlEl.value || '');
-  s.apiToken = (tokenEl.value || '').trim();
+  /*
+   * A blank credential box means "not shown", not "clear it". Switching to a vessel
+   * whose own setup carries no token paints an empty field; writing that back wiped
+   * the device-wide token in localStorage, so every later request went out with no
+   * Authorization header and the server answered 401. Blank now keeps what we have,
+   * falling back to the device mirror. The vessel slug is exempt — it is genuinely
+   * per-ship and an empty one is resolved from the vessel itself downstream.
+   */
+  const creds = (typeof readSyncCredentialsFromLocalStorage === 'function')
+    ? (readSyncCredentialsFromLocalStorage() || {})
+    : {};
+  const formUrl = normalizeSyncServerUrl(urlEl.value || '');
+  const formToken = (tokenEl.value || '').trim();
+  const formName = nameEl ? (nameEl.value || '').trim() : '';
+  s.serverUrl = formUrl || (s.serverUrl || '') || (creds.serverUrl || '');
+  s.apiToken = formToken || (s.apiToken || '') || (creds.apiToken || '');
   s.vesselId = (vesselEl.value || '').trim();
-  s.deviceName = nameEl ? (nameEl.value || '').trim() : (s.deviceName || '');
+  s.deviceName = formName || (s.deviceName || '') || (creds.deviceName || '');
   s.autoSync = autoEl.value === 'true';
   s.conflictPolicy = conflictEl.value || 'merge';
   s.lastModifiedAt = new Date().toISOString();
-  if (urlEl.value.trim() !== s.serverUrl) urlEl.value = s.serverUrl;
+  /* Never rewrite the box mid-typing: "http://" normalises to "http:", which would
+     eat the slashes the user just typed and jump the caret to the end. */
+  if (urlEl.value.trim() !== s.serverUrl && document.activeElement !== urlEl) urlEl.value = s.serverUrl;
   return s;
 }
 
@@ -13308,7 +13453,15 @@ async function applyMirroredSyncCredentials(){
     /* Device-level credentials always win — needed after pull/remote wipe and fresh tablets. */
     if (creds.serverUrl != null) sync.serverUrl = creds.serverUrl || '';
     if (creds.apiToken != null) sync.apiToken = creds.apiToken || '';
-    if (creds.vesselId) sync.vesselId = creds.vesselId;
+    /* Server URL, token and device name are device-level; the vessel slug is NOT.
+       Taking it from the mirror made every newly added ship inherit the previous
+       ship's slug and upload over its server folder. Only seed it when this vessel
+       has none of its own. */
+    if (!(sync.vesselId || '').trim()){
+      const ownSlug = (activeVessel()?.slug || '').trim();
+      if (ownSlug) sync.vesselId = ownSlug;
+      else if (creds.vesselId) sync.vesselId = creds.vesselId;
+    }
     if (creds.deviceName != null) sync.deviceName = creds.deviceName || '';
     if (typeof creds.autoSync === 'boolean') sync.autoSync = creds.autoSync;
     if (creds.conflictPolicy) sync.conflictPolicy = creds.conflictPolicy;
@@ -13330,11 +13483,21 @@ async function saveSyncSettingsFromForm(options = {}){
   if (btn && !btn.dataset.defaultLabel) btn.dataset.defaultLabel = btn.textContent || 'Save Sync Settings';
 
   _syncSaveInFlight = (async ()=>{
+    /* Yield once before doing anything. The success path below has no awaits, so
+       without this the whole body — including the finally that nulls the guard —
+       ran before `_syncSaveInFlight` was assigned, leaving it permanently set and
+       silently swallowing every autosave after the first. */
+    await Promise.resolve();
     try{
-      try{
-        const ae = document.activeElement;
-        if (ae && typeof ae.blur === 'function' && ae !== btn) ae.blur();
-      }catch(_){}
+      /* Commit any pending mobile-keyboard composition — but only for an explicit
+         save. Blurring on autosave would throw the user out of the field they are
+         still typing in (a mid-URL pause is enough to arm the timer). */
+      if (!fromAutosave){
+        try{
+          const ae = document.activeElement;
+          if (ae && typeof ae.blur === 'function' && ae !== btn) ae.blur();
+        }catch(_){}
+      }
       if (btn){
         btn.disabled = true;
         btn.setAttribute('aria-busy', 'true');
@@ -13398,6 +13561,15 @@ function queueSyncSettingsAutosave(){
   _syncAutosaveTimer = setTimeout(()=>{
     saveSyncSettingsFromForm({ silent: true, fromAutosave: true });
   }, 900);
+}
+
+/** Leaving a sync field commits it immediately instead of waiting out the timer. */
+function flushSyncSettingsOnBlur(){
+  if (!_syncFormDirty) return;
+  clearTimeout(_syncAutosaveTimer);
+  _syncAutosaveTimer = setTimeout(()=>{
+    saveSyncSettingsFromForm({ silent: true, fromAutosave: true });
+  }, 150);
 }
 
 function bindMobileSafeAction(el, handler){
@@ -13487,10 +13659,15 @@ function renderSyncUi(){
     const nameEl = document.getElementById('sync_deviceName');
     const autoEl = document.getElementById('sync_auto');
     const conflictEl = document.getElementById('sync_conflict');
-    if (urlEl) urlEl.value = sync.serverUrl || '';
-    if (tokenEl) tokenEl.value = sync.apiToken || '';
+    /* Server, token and device name are device-wide: fall back to the mirror so a
+       vessel added on this device shows the working credentials instead of blanks. */
+    const creds = (typeof readSyncCredentialsFromLocalStorage === 'function')
+      ? (readSyncCredentialsFromLocalStorage() || {})
+      : {};
+    if (urlEl) urlEl.value = sync.serverUrl || creds.serverUrl || '';
+    if (tokenEl) tokenEl.value = sync.apiToken || creds.apiToken || '';
     if (vesselEl) vesselEl.value = sync.vesselId || '';
-    if (nameEl) nameEl.value = sync.deviceName || '';
+    if (nameEl) nameEl.value = sync.deviceName || creds.deviceName || '';
     if (autoEl) autoEl.value = sync.autoSync ? 'true' : 'false';
     if (conflictEl) conflictEl.value = sync.conflictPolicy || 'merge';
   }
@@ -13748,6 +13925,7 @@ function queueBackgroundSync(){
     el.addEventListener('change', queueSyncSettingsAutosave);
     /* Debounced input autosave — localStorage-only path is fast enough. */
     el.addEventListener('input', queueSyncSettingsAutosave);
+    el.addEventListener('blur', flushSyncSettingsOnBlur);
   });
 })();
 
@@ -13960,7 +14138,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v101';
+let androidInstallCacheName = 'noon-report-v102';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
