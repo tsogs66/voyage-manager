@@ -13200,9 +13200,10 @@ async function fetchSyncJson(url, options = {}){
   if (!res.ok){
     const detail = (body && (body.error || body.message)) ? String(body.error || body.message) : ('HTTP ' + res.status);
     if (res.status === 401 || res.status === 403){
-      const sent = !!(opts.headers && opts.headers.Authorization);
-      throw new Error(sent
-        ? `${detail} (HTTP ${res.status}) — the server rejected this API token. Check the token in Setup → Server Sync matches the server's SYNC_API_TOKEN.`
+      const sentAuth = (opts.headers && opts.headers.Authorization) || '';
+      const sentToken = sentAuth.replace(/^Bearer\s+/i, '');
+      throw new Error(sentToken
+        ? `${detail} (HTTP ${res.status}) — the server rejected the token ${maskSyncToken(sentToken)}. Re-enter the API token in Setup → Server Sync and press Save, then retry; saving replaces the copy stored on every vessel.`
         : `${detail} (HTTP ${res.status}) — no API token was sent. Enter the token in Setup → Server Sync and save.`);
     }
     throw new Error(detail);
@@ -13453,17 +13454,54 @@ async function persistSyncSettingsToDb(sync){
 async function recoverSyncCredentialsFromVesselSetups(){
   try{
     const rows = await dbGetAll('meta');
-    let best = null;
+    let best = null, bestStamp = '';
     for (const row of (rows || [])){
       if (!row || typeof row.key !== 'string') continue;
       if (row.key !== 'setup' && !row.key.startsWith('setup:')) continue;
       const s = row.value && row.value.sync;
-      if (!s || (!s.apiToken && !s.serverUrl)) continue;
-      if (!best || (s.apiToken && !best.apiToken)) best = s;
-      if (best.apiToken && best.serverUrl) break;
+      if (!s || !s.apiToken) continue;
+      /* Newest wins — an old vessel can be carrying a rotated-out token, and
+         picking that one makes the server reject an otherwise healthy device. */
+      const stamp = s.lastModifiedAt || row.value.updatedAt || '';
+      if (!best || stamp > bestStamp){ best = s; bestStamp = stamp; }
     }
     return best;
   }catch(_){ return null; }
+}
+
+/**
+ * The server URL and token are device-wide, but every vessel setup keeps its own
+ * copy. Saving pushes the credential into all of them so no stale token survives
+ * to be recovered later — the cause of a device that authenticates on one ship and
+ * gets 401 on another.
+ */
+async function propagateSyncCredentialsToAllVessels(sync){
+  if (!sync || !(sync.apiToken || sync.serverUrl)) return 0;
+  let n = 0;
+  try{
+    const rows = await dbGetAll('meta');
+    for (const row of (rows || [])){
+      if (!row || typeof row.key !== 'string') continue;
+      if (row.key !== 'setup' && !row.key.startsWith('setup:')) continue;
+      if (!row.value || typeof row.value !== 'object') continue;
+      const s = row.value.sync || {};
+      if (s.serverUrl === sync.serverUrl && s.apiToken === sync.apiToken) continue;
+      /* vesselId stays put — it names this ship's own server folder. */
+      row.value.sync = { ...s, serverUrl: sync.serverUrl || '', apiToken: sync.apiToken || '',
+                         deviceName: sync.deviceName || s.deviceName || '', lastModifiedAt: new Date().toISOString() };
+      await dbPut('meta', row);
+      n++;
+    }
+  }catch(err){ console.warn('sync credential propagation deferred:', err); }
+  return n;
+}
+
+/** Masked readout so a wrong token can be spotted without exposing it. */
+function maskSyncToken(token){
+  const t = String(token || '').trim();
+  if (!t) return '(none)';
+  if (t.length <= 8) return '••••';
+  return t.slice(0, 4) + '…' + t.slice(-4) + ' (' + t.length + ' chars)';
 }
 
 async function applyMirroredSyncCredentials(){
@@ -13575,6 +13613,8 @@ async function saveSyncSettingsFromForm(options = {}){
 
       /* Background mirrors — never block the SUCCESS path. */
       persistSyncCredentialsMirror(sync).catch(err => console.warn('sync IDB mirror:', err));
+      /* One token per device — overwrite every vessel's stale copy. */
+      propagateSyncCredentialsToAllVessels(sync).catch(err => console.warn('sync propagation:', err));
       Promise.resolve().then(async ()=>{
         try{
           await ensureActiveVesselForPersist();
@@ -13772,6 +13812,8 @@ function renderSyncUi(){
     parts.push('Last sync: ' + (sync.lastSyncedAt ? new Date(sync.lastSyncedAt).toLocaleString() : 'never'));
     parts.push(`active ${voyageSyncKey()}/${voyageConditionKey()}`);
     parts.push(`data/${vesselSyncSlug()}/${voyageSyncKey()}/${voyageConditionKey()}.json`);
+    /* Masked so a wrong or stale token is visible without exposing it. */
+    parts.push('token ' + maskSyncToken(syncFormFieldValue('sync_apiToken').trim() || sync.apiToken));
     if (sync.pendingChanges) parts.push('unsynced local changes');
     if (sync.lastSyncError) parts.push('error: ' + sync.lastSyncError);
     meta.textContent = parts.join(' · ');
@@ -14197,7 +14239,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v103';
+let androidInstallCacheName = 'noon-report-v104';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
