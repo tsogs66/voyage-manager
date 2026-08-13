@@ -152,6 +152,18 @@
     border-left:3px solid var(--teal); padding:6px 10px; margin:10px 0 0;
     background:var(--nav-item-bg); border-radius:0 3px 3px 0;
   }
+  /* Vessel stamp / Chief Engineer signature upload panels */
+  .stamp-row{display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; margin-top:6px;}
+  .stamp-preview{
+    flex:0 0 auto; width:190px; min-height:90px; display:flex; align-items:center; justify-content:center;
+    border:1px dashed var(--line-strong); border-radius:4px; background:var(--calc-bg); padding:8px;
+  }
+  .stamp-preview img{max-width:100%; max-height:120px; object-fit:contain; display:block;}
+  .stamp-preview .stamp-empty{font-size:11px; color:var(--paper-dim); text-align:center; line-height:1.4;}
+  .stamp-controls{flex:1 1 240px; min-width:0; display:flex; flex-direction:column; gap:8px;}
+  @media (max-width:640px){
+    .stamp-preview{width:100%;}
+  }
   .vessel-save-status{
     font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--good);
     margin-top:8px; min-height:16px;
@@ -1238,8 +1250,22 @@
   .pr-sign{
     margin-top:2.5mm; padding-top:1.5mm; border-top:1px solid #d4dce8; text-align:right;
   }
+  /* Ship's stamp sits to the left of the Chief Engineer block; the signature image
+     sits inside the space above the line, so it reads as signed over the line. */
+  .pr-sign-row{
+    display:flex; justify-content:flex-end; align-items:flex-end; gap:8mm;
+  }
+  .pr-sign-stamp{ flex:0 0 auto; }
+  .pr-sign-stamp img{
+    height:22mm; width:auto; max-width:40mm; object-fit:contain; display:block;
+  }
+  .pr-sign-block{ flex:0 0 auto; text-align:right; }
   .pr-sign-space{
-    height:14mm; width:42mm; margin-left:auto; margin-bottom:0;
+    height:14mm; width:42mm; margin-left:auto; margin-bottom:0; position:relative;
+  }
+  .pr-sign-space img{
+    position:absolute; right:0; bottom:0;
+    max-height:14mm; max-width:42mm; object-fit:contain;
   }
   .pr-sign-line{ width:42mm; height:1px; background:#122238; margin-left:auto; margin-bottom:1.2mm; }
   .pr-sign-name{ font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; }
@@ -1306,6 +1332,17 @@
         <div class="field span2"><label>Chief Engineer</label><input id="s_chEngVoyage" placeholder="Update at crew change"></div>
       </div>
       <div class="hint">Chief Engineer is the same record as on Vessel Data — update it here at a crew change and it carries forward to the following voyages. Entries already saved keep the officer who was aboard when they were made, so their reports still print the correct signature.</div>
+
+      <h3 class="sub">Chief Engineer Signature</h3>
+      <div class="stamp-row">
+        <div class="stamp-preview" id="chEngSignaturePreview"></div>
+        <div class="stamp-controls">
+          <div class="field"><label>Signature image (PNG or JPG)</label><input type="file" accept="image/*" id="chEngSignatureFile"></div>
+          <div class="hint" id="chEngSignatureFor" style="margin:0;"></div>
+          <button type="button" class="ghost small" id="btnRemoveChEngSignature" style="display:none;">Remove signature</button>
+        </div>
+      </div>
+      <div class="hint">Printed on the signature line above the Chief Engineer's name on every document. Stored against the name above, so after a crew change each officer keeps their own signature and earlier reports still print theirs. Held on this device only.</div>
       <div class="hint">Each voyage number <strong>starts as B (ballast)</strong> and <strong>ends as L (laden)</strong>. Only these two letters mark voyage condition — never any other. Legs are stored separately so the active log stays short.</div>
     </div>
 
@@ -1362,6 +1399,16 @@
       </div>
       <div class="vessel-save-status" id="vesselSaveStatus" role="status" aria-live="polite"></div>
       <div class="hint">Vessel name, Chief Engineer, DWT and IMO number are stored per vessel and used on printouts, CII and the e-ORB prefill.</div>
+
+      <h3 class="sub">Vessel Stamp</h3>
+      <div class="stamp-row">
+        <div class="stamp-preview" id="vesselStampPreview"></div>
+        <div class="stamp-controls">
+          <div class="field"><label>Stamp image (PNG or JPG)</label><input type="file" accept="image/*" id="vesselStampFile"></div>
+          <button type="button" class="ghost small" id="btnRemoveVesselStamp" style="display:none;">Remove stamp</button>
+        </div>
+      </div>
+      <div class="hint">Printed to the left of the Chief Engineer on every document. A PNG with a transparent background prints cleanest; the image is saved with this vessel and stored on the device only.</div>
     </div>
 
     <div class="panel">
@@ -7054,6 +7101,8 @@ function render(){
   if (dwtEl) dwtEl.value = state.setup.dwt ?? '';
   const imoEl = document.getElementById('s_imoNo');
   if (imoEl) imoEl.value = state.setup.imoNo || '';
+  renderVesselStampPreview();
+  renderChEngSignaturePreview();
 
   renderVesselSelector();
   renderVoyageLibrary().catch(()=>{});
@@ -9376,11 +9425,22 @@ function printRow(label, value, cls){
 function printSignatory(entry){
   const now = new Date().toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
   const signer = (entry && entry.chEng) ? entry.chEng : state.setup.chEng;
+  /* Signature belongs to whoever is named below it, so an old sheet reprinted after a
+     crew change carries the earlier officer's signature, not the incoming one's. */
+  const sigUrl = signatureForChEng(signer);
+  const stampUrl = vesselStampDataUrl();
+  const stamp = stampUrl ? `<div class="pr-sign-stamp"><img src="${stampUrl}" alt="Ship's stamp"></div>` : '';
+  const sig = sigUrl ? `<img src="${sigUrl}" alt="">` : '';
   return `<footer class="pr-sign">
-    <div class="pr-sign-space" aria-hidden="true"></div>
-    <div class="pr-sign-line"></div>
-    <div class="pr-sign-name">${escPrint(signer || '—')}</div>
-    <div class="pr-sign-role">Chief Engineer</div>
+    <div class="pr-sign-row">
+      ${stamp}
+      <div class="pr-sign-block">
+        <div class="pr-sign-space" aria-hidden="true">${sig}</div>
+        <div class="pr-sign-line"></div>
+        <div class="pr-sign-name">${escPrint(signer || '—')}</div>
+        <div class="pr-sign-role">Chief Engineer</div>
+      </div>
+    </div>
     <div class="pr-foot">Printed ${now} · ${escPrint(state.setup.vesselName||'')} · ${escPrint(state.setup.voyageNumber||'')}</div>
   </footer>`;
 }
@@ -9517,6 +9577,8 @@ CH_ENG_INPUT_IDS.forEach(id=>{
       const el = document.getElementById(other);
       if (el) el.value = v;
     });
+    /* Signatures are filed under the officer's name, so the preview follows it. */
+    if (typeof renderChEngSignaturePreview === 'function') renderChEngSignaturePreview();
   });
 });
 
@@ -9918,6 +9980,132 @@ async function compressImageFileToDataUrl(file, maxEdge=1280, quality=0.82){
     return raw;
   }
 }
+/* ---------------- vessel stamp & Chief Engineer signature ----------------
+   Both are printed on every document. The stamp belongs to the ship; signatures are
+   held per Chief Engineer name so an entry stamped with an earlier officer prints
+   that officer's signature rather than the incoming one's. */
+
+/**
+ * Like compressImageFileToDataUrl but keeps PNG, so transparency survives.
+ * A signature or stamp flattened to JPEG would print as a white box over the sheet.
+ */
+async function compressImageFileToPngDataUrl(file, maxEdge=900){
+  const raw = await readFileAsDataUrl(file);
+  if (!raw || typeof raw !== 'string' || !raw.startsWith('data:image/')) return raw;
+  const img = new Image();
+  const loaded = new Promise((resolve, reject)=>{
+    img.onload = ()=> resolve();
+    img.onerror = ()=> reject(new Error('Invalid image'));
+  });
+  img.src = raw;
+  await loaded;
+  let w = img.naturalWidth || img.width;
+  let h = img.naturalHeight || img.height;
+  if (!(w>0 && h>0)) return raw;
+  const scale = Math.min(1, maxEdge / Math.max(w, h));
+  w = Math.round(w * scale); h = Math.round(h * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  try { return canvas.toDataURL('image/png'); } catch { return raw; }
+}
+
+function chEngSignatureMap(){
+  if (!state.setup.chEngSignatures || typeof state.setup.chEngSignatures !== 'object'){
+    state.setup.chEngSignatures = {};
+  }
+  return state.setup.chEngSignatures;
+}
+
+/** Signature belonging to a given Chief Engineer, or null. */
+function signatureForChEng(name){
+  const key = (name || '').trim();
+  if (!key) return null;
+  return chEngSignatureMap()[key] || null;
+}
+
+/** Signature to print for an entry — its stamped officer, else the current one. */
+function signatureForEntry(entry){
+  return signatureForChEng(entry?.chEng || state.setup.chEng);
+}
+
+function vesselStampDataUrl(){
+  return state.setup.vesselStamp || null;
+}
+
+function renderVesselStampPreview(){
+  const box = document.getElementById('vesselStampPreview');
+  if (!box) return;
+  const url = vesselStampDataUrl();
+  box.innerHTML = url
+    ? `<img src="${url}" alt="Vessel stamp">`
+    : `<span class="stamp-empty">No stamp uploaded — printed documents show the signature line only.</span>`;
+  const btn = document.getElementById('btnRemoveVesselStamp');
+  if (btn) btn.style.display = url ? '' : 'none';
+}
+
+function renderChEngSignaturePreview(){
+  const box = document.getElementById('chEngSignaturePreview');
+  if (!box) return;
+  const name = (document.getElementById('s_chEng')?.value || state.setup.chEng || '').trim();
+  const url = signatureForChEng(name);
+  box.innerHTML = url
+    ? `<img src="${url}" alt="Chief Engineer signature">`
+    : `<span class="stamp-empty">${name ? 'No signature stored for ' + escHtml(name) + '.' : 'Enter the Chief Engineer name first, then upload their signature.'}</span>`;
+  const btn = document.getElementById('btnRemoveChEngSignature');
+  if (btn) btn.style.display = url ? '' : 'none';
+  const who = document.getElementById('chEngSignatureFor');
+  if (who) who.textContent = name ? `Signature on file for: ${name}` : '';
+}
+
+document.getElementById('vesselStampFile')?.addEventListener('change', async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  try{
+    state.setup.vesselStamp = await compressImageFileToPngDataUrl(file, 900);
+    await saveSetup();
+    renderVesselStampPreview();
+  }catch(err){
+    console.error(err);
+    alert('Could not load that image. Use a PNG or JPG of the ship’s stamp.');
+  }
+  e.target.value = '';
+});
+document.getElementById('btnRemoveVesselStamp')?.addEventListener('click', async ()=>{
+  state.setup.vesselStamp = null;
+  await saveSetup();
+  renderVesselStampPreview();
+});
+
+document.getElementById('chEngSignatureFile')?.addEventListener('change', async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const name = (document.getElementById('s_chEng')?.value || state.setup.chEng || '').trim();
+  if (!name){
+    alert('Enter the Chief Engineer name first — the signature is stored against that name so earlier reports keep the right one.');
+    e.target.value = '';
+    return;
+  }
+  try{
+    chEngSignatureMap()[name] = await compressImageFileToPngDataUrl(file, 900);
+    state.setup.chEng = name;
+    await saveSetup();
+    renderChEngSignaturePreview();
+  }catch(err){
+    console.error(err);
+    alert('Could not load that image. Use a PNG or JPG of the signature, ideally on a transparent or white background.');
+  }
+  e.target.value = '';
+});
+document.getElementById('btnRemoveChEngSignature')?.addEventListener('click', async ()=>{
+  const name = (document.getElementById('s_chEng')?.value || state.setup.chEng || '').trim();
+  if (name) delete chEngSignatureMap()[name];
+  await saveSetup();
+  renderChEngSignaturePreview();
+});
+
 document.getElementById('vs_photoFile')?.addEventListener('change', async (e)=>{
   const file = e.target.files && e.target.files[0];
   if (!file) return;
@@ -13486,7 +13674,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v95';
+let androidInstallCacheName = 'noon-report-v96';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -15173,7 +15361,7 @@ document.getElementById('btnOrbPrint')?.addEventListener('click', ()=>{
     const off = (orbSetup().officers || []).find(o=>o.id===officerId);
     if (off) range += ` — officer in charge: ${off.rank ? off.rank + ' ' : ''}${off.name}`;
   }
-  const html = EORB.buildPrintHtml(orbSetup(), rows, range);
+  const html = EORB.buildPrintHtml(orbSetup(), rows, range, { stampDataUrl: vesselStampDataUrl() });
   const iframe = document.createElement('iframe');
   iframe.setAttribute('aria-hidden', 'true');
   iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;opacity:0;pointer-events:none;';
