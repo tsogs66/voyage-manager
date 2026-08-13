@@ -4,6 +4,7 @@
   "description": "Noon Report — Voyage Manager (PWA + Android)",
   "private": true,
   "scripts": {
+    "test": "node tests/check_js_syntax.js && node tests/check_assets.js && python3 tests/test_sync_auth.py",
     "www:sync": "node scripts/sync-www.js",
     "cap:sync": "npm run www:sync && npx cap sync android",
     "cap:open": "npx cap open android",

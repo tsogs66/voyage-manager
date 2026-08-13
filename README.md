@@ -232,6 +232,25 @@ Sync merges records by `id`, keeping the newest `updatedAt` per entry/receipt/do
 | `icons/` | App icons |
 | `sync-server/server.py` | Self-hosted sync API |
 | `noonreport_backup.json` | Sample backup data |
+| `tests/` | Checks run by CI (see below) |
+
+## Checks
+
+```bash
+npm test
+```
+
+Runs on every push and pull request via `.github/workflows/ci.yml`. No dependencies beyond
+Node and Python 3 — nothing to install.
+
+| Check | Guards |
+|-------|--------|
+| `tests/check_js_syntax.js` | Every shipped `.js` file and each inline `<script>` in `voyage_manager.html` parses. There is no build step, so a syntax error otherwise ships silently. |
+| `tests/check_assets.js` | `sw.js`'s cache name and precache list still match `androidInstallCacheName` / `androidInstallAssets` in the app, and every precached file exists. A stale cache name leaves phones on the previous build. |
+| `tests/test_sync_auth.py` | Starts `sync-server/server.py` with and without `SYNC_API_TOKEN` and asserts who gets in, including the 401 `reason` codes and a non-ASCII token. |
+
+CI also runs `shellcheck` over the install scripts, which are piped from `curl` straight
+into `bash` as root.
 
 ## Setup Tab
 
