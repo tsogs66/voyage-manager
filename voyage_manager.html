@@ -11571,12 +11571,12 @@ function buildVoyageNoonSheetHTML(entry){
     ], 4)}
     ${printKpiRow(kpiItems)}
     <div class="pr-noon-body">
-      ${cylSection ? `<div class="pr-noon-full">${cylSection}</div>` : ''}
       <div class="pr-noon-cols">
         <div class="pr-noon-col">${col1}</div>
         <div class="pr-noon-col">${col2}</div>
         <div class="pr-noon-col">${col3}</div>
       </div>
+      ${cylSection ? `<div class="pr-noon-full">${cylSection}</div>` : ''}
       <div class="pr-noon-full">${robTable}</div>
     </div>
     ${remarksSection}
@@ -13956,7 +13956,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v99';
+let androidInstallCacheName = 'noon-report-v100';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
