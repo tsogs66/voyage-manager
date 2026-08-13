@@ -5444,6 +5444,11 @@ async function pushVesselToServer(vesselId){
   const vessel = state.vessels.find(v=>v.id===vesselId);
   if (!vessel) return;
   if (!syncApiBase()){ alert('Configure the sync server URL on the Setup tab first.'); return; }
+  /* Fail before hopping legs — 12 uploads all reporting "unauthorized" hides the cause. */
+  if (!syncRequestHeaders({}).Authorization){
+    alert('No sync API token on this device.\n\nEnter the API token in Setup → Server Sync and save, then push again.');
+    return;
+  }
 
   const prevVesselId = state.activeVesselId;
   const prevOverride = _syncSlugOverride;
@@ -13194,6 +13199,12 @@ async function fetchSyncJson(url, options = {}){
   }
   if (!res.ok){
     const detail = (body && (body.error || body.message)) ? String(body.error || body.message) : ('HTTP ' + res.status);
+    if (res.status === 401 || res.status === 403){
+      const sent = !!(opts.headers && opts.headers.Authorization);
+      throw new Error(sent
+        ? `${detail} (HTTP ${res.status}) — the server rejected this API token. Check the token in Setup → Server Sync matches the server's SYNC_API_TOKEN.`
+        : `${detail} (HTTP ${res.status}) — no API token was sent. Enter the token in Setup → Server Sync and save.`);
+    }
     throw new Error(detail);
   }
   if (body == null) throw new Error('Empty response from sync server (HTTP ' + res.status + ')');
@@ -13432,6 +13443,29 @@ async function persistSyncSettingsToDb(sync){
   }
 }
 
+/**
+ * Last-resort credential recovery: the server URL and token are device-wide, but
+ * they are also stored inside every vessel's own setup. If the device mirror was
+ * emptied (the old "blank field clears the credential" bug) the only surviving copy
+ * may be on a vessel other than the active one — so a ship that never held its own
+ * token, like a newly added one, had nothing to authenticate with and got a 401.
+ */
+async function recoverSyncCredentialsFromVesselSetups(){
+  try{
+    const rows = await dbGetAll('meta');
+    let best = null;
+    for (const row of (rows || [])){
+      if (!row || typeof row.key !== 'string') continue;
+      if (row.key !== 'setup' && !row.key.startsWith('setup:')) continue;
+      const s = row.value && row.value.sync;
+      if (!s || (!s.apiToken && !s.serverUrl)) continue;
+      if (!best || (s.apiToken && !best.apiToken)) best = s;
+      if (best.apiToken && best.serverUrl) break;
+    }
+    return best;
+  }catch(_){ return null; }
+}
+
 async function applyMirroredSyncCredentials(){
   try{
     let creds = readSyncCredentialsFromLocalStorage();
@@ -13448,11 +13482,36 @@ async function applyMirroredSyncCredentials(){
         if (creds) writeSyncCredentialsToLocalStorage(creds);
       }catch(_){}
     }
+    if (creds && typeof creds !== 'object') creds = null;
+    /* Nothing usable on the device? Recover from whichever vessel still has it. */
+    if (!creds || !(creds.apiToken || creds.serverUrl)){
+      const found = await recoverSyncCredentialsFromVesselSetups();
+      if (found){
+        creds = Object.assign({}, creds || {}, {
+          serverUrl: (creds && creds.serverUrl) || found.serverUrl || '',
+          apiToken:  (creds && creds.apiToken)  || found.apiToken  || '',
+          deviceName:(creds && creds.deviceName)|| found.deviceName|| ''
+        });
+      }
+    }
     if (!creds || typeof creds !== 'object') return false;
     const sync = ensureSyncConfig();
-    /* Device-level credentials always win — needed after pull/remote wipe and fresh tablets. */
-    if (creds.serverUrl != null) sync.serverUrl = creds.serverUrl || '';
-    if (creds.apiToken != null) sync.apiToken = creds.apiToken || '';
+    /*
+     * Device-level credentials win when they actually hold a value — needed after
+     * pull/remote wipe and on fresh tablets. An EMPTY mirror must not win: a mirror
+     * blanked by the old "blank field clears the credential" bug would otherwise
+     * re-wipe the live token on every vessel load, so re-entering the token never
+     * stuck and any vessel switch (including the one Push does) produced a 401.
+     */
+    if (creds.serverUrl) sync.serverUrl = creds.serverUrl;
+    if (creds.apiToken) sync.apiToken = creds.apiToken;
+    /* Heal the device mirror (and this vessel's setup) from whatever we resolved,
+       so the next vessel switch does not have to search for the token again. */
+    const stored = readSyncCredentialsFromLocalStorage() || {};
+    if ((sync.serverUrl && stored.serverUrl !== sync.serverUrl) ||
+        (sync.apiToken && stored.apiToken !== sync.apiToken)){
+      try{ writeSyncCredentialsToLocalStorage(sync); }catch(_){}
+    }
     /* Server URL, token and device name are device-level; the vessel slug is NOT.
        Taking it from the mirror made every newly added ship inherit the previous
        ship's slug and upload over its server folder. Only seed it when this vessel
@@ -14138,7 +14197,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v102';
+let androidInstallCacheName = 'noon-report-v103';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
