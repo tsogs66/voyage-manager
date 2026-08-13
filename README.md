@@ -185,7 +185,7 @@ Environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SYNC_API_TOKEN` | `change-me-in-production` | Bearer token for API auth |
+| `SYNC_API_TOKEN` | `change-me-in-production` | Bearer token for API auth. Left unset, the server has no secret to check and accepts **every** request — `/api/health` then reports `"tokenConfigured": false` and the app warns on Test Connection. |
 | `SYNC_PORT` | `8787` | Listen port |
 | `SYNC_HOST` | `0.0.0.0` | Bind address |
 | `SYNC_DATA_DIR` | `./sync-data` | JSON storage directory |

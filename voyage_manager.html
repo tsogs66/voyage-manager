@@ -13165,6 +13165,29 @@ function syncRequestHeaders(extra){
   return headers;
 }
 
+/*
+ * True when the sync server is running without a SYNC_API_TOKEN, so it authenticates
+ * nobody: v1.4+ says so on /api/health, older builds only reveal it by accepting an
+ * anonymous read of the same URL. Read-only; called on the auth-failure path.
+ */
+async function syncServerIsUnprotected(requestUrl){
+  const base = String(requestUrl || '').split('/api/')[0];
+  if (base){
+    try{
+      const res = await fetch(`${base}/api/health`, { cache:'no-store' });
+      if (res.ok){
+        const body = await res.json();
+        if (body && typeof body.tokenConfigured === 'boolean') return body.tokenConfigured === false;
+      }
+    }catch(_){}
+  }
+  try{
+    const probe = await fetch(requestUrl, { cache:'no-store', method:'GET' });
+    return probe.status !== 401 && probe.status !== 403;
+  }catch(_){}
+  return false;
+}
+
 async function fetchSyncJson(url, options = {}){
   const opts = Object.assign({ cache: 'no-store' }, options || {});
   let res;
@@ -13205,20 +13228,19 @@ async function fetchSyncJson(url, options = {}){
       if (!sentToken){
         throw new Error(`${detail} (HTTP ${res.status}) — no API token was sent. Enter the token in Setup → Server Sync and save.`);
       }
+      const tokenRejected = `${detail} (HTTP ${res.status}) — the server rejected the token ${maskSyncToken(sentToken)}. Check it matches the sync server's SYNC_API_TOKEN, then re-enter it in Setup → Server Sync and press Save.`;
       /*
        * Distinguish "wrong token" from "server never got its SYNC_API_TOKEN".
-       * server.py falls back to `API_TOKEN == "change-me-in-production" and not auth`,
-       * so a server still on the default accepts ANONYMOUS requests and rejects every
-       * authenticated one — the same 401 as a bad token, opposite cause and fix.
+       * Servers from v1.4 name the cause in the body and only reject when they do hold
+       * a token, so the token really is wrong. Older ones fall back to
+       * `API_TOKEN == "change-me-in-production" and not auth`, so they accept ANONYMOUS
+       * requests and reject every authenticated one — same 401, opposite cause and fix.
        */
-      let anonymousWorks = false;
-      try{
-        const probe = await fetch(url, { cache:'no-store', method:'GET' });
-        anonymousWorks = probe.status !== 401 && probe.status !== 403;
-      }catch(_){}
-      throw new Error(anonymousWorks
-        ? `${detail} (HTTP ${res.status}) — the server accepts requests with NO token but rejects this one, which means it is still running with the default SYNC_API_TOKEN. The token here is fine; set SYNC_API_TOKEN=<your token> on the sync server and restart it.`
-        : `${detail} (HTTP ${res.status}) — the server rejected the token ${maskSyncToken(sentToken)}. Check it matches the sync server's SYNC_API_TOKEN, then re-enter it in Setup → Server Sync and press Save.`);
+      if (body && body.reason === 'token_mismatch') throw new Error(tokenRejected);
+      const serverIsOpen = await syncServerIsUnprotected(url);
+      throw new Error(serverIsOpen
+        ? `${detail} (HTTP ${res.status}) — the sync server is running WITHOUT an API token, so it rejects authenticated requests. The token here is fine; set SYNC_API_TOKEN=<your token> on the sync server and restart it.`
+        : tokenRejected);
     }
     throw new Error(detail);
   }
@@ -14077,8 +14099,28 @@ document.getElementById('btnTestSync')?.addEventListener('click', async ()=>{
     if (!body || body.ok !== true){
       throw new Error('Health check response was JSON but not a Noon Report sync server.');
     }
-    setSyncSaveStatus('Connection OK — ' + base, 'ok');
-    alert('Connection OK.\nURL: ' + base + '\n' + JSON.stringify(body, null, 2));
+    /*
+     * /api/health is unauthenticated, so it proves the URL is reachable and nothing
+     * more — a wrong token still passes it and only fails later on push/pull. Follow
+     * it with an authenticated read so Test Connection tests the credential too.
+     * Listing an unknown vessel is a valid empty read, so a new vessel is not an error.
+     */
+    const vessel = vesselSyncSlug();
+    await fetchSyncJson(`${base}/api/voyage/${encodeURIComponent(vessel)}`, { headers: syncRequestHeaders() });
+    const openServer = body.tokenConfigured === false;
+    setSyncSaveStatus(
+      openServer ? 'Connection OK, but the server has NO API token set — ' + base : 'Connection OK — ' + base,
+      openServer ? 'err' : 'ok'
+    );
+    alert(
+      (openServer
+        ? 'Connection OK — but this sync server is running WITHOUT an API token.\n' +
+          'It accepts every request, so anyone who can reach the URL can read and\n' +
+          'overwrite voyage data. Set SYNC_API_TOKEN=<your token> on the server and\n' +
+          'restart it.\n\n'
+        : 'Connection OK — the API token was accepted.\n\n') +
+      'URL: ' + base + '\nVessel: ' + vessel + '\n' + JSON.stringify(body, null, 2)
+    );
   } catch (e){
     setSyncSaveStatus('Connection failed: ' + e.message, 'err');
     alert('Connection failed: ' + e.message);
@@ -14253,7 +14295,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v105';
+let androidInstallCacheName = 'noon-report-v106';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
