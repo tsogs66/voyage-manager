@@ -21,10 +21,13 @@ API:
 Legacy flat files <voyage>-<CONDITION>.json are still readable and listed.
 
 Auth: Authorization: Bearer <SYNC_API_TOKEN>
+      With SYNC_API_TOKEN unset the server has no secret to check and accepts every
+      request; /api/health reports tokenConfigured:false so clients can say so.
 """
 
 from __future__ import annotations
 
+import hmac
 import json
 import mimetypes
 import os
@@ -36,7 +39,11 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 DATA_DIR = Path(os.environ.get("SYNC_DATA_DIR", "./sync-data"))
-API_TOKEN = os.environ.get("SYNC_API_TOKEN", "change-me-in-production")
+DEFAULT_API_TOKEN = "change-me-in-production"
+API_TOKEN = os.environ.get("SYNC_API_TOKEN", DEFAULT_API_TOKEN)
+# No SYNC_API_TOKEN reached the process: the server has no secret to check against,
+# so it cannot authenticate anyone. See _auth_reason().
+TOKEN_CONFIGURED = API_TOKEN != DEFAULT_API_TOKEN
 HOST = os.environ.get("SYNC_HOST", "0.0.0.0")
 PORT = int(os.environ.get("SYNC_PORT", "8787"))
 ALLOWED_ORIGINS = [
@@ -238,7 +245,7 @@ def list_conditions(vessel: str, voyage: str) -> list[dict]:
 
 
 class SyncHandler(BaseHTTPRequestHandler):
-    server_version = "NoonReportSync/1.3"
+    server_version = "NoonReportSync/1.4"
 
     def log_message(self, fmt: str, *args) -> None:
         print(f"[{utc_now()}] {self.address_string()} {fmt % args}")
@@ -248,11 +255,45 @@ class SyncHandler(BaseHTTPRequestHandler):
         send_cors(self)
         self.end_headers()
 
-    def _authorized(self) -> bool:
+    def _auth_reason(self) -> str:
+        """'' when the request may proceed, otherwise why it may not."""
         auth = self.headers.get("Authorization", "")
-        if auth == f"Bearer {API_TOKEN}":
-            return True
-        return API_TOKEN == "change-me-in-production" and not auth
+        if not TOKEN_CONFIGURED:
+            # Unconfigured: the server is open to anyone who can reach it, with or
+            # without a token. Rejecting a bearer token here would protect nothing
+            # while making a correctly configured app look broken — which is exactly
+            # the 401 this used to produce. /api/health reports tokenConfigured:false
+            # so the app can say the server is open instead of guessing.
+            return ""
+        if not auth:
+            return "missing_token"
+        # Compare wire bytes. http.server decodes headers as latin-1, so a non-ASCII
+        # token arrives mojibake and never matches the str it was set from; re-encoding
+        # as latin-1 recovers the bytes the client actually sent.
+        sent = auth.encode("latin-1", "replace")
+        expected = f"Bearer {API_TOKEN}".encode("utf-8")
+        if hmac.compare_digest(sent, expected):
+            return ""
+        return "token_mismatch"
+
+    def _authorized(self) -> bool:
+        return self._auth_reason() == ""
+
+    def _reject_unauthorized(self) -> None:
+        reason = self._auth_reason()
+        json_response(
+            self,
+            HTTPStatus.UNAUTHORIZED,
+            {
+                "error": "unauthorized",
+                "reason": reason,
+                "message": (
+                    "No Authorization header was sent; the app needs the API token."
+                    if reason == "missing_token"
+                    else "The bearer token does not match this server's SYNC_API_TOKEN."
+                ),
+            },
+        )
 
     def _read_json(self) -> dict:
         length = int(self.headers.get("Content-Length", "0"))
@@ -292,10 +333,14 @@ class SyncHandler(BaseHTTPRequestHandler):
                 {
                     "ok": True,
                     "service": "noon-report-sync",
-                    "version": "1.3",
+                    "version": "1.4",
                     "time": utc_now(),
                     "static": bool(STATIC_DIR),
                     "layout": "vessel/voyageNo/CONDITION.json",
+                    # False = SYNC_API_TOKEN never reached this process, so every
+                    # request is accepted. The app surfaces this as a warning.
+                    "tokenConfigured": TOKEN_CONFIGURED,
+                    "authRequired": TOKEN_CONFIGURED,
                 },
             )
             return
@@ -303,7 +348,7 @@ class SyncHandler(BaseHTTPRequestHandler):
         parts = [p for p in parsed.path.strip("/").split("/") if p]
         if len(parts) >= 2 and parts[0] == "api" and parts[1] == "voyage":
             if not self._authorized():
-                json_response(self, HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+                self._reject_unauthorized()
                 return
             try:
                 if len(parts) == 3:
@@ -375,7 +420,7 @@ class SyncHandler(BaseHTTPRequestHandler):
             json_response(self, HTTPStatus.NOT_FOUND, {"error": "not found"})
             return
         if not self._authorized():
-            json_response(self, HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            self._reject_unauthorized()
             return
 
         try:
@@ -545,8 +590,12 @@ def main() -> None:
     print("Layout: <data>/<vessel>/<voyageNo>/<B|L>.json  (B=ballast, L=laden)")
     if STATIC_DIR:
         print(f"Serving static PWA from: {STATIC_DIR}")
-    if API_TOKEN == "change-me-in-production":
-        print("WARNING: using default API token — set SYNC_API_TOKEN in production")
+    if not TOKEN_CONFIGURED:
+        print("*" * 78)
+        print("WARNING: SYNC_API_TOKEN is not set — this server accepts EVERY request,")
+        print("         with or without a token. Anyone who can reach this URL can read")
+        print("         and overwrite voyage data. Set SYNC_API_TOKEN=<secret> and restart.")
+        print("*" * 78)
     print("Cloudflare Tunnel example:")
     print(f"  cloudflared tunnel --url http://127.0.0.1:{PORT}")
     try:

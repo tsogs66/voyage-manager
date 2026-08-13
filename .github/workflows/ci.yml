@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: App (JS syntax + asset manifests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No build step and no bundler: voyage_manager.html is hand-edited, so a syntax
+      # error in an inline <script> would otherwise reach a phone before anyone noticed.
+      - name: Check JavaScript parses
+        run: node tests/check_js_syntax.js
+
+      - name: Check cache name and precache list agree
+        run: node tests/check_assets.js
+
+  sync-server:
+    name: Sync server (auth matrix)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Compile server
+        run: python3 -m py_compile sync-server/server.py
+
+      # Starts server.py with and without SYNC_API_TOKEN and asserts who gets in.
+      # Guards the regression where a token-less server rejected the correct token.
+      - name: Run auth matrix
+        run: python3 tests/test_sync_auth.py
+
+  install-scripts:
+    name: Install scripts (shellcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # These run as root on a Proxmox host and are piped straight from curl to bash,
+      # so a quoting slip is expensive and never seen in review.
+      - name: Shellcheck
+        run: shellcheck install/proxmox-install.sh install/proxmox-update.sh scripts/build-pc-portable.sh
