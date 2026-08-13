@@ -1401,10 +1401,14 @@
       </div>
       <div class="btn-row" style="margin-top:10px;">
         <button class="ghost small" id="btnAddVessel">Add New Vessel…</button>
+        <button class="ghost small" id="btnExportVessel">Export Selected Vessel (JSON)</button>
+        <button class="ghost small" id="btnImportVessel">Import Vessel from File…</button>
         <button class="ghost small" id="btnPullVesselRemote">Pull Selected from Server</button>
         <button class="ghost small" id="btnInstallTestFleet">Install / Reset Test Fleet</button>
+        <input type="file" id="fileImportVessel" accept="application/json,.json" style="display:none;">
       </div>
       <div class="hint" id="vesselSwitchHint">Each vessel keeps its own setup, voyage log, receipts, and documents in this browser. Switch vessels here to review or continue another ship's records. Use Pull from Server when sync is configured for that vessel's slug.</div>
+      <div class="hint" id="vesselExportStatus">Export writes <strong>one ship's complete data</strong> to a JSON file — vessel details, stamp, engine &amp; tank setup, every log entry, receipt, document, abstract, print history, saved B/L voyage legs and e-ORB records. Import brings that file back on another PC or tablet, replacing only that vessel. The sync API token is never written to the file. For every vessel at once, use Database Backup / Restore / Merge on the Setup tab.</div>
       <div class="hint">Test Fleet loads four scenario vessels for formula checks: <strong>M/V HARBOUR KEY</strong> (port ops), <strong>M/V ROADSTEAD</strong> (anchorage/drifting), <strong>M/V CIRCUMNAV</strong> (full voyage), <strong>M/V PACIFIC TRADER</strong> (three succeeding voyages 40/41/42). Re-running replaces only those four ships' data — your other vessels are left alone.</div>
     </div>
 
@@ -13956,7 +13960,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v100';
+let androidInstallCacheName = 'noon-report-v101';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -14393,6 +14397,207 @@ function readJsonFileInput(file){
     reader.readAsText(file);
   });
 }
+
+/* ---------------- export / import one vessel ----------------
+   Sits between the two existing granularities: the whole database
+   (Backup / Restore / Merge) and a single working leg. This moves one
+   ship — setup, stamp, every leg, receipt, document and e-ORB record —
+   between devices without touching the rest of the fleet. */
+const VESSEL_EXPORT_FORMAT = 'noon-report-vessel-v1';
+const VESSEL_EXPORT_STORES = ['entries','receipts','documents','abstracts','printHistory','voyageLegs','orbEntries'];
+
+function setVesselExportStatus(msg){
+  const el = document.getElementById('vesselExportStatus');
+  if (el) el.textContent = msg;
+}
+
+/** Does one store row belong to this vessel? Legs match on their own id prefix. */
+function recordBelongsToVessel(storeName, row, vesselId){
+  if (!row) return false;
+  if (storeName === 'voyageLegs') return legBelongsToVessel(row, vesselId);
+  if (row.vesselId) return vesselIdentityKeys(vesselId).has(row.vesselId);
+  return vesselId === LEGACY_VESSEL_ID;
+}
+
+/** Export files get handed to other people — never write the sync token into one. */
+function setupForVesselExport(setup){
+  if (!setup || typeof setup !== 'object') return setup;
+  const copy = JSON.parse(JSON.stringify(setup));
+  if (copy.sync) copy.sync = { ...copy.sync, apiToken: '' };
+  return copy;
+}
+
+async function buildVesselExport(vesselId){
+  await ensureDB();
+  const vessel = vesselRecord(vesselId);
+  if (!vessel) throw new Error('Vessel not found in the fleet registry.');
+  /* Flush the active vessel so the file matches what is on screen. */
+  if (vessel.id === state.activeVesselId) await saveCurrentVesselState();
+
+  const metaAll = await dbGetAll('meta');
+  const setupRow = metaAll.find(m => m.key === `setup:${vessel.id}`);
+
+  const stores = {};
+  for (const name of VESSEL_EXPORT_STORES){
+    try{
+      const all = await dbGetAll(name);
+      stores[name] = (all || []).filter(r => recordBelongsToVessel(name, r, vessel.id));
+    }catch(_){ stores[name] = []; }
+  }
+  stores.voyageLegs = (stores.voyageLegs || []).map(leg =>
+    (leg && leg.setup) ? { ...leg, setup: setupForVesselExport(leg.setup) } : leg
+  );
+
+  return {
+    format: VESSEL_EXPORT_FORMAT,
+    app: 'Noon Report',
+    exportedAt: new Date().toISOString(),
+    vessel: { ...vessel },
+    setup: setupForVesselExport(setupRow ? setupRow.value : null),
+    stores,
+    counts: Object.fromEntries(Object.entries(stores).map(([k,v])=>[k, (v||[]).length]))
+  };
+}
+
+function isVesselExport(payload){
+  return !!(payload && payload.format === VESSEL_EXPORT_FORMAT && payload.vessel && payload.stores && typeof payload.stores === 'object');
+}
+
+/** The fleet entry this file would land on, or null when it is a new ship. */
+function matchVesselForImport(payload){
+  const src = (payload && payload.vessel) || {};
+  return state.vessels.find(v => src.id && v.id === src.id)
+      || state.vessels.find(v => src.slug && v.slug === src.slug)
+      || null;
+}
+
+async function importVesselExport(payload){
+  if (!isVesselExport(payload)){
+    throw new Error('Not a vessel export (expected format ' + VESSEL_EXPORT_FORMAT + ').');
+  }
+  await ensureDB();
+  await saveCurrentVesselState();
+
+  const src = payload.vessel || {};
+  const srcName = String(src.name || payload.setup?.vesselName || 'IMPORTED VESSEL').trim();
+  const srcSlug = src.slug || vesselSlugFromName(srcName);
+
+  let target = matchVesselForImport(payload);
+  const replacing = !!target;
+  if (target){
+    if (srcName) target.name = srcName;
+    if (srcSlug) target.slug = srcSlug;
+    /* Wipe this vessel only — pack stores, its legs and its setup row. */
+    await clearVesselPackData(target.id);
+    await clearVesselStore('orbEntries', target.id);
+  } else {
+    target = {
+      id: src.id || ('v-' + uid()),
+      name: srcName,
+      slug: srcSlug,
+      createdAt: src.createdAt || new Date().toISOString()
+    };
+    state.vessels.push(target);
+  }
+
+  const setup = migrateSetup(JSON.parse(JSON.stringify(payload.setup || defaultSetupTemplate({ vesselName: srcName }))));
+  if (!setup.vesselName) setup.vesselName = srcName;
+  /* Device credentials are mirrored back on load; carry only the ship's slug. */
+  setup.sync = { ...(setup.sync || {}), apiToken: '', vesselId: srcSlug };
+  await dbPut('meta', { key: `setup:${target.id}`, value: setup });
+
+  let written = 0;
+  for (const name of VESSEL_EXPORT_STORES){
+    const rows = (payload.stores && payload.stores[name]) || [];
+    for (const raw of rows){
+      if (!raw || raw.id == null) continue;
+      const row = JSON.parse(JSON.stringify(raw));
+      row.vesselId = target.id;
+      if (name === 'voyageLegs'){
+        row.id = voyageLegId(target.id, row.voyageNumber, row.condition);
+        for (const key of ['entries','receipts','documents','abstracts','printHistory']){
+          if (Array.isArray(row[key])){
+            row[key] = row[key].map(x => (x && typeof x === 'object') ? { ...x, vesselId: target.id } : x);
+          }
+        }
+        if (row.setup) row.setup = { ...row.setup, sync: { ...(row.setup.sync || {}), apiToken: '', vesselId: srcSlug } };
+      }
+      await dbPut(name, row);
+      written++;
+    }
+  }
+
+  await saveVesselRegistry();
+  await dbPut('meta', { key:'activeVesselId', value: target.id });
+  await loadVesselFromDb(target.id);
+  renderVesselSelector();
+  render();
+  applyEntryDefaults();
+  prefillFromLastEntry();
+  renderSyncUi();
+  try{ if (typeof renderOrbUi === 'function') renderOrbUi(); }catch(_){}
+  return { vessel: target, replacing, written };
+}
+
+function vesselExportCountSummary(counts){
+  return Object.keys(counts || {}).filter(k => counts[k]).map(k => `${k}: ${counts[k]}`).join(', ') || 'no records';
+}
+
+document.getElementById('btnExportVessel')?.addEventListener('click', async ()=>{
+  const btn = document.getElementById('btnExportVessel');
+  const sel = document.getElementById('s_vesselSelect');
+  const vesselId = sel?.value || state.activeVesselId;
+  if (!vesselId){ alert('Select a vessel in the Fleet list first.'); return; }
+  if (btn) btn.disabled = true;
+  try{
+    setVesselExportStatus('Building vessel export…');
+    const payload = await buildVesselExport(vesselId);
+    const stamp = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+    const name = `noon-report-vessel_${payload.vessel.slug || 'vessel'}_${stamp}.json`;
+    downloadJsonFile(name, payload);
+    const total = Object.values(payload.counts || {}).reduce((a,b)=>a+(b||0),0);
+    const summary = vesselExportCountSummary(payload.counts);
+    setVesselExportStatus(`Exported ${payload.vessel.name}: ${name} — ${total} record(s) (${summary}). Sync API token excluded.`);
+    alert(`Vessel export downloaded.\n\nVessel: ${payload.vessel.name}\nFile: ${name}\nRecords: ${total}\n${summary}\n\nThe sync API token is not written to the file.`);
+  }catch(e){
+    console.error(e);
+    setVesselExportStatus('Vessel export failed: ' + e.message);
+    alert('Vessel export failed: ' + e.message);
+  }finally{
+    if (btn) btn.disabled = false;
+  }
+});
+
+document.getElementById('btnImportVessel')?.addEventListener('click', ()=> document.getElementById('fileImportVessel')?.click());
+document.getElementById('fileImportVessel')?.addEventListener('change', async (ev)=>{
+  const file = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!file) return;
+  try{
+    setVesselExportStatus('Reading vessel file…');
+    const payload = await readJsonFileInput(file);
+    if (!isVesselExport(payload)){
+      throw new Error('This file is not a vessel export (format ' + VESSEL_EXPORT_FORMAT + '). Create one with “Export Selected Vessel (JSON)”. Full-database backups go through Restore / Merge on the Setup tab.');
+    }
+    const src = payload.vessel || {};
+    const existing = matchVesselForImport(payload);
+    const total = Object.values(payload.counts || {}).reduce((a,b)=>a+(b||0),0);
+    const summary = vesselExportCountSummary(payload.counts);
+    const msg = existing
+      ? `REPLACE all local data for "${existing.name}" with this file?\n\nFile: ${file.name}\nExported: ${payload.exportedAt || 'unknown'}\nIncoming: ${total} record(s) — ${summary}\n\nThis ship's local entries, receipts, documents, voyage legs and e-ORB records are erased first. Other vessels are untouched.`
+      : `Import "${src.name || 'vessel'}" as a new vessel?\n\nFile: ${file.name}\nExported: ${payload.exportedAt || 'unknown'}\nIncoming: ${total} record(s) — ${summary}`;
+    if (!confirm(msg)){ setVesselExportStatus('Vessel import cancelled.'); return; }
+    setVesselExportStatus('Importing vessel…');
+    const res = await importVesselExport(payload);
+    const verb = res.replacing ? 'replaced' : 'added';
+    setVesselExportStatus(`Vessel ${verb}: ${res.vessel.name} — ${res.written} record(s) written and loaded as the active vessel.`);
+    alert(`Vessel ${verb} from ${file.name}.\n\nVessel: ${res.vessel.name}\nRecords written: ${res.written}\n\nIt is now the active vessel.`);
+  }catch(e){
+    console.error(e);
+    setVesselExportStatus('Vessel import failed: ' + e.message);
+    alert('Vessel import failed: ' + e.message);
+  }
+});
 
 document.getElementById('btnDbBackup')?.addEventListener('click', async ()=>{
   const btn = document.getElementById('btnDbBackup');
