@@ -1265,23 +1265,28 @@
   }
   /* Ship's stamp sits to the left of the Chief Engineer block; the signature image
      sits inside the space above the line, so it reads as signed over the line. */
+  /* No gap: the stamp's right edge is meant to meet the left end of the signature
+     line, and the block is pinned to the line's width so those two edges coincide.
+     Centred rather than bottom-aligned, so the stamp sits level with the signature
+     instead of towering over it. */
   .pr-sign-row{
-    display:flex; justify-content:flex-end; align-items:flex-end; gap:8mm;
+    display:flex; justify-content:flex-end; align-items:center; gap:0;
   }
-  .pr-sign-stamp{ flex:0 0 auto; }
+  .pr-sign-stamp{ flex:0 0 auto; display:flex; align-items:center; justify-content:center; }
   .pr-sign-stamp img{
-    height:22mm; width:auto; max-width:40mm; object-fit:contain; display:block;
+    height:44mm; width:auto; max-width:80mm; object-fit:contain; display:block;
   }
-  .pr-sign-block{ flex:0 0 auto; text-align:right; }
+  .pr-sign-block{ flex:0 0 42mm; text-align:right; }
   .pr-sign-space{
     height:14mm; width:42mm; margin-left:auto; margin-bottom:0; position:relative;
   }
+  /* Centred over the line rather than pushed to its right end. */
   .pr-sign-space img{
-    position:absolute; right:0; bottom:0;
+    position:absolute; left:50%; transform:translateX(-50%); bottom:0;
     max-height:14mm; max-width:42mm; object-fit:contain;
   }
   .pr-sign-line{ width:42mm; height:1px; background:#122238; margin-left:auto; margin-bottom:1.2mm; }
-  .pr-sign-name{ font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; }
+  .pr-sign-name{ font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; overflow-wrap:anywhere; }
   .pr-sign-role{ font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:#5a6578; margin-top:0; }
   .pr-foot{ font-size:9px; color:#8a95a8; margin-top:0.6mm; text-align:center; letter-spacing:0.02em; }
   /* legacy aliases */
@@ -10053,7 +10058,85 @@ async function compressImageFileToPngDataUrl(file, maxEdge=900){
  * ink is found the original is returned untouched, so an image is never silently
  * blanked.
  */
-async function removeWhiteBackgroundDataUrl(srcDataUrl, { lo = 10, hi = 40, chroma = 1.3, pad = 6 } = {}){
+/**
+ * Bounds of the main body of ink, ignoring strays.
+ *
+ * Signatures are photographed on a page that usually holds other marks — the sample
+ * carries a fragment of the signature above it in one corner. Taking the bounding box
+ * of every surviving pixel would include that fragment and leave the real signature a
+ * small feature of a large crop, which then scales down to nothing in the 42mm print
+ * slot. So the ink is grouped into connected blobs and only the main cluster is kept:
+ * the largest blob, anything close enough to be part of the same signature (which
+ * covers dots and detached strokes), and anything large enough to be a second half.
+ * Runs on a downsampled mask — this is about grouping, not precision.
+ */
+function inkClusterBounds(px, w, h, { alphaMin = 24, nearFrac = 0.12, keepFrac = 0.35 } = {}){
+  const scale = Math.max(1, Math.ceil(Math.max(w, h) / 320));
+  const mw = Math.ceil(w / scale), mh = Math.ceil(h / scale);
+  const mask = new Uint8Array(mw * mh);
+  for (let y = 0; y < h; y++){
+    for (let x = 0; x < w; x++){
+      if (px[(y*w + x)*4 + 3] > alphaMin) mask[((y/scale)|0) * mw + ((x/scale)|0)] = 1;
+    }
+  }
+  const label = new Int32Array(mw * mh).fill(-1);
+  const comps = [];
+  const stack = [];
+  for (let i = 0; i < mask.length; i++){
+    if (!mask[i] || label[i] !== -1) continue;
+    const id = comps.length;
+    const c = { area:0, x0:mw, y0:mh, x1:-1, y1:-1 };
+    comps.push(c);
+    stack.length = 0; stack.push(i); label[i] = id;
+    while (stack.length){
+      const p = stack.pop();
+      const cx = p % mw, cy = (p / mw) | 0;
+      c.area++;
+      if (cx < c.x0) c.x0 = cx;
+      if (cx > c.x1) c.x1 = cx;
+      if (cy < c.y0) c.y0 = cy;
+      if (cy > c.y1) c.y1 = cy;
+      for (let dy = -1; dy <= 1; dy++){
+        for (let dx = -1; dx <= 1; dx++){
+          const nx = cx+dx, ny = cy+dy;
+          if (nx<0||ny<0||nx>=mw||ny>=mh) continue;
+          const q = ny*mw + nx;
+          if (mask[q] && label[q] === -1){ label[q] = id; stack.push(q); }
+        }
+      }
+    }
+  }
+  /* Drop specks before grouping, so surviving grain cannot anchor or extend the crop. */
+  const minArea = Math.max(3, Math.round(mw * mh * 0.0002));
+  const kept = comps.filter(c => c.area >= minArea);
+  if (!kept.length) return null;
+  kept.sort((a,b)=> b.area - a.area);
+  comps.length = 0; comps.push(...kept);
+  const main = comps[0];
+  const near = Math.max(mw, mh) * nearFrac;
+  let x0 = main.x0, y0 = main.y0, x1 = main.x1, y1 = main.y1;
+  /* Grown against the running box, so a chain of strokes pulls the whole signature in
+     while an isolated corner fragment stays out. */
+  for (let i = 1; i < comps.length; i++){
+    const c = comps[i];
+    const gapX = Math.max(0, Math.max(x0 - c.x1, c.x0 - x1));
+    const gapY = Math.max(0, Math.max(y0 - c.y1, c.y0 - y1));
+    if ((gapX <= near && gapY <= near) || c.area >= main.area * keepFrac){
+      if (c.x0 < x0) x0 = c.x0;
+      if (c.x1 > x1) x1 = c.x1;
+      if (c.y0 < y0) y0 = c.y0;
+      if (c.y1 > y1) y1 = c.y1;
+    }
+  }
+  return {
+    minX: x0 * scale,
+    minY: y0 * scale,
+    maxX: Math.min(w - 1, (x1 + 1) * scale - 1),
+    maxY: Math.min(h - 1, (y1 + 1) * scale - 1)
+  };
+}
+
+async function removeWhiteBackgroundDataUrl(srcDataUrl, { lo = 10, hi = 40, neutralLo = 26, neutralHi = 62, chroma = 1.3, pad = 6 } = {}){
   if (!srcDataUrl || typeof srcDataUrl !== 'string' || !srcDataUrl.startsWith('data:image/')) return srcDataUrl;
   const img = new Image();
   await new Promise((resolve, reject)=>{
@@ -10135,7 +10218,15 @@ async function removeWhiteBackgroundDataUrl(srcDataUrl, { lo = 10, hi = 40, chro
     return (a*(1-tx) + b*tx)*(1-ty) + (c*(1-tx) + d*tx)*ty;
   };
 
+  /* Two independent kinds of evidence, each with its own ramp.
+     Coloured pixels are ink even when pale, so chroma gets the low bar. A neutral
+     pixel could equally be paper grain or a shadow, so it has to be clearly darker
+     than the paper beside it before it counts — a single shared threshold let paper
+     texture through as ink and defeated the crop entirely. Black ink still passes
+     easily on the neutral ramp, being far darker than any grain. */
   const span = Math.max(1, hi - lo);
+  const neutralSpan = Math.max(1, neutralHi - neutralLo);
+  const ramp = (v, from, width)=> v <= from ? 0 : Math.min(1, (v - from) / width);
   let minX = w, minY = h, maxX = -1, maxY = -1, inkCount = 0;
   for (let y = 0; y < h; y++){
     for (let x = 0; x < w; x++){
@@ -10144,11 +10235,8 @@ async function removeWhiteBackgroundDataUrl(srcDataUrl, { lo = 10, hi = 40, chro
       const r = px[i], g = px[i+1], b = px[i+2];
       const sat = Math.max(r,g,b) - Math.min(r,g,b);
       const darker = paperAt(x, y) - luma[p];
-      const score = Math.max(darker, sat * chroma);
-      let a;
-      if (score <= lo) a = 0;
-      else if (score >= hi) a = px[i+3];
-      else a = Math.round(px[i+3] * (score - lo) / span);
+      const k = Math.max(ramp(sat * chroma, lo, span), ramp(darker, neutralLo, neutralSpan));
+      const a = Math.round(px[i+3] * k);
       px[i+3] = a;
       if (a > 24){
         inkCount++;
@@ -10163,9 +10251,13 @@ async function removeWhiteBackgroundDataUrl(srcDataUrl, { lo = 10, hi = 40, chro
   if (maxX < 0 || inkCount < (w*h) * 0.0005) return srcDataUrl;
 
   ctx.putImageData(data, 0, 0);
-  const x0 = Math.max(0, minX - pad), y0 = Math.max(0, minY - pad);
-  const cw = Math.min(w, maxX + pad + 1) - x0;
-  const ch = Math.min(h, maxY + pad + 1) - y0;
+  /* Crop to the signature itself rather than to every mark on the page: a plain
+     bounding box stretches to swallow a stray stroke from the signature above, which
+     then shrinks the real one to nothing inside the 42mm slot. */
+  const bounds = inkClusterBounds(px, w, h) || { minX, minY, maxX, maxY };
+  const x0 = Math.max(0, bounds.minX - pad), y0 = Math.max(0, bounds.minY - pad);
+  const cw = Math.min(w, bounds.maxX + pad + 1) - x0;
+  const ch = Math.min(h, bounds.maxY + pad + 1) - y0;
   const out = document.createElement('canvas');
   out.width = cw; out.height = ch;
   out.getContext('2d').drawImage(canvas, x0, y0, cw, ch, 0, 0, cw, ch);
@@ -13864,7 +13956,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v98';
+let androidInstallCacheName = 'noon-report-v99';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
