@@ -13202,9 +13202,23 @@ async function fetchSyncJson(url, options = {}){
     if (res.status === 401 || res.status === 403){
       const sentAuth = (opts.headers && opts.headers.Authorization) || '';
       const sentToken = sentAuth.replace(/^Bearer\s+/i, '');
-      throw new Error(sentToken
-        ? `${detail} (HTTP ${res.status}) — the server rejected the token ${maskSyncToken(sentToken)}. Re-enter the API token in Setup → Server Sync and press Save, then retry; saving replaces the copy stored on every vessel.`
-        : `${detail} (HTTP ${res.status}) — no API token was sent. Enter the token in Setup → Server Sync and save.`);
+      if (!sentToken){
+        throw new Error(`${detail} (HTTP ${res.status}) — no API token was sent. Enter the token in Setup → Server Sync and save.`);
+      }
+      /*
+       * Distinguish "wrong token" from "server never got its SYNC_API_TOKEN".
+       * server.py falls back to `API_TOKEN == "change-me-in-production" and not auth`,
+       * so a server still on the default accepts ANONYMOUS requests and rejects every
+       * authenticated one — the same 401 as a bad token, opposite cause and fix.
+       */
+      let anonymousWorks = false;
+      try{
+        const probe = await fetch(url, { cache:'no-store', method:'GET' });
+        anonymousWorks = probe.status !== 401 && probe.status !== 403;
+      }catch(_){}
+      throw new Error(anonymousWorks
+        ? `${detail} (HTTP ${res.status}) — the server accepts requests with NO token but rejects this one, which means it is still running with the default SYNC_API_TOKEN. The token here is fine; set SYNC_API_TOKEN=<your token> on the sync server and restart it.`
+        : `${detail} (HTTP ${res.status}) — the server rejected the token ${maskSyncToken(sentToken)}. Check it matches the sync server's SYNC_API_TOKEN, then re-enter it in Setup → Server Sync and press Save.`);
     }
     throw new Error(detail);
   }
@@ -14239,7 +14253,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v104';
+let androidInstallCacheName = 'noon-report-v105';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
