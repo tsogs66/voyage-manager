@@ -126,7 +126,7 @@ def main() -> int:
             payload={"username": "admin", "password": "admin-secret"},
         )
         check("admin logs in", status, 200)
-        check("admin has the admin role", login.get("role"), "admin")
+        check("admin has the fleet manager role", login.get("role"), "fleet_manager")
         check("admin has no vessel assigned", login.get("vessel"), None)
         admin_session = login["sessionToken"]
 
@@ -185,7 +185,7 @@ def main() -> int:
             payload={"username": "fangcheng", "password": "vessel-secret"},
         )
         check("vessel user logs in", status, 200)
-        check("role is vessel", vlogin.get("role"), "vessel")
+        check("role is chief engineer", vlogin.get("role"), "chief_engineer")
         check("login returns its vessel", vlogin["vessel"]["vesselId"], "m-v-fangcheng")
         check("login returns the company", vlogin["vessel"]["company"], "Pacific Ocean Shipping")
         check("login returns the sync token", vlogin["vessel"]["token"], vessel["token"])
@@ -262,13 +262,94 @@ def main() -> int:
         _, listing = request(f"{srv.base}/api/admin/vessels", session=admin_session)
         check("still two vessels, not three", len(listing["vessels"]), 2)
 
+
+        print("\ncrew rotation: transfer, history, and who may still write")
+        # Post the Fangcheng engineer across to Roadstead, as a manager would at
+        # a crew change. The old assignment closes in the same transaction.
+        status, moved = request(
+            f"{srv.base}/api/admin/assign", session=admin_session, method="POST",
+            payload={"username": "fangcheng", "vesselId": "m-v-roadstead",
+                     "note": "crew change Singapore"},
+        )
+        check("the transfer is accepted", status, 200)
+        check("he is posted to the new ship", moved["assignment"]["vesselId"], "m-v-roadstead")
+
+        status, relogin = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "fangcheng", "password": "vessel-secret"},
+        )
+        moved_session = relogin["sessionToken"]
+        check("login now returns the new ship", relogin["vessel"]["vesselId"], "m-v-roadstead")
+        check("both ships are in his history", sorted(v["vesselId"] for v in relogin["history"]),
+              ["m-v-fangcheng", "m-v-roadstead"])
+
+        status, _ = request(
+            f"{srv.base}/api/voyage/m-v-roadstead/50/B", session=moved_session,
+            method="PUT", payload={"entries": []},
+        )
+        check("he writes to the ship he is on", status, 200)
+
+        # The point of the period model: he keeps the record he sailed, but the
+        # relief owns it now.
+        status, _ = request(f"{srv.base}/api/voyage/m-v-fangcheng", session=moved_session)
+        check("he still reads his previous ship", status, 200)
+        status, refused = request(
+            f"{srv.base}/api/voyage/m-v-fangcheng/22/B", session=moved_session,
+            method="PUT", payload={"entries": []},
+        )
+        check("he can no longer write to it", refused and 403, 403)
+        check("the refusal says why", refused.get("reason"), "not_current_vessel")
+
+        status, hist = request(f"{srv.base}/api/assignments/fangcheng", session=moved_session)
+        check("he can read his own service record", status, 200)
+        check("it shows two postings", len(hist["assignments"]), 2)
+        check("the current one is the new ship",
+              next(a["vesselId"] for a in hist["assignments"] if a["current"]), "m-v-roadstead")
+
+        status, _ = request(f"{srv.base}/api/assignments/roadstead", session=moved_session)
+        check("he cannot read another engineer's record", status, 403)
+
+        status, crew = request(f"{srv.base}/api/admin/crew/m-v-fangcheng", session=admin_session)
+        check("the manager sees who sailed a ship", status, 200)
+        check("and that nobody is on it now", crew["crew"]["chiefEngineer"], None)
+
+        print("\nimporting a vessel that is not in the database")
+        status, imported = request(
+            f"{srv.base}/api/vessels/import", session=moved_session, method="POST",
+            payload={"vesselName": "M/V Local Only", "imo": "9999001",
+                     "company": "Pacific Ocean Shipping"},
+        )
+        check("an engineer may register an unlisted ship", status, 200)
+        check("it is created", imported["created"], True)
+        check("and he is posted to it", imported["assignment"]["vesselId"], "m-v-local-only")
+        status, _ = request(
+            f"{srv.base}/api/voyage/m-v-local-only/1/B", session=moved_session,
+            method="PUT", payload={"entries": []},
+        )
+        check("so his local data can be pushed", status, 200)
+
+        status, clash = request(
+            f"{srv.base}/api/vessels/import", session=moved_session, method="POST",
+            payload={"vesselName": "M/V Renamed", "imo": "9722101"},
+        )
+        check("but he cannot overwrite a registered ship", status, 409)
+        check("the refusal names the reason", clash.get("reason"), "already_registered")
+
+        status, mgr_import = request(
+            f"{srv.base}/api/vessels/import", session=admin_session, method="POST",
+            payload={"vesselName": "M/V Fangcheng", "imo": "9722101",
+                     "company": "Renamed Marine"},
+        )
+        check("the fleet manager may change vessel details", status, 200)
+        check("and the change lands", mgr_import["vessel"]["company"], "Renamed Marine")
+
         print("\nsession lifecycle")
-        status, me = request(f"{srv.base}/api/auth/me", session=vessel_session)
-        check("me returns the logged-in vessel", me["vessel"]["vesselId"], "m-v-fangcheng")
-        request(f"{srv.base}/api/auth/logout", session=vessel_session, method="POST")
-        status, _ = request(f"{srv.base}/api/auth/me", session=vessel_session)
+        status, me = request(f"{srv.base}/api/auth/me", session=moved_session)
+        check("me returns the ship he was last posted to", me["vessel"]["vesselId"], "m-v-local-only")
+        request(f"{srv.base}/api/auth/logout", session=moved_session, method="POST")
+        status, _ = request(f"{srv.base}/api/auth/me", session=moved_session)
         check("the session is dead after logout", status, 401)
-        status, _ = request(f"{srv.base}/api/voyage/m-v-fangcheng", session=vessel_session)
+        status, _ = request(f"{srv.base}/api/voyage/m-v-roadstead", session=moved_session)
         check("the dead session cannot sync", status, 401)
 
     print()

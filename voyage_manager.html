@@ -1532,6 +1532,7 @@
         <button class="primary small" id="btnSaveVesselIdentity">Save Vessel Details</button>
       </div>
       <div class="vessel-save-status" id="vesselSaveStatus" role="status" aria-live="polite"></div>
+      <div class="vessel-locked-note" id="vesselIdentityNote"></div>
       <div class="hint">Vessel name, company, Chief Engineer, DWT and IMO number are stored per vessel and used on printouts, CII and the e-ORB prefill.</div>
 
       <h3 class="sub">Vessel Stamp</h3>
@@ -14406,7 +14407,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v107';
+let androidInstallCacheName = 'noon-report-v108';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -16567,7 +16568,7 @@ async function applyVesselAssignment(vessel, serverUrl){
 function renderVesselLock(){
   const session = state.session || {};
   const vessel = session.vessel;
-  const isAdmin = session.role === 'admin';
+  const isAdmin = session.role === 'fleet_manager' || session.role === 'admin';
   const who = session.username ? `Signed in as ${session.username}` : 'Not signed in';
   const label = document.getElementById('assignedVesselLabel');
   if (label){
@@ -16581,6 +16582,23 @@ function renderVesselLock(){
     const el = document.getElementById(id);
     if (el) el.disabled = lockSwitcher;
   });
+  /* Vessel identity is the fleet manager's record, not the ship's. */
+  const identityLocked = !!session.username && !isAdmin;
+  ['s_vesselName', 's_imoNo', 's_company'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el){
+      el.readOnly = identityLocked;
+      el.title = identityLocked
+        ? 'Vessel name, IMO and company are held in the central database. Ask the fleet manager to change them.'
+        : '';
+    }
+  });
+  const idNote = document.getElementById('vesselIdentityNote');
+  if (idNote){
+    idNote.textContent = identityLocked
+      ? 'Vessel name, IMO and company come from the central database — changing them needs a fleet manager login.'
+      : '';
+  }
   const note = document.getElementById('vesselLockNote');
   if (note){
     note.textContent = lockSwitcher
@@ -16607,7 +16625,8 @@ async function handleLoginSubmit(){
       expiresAt: out.expiresAt,
       username: out.username,
       role: out.role,
-      vessel: out.vessel || null
+      vessel: out.vessel || null,
+      history: out.history || []
     });
     state.session = session;
     setLoginStatus('loginStatus', '', null);
@@ -16623,7 +16642,7 @@ async function enterAssignStep(session){
   const signedAs = document.getElementById('loginSignedAs');
   if (signedAs){
     signedAs.textContent = session.role === 'admin'
-      ? `Signed in as ${session.username} (administrator) — choose the vessel to load.`
+      ? `Signed in as ${session.username} (fleet manager) — choose the vessel to load.`
       : `Signed in as ${session.username}.`;
   }
   setLoginStatus('loginAssignStatus', '', null);
@@ -16641,7 +16660,8 @@ async function enterAssignStep(session){
   }
 
   const pick = document.getElementById('loginVesselPick');
-  if (session.role === 'admin'){
+  const manager = session.role === 'fleet_manager' || session.role === 'admin';
+  if (manager){
     try{
       const out = await loginApiCall(session.serverUrl, '/api/admin/vessels', { session });
       const sel = document.getElementById('login_vesselSelect');
@@ -16660,7 +16680,22 @@ async function enterAssignStep(session){
       setLoginStatus('loginAssignStatus', 'Could not list vessels: ' + err.message, 'err');
     }
   } else if (pick){
-    pick.hidden = true;
+    /* An engineer with a service history may load a previous ship to review it.
+       The server refuses writes to anything but his current posting, so this is
+       read-only in practice — the note says so. */
+    const history = session.history || [];
+    if (history.length > 1){
+      const sel = document.getElementById('login_vesselSelect');
+      state.session.fleet = history;
+      if (sel){
+        sel.innerHTML = history.map(v =>
+          `<option value="${v.vesselId}"${v.vesselId === (session.vessel && session.vessel.vesselId) ? ' selected' : ''}>${v.vesselName} — IMO ${v.imo}${v.vesselId === (session.vessel && session.vessel.vesselId) ? ' (current)' : ' (past — read only)'}</option>`
+        ).join('');
+      }
+      pick.hidden = false;
+    } else {
+      pick.hidden = true;
+    }
   }
 }
 
@@ -16762,7 +16797,11 @@ async function initLoginGate(){
        server we cannot reach must not strand the ship either. */
     loginApiCall(stored.serverUrl, '/api/auth/me', { session: stored })
       .then(out => {
-        const merged = Object.assign({}, stored, { role: out.role, vessel: out.vessel || stored.vessel });
+        const merged = Object.assign({}, stored, {
+          role: out.role,
+          vessel: out.vessel || stored.vessel,
+          history: out.history || stored.history || []
+        });
         state.session = writeStoredSession(merged);
         renderVesselLock();
       })

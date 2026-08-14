@@ -43,6 +43,8 @@ from urllib.parse import unquote, urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from accounts import (  # noqa: E402
     ROLE_ADMIN,
+    ROLE_VESSEL,
+    canonical_role,
     AccountError,
     AccountStore,
 )
@@ -293,11 +295,21 @@ class SyncHandler(BaseHTTPRequestHandler):
 
         session = ACCOUNTS.get_session(session_header or token)
         if session:
+            if session["role"] == ROLE_ADMIN:
+                # The fleet manager sees the whole database.
+                return {"kind": "session", "role": session["role"],
+                        "username": session["username"], "vesselId": None,
+                        "readable": None, "writable": None, "reason": ""}
+            # A chief engineer reads every ship he has sailed, writes only the
+            # one he is on now.
+            username = session["username"]
             return {
                 "kind": "session",
                 "role": session["role"],
-                "username": session["username"],
-                "vesselId": None if session["role"] == ROLE_ADMIN else session["vesselId"],
+                "username": username,
+                "vesselId": ACCOUNTS.current_vessel(username),
+                "readable": set(ACCOUNTS.readable_vessels(username)),
+                "writable": ACCOUNTS.current_vessel(username),
                 "reason": "",
             }
 
@@ -305,46 +317,69 @@ class SyncHandler(BaseHTTPRequestHandler):
             vessel = ACCOUNTS.get_vessel_by_token(token)
             if vessel:
                 return {
-                    "kind": "vessel",
-                    "role": "vessel",
-                    "username": None,
+                    "kind": "vessel", "role": ROLE_VESSEL, "username": None,
                     "vesselId": vessel["vesselId"],
+                    "readable": {vessel["vesselId"]}, "writable": vessel["vesselId"],
                     "reason": "",
                 }
 
         if not TOKEN_CONFIGURED:
-            return {"kind": "open", "role": ROLE_ADMIN, "username": None, "vesselId": None, "reason": ""}
+            return {"kind": "open", "role": ROLE_ADMIN, "username": None, "vesselId": None,
+                    "readable": None, "writable": None, "reason": ""}
 
         if not token:
-            return {"kind": "none", "role": "", "username": None, "vesselId": None, "reason": "missing_token"}
+            return {"kind": "none", "role": "", "username": None, "vesselId": None,
+                    "readable": set(), "writable": None, "reason": "missing_token"}
 
         if hmac.compare_digest(
             self.headers.get("Authorization", "").encode("latin-1", "replace"),
             f"Bearer {API_TOKEN}".encode("utf-8"),
         ):
-            return {"kind": "master", "role": ROLE_ADMIN, "username": None, "vesselId": None, "reason": ""}
+            return {"kind": "master", "role": ROLE_ADMIN, "username": None, "vesselId": None,
+                    "readable": None, "writable": None, "reason": ""}
 
-        return {"kind": "none", "role": "", "username": None, "vesselId": None, "reason": "token_mismatch"}
+        return {"kind": "none", "role": "", "username": None, "vesselId": None,
+                "readable": set(), "writable": None, "reason": "token_mismatch"}
 
-    def _authorize_vessel(self, vessel: str) -> dict | None:
-        """Principal for a request about one vessel, or None after replying 4xx."""
+    def _authorize_vessel(self, vessel: str, write: bool = False) -> dict | None:
+        """Principal for a request about one vessel, or None after replying 4xx.
+
+        Reading is allowed for any ship in the caller's service history; writing
+        only for the ship they are assigned to right now. A relieved engineer
+        keeps his records but can no longer change them.
+        """
         principal = self._principal()
         if principal["reason"]:
             self._reject_unauthorized(principal["reason"])
             return None
-        scoped = principal["vesselId"]
-        if scoped and scoped != vessel:
+
+        readable = principal.get("readable")
+        if readable is None:          # fleet manager, master token, or open mode
+            return principal
+
+        if write:
+            if principal.get("writable") != vessel:
+                current = principal.get("writable")
+                json_response(
+                    self, HTTPStatus.FORBIDDEN,
+                    {"error": "forbidden", "reason": "not_current_vessel",
+                     "message": (
+                         f"This login may only write to the vessel it is currently "
+                         f"assigned to ({current or 'none'}), not '{vessel}'."
+                         if current else
+                         f"This login is not assigned to any vessel, so it cannot "
+                         f"write to '{vessel}'.")},
+                )
+                return None
+            return principal
+
+        if vessel not in readable:
             json_response(
-                self,
-                HTTPStatus.FORBIDDEN,
-                {
-                    "error": "forbidden",
-                    "reason": "wrong_vessel",
-                    "message": (
-                        f"This login is assigned to vessel '{scoped}' and cannot "
-                        f"read or write '{vessel}'."
-                    ),
-                },
+                self, HTTPStatus.FORBIDDEN,
+                {"error": "forbidden", "reason": "wrong_vessel",
+                 "message": (
+                     f"This login has never been assigned to '{vessel}', so its "
+                     f"records are not available.")},
             )
             return None
         return principal
@@ -476,6 +511,7 @@ class SyncHandler(BaseHTTPRequestHandler):
                     "username": principal["username"],
                     "role": principal["role"],
                     "vessel": self._vessel_public(vessel, include_token=True),
+                    "history": self._readable_fleet(principal),
                 },
             )
             return
@@ -495,6 +531,30 @@ class SyncHandler(BaseHTTPRequestHandler):
             if self._require_admin() is None:
                 return
             json_response(self, HTTPStatus.OK, {"ok": True, "accounts": ACCOUNTS.list_accounts()})
+            return
+
+        if len(parts) == 4 and parts[:3] == ["api", "admin", "crew"]:
+            if self._require_admin() is None:
+                return
+            json_response(self, HTTPStatus.OK,
+                          {"ok": True, "crew": ACCOUNTS.vessel_crew(safe_slug(parts[3]))})
+            return
+
+        # An engineer's own service record. A fleet manager may read anyone's.
+        if len(parts) >= 3 and parts[:2] == ["api", "assignments"]:
+            principal = self._principal()
+            if principal["reason"]:
+                self._reject_unauthorized(principal["reason"])
+                return
+            who = parts[2] if len(parts) > 2 else principal["username"]
+            if principal["role"] != ROLE_ADMIN and who != principal["username"]:
+                json_response(self, HTTPStatus.FORBIDDEN,
+                              {"error": "forbidden", "reason": "not_your_record",
+                               "message": "You may only read your own assignment history."})
+                return
+            json_response(self, HTTPStatus.OK,
+                          {"ok": True, "username": who,
+                           "assignments": ACCOUNTS.assignment_history(username=who)})
             return
 
         if len(parts) >= 2 and parts[0] == "api" and parts[1] == "voyage":
@@ -587,6 +647,19 @@ class SyncHandler(BaseHTTPRequestHandler):
             out["token"] = vessel["token"]
         return out
 
+
+    def _readable_fleet(self, principal: dict) -> list:
+        """Ships this caller may read: the fleet for a manager, the engineer's
+        service history otherwise."""
+        if principal.get("role") == ROLE_ADMIN:
+            return [self._vessel_public(v, False) for v in ACCOUNTS.list_vessels()]
+        out = []
+        for vessel_id in sorted(principal.get("readable") or []):
+            vessel = ACCOUNTS.get_vessel(vessel_id)
+            if vessel:
+                out.append(self._vessel_public(vessel, False))
+        return out
+
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         parts = [p for p in parsed.path.strip("/").split("/") if p]
@@ -609,6 +682,12 @@ class SyncHandler(BaseHTTPRequestHandler):
                 return self._handle_token_preview(body)
             if parts == ["api", "admin", "accounts"]:
                 return self._handle_create_account(body)
+            if parts == ["api", "admin", "assign"]:
+                return self._handle_assign(body)
+            if parts == ["api", "admin", "release"]:
+                return self._handle_release(body)
+            if parts == ["api", "vessels", "import"]:
+                return self._handle_vessel_import(body)
         except AccountError as err:
             json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(err)})
             return
@@ -661,9 +740,8 @@ class SyncHandler(BaseHTTPRequestHandler):
             )
             return
         session = ACCOUNTS.create_session(account["username"])
-        vessel = (
-            ACCOUNTS.get_vessel(account["vessel_id"]) if account["vessel_id"] else None
-        )
+        current = ACCOUNTS.current_vessel(account["username"]) or account["vessel_id"]
+        vessel = ACCOUNTS.get_vessel(current) if current else None
         json_response(
             self,
             HTTPStatus.OK,
@@ -672,9 +750,15 @@ class SyncHandler(BaseHTTPRequestHandler):
                 "sessionToken": session["sessionToken"],
                 "expiresAt": session["expiresAt"],
                 "username": account["username"],
-                "role": account["role"],
-                # A vessel user gets its own token so the app can sync straight away.
+                "role": canonical_role(account["role"]),
+                # The engineer gets his ship's token so the app can sync at once.
                 "vessel": self._vessel_public(vessel, include_token=True),
+                # Ships he has sailed before — readable, not writable.
+                "history": self._readable_fleet({
+                    "role": canonical_role(account["role"]),
+                    "username": account["username"],
+                    "readable": set(ACCOUNTS.readable_vessels(account["username"])),
+                }),
             },
         )
 
@@ -724,7 +808,16 @@ class SyncHandler(BaseHTTPRequestHandler):
         username = str(body.get("username", "")).strip()
         if username:
             account = ACCOUNTS.create_account(
-                username, str(body.get("password", "")), "vessel", vessel["vesselId"]
+                username, str(body.get("password", "")),
+                str(body.get("role", ROLE_VESSEL)), vessel["vesselId"],
+            )
+            # Open the assignment period too. accounts.vessel_id alone is not a
+            # posting: reads and writes are decided by the assignments table, so
+            # without this the new engineer could not touch his own ship.
+            ACCOUNTS.assign_vessel(
+                username, vessel["vesselId"],
+                assigned_by=(self._principal().get("username") or "fleet_manager"),
+                note="created with vessel",
             )
         json_response(
             self,
@@ -745,6 +838,84 @@ class SyncHandler(BaseHTTPRequestHandler):
         )
         json_response(self, HTTPStatus.OK, {"ok": True, "account": account})
 
+
+    def _handle_assign(self, body: dict) -> None:
+        """Post an engineer to a ship. Re-posting is the transfer: the previous
+        assignment is closed in the same transaction, so there is never a moment
+        where an engineer is on two ships or none."""
+        principal = self._require_admin()
+        if principal is None:
+            return
+        out = ACCOUNTS.assign_vessel(
+            username=str(body.get("username", "")),
+            vessel_id=str(body.get("vesselId", "")),
+            assigned_by=principal.get("username") or "fleet_manager",
+            note=str(body.get("note", "")),
+        )
+        json_response(self, HTTPStatus.OK, {"ok": True, "assignment": out})
+
+    def _handle_release(self, body: dict) -> None:
+        if self._require_admin() is None:
+            return
+        ACCOUNTS.release_vessel(str(body.get("username", "")))
+        json_response(self, HTTPStatus.OK, {"ok": True})
+
+    def _handle_vessel_import(self, body: dict) -> None:
+        """Register a ship that is not in the database yet, from local data.
+
+        A fleet manager may register anything. A chief engineer may register a
+        ship that does not exist — that is how a device with local records for an
+        unlisted vessel gets it into the fleet — and is posted to it immediately,
+        but the vessel is flagged pending_review so the manager sees it appeared
+        from a ship rather than from the office. Neither may quietly overwrite an
+        existing registration: vessel identity is the manager's to change.
+        """
+        principal = self._principal()
+        if principal["reason"] or principal["kind"] != "session":
+            self._reject_unauthorized("missing_token")
+            return
+
+        imo = str(body.get("imo", ""))
+        existing = None
+        try:
+            existing = ACCOUNTS.get_vessel_by_imo(imo)
+        except AccountError:
+            raise
+
+        is_manager = principal["role"] == ROLE_ADMIN
+        if existing and not is_manager:
+            json_response(
+                self, HTTPStatus.CONFLICT,
+                {"error": "already_registered", "reason": "already_registered",
+                 "message": (
+                     f"IMO {existing['imo']} is already registered as "
+                     f"'{existing['vesselName']}'. Ask the fleet manager to change "
+                     f"vessel details."),
+                 "vessel": self._vessel_public(existing, include_token=False)},
+            )
+            return
+
+        vessel = ACCOUNTS.upsert_vessel(
+            vessel_name=str(body.get("vesselName", "")),
+            imo=imo,
+            company=str(body.get("company", "")),
+            vessel_id=(str(body.get("vesselId", "")).strip() or None),
+            created_by=principal["username"] or "",
+            pending_review=not is_manager,
+        )
+        assignment = None
+        if not is_manager:
+            assignment = ACCOUNTS.assign_vessel(
+                principal["username"], vessel["vesselId"],
+                assigned_by=principal["username"], note="self-registered from local data",
+            )
+        json_response(
+            self, HTTPStatus.OK,
+            {"ok": True, "created": existing is None,
+             "vessel": self._vessel_public(vessel, include_token=True),
+             "assignment": assignment},
+        )
+
     def do_PUT(self) -> None:
         parsed = urlparse(self.path)
         parts = [p for p in parsed.path.strip("/").split("/") if p]
@@ -756,7 +927,7 @@ class SyncHandler(BaseHTTPRequestHandler):
         except ValueError:
             json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid path"})
             return
-        if self._authorize_vessel(requested_vessel) is None:
+        if self._authorize_vessel(requested_vessel, write=True) is None:
             return
 
         try:

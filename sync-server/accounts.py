@@ -34,8 +34,16 @@ SESSION_TTL_HOURS = 12
 TOKEN_LENGTH = 40
 SLUG_RE = re.compile(r"^[a-zA-Z0-9._-]{1,64}$")
 
-ROLE_ADMIN = "admin"
-ROLE_VESSEL = "vessel"
+ROLE_ADMIN = "fleet_manager"
+ROLE_VESSEL = "chief_engineer"
+# Older databases wrote these names; both still authenticate.
+LEGACY_ROLES = {"admin": ROLE_ADMIN, "vessel": ROLE_VESSEL}
+ALL_ROLES = (ROLE_ADMIN, ROLE_VESSEL)
+
+
+def canonical_role(role: str) -> str:
+    role = (role or "").strip()
+    return LEGACY_ROLES.get(role, role)
 
 
 def utc_now() -> datetime:
@@ -112,7 +120,9 @@ class AccountStore:
                     imo         TEXT NOT NULL UNIQUE,
                     company     TEXT NOT NULL DEFAULT '',
                     token       TEXT NOT NULL,
-                    created_at  TEXT NOT NULL
+                    created_at  TEXT NOT NULL,
+                    created_by  TEXT NOT NULL DEFAULT '',
+                    pending_review INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE TABLE IF NOT EXISTS accounts (
                     username      TEXT PRIMARY KEY,
@@ -129,7 +139,22 @@ class AccountStore:
                     created_at TEXT NOT NULL,
                     expires_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS assignments (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username    TEXT NOT NULL,
+                    vessel_id   TEXT NOT NULL,
+                    assigned_at TEXT NOT NULL,
+                    released_at TEXT,
+                    assigned_by TEXT NOT NULL DEFAULT '',
+                    note        TEXT NOT NULL DEFAULT ''
+                );
                 CREATE INDEX IF NOT EXISTS idx_vessel_token ON vessels(token);
+                CREATE INDEX IF NOT EXISTS idx_assign_user ON assignments(username);
+                CREATE INDEX IF NOT EXISTS idx_assign_vessel ON assignments(vessel_id);
+                -- One live posting per engineer: a second open row would make
+                -- "which ship am I on" ambiguous at handover.
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_assign_one_open
+                    ON assignments(username) WHERE released_at IS NULL;
                 """
             )
 
@@ -186,10 +211,10 @@ class AccountStore:
             raise AccountError(
                 "Username must be 1-64 characters, letters/digits/dot/dash/underscore"
             )
-        if role not in (ROLE_ADMIN, ROLE_VESSEL):
-            raise AccountError("Role must be 'admin' or 'vessel'")
-        if role == ROLE_VESSEL and not vessel_id:
-            raise AccountError("A vessel account needs a vessel")
+        role = canonical_role(role)
+        if role not in ALL_ROLES:
+            raise AccountError(f"Role must be one of {', '.join(ALL_ROLES)}")
+        # vessel_id is the engineer's CURRENT posting; assignments hold the history.
         salt = secrets.token_hex(16)
         password_hash = self._hash_password(password, salt)
         try:
@@ -278,7 +303,8 @@ class AccountStore:
     # --------------------------------------------------------------- vessels
 
     def upsert_vessel(
-        self, vessel_name: str, imo: str, company: str = "", vessel_id: str | None = None
+        self, vessel_name: str, imo: str, company: str = "", vessel_id: str | None = None,
+        created_by: str = "", pending_review: bool = False
     ) -> dict:
         """Register a vessel and mint its token. Re-registering the same IMO
         updates the details in place and keeps the same slug."""
@@ -300,13 +326,15 @@ class AccountStore:
 
         with self._lock, self._conn:
             self._conn.execute(
-                "INSERT INTO vessels (vessel_id, vessel_name, imo, company, token, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?) "
+                "INSERT INTO vessels "
+                "(vessel_id, vessel_name, imo, company, token, created_at, created_by, pending_review) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(imo) DO UPDATE SET "
                 "  vessel_name = excluded.vessel_name, "
                 "  company = excluded.company, "
                 "  token = excluded.token",
-                (slug, display_name, imo_digits, str(company or "").strip(), token, iso(utc_now())),
+                (slug, display_name, imo_digits, str(company or "").strip(), token,
+                 iso(utc_now()), created_by or "", 1 if pending_review else 0),
             )
         return self.get_vessel(slug) or {}
 
@@ -318,6 +346,8 @@ class AccountStore:
             "company": row["company"],
             "token": row["token"],
             "createdAt": row["created_at"],
+            "createdBy": row["created_by"],
+            "pendingReview": bool(row["pending_review"]),
         }
 
     def get_vessel(self, vessel_id: str) -> dict | None:
@@ -368,6 +398,119 @@ class AccountStore:
             )
         if cur.rowcount == 0:
             raise AccountError("No such vessel")
+
+
+    # ------------------------------------------------------------ assignments
+    #
+    # An assignment is a PERIOD, not a field. That one choice gives transfer,
+    # service history and the access rule the same shape:
+    #
+    #   read   any vessel the engineer has ever been assigned to
+    #   write  only the vessel he is assigned to right now
+    #
+    # So a relieved engineer keeps the history he sailed but cannot alter the
+    # record after signing off, and his relief inherits the full prior log —
+    # which this app needs, since opening ROB and meter readings carry over.
+
+    def assign_vessel(
+        self, username: str, vessel_id: str, assigned_by: str = "", note: str = ""
+    ) -> dict:
+        """Post an engineer to a ship, releasing whatever they were on."""
+        username = (username or "").strip().lower()
+        account = self.get_account(username)
+        if not account:
+            raise AccountError(f"No account '{username}'")
+        if not self.get_vessel(vessel_id):
+            raise AccountError(f"No vessel '{vessel_id}' is registered")
+
+        now = iso(utc_now())
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE assignments SET released_at = ? "
+                "WHERE username = ? AND released_at IS NULL",
+                (now, username),
+            )
+            self._conn.execute(
+                "INSERT INTO assignments "
+                "(username, vessel_id, assigned_at, assigned_by, note) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (username, vessel_id, now, assigned_by or "", note or ""),
+            )
+            self._conn.execute(
+                "UPDATE accounts SET vessel_id = ? WHERE username = ?",
+                (vessel_id, username),
+            )
+        return {"username": username, "vesselId": vessel_id, "assignedAt": now}
+
+    def release_vessel(self, username: str) -> None:
+        """Sign an engineer off without posting them anywhere else."""
+        username = (username or "").strip().lower()
+        now = iso(utc_now())
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "UPDATE assignments SET released_at = ? "
+                "WHERE username = ? AND released_at IS NULL",
+                (now, username),
+            )
+            self._conn.execute(
+                "UPDATE accounts SET vessel_id = NULL WHERE username = ?", (username,)
+            )
+        if cur.rowcount == 0:
+            raise AccountError(f"'{username}' is not assigned to a vessel")
+
+    def current_vessel(self, username: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT vessel_id FROM assignments "
+                "WHERE username = ? AND released_at IS NULL",
+                ((username or "").strip().lower(),),
+            ).fetchone()
+        return row["vessel_id"] if row else None
+
+    def readable_vessels(self, username: str) -> list[str]:
+        """Every ship this engineer has ever sailed — their service history."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT DISTINCT vessel_id FROM assignments WHERE username = ?",
+                ((username or "").strip().lower(),),
+            ).fetchall()
+        return [r["vessel_id"] for r in rows]
+
+    def assignment_history(self, username: str | None = None,
+                           vessel_id: str | None = None) -> list[dict]:
+        sql = ("SELECT a.*, v.vessel_name, v.imo, v.company FROM assignments a "
+               "LEFT JOIN vessels v ON v.vessel_id = a.vessel_id WHERE 1=1")
+        args: list = []
+        if username:
+            sql += " AND a.username = ?"
+            args.append((username or "").strip().lower())
+        if vessel_id:
+            sql += " AND a.vessel_id = ?"
+            args.append(vessel_id)
+        sql += " ORDER BY a.assigned_at DESC"
+        with self._lock:
+            rows = self._conn.execute(sql, args).fetchall()
+        return [
+            {
+                "username": r["username"],
+                "vesselId": r["vessel_id"],
+                "vesselName": r["vessel_name"],
+                "imo": r["imo"],
+                "company": r["company"],
+                "assignedAt": r["assigned_at"],
+                "releasedAt": r["released_at"],
+                "assignedBy": r["assigned_by"],
+                "note": r["note"],
+                "current": r["released_at"] is None,
+            }
+            for r in rows
+        ]
+
+    def vessel_crew(self, vessel_id: str) -> dict:
+        """Who is on this ship now, and who has been."""
+        history = self.assignment_history(vessel_id=vessel_id)
+        current = next((h["username"] for h in history if h["current"]), None)
+        return {"vesselId": vessel_id, "chiefEngineer": current, "history": history}
 
     # -------------------------------------------------------------- sessions
 

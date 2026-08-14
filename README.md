@@ -234,10 +234,61 @@ the user and decides which **single** vessel this copy of the program loads.
 
 ### Roles
 
-| Role | Sees | Vessel |
-|------|------|--------|
-| `admin` | The whole fleet, plus vessel/account management | Picks one ship to load, one at a time |
-| `vessel` | Only its own ship | Fixed — the switcher is locked |
+| Role | Reads | Writes | Manages |
+|------|-------|--------|---------|
+| `fleet_manager` | Every vessel | Every vessel | Vessels, logins, assignments, transfers |
+| `chief_engineer` | Every ship he has **ever** been assigned to | Only the ship he is assigned to **right now** | Nothing |
+
+### Assignments are periods, not fields
+
+```
+assignments(username, vessel_id, assigned_at, released_at, assigned_by, note)
+```
+
+A posting is a row with `released_at` empty. Re-posting an engineer closes the old
+row and opens a new one in the same transaction, so an engineer is never on two
+ships or none. One partial unique index enforces a single live posting each.
+
+That single shape gives three things at once:
+
+- **Transfer** — one `POST /api/admin/assign` moves an engineer; the app follows on
+  his next login.
+- **Service history** — every ship he sailed, and when, for him and for the vessel.
+- **The access rule** — a relieved engineer keeps the records he sailed but can no
+  longer change them, while his relief inherits the full prior log. That matters
+  here: opening ROB and meter readings carry over from the last entry, so a new
+  chief engineer joining a ship with no history cannot start a voyage correctly.
+
+### Importing a vessel that is not in the database
+
+`POST /api/vessels/import` with the vessel name, IMO and company:
+
+- **Fleet manager** — registers it, or updates an existing registration.
+- **Chief engineer** — may register a ship that is **not yet listed** (this is how a
+  device holding local records for an unlisted vessel gets it into the fleet) and is
+  posted to it immediately. The vessel is flagged `pendingReview` so the manager can
+  see it arrived from a ship rather than the office.
+- Neither path lets an engineer overwrite an existing registration — that returns
+  `409 already_registered`. Vessel name, IMO and company are the manager's record,
+  and the app makes those fields read-only for anyone else.
+
+### Sample fleet
+
+The four scenario vessels built into the app double as the sample data:
+
+```bash
+python3 sync-server/seed_demo_fleet.py --db /opt/voyage-manager/sync-server/sync-data/accounts.db
+```
+
+| Vessel | IMO | Slug | Chief engineer |
+|--------|-----|------|----------------|
+| M/V HARBOUR KEY | 9722101 | `mv-harbour-key` | `aruiz` |
+| M/V ROADSTEAD | 9684412 | `mv-roadstead` | `hberg` |
+| M/V CIRCUMNAV | 9810024 | `mv-circumnav` | `pnair` |
+| M/V PACIFIC TRADER | 9756231 | `mv-pacific-trader` | `mdalisay` |
+
+Slugs match the app's Test Fleet, so the seeded database and the local demo data
+line up and can actually sync. Passwords are printed once.
 
 The first administrator is created on first start. Set `SYNC_ADMIN_PASSWORD` to
 choose the password, or let the server generate one — it is printed once, at
@@ -299,8 +350,13 @@ its vessel assignment instead of locking the crew out of their own records.
 | `POST /api/auth/password` | session | Change own password |
 | `GET/POST /api/admin/vessels` | admin | List / register vessels |
 | `DELETE /api/admin/vessels/<id>` | admin | Remove a vessel and its accounts |
-| `POST /api/admin/token-preview` | admin | Token for a name + IMO, without creating anything |
-| `GET/POST /api/admin/accounts` | admin | List / create logins |
+| `POST /api/admin/token-preview` | manager | Token for a name + IMO, without creating anything |
+| `GET/POST /api/admin/accounts` | manager | List / create logins |
+| `POST /api/admin/assign` | manager | Post an engineer to a ship (this is also the transfer) |
+| `POST /api/admin/release` | manager | Sign an engineer off without re-posting |
+| `GET /api/admin/crew/<vesselId>` | manager | Who is on a ship now, and who has been |
+| `GET /api/assignments/<username>` | own record, or manager | Service history |
+| `POST /api/vessels/import` | any login | Register a vessel absent from the database |
 
 Data routes are scoped: a vessel login reaching another ship gets `403 wrong_vessel`.
 The legacy shared `SYNC_API_TOKEN` still works and still reaches every vessel, so
@@ -332,7 +388,8 @@ Node and Python 3 — nothing to install.
 | `tests/check_js_syntax.js` | Every shipped `.js` file and each inline `<script>` in `voyage_manager.html` parses. There is no build step, so a syntax error otherwise ships silently. |
 | `tests/check_assets.js` | `sw.js`'s cache name and precache list still match `androidInstallCacheName` / `androidInstallAssets` in the app, and every precached file exists. A stale cache name leaves phones on the previous build. |
 | `tests/test_sync_auth.py` | Starts `sync-server/server.py` with and without `SYNC_API_TOKEN` and asserts who gets in, including the 401 `reason` codes and a non-ASCII token. |
-| `tests/test_accounts.py` | Logins, derived vessel tokens, and the rule that one login reaches exactly one vessel — including that a vessel account is refused another ship and that the legacy shared token still works. |
+| `tests/test_accounts.py` | Logins, derived vessel tokens, crew rotation, and the read-history/write-current rule — including that a transferred engineer still reads his old ship but can no longer write to it, and that the legacy shared token still works. |
+| `tests/browser_login_e2e.js` | Not in CI (no browser there). Drives the real login UI in Chromium against a live seeded server. Run it after touching the gate. |
 | `tests/test_install_quoting.sh` | The installer's token quoting, checked against systemd's own parser via `systemd-analyze`. Unquoted, systemd splits an `Environment=` value on whitespace and reads `%` as a specifier, so a token with a space or a `%` reached the server truncated — leaving it on its default token, rejecting the very token the installer printed. |
 
 CI also runs `shellcheck` over the install scripts, which are piped from `curl` straight
