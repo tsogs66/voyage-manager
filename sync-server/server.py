@@ -45,6 +45,7 @@ from accounts import (  # noqa: E402
     ROLE_ADMIN,
     ROLE_VESSEL,
     canonical_role,
+    generate_password,
     AccountError,
     AccountStore,
 )
@@ -816,19 +817,54 @@ class SyncHandler(BaseHTTPRequestHandler):
         json_response(self, HTTPStatus.OK, {"ok": True})
 
     def _handle_password_change(self, body: dict) -> None:
+        """Only the fleet manager changes passwords.
+
+        A chief engineer cannot change his own. That is not about trust — his
+        password is generated precisely so it is strong enough to survive being on a
+        laptop that signs in offline, and letting him replace it with one he can
+        remember is the one move that undoes it. Resets go through the office, which
+        is also where a crew change is handled anyway.
+        """
         principal = self._principal()
         if principal["reason"] or principal["kind"] != "session":
             self._reject_unauthorized("missing_token")
             return
-        current = str(body.get("currentPassword", ""))
-        if not ACCOUNTS.verify_password(principal["username"], current):
+        if principal["role"] != ROLE_ADMIN:
             json_response(
-                self, HTTPStatus.UNAUTHORIZED,
-                {"error": "unauthorized", "message": "Current password is incorrect."},
+                self, HTTPStatus.FORBIDDEN,
+                {"error": "forbidden", "reason": "manager_only",
+                 "message": "Only the fleet manager can change a password. "
+                            "Ask the office for a reset."},
             )
             return
-        ACCOUNTS.set_password(principal["username"], str(body.get("newPassword", "")))
-        json_response(self, HTTPStatus.OK, {"ok": True})
+
+        target = str(body.get("username", "")).strip().lower() or principal["username"]
+        account = ACCOUNTS.get_account(target)
+        if not account:
+            raise AccountError(f"No account '{target}'")
+
+        # Changing your own still needs the current one, so a walked-away session
+        # cannot lock the office out of its own account.
+        if target == principal["username"]:
+            if not ACCOUNTS.verify_password(target, str(body.get("currentPassword", ""))):
+                json_response(
+                    self, HTTPStatus.UNAUTHORIZED,
+                    {"error": "unauthorized", "message": "Current password is incorrect."},
+                )
+                return
+
+        # A chief engineer's replacement is generated too — a reset that let the
+        # office type one in would reopen what generation closed.
+        if canonical_role(account["role"]) != ROLE_ADMIN:
+            new_password = generate_password()
+            ACCOUNTS.set_password(target, new_password)
+            json_response(self, HTTPStatus.OK,
+                          {"ok": True, "username": target, "password": new_password,
+                           "generated": True})
+            return
+
+        ACCOUNTS.set_password(target, str(body.get("newPassword", "")))
+        json_response(self, HTTPStatus.OK, {"ok": True, "username": target, "generated": False})
 
     def _handle_token_preview(self, body: dict) -> None:
         """The key generator: what token would this vessel name + IMO produce?"""

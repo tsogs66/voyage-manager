@@ -506,6 +506,68 @@ def main() -> int:
         )
         check("the generated one does", status, 200)
 
+
+        print("\nonly the office changes passwords")
+        status, refused = request(
+            f"{srv.base}/api/auth/password", session=moved_session, method="POST",
+            payload={"currentPassword": fangcheng_pw, "newPassword": "easy-to-remember"},
+        )
+        check("an engineer cannot change his own", status, 403)
+        check("and is told where to go", refused.get("reason"), "manager_only")
+        status, _ = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "fangcheng", "password": "easy-to-remember"},
+        )
+        check("the weak password he wanted does not work", status, 401)
+        status, _ = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "fangcheng", "password": fangcheng_pw},
+        )
+        check("his generated one still does", status, 200)
+
+        status, reset = request(
+            f"{srv.base}/api/auth/password", session=admin_session, method="POST",
+            payload={"username": "fangcheng", "newPassword": "office-picked-this"},
+        )
+        check("the manager can reset it", status, 200)
+        check("the replacement is generated, not the one asked for", reset["generated"], True)
+        check("and it is not what was sent", reset["password"] == "office-picked-this", False)
+        status, _ = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "fangcheng", "password": "office-picked-this"},
+        )
+        check("so that password does not work either", status, 401)
+        status, relog = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "fangcheng", "password": reset["password"]},
+        )
+        check("the generated replacement does", status, 200)
+        moved_session = relog["sessionToken"]
+
+        status, _ = request(
+            f"{srv.base}/api/auth/password", session=admin_session, method="POST",
+            payload={"username": "nobody-here", "newPassword": "x"},
+        )
+        check("resetting an account that does not exist is refused", status, 400)
+
+        # The manager's own password is still his to choose, and still needs the old one.
+        status, _ = request(
+            f"{srv.base}/api/auth/password", session=admin_session, method="POST",
+            payload={"currentPassword": "wrong", "newPassword": "new-admin-secret"},
+        )
+        check("changing his own with a wrong current password fails", status, 401)
+        status, own = request(
+            f"{srv.base}/api/auth/password", session=admin_session, method="POST",
+            payload={"currentPassword": "admin-secret", "newPassword": "new-admin-secret"},
+        )
+        check("with the right one it succeeds", status, 200)
+        check("and his is not generated for him", own["generated"], False)
+        status, _ = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "admin", "password": "new-admin-secret"},
+        )
+        check("the manager's chosen password works", status, 200)
+
         print("\nsession lifecycle")
         status, me = request(f"{srv.base}/api/auth/me", session=moved_session)
         check("me returns the ship he was last posted to", me["vessel"]["vesselId"], "m-v-local-only")

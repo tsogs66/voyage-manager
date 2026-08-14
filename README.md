@@ -355,8 +355,21 @@ dktn-us5x-4x87-bjjb
 
 That is roughly 79 bits. It matters because these credentials end up on a device that
 signs in offline, where an attacker who steals the laptop can grind at leisure — the
-one thing that must not happen is a weak password picked for convenience by the
-office. Fleet manager accounts still take a chosen password.
+one thing that must not happen is a weak password picked for convenience.
+
+**Only the fleet manager changes a password**, and a chief engineer's replacement is
+generated too. A chief engineer cannot change his own at all: his password is
+generated precisely so it survives being on a laptop that signs in offline, and
+letting him replace it with one he can remember is the single move that undoes that.
+Resets go through the office — which is where a crew change is handled anyway.
+
+```
+POST /api/auth/password  {"username": "hberg"}      -> new generated password, once
+```
+
+Fleet manager accounts still take a chosen password, and changing your own still
+requires the current one, so a session left open cannot lock the office out of its
+own account.
 
 Vessel identity is the manager's record, but only once there *is* a record. The name,
 IMO and company fields stay editable for an engineer who has no vessel yet, or whose
