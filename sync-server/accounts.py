@@ -14,7 +14,9 @@ token gets it back by typing its name and IMO again — no reset, no re-issue.
 The secret lives in this database, so tokens survive a restart but cannot be
 recomputed by anyone who does not hold the file.
 
-Passwords are PBKDF2-HMAC-SHA256 with a per-account salt. Stdlib only.
+Passwords are PBKDF2-HMAC-SHA256 with a per-account salt. A device that has
+signed in once holds a random enrollment secret, not a password verifier —
+offline unlock proves the laptop, not the password. Stdlib only.
 """
 
 from __future__ import annotations
@@ -44,11 +46,9 @@ PASSWORD_GROUP_SIZE = 4
 def generate_password() -> str:
     """A password the office cannot choose badly.
 
-    Chief engineer credentials end up on a laptop that sails, and a device that
-    signs in offline holds material an attacker can grind at leisure. Four groups
-    of four from a 31-character alphabet is about 79 bits — far past what anyone
-    types by hand, and the work factor on top of it makes offline grinding
-    hopeless.
+    Typed once, at first enrollment (and on a replacement laptop). Four groups of
+    four from a 31-character alphabet is about 79 bits, and it survives being
+    read off a handover sheet.
     """
     return "-".join(
         "".join(secrets.choice(PASSWORD_ALPHABET) for _ in range(PASSWORD_GROUP_SIZE))
@@ -169,9 +169,20 @@ class AccountStore:
                     assigned_by TEXT NOT NULL DEFAULT '',
                     note        TEXT NOT NULL DEFAULT ''
                 );
+                CREATE TABLE IF NOT EXISTS devices (
+                    device_id    TEXT PRIMARY KEY,
+                    username     TEXT NOT NULL,
+                    secret_hash  TEXT NOT NULL,
+                    secret_salt  TEXT NOT NULL,
+                    label        TEXT NOT NULL DEFAULT '',
+                    created_at   TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL,
+                    revoked      INTEGER NOT NULL DEFAULT 0
+                );
                 CREATE INDEX IF NOT EXISTS idx_vessel_token ON vessels(token);
                 CREATE INDEX IF NOT EXISTS idx_assign_user ON assignments(username);
                 CREATE INDEX IF NOT EXISTS idx_assign_vessel ON assignments(vessel_id);
+                CREATE INDEX IF NOT EXISTS idx_device_user ON devices(username);
                 -- One live posting per engineer: a second open row would make
                 -- "which ship am I on" ambiguous at handover.
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_assign_one_open
@@ -276,6 +287,7 @@ class AccountStore:
         username = (username or "").strip().lower()
         with self._lock, self._conn:
             self._conn.execute("DELETE FROM sessions WHERE username = ?", (username,))
+            self._conn.execute("DELETE FROM devices WHERE username = ?", (username,))
             cur = self._conn.execute("DELETE FROM accounts WHERE username = ?", (username,))
         if cur.rowcount == 0:
             raise AccountError("No such account")
@@ -291,8 +303,12 @@ class AccountStore:
     def list_accounts(self) -> list[dict]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT username, role, vessel_id, created_at, disabled "
-                "FROM accounts ORDER BY role DESC, username"
+                "SELECT a.username, a.role, a.created_at, a.disabled, "
+                "       COALESCE(s.vessel_id, a.vessel_id) AS vessel_id "
+                "FROM accounts a "
+                "LEFT JOIN assignments s "
+                "  ON s.username = a.username AND s.released_at IS NULL "
+                "ORDER BY a.role DESC, a.username"
             ).fetchall()
         return [
             {
@@ -563,61 +579,158 @@ class AccountStore:
         current = next((h["username"] for h in history if h["current"]), None)
         return {"vesselId": vessel_id, "chiefEngineer": current, "history": history}
 
+    def claim_vessel(self, username: str, vessel_id: str) -> dict:
+        """An unassigned engineer picks the ship he actually joined.
 
-    # -------------------------------------------------------- offline bundles
-    #
-    # A ship joining with a fresh laptop and no connectivity cannot reach the
-    # server to log in even once. The bundle carries the vessel and the password
-    # VERIFIERS for whoever is posted to it, so the login can be checked entirely
-    # on the device.
-    #
-    # This is a deliberate trade, and its cost is real: a stolen laptop carries
-    # crackable password material, and a transferred engineer keeps working on the
-    # old device until it reconnects. Two things bound that cost — the bundle
-    # expires, and it carries only the engineers currently posted to that one ship.
-    # Fleet managers are never included: office credentials have no business on a
-    # ship's laptop.
-
-    def offline_bundle(self, vessel_id: str, ttl_days: int = 90) -> dict:
-        vessel = self.get_vessel(vessel_id)
-        if not vessel:
+        The office still creates the vessel and the account. This only opens the
+        posting, and only when he is on none — it is not a transfer, and it will
+        not mint a ship that is not already on the register.
+        """
+        username = (username or "").strip().lower()
+        account = self.get_account(username)
+        if not account:
+            raise AccountError(f"No account '{username}'")
+        if canonical_role(account["role"]) == ROLE_ADMIN:
+            raise AccountError("A fleet manager is not posted to a ship")
+        if self.current_vessel(username):
+            raise AccountError(
+                "Already assigned to a vessel — ask the office to transfer you"
+            )
+        if not self.get_vessel(vessel_id):
             raise AccountError(f"No vessel '{vessel_id}' is registered")
-        if ttl_days < 1 or ttl_days > 3650:
-            raise AccountError("Bundle validity must be between 1 and 3650 days")
+        return self.assign_vessel(
+            username, vessel_id, assigned_by=username, note="claimed at first sign-in"
+        )
 
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT a.username, a.password_hash, a.password_salt, a.role, a.disabled "
-                "FROM accounts a "
-                "JOIN assignments s ON s.username = a.username AND s.released_at IS NULL "
-                "WHERE s.vessel_id = ? AND a.disabled = 0 AND a.role != ?",
-                (vessel["vesselId"], ROLE_ADMIN),
-            ).fetchall()
 
-        now = utc_now()
+    # -------------------------------------------------------- device enrollment
+    #
+    # A laptop earns offline access by signing in online once. The device then
+    # holds a random secret the server hashed — not a password verifier. Offline
+    # unlock proves this laptop, so the generated password is only typed at first
+    # enrollment (and on a replacement machine). A stolen laptop is revoked from
+    # the office; the password itself never sat on the disk to be ground at.
+    #
+    # Fleet manager accounts are never enrolled: office credentials have no
+    # business on a ship's laptop.
+
+    DEVICE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{16,80}$")
+
+    @staticmethod
+    def _hash_device_secret(secret: str, salt: str) -> str:
+        if not secret or len(secret) < 32:
+            raise AccountError("Device secret is too short")
+        return hmac.new(
+            bytes.fromhex(salt), secret.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+
+    def _device_row_to_dict(self, row: sqlite3.Row) -> dict:
         return {
-            "version": 1,
-            "issuedAt": iso(now),
-            "expiresAt": iso(now + timedelta(days=ttl_days)),
-            "vessel": {
-                "vesselId": vessel["vesselId"],
-                "vesselName": vessel["vesselName"],
-                "imo": vessel["imo"],
-                "company": vessel["company"],
-                "token": vessel["token"],
-            },
-            "logins": [
-                {
-                    "username": r["username"],
-                    "role": canonical_role(r["role"]),
-                    "algorithm": "pbkdf2-hmac-sha256",
-                    "rounds": PBKDF2_ROUNDS,
-                    "salt": r["password_salt"],
-                    "verifier": r["password_hash"],
-                }
-                for r in rows
-            ],
+            "deviceId": row["device_id"],
+            "username": row["username"],
+            "label": row["label"],
+            "createdAt": row["created_at"],
+            "lastSeenAt": row["last_seen_at"],
+            "revoked": bool(row["revoked"]),
         }
+
+    def enroll_device(
+        self, username: str, device_id: str, secret: str, label: str = ""
+    ) -> dict:
+        """Bind this laptop to a chief engineer. The secret is hashed and the
+        plaintext is stored only on the device that generated it."""
+        username = (username or "").strip().lower()
+        device_id = (device_id or "").strip()
+        label = re.sub(r"\s+", " ", str(label or "")).strip()[:120]
+        account = self.get_account(username)
+        if not account or account["disabled"]:
+            raise AccountError("No such account")
+        if canonical_role(account["role"]) == ROLE_ADMIN:
+            raise AccountError("Fleet manager accounts are not enrolled on a device")
+        if not self.DEVICE_ID_RE.match(device_id):
+            raise AccountError("Device id is not valid")
+
+        existing = self.get_device(device_id)
+        if existing and existing["username"] != username:
+            raise AccountError("That device is already enrolled to someone else")
+        if existing and existing["revoked"]:
+            raise AccountError(
+                "That device has been revoked — sign in with a password on a new one"
+            )
+
+        salt = secrets.token_hex(16)
+        secret_hash = self._hash_device_secret(secret, salt)
+        now = iso(utc_now())
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO devices "
+                "(device_id, username, secret_hash, secret_salt, label, "
+                " created_at, last_seen_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(device_id) DO UPDATE SET "
+                "  secret_hash = excluded.secret_hash, "
+                "  secret_salt = excluded.secret_salt, "
+                "  label = excluded.label, "
+                "  last_seen_at = excluded.last_seen_at",
+                (device_id, username, secret_hash, salt, label, now, now),
+            )
+        return self.get_device(device_id) or {}
+
+    def get_device(self, device_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM devices WHERE device_id = ?", ((device_id or "").strip(),)
+            ).fetchone()
+        return self._device_row_to_dict(row) if row else None
+
+    def verify_device(self, device_id: str, secret: str) -> dict | None:
+        """Return the account this device is bound to, or None."""
+        device_id = (device_id or "").strip()
+        if not device_id or not secret:
+            return None
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM devices WHERE device_id = ?", (device_id,)
+            ).fetchone()
+        if not row or row["revoked"]:
+            return None
+        try:
+            candidate = self._hash_device_secret(secret, row["secret_salt"])
+        except (AccountError, ValueError):
+            return None
+        if not hmac.compare_digest(candidate, row["secret_hash"]):
+            return None
+        account = self.get_account(row["username"])
+        if not account or account["disabled"]:
+            return None
+        now = iso(utc_now())
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE devices SET last_seen_at = ? WHERE device_id = ?",
+                (now, device_id),
+            )
+        return account
+
+    def revoke_device(self, device_id: str) -> dict:
+        device_id = (device_id or "").strip()
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "UPDATE devices SET revoked = 1 WHERE device_id = ?", (device_id,)
+            )
+        if cur.rowcount == 0:
+            raise AccountError("No such device")
+        return self.get_device(device_id) or {}
+
+    def list_devices(self, username: str | None = None) -> list[dict]:
+        sql = "SELECT * FROM devices"
+        args: list = []
+        if username:
+            sql += " WHERE username = ?"
+            args.append((username or "").strip().lower())
+        sql += " ORDER BY last_seen_at DESC"
+        with self._lock:
+            rows = self._conn.execute(sql, args).fetchall()
+        return [self._device_row_to_dict(r) for r in rows]
 
     # -------------------------------------------------------------- sessions
 

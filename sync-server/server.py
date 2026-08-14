@@ -261,7 +261,7 @@ def list_conditions(vessel: str, voyage: str) -> list[dict]:
 
 
 class SyncHandler(BaseHTTPRequestHandler):
-    server_version = "NoonReportSync/1.4"
+    server_version = "NoonReportSync/1.5"
 
     def log_message(self, fmt: str, *args) -> None:
         print(f"[{utc_now()}] {self.address_string()} {fmt % args}")
@@ -478,7 +478,7 @@ class SyncHandler(BaseHTTPRequestHandler):
                 {
                     "ok": True,
                     "service": "noon-report-sync",
-                    "version": "1.4",
+                    "version": "1.5",
                     "time": utc_now(),
                     "static": bool(STATIC_DIR),
                     "layout": "vessel/voyageNo/CONDITION.json",
@@ -528,36 +528,19 @@ class SyncHandler(BaseHTTPRequestHandler):
             )
             return
 
-        # There is deliberately no way for the office to export credentials for a
-        # laptop that has never been online. The fleet manager creates the account;
-        # the engineer signs in online once, which is when his device earns the
-        # bundle below. That keeps credential files out of circulation entirely and
-        # means a device only ever holds verifiers for someone who authenticated on
-        # it against the live server.
-        if parts == ["api", "vessel", "offline-bundle"]:
+        # Any signed-in user may see the fleet register (no tokens). An unassigned
+        # engineer uses this list to claim the ship he joined, instead of minting one.
+        if parts == ["api", "vessels"]:
             principal = self._principal()
-            if principal["reason"]:
-                self._reject_unauthorized(principal["reason"])
+            if principal["reason"] or principal["kind"] != "session":
+                self._reject_unauthorized("missing_token")
                 return
-            # A session only — a bare vessel token must not mint offline credentials,
-            # or the token alone would be enough to unlock a device.
-            if principal["kind"] != "session":
-                json_response(self, HTTPStatus.FORBIDDEN,
-                              {"error": "forbidden", "reason": "session_required",
-                               "message": "Offline credentials are issued only to a signed-in user."})
-                return
-            own = principal.get("writable") or principal.get("vesselId")
-            if principal["role"] != ROLE_ADMIN and not own:
-                json_response(self, HTTPStatus.FORBIDDEN,
-                              {"error": "forbidden", "reason": "no_vessel",
-                               "message": "This login is not assigned to a vessel."})
-                return
-            try:
-                bundle = ACCOUNTS.offline_bundle(own)
-            except AccountError as err:
-                json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(err)})
-                return
-            json_response(self, HTTPStatus.OK, {"ok": True, "bundle": bundle})
+            json_response(
+                self,
+                HTTPStatus.OK,
+                {"ok": True,
+                 "vessels": [self._vessel_public(v, False) for v in ACCOUNTS.list_vessels()]},
+            )
             return
 
         if parts == ["api", "admin", "vessels", "pending"]:
@@ -572,6 +555,27 @@ class SyncHandler(BaseHTTPRequestHandler):
             if self._require_admin() is None:
                 return
             json_response(self, HTTPStatus.OK, {"ok": True, "accounts": ACCOUNTS.list_accounts()})
+            return
+
+        if parts == ["api", "auth", "devices"]:
+            principal = self._principal()
+            if principal["reason"] or principal["kind"] != "session":
+                self._reject_unauthorized("missing_token")
+                return
+            json_response(
+                self, HTTPStatus.OK,
+                {"ok": True, "devices": ACCOUNTS.list_devices(principal["username"])},
+            )
+            return
+
+        if parts == ["api", "admin", "devices"]:
+            if self._require_admin() is None:
+                return
+            who = parse_qs(urlparse(self.path).query).get("username", [None])[0]
+            json_response(
+                self, HTTPStatus.OK,
+                {"ok": True, "devices": ACCOUNTS.list_devices(who)},
+            )
             return
 
         if len(parts) == 4 and parts[:3] == ["api", "admin", "crew"]:
@@ -719,6 +723,10 @@ class SyncHandler(BaseHTTPRequestHandler):
                 return self._handle_logout()
             if parts == ["api", "auth", "password"]:
                 return self._handle_password_change(body)
+            if parts == ["api", "auth", "devices"]:
+                return self._handle_enroll_device(body)
+            if parts == ["api", "auth", "device-login"]:
+                return self._handle_device_login(body)
             if parts == ["api", "admin", "vessels"]:
                 return self._handle_create_vessel(body)
             if parts == ["api", "admin", "token-preview"]:
@@ -729,6 +737,8 @@ class SyncHandler(BaseHTTPRequestHandler):
                 return self._handle_assign(body)
             if parts == ["api", "admin", "release"]:
                 return self._handle_release(body)
+            if parts == ["api", "admin", "devices", "revoke"]:
+                return self._handle_revoke_device(body)
             if parts == ["api", "admin", "vessels", "approve"]:
                 if self._require_admin() is None:
                     return
@@ -737,6 +747,8 @@ class SyncHandler(BaseHTTPRequestHandler):
                                      {"ok": True, "vessel": self._vessel_public(vessel, True)})
             if parts == ["api", "vessels", "import"]:
                 return self._handle_vessel_import(body)
+            if parts == ["api", "vessels", "claim"]:
+                return self._handle_claim_vessel(body)
         except AccountError as err:
             json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(err)})
             return
@@ -776,6 +788,24 @@ class SyncHandler(BaseHTTPRequestHandler):
 
         json_response(self, HTTPStatus.NOT_FOUND, {"error": "not found"})
 
+    def _login_payload(self, account: dict) -> dict:
+        session = ACCOUNTS.create_session(account["username"])
+        current = ACCOUNTS.current_vessel(account["username"]) or account.get("vessel_id")
+        vessel = ACCOUNTS.get_vessel(current) if current else None
+        return {
+            "ok": True,
+            "sessionToken": session["sessionToken"],
+            "expiresAt": session["expiresAt"],
+            "username": account["username"],
+            "role": canonical_role(account["role"]),
+            "vessel": self._vessel_public(vessel, include_token=True),
+            "history": self._readable_fleet({
+                "role": canonical_role(account["role"]),
+                "username": account["username"],
+                "readable": set(ACCOUNTS.readable_vessels(account["username"])),
+            }),
+        }
+
     def _handle_login(self, body: dict) -> None:
         username = str(body.get("username", ""))
         password = str(body.get("password", ""))
@@ -788,27 +818,80 @@ class SyncHandler(BaseHTTPRequestHandler):
                  "message": "Username or password is incorrect."},
             )
             return
-        session = ACCOUNTS.create_session(account["username"])
-        current = ACCOUNTS.current_vessel(account["username"]) or account["vessel_id"]
-        vessel = ACCOUNTS.get_vessel(current) if current else None
+        json_response(self, HTTPStatus.OK, self._login_payload(account))
+
+    def _handle_enroll_device(self, body: dict) -> None:
+        """Bind this laptop to the signed-in chief engineer.
+
+        The device generates a random secret and keeps the only plaintext copy.
+        A bare vessel token must not enroll a laptop — the token already grants
+        sync, and letting it also mint a device would make it a master key.
+        """
+        principal = self._principal()
+        if principal["reason"]:
+            self._reject_unauthorized(principal["reason"])
+            return
+        if principal["kind"] != "session":
+            json_response(
+                self, HTTPStatus.FORBIDDEN,
+                {"error": "forbidden", "reason": "session_required",
+                 "message": "A device is enrolled only after a signed-in password login."},
+            )
+            return
+        if principal["role"] == ROLE_ADMIN:
+            json_response(
+                self, HTTPStatus.FORBIDDEN,
+                {"error": "forbidden", "reason": "engineer_only",
+                 "message": "Fleet manager accounts are not enrolled on a device."},
+            )
+            return
+        device = ACCOUNTS.enroll_device(
+            username=principal["username"],
+            device_id=str(body.get("deviceId", "")),
+            secret=str(body.get("secret", "")),
+            label=str(body.get("label", "")),
+        )
+        json_response(self, HTTPStatus.OK, {"ok": True, "device": device})
+
+    def _handle_device_login(self, body: dict) -> None:
+        account = ACCOUNTS.verify_device(
+            str(body.get("deviceId", "")), str(body.get("secret", ""))
+        )
+        if not account:
+            json_response(
+                self,
+                HTTPStatus.UNAUTHORIZED,
+                {"error": "unauthorized", "reason": "device_revoked",
+                 "message": "This device is not enrolled, or the office has revoked it."},
+            )
+            return
+        json_response(self, HTTPStatus.OK, self._login_payload(account))
+
+    def _handle_revoke_device(self, body: dict) -> None:
+        if self._require_admin() is None:
+            return
+        device = ACCOUNTS.revoke_device(str(body.get("deviceId", "")))
+        json_response(self, HTTPStatus.OK, {"ok": True, "device": device})
+
+    def _handle_claim_vessel(self, body: dict) -> None:
+        """An unassigned engineer joins a ship that is already on the register."""
+        principal = self._principal()
+        if principal["reason"] or principal["kind"] != "session":
+            self._reject_unauthorized("missing_token")
+            return
+        if principal["role"] == ROLE_ADMIN:
+            json_response(
+                self, HTTPStatus.FORBIDDEN,
+                {"error": "forbidden", "reason": "engineer_only",
+                 "message": "Post an engineer from Fleet Office, do not claim a ship as manager."},
+            )
+            return
+        out = ACCOUNTS.claim_vessel(principal["username"], str(body.get("vesselId", "")))
+        vessel = ACCOUNTS.get_vessel(out["vesselId"])
         json_response(
-            self,
-            HTTPStatus.OK,
-            {
-                "ok": True,
-                "sessionToken": session["sessionToken"],
-                "expiresAt": session["expiresAt"],
-                "username": account["username"],
-                "role": canonical_role(account["role"]),
-                # The engineer gets his ship's token so the app can sync at once.
-                "vessel": self._vessel_public(vessel, include_token=True),
-                # Ships he has sailed before — readable, not writable.
-                "history": self._readable_fleet({
-                    "role": canonical_role(account["role"]),
-                    "username": account["username"],
-                    "readable": set(ACCOUNTS.readable_vessels(account["username"])),
-                }),
-            },
+            self, HTTPStatus.OK,
+            {"ok": True, "assignment": out,
+             "vessel": self._vessel_public(vessel, include_token=True)},
         )
 
     def _handle_logout(self) -> None:
@@ -819,11 +902,11 @@ class SyncHandler(BaseHTTPRequestHandler):
     def _handle_password_change(self, body: dict) -> None:
         """Only the fleet manager changes passwords.
 
-        A chief engineer cannot change his own. That is not about trust — his
-        password is generated precisely so it is strong enough to survive being on a
-        laptop that signs in offline, and letting him replace it with one he can
-        remember is the one move that undoes it. Resets go through the office, which
-        is also where a crew change is handled anyway.
+        A chief engineer cannot change his own. The password is generated so the
+        first sign-in (and any replacement laptop) cannot be a weak one picked for
+        convenience. After that the laptop unlocks by device enrollment, not by
+        retyping it. Resets go through the office, which is also where a crew
+        change is handled.
         """
         principal = self._principal()
         if principal["reason"] or principal["kind"] != "session":
