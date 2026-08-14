@@ -1362,8 +1362,6 @@
       <div class="login-status" id="loginStatus" role="status"></div>
       <div class="login-actions">
         <button class="primary" id="btnLoginSubmit">Sign in</button>
-        <button class="ghost small" id="btnLoadOfflineCreds" type="button">Install vessel credentials…</button>
-        <input type="file" id="offlineCredsFile" accept="application/json,.json" hidden>
         <div class="hint" id="offlineCredsStatus"></div>
         <button class="ghost" id="btnLoginOffline">Work offline</button>
       </div>
@@ -14617,7 +14615,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v112';
+let androidInstallCacheName = 'noon-report-v113';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -16884,9 +16882,9 @@ function verifiersMatch(a, b){
 /** Sign in against the bundle on this device. Returns a session, or throws. */
 async function offlineLogin(username, password){
   const bundle = readOfflineBundle();
-  if (!bundle) throw new Error('No vessel credentials are installed on this device.');
+  if (!bundle) throw new Error('This device has never signed in. The first sign-in needs the server — connect, sign in once, and it will work offline after that.');
   if (bundle.expiresAt && new Date(bundle.expiresAt) < new Date()){
-    throw new Error(`These vessel credentials expired on ${String(bundle.expiresAt).slice(0,10)}. Connect to the server, or ask the fleet manager for a new bundle.`);
+    throw new Error(`Offline access for this device expired on ${String(bundle.expiresAt).slice(0,10)}. Connect to the server and sign in again.`);
   }
   const login = (bundle.logins || []).find(l => l.username === username.trim().toLowerCase());
   /* Do the derivation even when the username is unknown, so the failure takes the
@@ -16913,39 +16911,19 @@ async function offlineLogin(username, password){
 
 
 function bindOfflineCredsUi(){
-  const btn = document.getElementById('btnLoadOfflineCreds');
-  const file = document.getElementById('offlineCredsFile');
+  /* There is no way to install credentials by hand. A device earns its offline
+     access by signing in online once, which is when the bundle is fetched. */
   const status = document.getElementById('offlineCredsStatus');
-  const describe = () => {
-    const b = readOfflineBundle();
-    if (!status) return;
-    if (!b){ status.textContent = ''; return; }
-    const expired = b.expiresAt && new Date(b.expiresAt) < new Date();
-    status.textContent = `Credentials installed for ${b.vessel?.vesselName || 'a vessel'}`
-      + ` — ${expired ? 'EXPIRED ' + String(b.expiresAt).slice(0,10)
-                      : 'valid to ' + String(b.expiresAt || '').slice(0,10)}`
-      + `, ${(b.logins || []).length} login${(b.logins || []).length === 1 ? '' : 's'}.`;
-  };
-  if (btn && file){
-    btn.addEventListener('click', ()=> file.click());
-    file.addEventListener('change', ()=>{
-      const f = file.files?.[0];
-      if (!f) return;
-      const reader = new FileReader();
-      reader.onload = ()=>{
-        try{
-          writeOfflineBundle(JSON.parse(String(reader.result)));
-          describe();
-          setLoginStatus('loginStatus', 'Vessel credentials installed — you can now sign in without the server.', 'ok');
-        }catch(err){
-          setLoginStatus('loginStatus', err.message, 'err');
-        }
-        file.value = '';
-      };
-      reader.readAsText(f);
-    });
+  if (!status) return;
+  const b = readOfflineBundle();
+  if (!b){
+    status.textContent = 'This device has not signed in yet. The first sign-in needs the server; after that it works at sea.';
+    return;
   }
-  describe();
+  const expired = b.expiresAt && new Date(b.expiresAt) < new Date();
+  status.textContent = `Offline sign-in available for ${b.vessel?.vesselName || 'this vessel'}`
+    + (expired ? ` — EXPIRED ${String(b.expiresAt).slice(0,10)}, sign in online again.`
+               : ` — valid to ${String(b.expiresAt || '').slice(0,10)}.`);
 }
 
 async function handleLoginSubmit(){
@@ -16975,9 +16953,18 @@ async function handleLoginSubmit(){
        sign in today should still sign in after it sails. */
     if (out.vessel?.vesselId){
       try{
-        const b = await loginApiCall(base, '/api/vessel/offline-bundle', { session: out.sessionToken });
+        /* sessionRequestHeaders reads .sessionToken off the object — handing it a
+           bare string sends no header at all. */
+        const b = await loginApiCall(base, '/api/vessel/offline-bundle', {
+          session: { sessionToken: out.sessionToken }
+        });
         if (b?.bundle) writeOfflineBundle(b.bundle);
-      }catch(_){ /* never block a good login on this */ }
+      }catch(err){
+        /* Never block a good login on this, but do not swallow it silently either —
+           a device that quietly fails to earn offline access looks fine until the
+           ship sails. */
+        console.warn('Could not refresh offline credentials:', err.message);
+      }
     }
     await enterAssignStep(session);
   }catch(err){

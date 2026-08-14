@@ -4,48 +4,45 @@ Offline-capable ship performance and fuel logging app for engine department noon
 
 Works on **Android phones** and **PC browsers** as a Progressive Web App (PWA), with optional sync to a **self-hosted Linux server** behind Cloudflare Tunnel.
 
-## Signing in with no connectivity
+## Signing in at sea
 
-A ship joining with a fresh laptop cannot reach the server to sign in even once.
-An **offline credentials bundle** solves that: the fleet manager exports one per
-vessel, it is installed on the device from the login gate, and sign-in is then
-checked entirely on the laptop.
+**The fleet manager creates the account, and the engineer must sign in online once
+before that device works offline.** That first sign-in is what fetches his vessel and
+his data; from then on the same laptop signs in with no connectivity at all.
 
-```bash
-curl -H "X-Session-Token: $SESSION" \
-  "https://sync.example/api/admin/vessels/mv-roadstead/offline-bundle?days=30" \
-  > roadstead-credentials.json
-```
+There is deliberately **no way to provision a device that has never authenticated** —
+no credential file to export, carry on a stick, or leak. A laptop earns offline access
+by proving itself against the live server, once.
 
-The bundle carries the vessel, its sync token, and a PBKDF2-HMAC-SHA256 **verifier**
-for each engineer posted to that ship — never a password. The app recomputes the
-verifier with WebCrypto and compares; `tests/test_offline_verifier.js` checks the
-browser's digest against one Python produced, because if those two disagree by a
-byte then offline sign-in fails for everyone and a test of either side alone would
-not notice.
+On that first sign-in the app fetches an offline bundle for the ship
+(`GET /api/vessel/offline-bundle`) and keeps it. The bundle holds the vessel, its sync
+token, and a PBKDF2-HMAC-SHA256 **verifier** for each engineer posted to that ship —
+never a password. Offline, the app recomputes the verifier with WebCrypto and compares.
+`tests/test_offline_verifier.js` checks the browser's digest against one Python
+produced, because if those two disagree by a byte then offline sign-in fails for
+everyone and a test of either side alone would not notice.
 
-A device that is already working refreshes its own bundle on every successful
-online login (`GET /api/vessel/offline-bundle`), so a laptop that can sign in today
-still can after it sails.
+The bundle is refreshed on every successful online sign-in, so a device that works
+today still works after it sails, and a transfer reaches it the next time it connects.
 
-**This is a real trade, and its cost is worth stating plainly:**
+Three rules keep the exposure bounded:
 
-- **A stolen laptop carries crackable password material.** PBKDF2 at 240,000 rounds
-  makes that expensive, not impossible — a weak password will fall. Prefer generated
-  passwords for chief engineer accounts.
-- **Revocation needs the device to reconnect.** A transferred engineer keeps working
-  on the old laptop until it next reaches the server. He cannot *sync* the old ship —
-  the assignment is checked server-side — but he can open the program and read what
-  is on that machine.
+- **A bare vessel token cannot mint credentials.** The token already grants sync;
+  issuing offline credentials requires a signed-in session, or the token alone would
+  unlock a laptop.
+- **Only engineers currently posted to that ship are included**, and fleet manager
+  accounts never are — office credentials have no business on a ship's laptop.
+- **The bundle expires.** Past that, the device must reach the server again.
 
-Three things bound the exposure: the bundle **expires** (30–90 days is sensible), it
-contains only the engineers **currently posted to that one ship**, and fleet manager
-accounts are **never** included — office credentials have no business on a ship's
-laptop.
+The offline path is narrow by design: it is used **only when the server cannot be
+reached at all**. If the server answers — including a 401 — its answer stands, so a
+revoked login cannot be resurrected by pulling the network cable.
 
-The fallback is deliberately narrow. The app uses the bundle **only when the server
-cannot be reached at all**. If the server answers — including a 401 — its answer
-stands, so a revoked login cannot be resurrected by pulling the network cable.
+What remains true of any offline scheme: a stolen laptop carries crackable password
+material for whoever signed in on it, and a transferred engineer keeps working on the
+old device until it reconnects. He cannot *sync* the old ship — assignment is checked
+server-side — but he can read what is on that machine. Prefer generated passwords for
+chief engineer accounts.
 
 ## Bunkering and R.O.B. corrections
 
@@ -438,8 +435,7 @@ its vessel assignment instead of locking the crew out of their own records.
 | `GET /api/assignments/<username>` | own record, or manager | Service history |
 | `POST /api/vessels/import` | any login | Register a vessel absent from the database |
 | `GET /api/admin/vessels/pending` | manager | Ships registered from a device, awaiting review |
-| `GET /api/admin/vessels/<id>/offline-bundle` | manager | Export offline credentials (`?days=` sets validity) |
-| `GET /api/vessel/offline-bundle` | own vessel | Refresh this device's own bundle while online |
+| `GET /api/vessel/offline-bundle` | signed-in user | Earn/refresh this device's offline credentials |
 | `POST /api/admin/vessels/approve` | manager | Clear a ship's pending flag |
 
 Data routes are scoped: a vessel login reaching another ship gets `403 wrong_vessel`.

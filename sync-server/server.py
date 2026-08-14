@@ -527,28 +527,23 @@ class SyncHandler(BaseHTTPRequestHandler):
             )
             return
 
-        # The manager exports a bundle to provision a laptop that has never been
-        # online. An engineer may pull his OWN ship's bundle while connected, so a
-        # device that works today keeps working after it sails.
-        if len(parts) == 5 and parts[:3] == ["api", "admin", "vessels"] and parts[4] == "offline-bundle":
-            if self._require_admin() is None:
-                return
-            try:
-                ttl = int(parse_qs(urlparse(self.path).query).get("days", ["90"])[0])
-            except ValueError:
-                ttl = 90
-            try:
-                bundle = ACCOUNTS.offline_bundle(safe_slug(parts[3]), ttl)
-            except AccountError as err:
-                json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(err)})
-                return
-            json_response(self, HTTPStatus.OK, {"ok": True, "bundle": bundle})
-            return
-
+        # There is deliberately no way for the office to export credentials for a
+        # laptop that has never been online. The fleet manager creates the account;
+        # the engineer signs in online once, which is when his device earns the
+        # bundle below. That keeps credential files out of circulation entirely and
+        # means a device only ever holds verifiers for someone who authenticated on
+        # it against the live server.
         if parts == ["api", "vessel", "offline-bundle"]:
             principal = self._principal()
             if principal["reason"]:
                 self._reject_unauthorized(principal["reason"])
+                return
+            # A session only — a bare vessel token must not mint offline credentials,
+            # or the token alone would be enough to unlock a device.
+            if principal["kind"] != "session":
+                json_response(self, HTTPStatus.FORBIDDEN,
+                              {"error": "forbidden", "reason": "session_required",
+                               "message": "Offline credentials are issued only to a signed-in user."})
                 return
             own = principal.get("writable") or principal.get("vesselId")
             if principal["role"] != ROLE_ADMIN and not own:
