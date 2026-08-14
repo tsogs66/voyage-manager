@@ -21,7 +21,7 @@ const check = (label, actual, expected) => {
 };
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || '/opt/pw-browsers/chromium/chrome-linux/chrome' });
+  const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   const errors = [];

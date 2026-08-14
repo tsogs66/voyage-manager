@@ -2043,7 +2043,26 @@
             <tbody id="vsSoundingsBody"></tbody>
           </table>
         </div>
-        <div class="hint">Record ullage/sounding and observed temperature for handover. Volume is manual (from sounding tables) — does not override calculated R.O.B.</div>
+        <div class="hint">Record ullage/sounding and observed temperature for handover. Volume is manual (from sounding tables) — does not override calculated R.O.B. To correct R.O.B. from a survey, use Bunker Survey below.</div>
+
+        <h3 class="sub">Bunker Survey / R.O.B. Correction</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Tank</th><th>Calculated</th><th>Measured (survey)</th><th>Difference</th></tr></thead>
+            <tbody id="vsSurveyBody"></tbody>
+          </table>
+        </div>
+        <div class="form-grid cols3" style="margin-top:10px;">
+          <div class="field"><label>Place / Port</label><input type="text" id="vs_surveyPlace"></div>
+          <div class="field"><label>Surveyor</label><input type="text" id="vs_surveyor"></div>
+          <div class="field"><label>Remark</label><input type="text" id="vs_surveyRemark"></div>
+        </div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button class="ghost small" id="btnApplyRobSurvey" type="button">Apply Survey — Correct R.O.B.</button>
+          <button class="ghost small" id="btnClearRobSurvey" type="button">Remove Survey</button>
+        </div>
+        <div class="hint" id="vsSurveyStatus"></div>
+        <div class="hint">A survey re-bases R.O.B. from this report onward: later reports open from the measured figure, and bunkers received after it are added on top. The calculated figure and the difference are kept with the report as the record of what was corrected.</div>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -3960,6 +3979,7 @@ function entryFromSnap(id, datetime, operation, condition, snap, extra){
     fwProd: snap.fwProd,
     fwRob: snap.fwRob,
     miscCons: e.miscCons || { 'MDO/MGO':0, 'LSMGO':0 },
+    robSurvey: e.robSurvey || null,
     consOverride: e.consOverride || null,
     unitOverride: e.unitOverride || { ME:null, GE:null, BLR:null },
     weather: e.weather || weather(),
@@ -6531,9 +6551,153 @@ function getComputedRow(entryId){
   return rows.find(r=>r.id===entryId) || null;
 }
 
+/**
+ * The bunker survey in force at a given moment: the latest entry at or before the
+ * cutoff that carries one. Returns null for the ordinary case of no survey, which
+ * keeps the ROB engine on its original path.
+ */
+function latestRobSurveyAtOrBefore(cutoff){
+  const limit = cutoff instanceof Date ? cutoff.getTime() : new Date(cutoff).getTime();
+  let best = null, bestTime = -Infinity;
+  for (const e of (state.entries || [])){
+    if (!e || !e.robSurvey) continue;
+    const t = new Date(e.datetime).getTime();
+    if (!isFinite(t) || t > limit || t <= bestTime) continue;
+    bestTime = t;
+    best = Object.assign({ entryId: e.id, date: e.datetime }, e.robSurvey);
+  }
+  return best;
+}
+
+/** Day-resolution compare. Receipts carry a date, entries a datetime, so bunkers are
+ *  attributed by day: anything delivered on or before the survey day is already inside
+ *  the measured figure — a survey is normally taken to verify the delivery just made. */
+function receiptDayAfter(receiptDate, surveyDatetime){
+  const d = String(receiptDate || '').slice(0, 10);
+  const s = String(surveyDatetime || '').slice(0, 10);
+  return d > s;
+}
+
+
+/**
+ * Record a bunker survey against an entry. The measured figures become the new ROB
+ * baseline from this report on; the book figure and the difference are stored with
+ * it so the correction is auditable — a survey that silently rewrote ROB with no
+ * record of what it changed would be worse than no survey at all.
+ */
+async function recordRobSurvey(entryId, { measured = {}, measuredLube = {}, place = '', remark = '', surveyor = '' } = {}){
+  const entry = state.entries.find(e=>e.id===entryId);
+  if (!entry) throw new Error('No such entry');
+  const before = robAsOfEntry(entryId) || { rob:{}, robLube:{} };
+  const num = v => (v===''||v==null||isNaN(Number(v))) ? null : Number(v);
+
+  const clean = {}, cleanLube = {};
+  fuelTankList().forEach(t=>{ const v = num(measured[t.id]); if (v!=null) clean[t.id] = v; });
+  [...lubeTankList(), ...fwTankList()].forEach(t=>{ const v = num(measuredLube[t.id]); if (v!=null) cleanLube[t.id] = v; });
+
+  const diff = {}, diffLube = {};
+  Object.keys(clean).forEach(k=> diff[k] = clean[k] - (before.rob?.[k] ?? 0));
+  Object.keys(cleanLube).forEach(k=> diffLube[k] = cleanLube[k] - (before.robLube?.[k] ?? 0));
+
+  entry.robSurvey = {
+    takenAt: new Date().toISOString(),
+    place, remark, surveyor,
+    measured: clean, measuredLube: cleanLube,
+    calculated: { ...(before.rob||{}) }, calculatedLube: { ...(before.robLube||{}) },
+    difference: diff, differenceLube: diffLube
+  };
+  await dbPut('entries', tagVesselId(entry));
+  markPendingSync();
+  render();
+  return entry.robSurvey;
+}
+
+/** Remove a survey, putting the ROB chain back on the book figures. */
+async function clearRobSurvey(entryId){
+  const entry = state.entries.find(e=>e.id===entryId);
+  if (!entry || !entry.robSurvey) return;
+  entry.robSurvey = null;
+  await dbPut('entries', tagVesselId(entry));
+  markPendingSync();
+  render();
+}
+
+
+/** Bunker survey panel: book figure beside the measured one, with the difference. */
+function renderVsSurvey(){
+  const body = document.getElementById('vsSurveyBody');
+  if (!body || !currentVsEntryId) return;
+  const entry = state.entries.find(e=>e.id===currentVsEntryId);
+  if (!entry) return;
+  const calc = robAsOfEntry(currentVsEntryId) || { rob:{}, robLube:{} };
+  const sv = entry.robSurvey;
+  const rows = [
+    ...fuelTankList().map(t=>({t, cat:'fuel', store:'rob'})),
+    ...lubeTankList().map(t=>({t, cat:'lube', store:'robLube'})),
+    ...fwTankList().map(t=>({t, cat:'fw', store:'robLube'}))
+  ];
+  body.innerHTML = rows.map(({t, cat, store})=>{
+    /* With a survey applied the calculated column would echo the measurement, which
+       tells the reader nothing. Show what the book said when it was taken. */
+    const book = sv
+      ? (store==='rob' ? sv.calculated?.[t.id] : sv.calculatedLube?.[t.id])
+      : (store==='rob' ? calc.rob?.[t.id] : calc.robLube?.[t.id]);
+    const meas = sv ? (store==='rob' ? sv.measured?.[t.id] : sv.measuredLube?.[t.id]) : null;
+    const diff = (meas!=null && book!=null) ? meas - book : null;
+    const cls = diff==null ? '' : (Math.abs(diff) < 1e-9 ? '' : (diff < 0 ? ' style="color:var(--danger,#c66)"' : ' style="color:var(--teal)"'));
+    return `<tr><td class="row-lbl">${t.name}</td>`
+      + `<td>${fmtRob(book, cat)}</td>`
+      + `<td><input type="number" step="any" data-survey-tank="${t.id}" data-survey-store="${store}" value="${meas!=null?meas:''}" placeholder="${book!=null?fmtRob(book,cat):''}"></td>`
+      + `<td${cls}>${diff==null?'—':(diff>0?'+':'')+fmtRob(diff, cat)}</td></tr>`;
+  }).join('');
+
+  const status = document.getElementById('vsSurveyStatus');
+  if (status){
+    status.textContent = sv
+      ? `Survey applied${sv.place?` at ${sv.place}`:''}${sv.surveyor?` by ${sv.surveyor}`:''} — R.O.B. from this report onward counts from the measured figures.`
+      : 'No survey on this report. R.O.B. is the calculated figure.';
+  }
+  const place = document.getElementById('vs_surveyPlace');
+  const who = document.getElementById('vs_surveyor');
+  const rem = document.getElementById('vs_surveyRemark');
+  if (place && document.activeElement !== place) place.value = sv?.place || '';
+  if (who && document.activeElement !== who) who.value = sv?.surveyor || '';
+  if (rem && document.activeElement !== rem) rem.value = sv?.remark || '';
+}
+
+function bindRobSurveyUi(){
+  const apply = document.getElementById('btnApplyRobSurvey');
+  const clear = document.getElementById('btnClearRobSurvey');
+  if (apply) apply.addEventListener('click', async ()=>{
+    if (!currentVsEntryId){ alert('Open a log entry first.'); return; }
+    const measured = {}, measuredLube = {};
+    document.querySelectorAll('[data-survey-tank]').forEach(el=>{
+      if (el.value === '') return;
+      (el.dataset.surveyStore === 'rob' ? measured : measuredLube)[el.dataset.surveyTank] = el.value;
+    });
+    if (!Object.keys(measured).length && !Object.keys(measuredLube).length){
+      alert('Enter at least one measured figure.'); return;
+    }
+    await recordRobSurvey(currentVsEntryId, {
+      measured, measuredLube,
+      place: document.getElementById('vs_surveyPlace')?.value || '',
+      surveyor: document.getElementById('vs_surveyor')?.value || '',
+      remark: document.getElementById('vs_surveyRemark')?.value || ''
+    });
+    renderVsSurvey();
+  });
+  if (clear) clear.addEventListener('click', async ()=>{
+    if (!currentVsEntryId) return;
+    if (!confirm('Remove the survey? R.O.B. goes back to the calculated figures.')) return;
+    await clearRobSurvey(currentVsEntryId);
+    renderVsSurvey();
+  });
+}
+
 /* ROB as it stood at the time of a specific entry (not the voyage's final/current ROB) */
 function robAsOfEntry(entryId){
-  return robAsOfComputedRow(getComputedRow(entryId));
+  const {rows} = computeDerived();
+  return robAsOfComputedRow(rows.find(r=>r.id===entryId) || null, rows);
 }
 
 /**
@@ -6541,25 +6705,56 @@ function robAsOfEntry(entryId){
  * many entries (Voyage Abstract, CSV export) can run computeDerived() once instead of
  * once per row.
  */
-function robAsOfComputedRow(row){
+function robAsOfComputedRow(row, rowsHint){
   if (!row) return null;
   const cutoff = new Date(row.datetime);
+
+  /* A bunker survey re-bases the ROB chain. Everything before it is history; from
+     the survey onward ROB counts from the MEASURED figure, plus anything bunkered
+     after it, less what has been burnt since. Without this the book figure and the
+     tank never reconverge — the survey difference would be carried, silently, for
+     the rest of the voyage. */
+  const survey = latestRobSurveyAtOrBefore(cutoff);
+  let sRow = null;
+  if (survey){
+    sRow = survey.entryId === row.id
+      ? row
+      : (rowsHint || computeDerived().rows).find(r=>r.id===survey.entryId) || null;
+  }
+  /* A re-based tank must never fall back to the voyage-initial figure: consumption
+     is being counted only since the survey, so the opening figure has to be the
+     survey's too. Any tank the surveyor did not sound falls back to what the book
+     said at that moment, which the survey stores alongside the measurement. */
+  const base = (store, t, measured, calculated) => {
+    if (!survey) return tankRobValue(store, t);
+    if (measured?.[t.id] != null) return Number(measured[t.id]);
+    if (calculated?.[t.id] != null) return Number(calculated[t.id]);
+    return tankRobValue(store, t);
+  };
+  const countReceipt = (r) => {
+    if (new Date(r.date) > cutoff) return false;
+    /* Bunkers delivered up to the survey are already inside the measured figure —
+       counting them again would double the delivery. */
+    return !survey || receiptDayAfter(r.date, survey.date);
+  };
+
   const rob = {};
   fuelTankList().forEach(t=>{
-    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'fuel') && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
-    rob[t.id] = tankRobValue(state.setup.rob, t) + received;
+    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'fuel') && countReceipt(r)).reduce((s,r)=>s+r.qty,0);
+    rob[t.id] = base(state.setup.rob, t, survey?.measured, survey?.calculated) + received;
   });
-  FUEL_TYPES.forEach(g=> deductGradeConsumption(rob, fuelTankList(), g, 'grade', row.cumFuel?.[g]||0));
+  FUEL_TYPES.forEach(g=> deductGradeConsumption(rob, fuelTankList(), g, 'grade',
+    Math.max(0, (row.cumFuel?.[g]||0) - (survey ? (sRow?.cumFuel?.[g]||0) : 0))));
 
   const robLube = {};
   lubeTankList().forEach(t=>{
-    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'lube') && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
-    robLube[t.id] = tankRobValue(state.setup.robLube, t) + received;
+    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'lube') && countReceipt(r)).reduce((s,r)=>s+r.qty,0);
+    robLube[t.id] = base(state.setup.robLube, t, survey?.measuredLube, survey?.calculatedLube) + received;
   });
-  deductLubeConsumption(robLube, 'cylHigh', row.cumLube?.['CYL HIGH']||0);
-  deductLubeConsumption(robLube, 'cylLow', row.cumLube?.['CYL LOW']||0);
-  deductLubeConsumption(robLube, 'meSys', row.cumLube?.['ME SYS OIL']||0);
-  deductLubeConsumption(robLube, 'geSys', row.cumLube?.['GE SYS OIL']||0);
+  deductLubeConsumption(robLube, 'cylHigh', Math.max(0, (row.cumLube?.['CYL HIGH']||0) - (survey ? (sRow?.cumLube?.['CYL HIGH']||0) : 0)));
+  deductLubeConsumption(robLube, 'cylLow', Math.max(0, (row.cumLube?.['CYL LOW']||0) - (survey ? (sRow?.cumLube?.['CYL LOW']||0) : 0)));
+  deductLubeConsumption(robLube, 'meSys', Math.max(0, (row.cumLube?.['ME SYS OIL']||0) - (survey ? (sRow?.cumLube?.['ME SYS OIL']||0) : 0)));
+  deductLubeConsumption(robLube, 'geSys', Math.max(0, (row.cumLube?.['GE SYS OIL']||0) - (survey ? (sRow?.cumLube?.['GE SYS OIL']||0) : 0)));
   const primaryFw = fwTankList()[0];
   if (primaryFw) robLube[primaryFw.id] = row.fwRob!=null ? row.fwRob : latestFwRob(cutoff);
   return {rob, robLube};
@@ -10822,6 +11017,7 @@ function openVoyageSummary(entryId){
   const entryCeEl = document.getElementById('vs_entryChEng');
   if (entryCeEl) entryCeEl.value = entry.chEng ?? state.setup.chEng ?? '';
   // Tank soundings
+  renderVsSurvey();
   const sndBody = document.getElementById('vsSoundingsBody');
   if (sndBody){
     const snd = r.soundings || {};
@@ -14407,7 +14603,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v108';
+let androidInstallCacheName = 'noon-report-v109';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -16862,6 +17058,7 @@ document.getElementById('btnOpenLogin')?.addEventListener('click', ()=>{
     renderReportCategoryButtons();
     bindReferenceCalculators();
     bindBunkerPlanUi();
+    bindRobSurveyUi();
     try{
       if (window.EORB){
         state.setup.orb = ensureOrbSetup(state.setup.orb);

@@ -4,6 +4,36 @@ Offline-capable ship performance and fuel logging app for engine department noon
 
 Works on **Android phones** and **PC browsers** as a Progressive Web App (PWA), with optional sync to a **self-hosted Linux server** behind Cloudflare Tunnel.
 
+## Bunkering and R.O.B. corrections
+
+R.O.B. is a chain: every report's opening figure is the previous report's closing
+figure. Two things break that chain, and both are handled.
+
+**Bunkers received** are logged as receipts — date, grade, tank, quantity, BDN
+number, supplier, port, and optionally density, LCV and viscosity. A receipt dated
+on or before a report is added to that report's R.O.B., so the delivery flows into
+the next report automatically and stays on file as the record of what was taken.
+
+**A bunker survey** corrects the book figure to what the tanks actually sound.
+Record it against the report it was taken with, in Voyage Summary → Bunker Survey /
+R.O.B. Correction. From that report onward R.O.B. counts from the **measured**
+figure, plus anything bunkered after it, less what has been burnt since — so the
+book and the tank reconverge instead of carrying the difference for the rest of the
+voyage. The survey stores the calculated figure and the difference beside the
+measurement, so the correction is auditable rather than a silent rewrite.
+
+Two rules worth knowing:
+
+- **Bunkers delivered up to the survey day are already inside the measured figure**
+  and are not added again — a survey is normally taken to verify the delivery just
+  made. Bunkers received after it are added on top.
+- **A tank the surveyor did not sound** falls back to what the book said at the
+  moment of the survey, not to the voyage-opening figure — consumption is counted
+  only from the survey, so the opening figure has to be the survey's too.
+
+Tank soundings recorded in the Soundings table are still for handover only and do
+not touch R.O.B.; the survey panel is the one that corrects it.
+
 ## Features
 
 - **Offline-first**: all voyage data stored in IndexedDB — works without internet on Android and PC
@@ -388,6 +418,7 @@ Node and Python 3 — nothing to install.
 | `tests/check_js_syntax.js` | Every shipped `.js` file and each inline `<script>` in `voyage_manager.html` parses. There is no build step, so a syntax error otherwise ships silently. |
 | `tests/check_assets.js` | `sw.js`'s cache name and precache list still match `androidInstallCacheName` / `androidInstallAssets` in the app, and every precached file exists. A stale cache name leaves phones on the previous build. |
 | `tests/test_sync_auth.py` | Starts `sync-server/server.py` with and without `SYNC_API_TOKEN` and asserts who gets in, including the 401 `reason` codes and a non-ASCII token. |
+| `tests/test_rob_survey.js` | The R.O.B. chain across a bunker survey — that a survey re-bases it, that earlier reports are untouched, that a bunker taken before the survey is not counted twice, and that the later of two surveys wins. |
 | `tests/test_accounts.py` | Logins, derived vessel tokens, crew rotation, and the read-history/write-current rule — including that a transferred engineer still reads his old ship but can no longer write to it, and that the legacy shared token still works. |
 | `tests/browser_login_e2e.js` | Not in CI (no browser there). Drives the real login UI in Chromium against a live seeded server. Run it after touching the gate. |
 | `tests/test_install_quoting.sh` | The installer's token quoting, checked against systemd's own parser via `systemd-analyze`. Unquoted, systemd splits an `Environment=` value on whitespace and reads `%` as a specifier, so a token with a space or a `%` reached the server truncated — leaving it on its default token, rejecting the very token the installer printed. |
