@@ -1340,7 +1340,13 @@
 .fo-table td.mono{font-family:'IBM Plex Mono',monospace;font-size:12px;}
 .fo-password{margin-top:10px;padding:12px 14px;border:1px solid var(--brass-dim);border-radius:6px;background:rgba(201,154,83,.08);}
 .fo-password code{font-family:'IBM Plex Mono',monospace;font-size:18px;color:var(--brass);letter-spacing:.08em;}
-.fo-empty{opacity:.65;font-size:13px;padding:8px 0;}
+.fo-table select{
+  max-width:240px; width:100%;
+  background:var(--ink); color:var(--paper); border:1px solid var(--line-strong);
+  border-radius:3px; padding:6px 8px; font-family:inherit; font-size:13px;
+}
+.fo-password .btn-row{margin-top:10px;}
+
 #fleetOfficePanel h3.sub{margin-top:22px;}
 
 </style>
@@ -1399,7 +1405,7 @@
           <button class="primary" id="btnLoginClaimVessel" type="button">Join this vessel</button>
           <button class="ghost" id="btnLoginClaimLater" type="button">Ship not listed — enter it in Setup</button>
         </div>
-        <p class="login-note">The office already registered the fleet. Pick the ship you joined. If it is not listed, continue and Register Vessel from Setup.</p>
+        <p class="login-note">The office already registered the fleet. Pick an empty ship. Occupied ships name who is aboard and cannot be claimed — the office must reassign. If yours is not listed, continue and Register Vessel from Setup.</p>
       </div>
 
       <div class="login-token" id="loginTokenPath">
@@ -1517,7 +1523,7 @@
 
     <div class="panel" id="fleetOfficePanel" hidden>
       <h2>Fleet Office</h2>
-      <p class="hint">Create engineers, post them to ships, reset passwords, revoke a stolen laptop, and approve vessels that arrived from a device. Generated passwords are shown once — copy them onto the handover sheet.</p>
+      <p class="hint">One live chief engineer per ship. Create an account, then Assign on that row — do not reuse the create form. Posting someone onto an occupied ship signs the incumbent off. Generated passwords are shown once — copy them onto the handover sheet.</p>
       <div class="login-status" id="foStatus" role="status"></div>
 
       <h3 class="sub">Pending review</h3>
@@ -1528,6 +1534,7 @@
         <div class="field"><label>Vessel name</label><input id="fo_vesselName" placeholder="M/V Harbour Key"></div>
         <div class="field"><label>IMO</label><input id="fo_vesselImo" placeholder="IMO 9722101"></div>
         <div class="field"><label>Company</label><input id="fo_vesselCompany" placeholder="Pacific Ocean Shipping"></div>
+        <div class="field"><label>Chief engineer (optional)</label><input id="fo_vesselUsername" placeholder="created and posted to this ship" autocomplete="off"></div>
       </div>
       <div class="btn-row" style="margin-top:8px;">
         <button class="primary small" type="button" id="btnFoCreateVessel">Register vessel</button>
@@ -1550,10 +1557,13 @@
         <div class="hint" style="margin:0 0 6px;">Hand this to the engineer. It is shown once and stored nowhere else.</div>
         <code id="foPasswordValue"></code>
         <div class="hint" id="foPasswordWho" style="margin:6px 0 0;"></div>
+        <div class="btn-row">
+          <button class="primary small" type="button" id="btnFoCopyPassword">Copy password</button>
+        </div>
       </div>
       <div class="table-scroll" style="margin-top:12px;">
         <table class="fo-table" id="foAccountTable"><thead>
-          <tr><th>Username</th><th>Role</th><th>Vessel</th><th></th></tr>
+          <tr><th>Username</th><th>Current ship</th><th>Assign to</th><th></th></tr>
         </thead><tbody></tbody></table>
       </div>
 
@@ -14690,7 +14700,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v115';
+let androidInstallCacheName = 'noon-report-v116';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -17189,7 +17199,13 @@ async function enterAssignStep(session){
         const sel = document.getElementById('login_claimSelect');
         if (sel){
           sel.innerHTML = vessels.length
-            ? vessels.map(v => `<option value="${escAttr(v.vesselId)}">${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}${v.company ? ' — ' + escHtml(v.company) : ''}</option>`).join('')
+            ? '<option value="">— pick an empty ship —</option>' + vessels.map(v => {
+              const occupied = v.chiefEngineer
+                ? ` — ${escHtml(v.chiefEngineer)} aboard`
+                : '';
+              const disabled = v.chiefEngineer ? ' disabled' : '';
+              return `<option value="${escAttr(v.vesselId)}"${disabled}>${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}${v.company ? ' — ' + escHtml(v.company) : ''}${occupied}</option>`;
+            }).join('')
             : '<option value="">No vessels registered yet</option>';
         }
         if (claimBox) claimBox.hidden = false;
@@ -17346,6 +17362,14 @@ function foVesselName(vesselId, fleet){
   return v ? v.vesselName : (vesselId || '—');
 }
 
+function foShipSelect(username){
+  const selects = document.querySelectorAll('#foAccountTable tbody select[data-fo-ship]');
+  for (const el of selects){
+    if (el.getAttribute('data-fo-ship') === username) return el;
+  }
+  return null;
+}
+
 async function renderFleetOffice(){
   const panel = document.getElementById('fleetOfficePanel');
   const session = foSession();
@@ -17387,21 +17411,20 @@ async function renderFleetOffice(){
     if (vSel){
       const prev = vSel.value;
       vSel.innerHTML = '<option value="">— none yet, he will pick —</option>'
-        + vessels.map(v => `<option value="${escAttr(v.vesselId)}">${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}</option>`).join('');
+        + vessels.map(v => {
+          const aboard = v.chiefEngineer ? ` (${escHtml(v.chiefEngineer)} aboard)` : '';
+          return `<option value="${escAttr(v.vesselId)}">${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}${aboard}</option>`;
+        }).join('');
       if (prev && vessels.some(v => v.vesselId === prev)) vSel.value = prev;
     }
 
     const vBody = document.querySelector('#foVesselTable tbody');
     if (vBody){
-      const byShip = {};
-      accounts.filter(a => a.role === 'chief_engineer' && a.vesselId).forEach(a => {
-        byShip[a.vesselId] = (byShip[a.vesselId] || []).concat(a.username);
-      });
       vBody.innerHTML = vessels.length
         ? vessels.map(v => `<tr>
             <td>${escHtml(v.vesselName)}${v.pendingReview ? ' <span class="badge">pending</span>' : ''}</td>
             <td class="mono">${escHtml(v.imo)}</td>
-            <td>${escHtml((byShip[v.vesselId] || []).join(', ') || '—')}</td>
+            <td class="mono">${escHtml(v.chiefEngineer || '—')}</td>
             <td><button class="ghost small" type="button" data-fo-load="${escAttr(v.vesselId)}">Load</button></td>
           </tr>`).join('')
         : '<tr><td colspan="4" class="fo-empty">No vessels registered yet.</td></tr>';
@@ -17409,18 +17432,25 @@ async function renderFleetOffice(){
 
     const aBody = document.querySelector('#foAccountTable tbody');
     if (aBody){
-      aBody.innerHTML = accounts.length
-        ? accounts.map(a => `<tr>
+      const engineers = accounts.filter(a => a.role === 'chief_engineer' || a.role === 'vessel');
+      const shipOptions = (selected) =>
+        '<option value="">— not assigned —</option>'
+        + vessels.map(v => {
+          const aboard = v.chiefEngineer && v.chiefEngineer !== selected ? ` (${escHtml(v.chiefEngineer)} aboard)` : '';
+          return `<option value="${escAttr(v.vesselId)}"${v.vesselId === selected ? ' selected' : ''}>${escHtml(v.vesselName)}${aboard}</option>`;
+        }).join('');
+      aBody.innerHTML = engineers.length
+        ? engineers.map(a => `<tr>
             <td class="mono">${escHtml(a.username)}</td>
-            <td>${escHtml(a.role === 'fleet_manager' || a.role === 'admin' ? 'fleet manager' : 'chief engineer')}</td>
             <td>${escHtml(foVesselName(a.vesselId, vessels))}</td>
-            <td>${a.role === 'chief_engineer' ? `
-              <button class="ghost small" type="button" data-fo-assign="${escAttr(a.username)}">Post</button>
-              <button class="ghost small" type="button" data-fo-release="${escAttr(a.username)}">Release</button>
+            <td><select data-fo-ship="${escAttr(a.username)}">${shipOptions(a.vesselId)}</select></td>
+            <td>
+              <button class="primary small" type="button" data-fo-assign="${escAttr(a.username)}">Assign</button>
+              <button class="ghost small" type="button" data-fo-release="${escAttr(a.username)}">Sign off</button>
               <button class="ghost small" type="button" data-fo-reset="${escAttr(a.username)}">Reset password</button>
-            ` : ''}</td>
+            </td>
           </tr>`).join('')
-        : '<tr><td colspan="4" class="fo-empty">No accounts yet.</td></tr>';
+        : '<tr><td colspan="4" class="fo-empty">No chief engineers yet. Create one above.</td></tr>';
     }
 
     const dBody = document.querySelector('#foDeviceTable tbody');
@@ -17441,14 +17471,28 @@ async function renderFleetOffice(){
   }
 }
 
-function showGeneratedPassword(username, password, vesselId){
+function showGeneratedPassword(username, password, vesselLabel){
   const box = document.getElementById('foPasswordBox');
   const val = document.getElementById('foPasswordValue');
   const who = document.getElementById('foPasswordWho');
   if (val) val.textContent = password || '';
   if (who) who.textContent = username
-    + (vesselId ? ' — posted to ' + vesselId : ' — no vessel yet; he will pick one at sign-in');
-  if (box) box.hidden = !password;
+    + (vesselLabel ? ' — posted to ' + vesselLabel : ' — no vessel yet; assign a ship below, or he will pick one at sign-in');
+  if (box){
+    box.hidden = !password;
+    if (password) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+async function copyFoPassword(){
+  const val = document.getElementById('foPasswordValue')?.textContent?.trim();
+  if (!val){ setFoStatus('No password to copy.', 'err'); return; }
+  try{
+    await navigator.clipboard.writeText(val);
+    setFoStatus('Password copied.', 'ok');
+  }catch(_){
+    setFoStatus('Select the password and copy it by hand.', 'err');
+  }
 }
 
 async function handleFoCreateVessel(){
@@ -17457,16 +17501,26 @@ async function handleFoCreateVessel(){
   const vesselName = document.getElementById('fo_vesselName')?.value.trim();
   const imo = document.getElementById('fo_vesselImo')?.value.trim();
   const company = document.getElementById('fo_vesselCompany')?.value.trim() || '';
+  const username = document.getElementById('fo_vesselUsername')?.value.trim() || '';
   if (!vesselName || !imo){ setFoStatus('Enter the vessel name and IMO.', 'err'); return; }
   setFoStatus('Registering…', 'busy');
   try{
-    await loginApiCall(session.serverUrl, '/api/admin/vessels', {
-      method: 'POST', session, body: { vesselName, imo, company }
+    const body = { vesselName, imo, company };
+    if (username) body.username = username;
+    const out = await loginApiCall(session.serverUrl, '/api/admin/vessels', {
+      method: 'POST', session, body
     });
     document.getElementById('fo_vesselName').value = '';
     document.getElementById('fo_vesselImo').value = '';
     document.getElementById('fo_vesselCompany').value = '';
-    setFoStatus('Vessel registered.', 'ok');
+    document.getElementById('fo_vesselUsername').value = '';
+    const password = out.account && out.account.password;
+    if (password){
+      showGeneratedPassword(out.account.username || username, password, out.vessel?.vesselName);
+      setFoStatus('Vessel registered and engineer posted. Copy the password now.', 'ok');
+    } else {
+      setFoStatus('Vessel registered.', 'ok');
+    }
     await renderFleetOffice();
   }catch(err){ setFoStatus(err.message, 'err'); }
 }
@@ -17477,6 +17531,15 @@ async function handleFoCreateAccount(){
   const username = document.getElementById('fo_username')?.value.trim();
   const vesselId = document.getElementById('fo_accountVessel')?.value || '';
   if (!username){ setFoStatus('Enter a username.', 'err'); return; }
+  const fleet = session.fleet || [];
+  const vessel = fleet.find(v => v.vesselId === vesselId);
+  if (vessel && vessel.chiefEngineer && vessel.chiefEngineer !== username){
+    const ok = confirm(
+      vessel.chiefEngineer + ' is the chief engineer on ' + (vessel.vesselName || vesselId)
+      + ' and will be signed off. Create ' + username + ' on that ship instead?'
+    );
+    if (!ok) return;
+  }
   setFoStatus('Creating account…', 'busy');
   try{
     const out = await loginApiCall(session.serverUrl, '/api/admin/accounts', {
@@ -17485,7 +17548,8 @@ async function handleFoCreateAccount(){
     });
     const password = out.account && out.account.password;
     document.getElementById('fo_username').value = '';
-    showGeneratedPassword(out.account?.username || username, password, vesselId);
+    showGeneratedPassword(out.account?.username || username, password,
+      (out.vessel && out.vessel.vesselName) || foVesselName(vesselId, state.session.fleet || []));
     setFoStatus('Account created. Copy the password now — it is not stored.', 'ok');
     await renderFleetOffice();
   }catch(err){ setFoStatus(err.message, 'err'); }
@@ -17506,13 +17570,30 @@ async function handleFoApprove(vesselId){
 async function handleFoAssign(username){
   const session = foSession();
   if (!session) return;
-  const vesselId = document.getElementById('fo_accountVessel')?.value;
-  if (!vesselId){ setFoStatus('Choose a vessel in “Post to vessel”, then press Post.', 'err'); return; }
+  const sel = foShipSelect(username);
+  const vesselId = sel && sel.value;
+  if (!vesselId){ setFoStatus('Choose a vessel on that engineer’s row, then Assign.', 'err'); return; }
+  const fleet = session.fleet || [];
+  const vessel = fleet.find(v => v.vesselId === vesselId);
+  const occupant = vessel && vessel.chiefEngineer;
+  if (occupant && occupant !== username){
+    const ok = confirm(
+      occupant + ' is the chief engineer on ' + (vessel.vesselName || vesselId)
+      + ' and will be signed off. Assign ' + username + ' instead?'
+    );
+    if (!ok) return;
+  }
   try{
-    await loginApiCall(session.serverUrl, '/api/admin/assign', {
+    const out = await loginApiCall(session.serverUrl, '/api/admin/assign', {
       method: 'POST', session, body: { username, vesselId }
     });
-    setFoStatus(username + ' posted to ' + vesselId + '.', 'ok');
+    const name = (out.assignment && out.assignment.vesselName) || (vessel && vessel.vesselName) || vesselId;
+    const displaced = out.assignment && out.assignment.displaced;
+    setFoStatus(
+      username + ' assigned to ' + name
+      + (displaced ? ' — ' + displaced + ' signed off.' : '.'),
+      'ok'
+    );
     await renderFleetOffice();
   }catch(err){ setFoStatus(err.message, 'err'); }
 }
@@ -17524,7 +17605,7 @@ async function handleFoRelease(username){
     await loginApiCall(session.serverUrl, '/api/admin/release', {
       method: 'POST', session, body: { username }
     });
-    setFoStatus(username + ' signed off.', 'ok');
+    setFoStatus(username + ' signed off — no vessel assigned.', 'ok');
     await renderFleetOffice();
   }catch(err){ setFoStatus(err.message, 'err'); }
 }
@@ -17676,6 +17757,7 @@ document.getElementById('btnOpenLogin')?.addEventListener('click', ()=>{
 });
 document.getElementById('btnFoCreateVessel')?.addEventListener('click', handleFoCreateVessel);
 document.getElementById('btnFoCreateAccount')?.addEventListener('click', handleFoCreateAccount);
+document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPassword);
 
 (async function init(){
   try {
