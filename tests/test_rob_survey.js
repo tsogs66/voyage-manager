@@ -114,7 +114,7 @@ console.log('\na bunker received is added, and carries into later reports');
   check('and the next report opens from it', robOf(sb, st, 'e3').rob.hfo, 770);
 }
 
-console.log('\na survey re-bases the chain from that report on');
+console.log('\na plain tank survey, no bunkering involved');
 {
   const st = baseState();
   /* The book says 480 at e2; the tanks actually sound 475 — a 5 MT shortfall. */
@@ -171,6 +171,43 @@ console.log('\nthe later of two surveys wins');
   check('the second survey re-bases again', robOf(sb, st, 'e3').rob.hfo, 900);
   check('and the next report follows it', robOf(sb, st, 'e4').rob.hfo, 890);
   check('the first survey still governs its own report', robOf(sb, st, 'e2').rob.hfo, 475);
+}
+
+
+console.log('\na survey after bunkering: the measurement is the delivery check');
+{
+  const st = baseState();
+  /* 300 MT delivered on the BDN; the survey that follows finds only 296 in the
+     tanks. The 4 MT is a short delivery, and the chain must go on from what is
+     actually aboard — not from what the BDN claimed. */
+  st.receipts.push({ id: 'r1', date: '2026-03-02', category: 'fuel', tankId: 'hfo', qty: 300 });
+  st.entries[1].robSurvey = {
+    measured: { hfo: 776 }, calculated: { hfo: 780 },
+    measuredLube: {}, calculatedLube: {}, difference: { hfo: -4 },
+  };
+  const sb = makeSandbox(st);
+  const noSurvey = baseState();
+  noSurvey.receipts.push({ id: 'r1', date: '2026-03-02', category: 'fuel', tankId: 'hfo', qty: 300 });
+  check('the book expected the full BDN quantity',
+    robOf(makeSandbox(noSurvey), noSurvey, 'e2').rob.hfo, 780);
+  check('the chain goes on from what is aboard', robOf(sb, st, 'e2').rob.hfo, 776);
+  check('the short delivery is not silently made up later', robOf(sb, st, 'e3').rob.hfo, 766);
+  check('and the receipt is still on file for the claim', st.receipts[0].qty, 300);
+}
+
+console.log('\na survey on a voyage that has never bunkered');
+{
+  const st = baseState();                       // no receipts at all, ever
+  st.entries[2].robSurvey = {
+    measured: { hfo: 468 }, calculated: { hfo: 470 },
+    measuredLube: { cylhigh: 4680 }, calculatedLube: { cylhigh: 4700 },
+    difference: { hfo: -2 }, differenceLube: { cylhigh: -20 },
+  };
+  const sb = makeSandbox(st);
+  check('no receipts are needed for a survey to apply', robOf(sb, st, 'e3').rob.hfo, 468);
+  check('the next report follows the tanks', robOf(sb, st, 'e4').rob.hfo, 458);
+  check('lube too', robOf(sb, st, 'e4').robLube.cylhigh, 4580);
+  check('reports before it keep the book figure', robOf(sb, st, 'e2').rob.hfo, 480);
 }
 
 console.log(failures ? `\nFAILED — ${failures} of ${checks} checks` : `\nPASSED — ${checks} checks`);

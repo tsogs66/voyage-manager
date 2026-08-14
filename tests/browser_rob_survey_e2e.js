@@ -74,7 +74,7 @@ const check = (l, a, e) => { c++; const ok = a === e || (typeof a === 'number' &
   console.log('\nthe panel reflects the applied survey');
   const after = await pg.evaluate(() => { renderVsSurvey(); return {
     status: document.getElementById('vsSurveyStatus').textContent,
-    calcCol: document.querySelector('#vsSurveyBody tr td:nth-child(2)').textContent }; });
+    calcCol: document.querySelector('#vsSurveyBody tr td:nth-child(3)').textContent }; });
   check('status says the survey is applied', /Survey applied/.test(after.status), true);
   check('the calculated column still shows the book figure, not the measurement',
     after.calcCol.replace(/[, ]/g,'') !== '', true);

@@ -2048,7 +2048,7 @@
         <h3 class="sub">Bunker Survey / R.O.B. Correction</h3>
         <div class="table-scroll">
           <table>
-            <thead><tr><th>Tank</th><th>Calculated</th><th>Measured (survey)</th><th>Difference</th></tr></thead>
+            <thead><tr><th>Tank</th><th>Received</th><th>Calculated</th><th>Measured (survey)</th><th>Difference</th></tr></thead>
             <tbody id="vsSurveyBody"></tbody>
           </table>
         </div>
@@ -2062,6 +2062,7 @@
           <button class="ghost small" id="btnClearRobSurvey" type="button">Remove Survey</button>
         </div>
         <div class="hint" id="vsSurveyStatus"></div>
+        <div class="hint">Use it either way: after bunkering, to check the delivery against the tanks — the Received column shows what landed that day, so a negative difference is a short delivery; or on its own, as a plain survey of the tanks with no bunkering involved.</div>
         <div class="hint">A survey re-bases R.O.B. from this report onward: later reports open from the measured figure, and bunkers received after it are added on top. The calculated figure and the difference are kept with the report as the record of what was corrected.</div>
       </div>
 
@@ -6636,6 +6637,13 @@ function renderVsSurvey(){
     ...lubeTankList().map(t=>({t, cat:'lube', store:'robLube'})),
     ...fwTankList().map(t=>({t, cat:'fw', store:'robLube'}))
   ];
+  /* Bunkers landed on the day being surveyed — the delivery this survey checks.
+     A plain tank survey with no bunkering simply shows nothing here. */
+  const surveyDay = String((sv ? sv.date : entry.datetime) || '').slice(0,10);
+  const receivedOnDay = (tank, category) => state.receipts
+    .filter(r=> receiptMatchesTank(r, tank, category) && String(r.date||'').slice(0,10) === surveyDay)
+    .reduce((a,r)=> a + (Number(r.qty)||0), 0);
+
   body.innerHTML = rows.map(({t, cat, store})=>{
     /* With a survey applied the calculated column would echo the measurement, which
        tells the reader nothing. Show what the book said when it was taken. */
@@ -6645,7 +6653,9 @@ function renderVsSurvey(){
     const meas = sv ? (store==='rob' ? sv.measured?.[t.id] : sv.measuredLube?.[t.id]) : null;
     const diff = (meas!=null && book!=null) ? meas - book : null;
     const cls = diff==null ? '' : (Math.abs(diff) < 1e-9 ? '' : (diff < 0 ? ' style="color:var(--danger,#c66)"' : ' style="color:var(--teal)"'));
+    const recv = receivedOnDay(t, cat==='fuel' ? 'fuel' : (cat==='lube' ? 'lube' : 'fw'));
     return `<tr><td class="row-lbl">${t.name}</td>`
+      + `<td>${recv ? fmtRob(recv, cat) : '—'}</td>`
       + `<td>${fmtRob(book, cat)}</td>`
       + `<td><input type="number" step="any" data-survey-tank="${t.id}" data-survey-store="${store}" value="${meas!=null?meas:''}" placeholder="${book!=null?fmtRob(book,cat):''}"></td>`
       + `<td${cls}>${diff==null?'—':(diff>0?'+':'')+fmtRob(diff, cat)}</td></tr>`;
@@ -14603,7 +14613,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v109';
+let androidInstallCacheName = 'noon-report-v110';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',

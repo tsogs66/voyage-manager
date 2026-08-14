@@ -14,7 +14,11 @@ number, supplier, port, and optionally density, LCV and viscosity. A receipt dat
 on or before a report is added to that report's R.O.B., so the delivery flows into
 the next report automatically and stays on file as the record of what was taken.
 
-**A bunker survey** corrects the book figure to what the tanks actually sound.
+**A bunker survey** corrects the book figure to what the tanks actually sound. It
+works either way round: after bunkering, to check the delivery against the tanks —
+the panel's Received column shows what landed that day, so a negative difference is
+a short delivery, while the receipt stays on file at the BDN quantity for the claim
+— or on its own, as a plain survey of the tanks with no bunkering involved.
 Record it against the report it was taken with, in Voyage Summary → Bunker Survey /
 R.O.B. Correction. From that report onward R.O.B. counts from the **measured**
 figure, plus anything bunkered after it, less what has been burnt since — so the
@@ -25,8 +29,8 @@ measurement, so the correction is auditable rather than a silent rewrite.
 Two rules worth knowing:
 
 - **Bunkers delivered up to the survey day are already inside the measured figure**
-  and are not added again — a survey is normally taken to verify the delivery just
-  made. Bunkers received after it are added on top.
+  and are not added again, because the survey is taken after bunkering. Bunkers
+  received after it are added on top.
 - **A tank the surveyor did not sound** falls back to what the book said at the
   moment of the survey, not to the voyage-opening figure — consumption is counted
   only from the survey, so the opening figure has to be the survey's too.
