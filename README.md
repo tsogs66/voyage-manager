@@ -301,7 +301,10 @@ That single shape gives three things at once:
 - **Chief engineer** — may register a ship that is **not yet listed** (this is how a
   device holding local records for an unlisted vessel gets it into the fleet) and is
   posted to it immediately. The vessel is flagged `pendingReview` so the manager can
-  see it arrived from a ship rather than the office.
+  see it arrived from a ship rather than the office. Those ships are listed at
+  `GET /api/admin/vessels/pending` and called out on the manager's vessel picker at
+  sign-in — with the IMO and who registered them — and cleared with
+  `POST /api/admin/vessels/approve`.
 - Neither path lets an engineer overwrite an existing registration — that returns
   `409 already_registered`. Vessel name, IMO and company are the manager's record,
   and the app makes those fields read-only for anyone else.
@@ -391,6 +394,8 @@ its vessel assignment instead of locking the crew out of their own records.
 | `GET /api/admin/crew/<vesselId>` | manager | Who is on a ship now, and who has been |
 | `GET /api/assignments/<username>` | own record, or manager | Service history |
 | `POST /api/vessels/import` | any login | Register a vessel absent from the database |
+| `GET /api/admin/vessels/pending` | manager | Ships registered from a device, awaiting review |
+| `POST /api/admin/vessels/approve` | manager | Clear a ship's pending flag |
 
 Data routes are scoped: a vessel login reaching another ship gets `403 wrong_vessel`.
 The legacy shared `SYNC_API_TOKEN` still works and still reaches every vessel, so

@@ -383,6 +383,25 @@ class AccountStore:
             ).fetchall()
         return [self._vessel_row_to_dict(r) for r in rows]
 
+
+    def approve_vessel(self, vessel_id: str) -> dict:
+        """Clear the pending flag on a vessel that was registered from a ship."""
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "UPDATE vessels SET pending_review = 0 WHERE vessel_id = ?", (vessel_id or "",)
+            )
+        if cur.rowcount == 0:
+            raise AccountError(f"No vessel '{vessel_id}' is registered")
+        return self.get_vessel(vessel_id)
+
+    def pending_vessels(self) -> list[dict]:
+        """Vessels that appeared from a ship rather than from the office."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM vessels WHERE pending_review = 1 ORDER BY created_at DESC"
+            ).fetchall()
+        return [self._vessel_row_to_dict(r) for r in rows]
+
     def delete_vessel(self, vessel_id: str) -> None:
         with self._lock, self._conn:
             cur = self._conn.execute(

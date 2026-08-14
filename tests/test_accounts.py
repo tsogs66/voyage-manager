@@ -343,6 +343,42 @@ def main() -> int:
         check("the fleet manager may change vessel details", status, 200)
         check("and the change lands", mgr_import["vessel"]["company"], "Renamed Marine")
 
+
+        print("\nvessels registered from a ship are held for review")
+        status, pending = request(f"{srv.base}/api/admin/vessels/pending", session=admin_session)
+        check("the manager can list them", status, 200)
+        check("the self-registered ship is there",
+              [v["vesselId"] for v in pending["vessels"]], ["m-v-local-only"])
+        check("and it names who registered it", pending["vessels"][0]["createdBy"], "fangcheng")
+
+        status, all_v = request(f"{srv.base}/api/admin/vessels", session=admin_session)
+        flagged = {v["vesselId"]: v["pendingReview"] for v in all_v["vessels"]}
+        check("the flag shows in the full fleet list", flagged.get("m-v-local-only"), True)
+        check("a ship registered by the office is not flagged", flagged.get("m-v-fangcheng"), False)
+
+        status, _ = request(f"{srv.base}/api/admin/vessels/pending", session=moved_session)
+        check("an engineer cannot list them", status, 403)
+        status, _ = request(
+            f"{srv.base}/api/admin/vessels/approve", session=moved_session, method="POST",
+            payload={"vesselId": "m-v-local-only"},
+        )
+        check("nor approve one", status, 403)
+
+        status, approved = request(
+            f"{srv.base}/api/admin/vessels/approve", session=admin_session, method="POST",
+            payload={"vesselId": "m-v-local-only"},
+        )
+        check("the manager approves it", status, 200)
+        check("the flag is cleared", approved["vessel"]["pendingReview"], False)
+        _, after = request(f"{srv.base}/api/admin/vessels/pending", session=admin_session)
+        check("and it leaves the pending list", after["vessels"], [])
+
+        status, missing = request(
+            f"{srv.base}/api/admin/vessels/approve", session=admin_session, method="POST",
+            payload={"vesselId": "no-such-ship"},
+        )
+        check("approving a ship that does not exist is refused", status, 400)
+
         print("\nsession lifecycle")
         status, me = request(f"{srv.base}/api/auth/me", session=moved_session)
         check("me returns the ship he was last posted to", me["vessel"]["vesselId"], "m-v-local-only")

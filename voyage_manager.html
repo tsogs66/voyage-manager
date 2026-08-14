@@ -1373,6 +1373,7 @@
       <div id="loginVesselPick" hidden>
         <label class="login-field"><span>Load which vessel?</span>
           <select id="login_vesselSelect"></select></label>
+        <div class="hint" id="loginPendingNotice" hidden></div>
         <div class="login-actions">
           <button class="primary" id="btnLoginLoadVessel">Load vessel</button>
         </div>
@@ -14613,7 +14614,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v110';
+let androidInstallCacheName = 'noon-report-v111';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -16875,8 +16876,20 @@ async function enterAssignStep(session){
       state.session.fleet = vessels;
       if (sel){
         sel.innerHTML = vessels.length
-          ? vessels.map(v => `<option value="${v.vesselId}">${v.vesselName} — IMO ${v.imo}${v.company ? ' — ' + v.company : ''}</option>`).join('')
+          ? vessels.map(v => `<option value="${v.vesselId}">${v.vesselName} — IMO ${v.imo}${v.company ? ' — ' + v.company : ''}${v.pendingReview ? ` — PENDING REVIEW${v.createdBy ? ' (from ' + v.createdBy + ')' : ''}` : ''}</option>`).join('')
           : '<option value="">No vessels registered yet</option>';
+      }
+      /* A ship registered from a device rather than the office is held for review.
+         The flag was being recorded and never shown, which is the same as not
+         recording it. */
+      const waiting = vessels.filter(v => v.pendingReview);
+      const notice = document.getElementById('loginPendingNotice');
+      if (notice){
+        notice.textContent = waiting.length
+          ? `${waiting.length} vessel${waiting.length > 1 ? 's' : ''} registered from a ship and awaiting review: `
+            + waiting.map(v => `${v.vesselName} (IMO ${v.imo}${v.createdBy ? ', from ' + v.createdBy : ''})`).join('; ')
+          : '';
+        notice.hidden = !waiting.length;
       }
       if (pick) pick.hidden = false;
       if (!vessels.length){

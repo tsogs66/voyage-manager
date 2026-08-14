@@ -527,6 +527,14 @@ class SyncHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if parts == ["api", "admin", "vessels", "pending"]:
+            if self._require_admin() is None:
+                return
+            json_response(self, HTTPStatus.OK,
+                          {"ok": True,
+                           "vessels": [self._vessel_public(v, True) for v in ACCOUNTS.pending_vessels()]})
+            return
+
         if parts == ["api", "admin", "accounts"]:
             if self._require_admin() is None:
                 return
@@ -642,6 +650,8 @@ class SyncHandler(BaseHTTPRequestHandler):
             "vesselName": vessel["vesselName"],
             "imo": vessel["imo"],
             "company": vessel["company"],
+            "pendingReview": bool(vessel.get("pendingReview")),
+            "createdBy": vessel.get("createdBy") or "",
         }
         if include_token:
             out["token"] = vessel["token"]
@@ -686,6 +696,12 @@ class SyncHandler(BaseHTTPRequestHandler):
                 return self._handle_assign(body)
             if parts == ["api", "admin", "release"]:
                 return self._handle_release(body)
+            if parts == ["api", "admin", "vessels", "approve"]:
+                if self._require_admin() is None:
+                    return
+                vessel = ACCOUNTS.approve_vessel(str(body.get("vesselId", "")))
+                return json_response(self, HTTPStatus.OK,
+                                     {"ok": True, "vessel": self._vessel_public(vessel, True)})
             if parts == ["api", "vessels", "import"]:
                 return self._handle_vessel_import(body)
         except AccountError as err:
