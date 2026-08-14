@@ -274,6 +274,8 @@ def main() -> int:
         )
         check("the transfer is accepted", status, 200)
         check("he is posted to the new ship", moved["assignment"]["vesselId"], "m-v-roadstead")
+        check("the incumbent on that ship is signed off",
+              moved["assignment"].get("displaced"), "roadstead")
 
         status, relogin = request(
             f"{srv.base}/api/auth/login", method="POST",
@@ -531,24 +533,35 @@ def main() -> int:
               all("token" not in v for v in fleet["vessels"]), True)
         check("and Fangcheng is on it",
               any(v["vesselId"] == "m-v-fangcheng" for v in fleet["vessels"]), True)
+        fangcheng_row = next(v for v in fleet["vessels"] if v["vesselId"] == "m-v-fangcheng")
+        check("and names who is already aboard", fangcheng_row.get("chiefEngineer"), "newce")
 
-        status, claimed = request(
+        status, occupied = request(
             f"{srv.base}/api/vessels/claim", session=joiner_session, method="POST",
             payload={"vesselId": "m-v-fangcheng"},
         )
-        check("he can claim a ship that is already registered", status, 200)
-        check("and he is posted to it", claimed["assignment"]["vesselId"], "m-v-fangcheng")
+        check("claiming an occupied ship is refused", status, 409)
+        check("and names the reason", occupied.get("reason"), "ship_occupied")
+        check("and names who is aboard", occupied.get("chiefEngineer"), "newce")
+        check("so he did not kick anyone off", occupied.get("ok"), None)
+
+        status, claimed = request(
+            f"{srv.base}/api/vessels/claim", session=joiner_session, method="POST",
+            payload={"vesselId": "m-v-roadstead"},
+        )
+        check("he can claim a registered ship that is empty", status, 200)
+        check("and he is posted to it", claimed["assignment"]["vesselId"], "m-v-roadstead")
         check("with the sync token so the app can follow",
               bool(claimed["vessel"].get("token")), True)
         status, _ = request(
-            f"{srv.base}/api/voyage/m-v-fangcheng/1/B", session=joiner_session,
+            f"{srv.base}/api/voyage/m-v-roadstead/1/B", session=joiner_session,
             method="PUT", payload={"entries": [{"id": "join1", "updatedAt": "2026-02-01T00:00:00Z"}]},
         )
         check("and can write to the claimed ship", status, 200)
 
         status, twice = request(
             f"{srv.base}/api/vessels/claim", session=joiner_session, method="POST",
-            payload={"vesselId": "m-v-roadstead"},
+            payload={"vesselId": "m-v-fangcheng"},
         )
         check("claiming a second ship is refused — that is a transfer", status, 400)
 
@@ -557,6 +570,32 @@ def main() -> int:
             payload={"vesselId": "m-v-fangcheng"},
         )
         check("a manager cannot claim a posting", status, 403)
+
+        print("\nthe office assigns by displacing, the engineer cannot")
+        status, takeover = request(
+            f"{srv.base}/api/admin/assign", session=admin_session, method="POST",
+            payload={"username": "joiner", "vesselId": "m-v-fangcheng"},
+        )
+        check("the office can post him onto an occupied ship", status, 200)
+        check("the incumbent is named", takeover["assignment"].get("displaced"), "newce")
+        check("and he is now on Fangcheng", takeover["assignment"]["vesselId"], "m-v-fangcheng")
+
+        status, leftover = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "newce", "password": newce_pw},
+        )
+        check("the signed-off engineer still logs in", status, 200)
+        check("but with no vessel", leftover.get("vessel"), None)
+        status, blocked = request(
+            f"{srv.base}/api/voyage/m-v-fangcheng/1/B", session=newce_session,
+            method="PUT", payload={"entries": []},
+        )
+        check("and can no longer write the ship he left", blocked and 403, 403)
+        status, _ = request(
+            f"{srv.base}/api/voyage/m-v-fangcheng/1/B", session=joiner_session,
+            method="PUT", payload={"entries": [{"id": "join2", "updatedAt": "2026-02-01T01:00:00Z"}]},
+        )
+        check("the new posting can write it", status, 200)
 
         # Release him so the later import path still has an unassigned engineer.
         request(f"{srv.base}/api/admin/release", session=admin_session, method="POST",

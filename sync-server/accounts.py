@@ -189,6 +189,39 @@ class AccountStore:
                     ON assignments(username) WHERE released_at IS NULL;
                 """
             )
+            # One live chief engineer per ship: older databases allowed two
+            # open postings on the same vessel. Close the extras, then index.
+            self._ensure_one_chief_per_ship()
+
+    def _ensure_one_chief_per_ship(self) -> None:
+        """A ship has one live chief engineer. Older double-postings are closed
+        so the unique index can be created on databases that predate the rule."""
+        now = iso(utc_now())
+        rows = self._conn.execute(
+            "SELECT id, vessel_id FROM assignments "
+            "WHERE released_at IS NULL ORDER BY assigned_at DESC, id DESC"
+        ).fetchall()
+        seen: set[str] = set()
+        for row in rows:
+            if row["vessel_id"] in seen:
+                self._conn.execute(
+                    "UPDATE assignments SET released_at = ? WHERE id = ?",
+                    (now, row["id"]),
+                )
+            else:
+                seen.add(row["vessel_id"])
+        # Keep accounts.vessel_id in line with the surviving live posting.
+        self._conn.execute(
+            "UPDATE accounts SET vessel_id = ("
+            "  SELECT vessel_id FROM assignments "
+            "  WHERE assignments.username = accounts.username "
+            "    AND released_at IS NULL"
+            ")"
+        )
+        self._conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_assign_one_ce_per_ship "
+            "ON assignments(vessel_id) WHERE released_at IS NULL"
+        )
 
     # -------------------------------------------------------------- settings
 
@@ -427,9 +460,18 @@ class AccountStore:
     def list_vessels(self) -> list[dict]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT * FROM vessels ORDER BY vessel_name"
+                "SELECT v.*, s.username AS chief_engineer "
+                "FROM vessels v "
+                "LEFT JOIN assignments s "
+                "  ON s.vessel_id = v.vessel_id AND s.released_at IS NULL "
+                "ORDER BY v.vessel_name"
             ).fetchall()
-        return [self._vessel_row_to_dict(r) for r in rows]
+        out = []
+        for row in rows:
+            item = self._vessel_row_to_dict(row)
+            item["chiefEngineer"] = row["chief_engineer"]
+            out.append(item)
+        return out
 
 
     def approve_vessel(self, vessel_id: str) -> dict:
@@ -480,34 +522,94 @@ class AccountStore:
     # which this app needs, since opening ROB and meter readings carry over.
 
     def assign_vessel(
-        self, username: str, vessel_id: str, assigned_by: str = "", note: str = ""
+        self,
+        username: str,
+        vessel_id: str,
+        assigned_by: str = "",
+        note: str = "",
+        displace: bool = True,
     ) -> dict:
-        """Post an engineer to a ship, releasing whatever they were on."""
+        """Post an engineer to a ship.
+
+        One live chief engineer per ship. The office may displace the incumbent
+        (`displace=True`, the default): that person is signed off in the same
+        transaction. A claim from the ship must not (`displace=False`) — kicking
+        someone off is an office action. Re-posting the same pairing is a no-op.
+        """
         username = (username or "").strip().lower()
         account = self.get_account(username)
         if not account:
             raise AccountError(f"No account '{username}'")
-        if not self.get_vessel(vessel_id):
+        if canonical_role(account["role"]) == ROLE_ADMIN:
+            raise AccountError("A fleet manager is not posted to a ship")
+        vessel = self.get_vessel(vessel_id)
+        if not vessel:
             raise AccountError(f"No vessel '{vessel_id}' is registered")
 
+        current = self.current_vessel(username)
+        if current == vessel["vesselId"]:
+            return {
+                "username": username,
+                "vesselId": vessel["vesselId"],
+                "vesselName": vessel["vesselName"],
+                "unchanged": True,
+                "displaced": None,
+            }
+
         now = iso(utc_now())
+        displaced = None
         with self._lock, self._conn:
             self._conn.execute(
                 "UPDATE assignments SET released_at = ? "
                 "WHERE username = ? AND released_at IS NULL",
                 (now, username),
             )
-            self._conn.execute(
-                "INSERT INTO assignments "
-                "(username, vessel_id, assigned_at, assigned_by, note) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (username, vessel_id, now, assigned_by or "", note or ""),
-            )
+            occupant = self._conn.execute(
+                "SELECT username FROM assignments "
+                "WHERE vessel_id = ? AND released_at IS NULL",
+                (vessel["vesselId"],),
+            ).fetchone()
+            if occupant and occupant["username"] != username:
+                if not displace:
+                    raise AccountError(
+                        f"{vessel['vesselName']} already has a chief engineer "
+                        f"({occupant['username']}). Ask the office to assign you."
+                    )
+                displaced = occupant["username"]
+                self._conn.execute(
+                    "UPDATE assignments SET released_at = ? "
+                    "WHERE vessel_id = ? AND released_at IS NULL",
+                    (now, vessel["vesselId"]),
+                )
+                self._conn.execute(
+                    "UPDATE accounts SET vessel_id = NULL WHERE username = ?",
+                    (displaced,),
+                )
+            try:
+                self._conn.execute(
+                    "INSERT INTO assignments "
+                    "(username, vessel_id, assigned_at, assigned_by, note) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (username, vessel["vesselId"], now, assigned_by or "", note or ""),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise AccountError(
+                    f"{vessel['vesselName']} already has a chief engineer. "
+                    "Ask the office to assign you."
+                ) from exc
             self._conn.execute(
                 "UPDATE accounts SET vessel_id = ? WHERE username = ?",
-                (vessel_id, username),
+                (vessel["vesselId"], username),
             )
-        return {"username": username, "vesselId": vessel_id, "assignedAt": now}
+        return {
+            "username": username,
+            "vesselId": vessel["vesselId"],
+            "vesselName": vessel["vesselName"],
+            "assignedAt": now,
+            "previousVesselId": current,
+            "displaced": displaced,
+            "unchanged": False,
+        }
 
     def release_vessel(self, username: str) -> None:
         """Sign an engineer off without posting them anywhere else."""
@@ -524,6 +626,17 @@ class AccountStore:
             )
         if cur.rowcount == 0:
             raise AccountError(f"'{username}' is not assigned to a vessel")
+
+    def current_engineer(self, vessel_id: str) -> str | None:
+        """Who is the live chief engineer on this ship, if anyone."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT username FROM assignments "
+                "WHERE vessel_id = ? AND released_at IS NULL "
+                "ORDER BY assigned_at DESC LIMIT 1",
+                (vessel_id or "",),
+            ).fetchone()
+        return row["username"] if row else None
 
     def current_vessel(self, username: str) -> str | None:
         with self._lock:
@@ -580,11 +693,11 @@ class AccountStore:
         return {"vesselId": vessel_id, "chiefEngineer": current, "history": history}
 
     def claim_vessel(self, username: str, vessel_id: str) -> dict:
-        """An unassigned engineer picks the ship he actually joined.
+        """An unassigned engineer picks an empty registered ship.
 
         The office still creates the vessel and the account. This only opens the
-        posting, and only when he is on none — it is not a transfer, and it will
-        not mint a ship that is not already on the register.
+        posting, and only when he is on none and the ship has no live chief
+        engineer — it is not a transfer, and it will not kick anyone off.
         """
         username = (username or "").strip().lower()
         account = self.get_account(username)
@@ -596,10 +709,21 @@ class AccountStore:
             raise AccountError(
                 "Already assigned to a vessel — ask the office to transfer you"
             )
-        if not self.get_vessel(vessel_id):
+        vessel = self.get_vessel(vessel_id)
+        if not vessel:
             raise AccountError(f"No vessel '{vessel_id}' is registered")
+        occupant = self.current_engineer(vessel["vesselId"])
+        if occupant and occupant != username:
+            raise AccountError(
+                f"{vessel['vesselName']} already has a chief engineer ({occupant}). "
+                "Ask the office to assign you."
+            )
         return self.assign_vessel(
-            username, vessel_id, assigned_by=username, note="claimed at first sign-in"
+            username,
+            vessel["vesselId"],
+            assigned_by=username,
+            note="claimed at first sign-in",
+            displace=False,
         )
 
 

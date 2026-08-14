@@ -42,10 +42,16 @@ server-side — but he can read what is on that machine. Revoke the device from
 Fleet Office when a laptop is lost or handed over.
 
 **Two ways an unassigned engineer gets a ship.** The office creates the account
-with a vessel, or with none. If none, he signs in and **picks from the fleet
-register** (`POST /api/vessels/claim`) — he does not mint a ship that is already
-someone else's. Register Vessel remains only for a ship that is not listed yet,
+with a vessel, or with none. If none, he signs in and **picks an empty ship from
+the fleet register** (`POST /api/vessels/claim`) — he does not mint a ship that
+is already someone else's, and he cannot take a ship that already has a live
+chief engineer. Register Vessel remains only for a ship that is not listed yet,
 and those arrivals are flagged for review.
+
+**Assigning in Fleet Office.** Each engineer row has its own ship picker, plus
+Assign / Sign off / Reset password. The create form's "Post to vessel" is only
+for the moment the account is created. Occupied ships name who is aboard; posting
+someone onto one asks before signing the incumbent off.
 
 ## Bunkering and R.O.B. corrections
 
@@ -324,7 +330,15 @@ assignments(username, vessel_id, assigned_at, released_at, assigned_by, note)
 
 A posting is a row with `released_at` empty. Re-posting an engineer closes the old
 row and opens a new one in the same transaction, so an engineer is never on two
-ships or none. One partial unique index enforces a single live posting each.
+ships at once. Two partial unique indexes keep the roster unambiguous:
+
+- one live posting **per engineer**
+- one live chief engineer **per ship**
+
+The office may post someone onto an occupied ship: `POST /api/admin/assign` signs
+the incumbent off in the same transaction (`displaced` in the response). An
+engineer claiming a ship cannot: `POST /api/vessels/claim` returns `409
+ship_occupied` if someone is already aboard.
 
 That single shape gives three things at once:
 
@@ -341,12 +355,14 @@ That single shape gives three things at once:
 The fleet manager creates the account from **Fleet Office** in the app (Vessel
 Data, when signed in as manager), and either:
 
-- **names a vessel** — `POST /api/admin/accounts` with a `vesselId` posts him to it,
-  and he is on that ship the moment he signs in; or
+- **names a vessel** — `POST /api/admin/accounts` with a `vesselId` posts him to it
+  (and signs off whoever was already there), and he is on that ship the moment he
+  signs in; or
 - **leaves it empty** — the account is created with no vessel. He signs in and
-  **picks the ship he joined** from the fleet register (`POST /api/vessels/claim`).
-  If the ship is not listed yet, he continues into Setup and presses **Register
-  Vessel**, which flags it for the office.
+  **picks an empty ship he joined** from the fleet register (`POST /api/vessels/claim`).
+  Occupied ships are listed with who is aboard and cannot be claimed. If the ship
+  is not listed yet, he continues into Setup and presses **Register Vessel**, which
+  flags it for the office.
 
 **The password is generated, not chosen.** `POST /api/admin/accounts` and
 `POST /api/admin/vessels` ignore any password in the request and generate one for a
@@ -482,12 +498,12 @@ its vessel assignment instead of locking the crew out of their own records.
 | `DELETE /api/admin/vessels/<id>` | admin | Remove a vessel and its accounts |
 | `POST /api/admin/token-preview` | manager | Token for a name + IMO, without creating anything |
 | `GET/POST /api/admin/accounts` | manager | List / create logins |
-| `POST /api/admin/assign` | manager | Post an engineer to a ship (this is also the transfer) |
+| `POST /api/admin/assign` | manager | Post an engineer to a ship (this is also the transfer; displaces the incumbent) |
 | `POST /api/admin/release` | manager | Sign an engineer off without re-posting |
 | `GET /api/admin/crew/<vesselId>` | manager | Who is on a ship now, and who has been |
 | `GET /api/assignments/<username>` | own record, or manager | Service history |
-| `GET /api/vessels` | session | Fleet register without tokens — used to claim a ship |
-| `POST /api/vessels/claim` | unassigned engineer | Join a ship that is already registered |
+| `GET /api/vessels` | session | Fleet register without tokens — used to claim a ship; includes `chiefEngineer` |
+| `POST /api/vessels/claim` | unassigned engineer | Join an empty registered ship (`409 ship_occupied` if someone is aboard) |
 | `POST /api/vessels/import` | any login | Register a vessel absent from the database |
 | `GET /api/admin/vessels/pending` | manager | Ships registered from a device, awaiting review |
 | `POST /api/admin/vessels/approve` | manager | Clear a ship's pending flag |
@@ -525,7 +541,7 @@ Node and Python 3 — nothing to install.
 | `tests/browser_*_e2e.js` | Not in CI (no browser there). Run against a live seeded server with `NODE_PATH` pointing at a `playwright-core` install: `APP_BASE=http://127.0.0.1:8860 NODE_PATH=/path/to/node_modules node tests/browser_empty_vessel_e2e.js`. |
 | `tests/test_device_enrollment.js` | Device enrollment helpers — that a generated id matches the server pattern, that a device that has never signed in is refused, and that unlock after enrollment needs no password. |
 | `tests/test_rob_survey.js` | The R.O.B. chain across a bunker survey — that a survey re-bases it, that earlier reports are untouched, that a bunker taken before the survey is not counted twice, and that the later of two surveys wins. |
-| `tests/test_accounts.py` | Logins, derived vessel tokens, crew rotation, device enrollment/revocation, claiming a registered ship, and the read-history/write-current rule — including that a transferred engineer still reads his old ship but can no longer write to it, and that the legacy shared token still works. |
+| `tests/test_accounts.py` | Logins, derived vessel tokens, crew rotation, device enrollment/revocation, claiming an empty registered ship, refusing an occupied claim, office assign displacing the incumbent, and the read-history/write-current rule — including that a transferred engineer still reads his old ship but can no longer write to it, and that the legacy shared token still works. |
 | `tests/browser_login_e2e.js` | Not in CI (no browser there). Drives the real login UI in Chromium against a live seeded server. Run it after touching the gate. |
 | `tests/test_install_quoting.sh` | The installer's token quoting, checked against systemd's own parser via `systemd-analyze`. Unquoted, systemd splits an `Environment=` value on whitespace and reads `%` as a specifier, so a token with a space or a `%` reached the server truncated — leaving it on its default token, rejecting the very token the installer printed. |
 

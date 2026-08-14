@@ -690,6 +690,8 @@ class SyncHandler(BaseHTTPRequestHandler):
             "pendingReview": bool(vessel.get("pendingReview")),
             "createdBy": vessel.get("createdBy") or "",
         }
+        if vessel.get("chiefEngineer") is not None:
+            out["chiefEngineer"] = vessel.get("chiefEngineer") or ""
         if include_token:
             out["token"] = vessel["token"]
         return out
@@ -886,6 +888,20 @@ class SyncHandler(BaseHTTPRequestHandler):
                  "message": "Post an engineer from Fleet Office, do not claim a ship as manager."},
             )
             return
+        occupant = ACCOUNTS.current_engineer(str(body.get("vesselId", "")))
+        if occupant and occupant != principal["username"]:
+            vessel = ACCOUNTS.get_vessel(str(body.get("vesselId", "")))
+            name = (vessel or {}).get("vesselName") or str(body.get("vesselId", ""))
+            json_response(
+                self, HTTPStatus.CONFLICT,
+                {"error": "ship_occupied", "reason": "ship_occupied",
+                 "message": (
+                     f"{name} already has a chief engineer ({occupant}). "
+                     "Ask the office to assign you."
+                 ),
+                 "chiefEngineer": occupant},
+            )
+            return
         out = ACCOUNTS.claim_vessel(principal["username"], str(body.get("vesselId", "")))
         vessel = ACCOUNTS.get_vessel(out["vesselId"])
         json_response(
@@ -1038,7 +1054,8 @@ class SyncHandler(BaseHTTPRequestHandler):
     def _handle_assign(self, body: dict) -> None:
         """Post an engineer to a ship. Re-posting is the transfer: the previous
         assignment is closed in the same transaction, so there is never a moment
-        where an engineer is on two ships or none."""
+        where an engineer is on two ships or none. If the target already has a
+        live chief engineer, that person is signed off — one CE per ship."""
         principal = self._require_admin()
         if principal is None:
             return
