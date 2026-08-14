@@ -564,6 +564,7 @@ def main() -> int:
             payload={"vesselId": "m-v-fangcheng"},
         )
         check("claiming a second ship is refused — that is a transfer", status, 400)
+        check("and says so", twice.get("reason"), "already_assigned")
 
         status, _ = request(
             f"{srv.base}/api/vessels/claim", session=admin_session, method="POST",

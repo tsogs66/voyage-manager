@@ -888,6 +888,13 @@ class SyncHandler(BaseHTTPRequestHandler):
                  "message": "Post an engineer from Fleet Office, do not claim a ship as manager."},
             )
             return
+        if ACCOUNTS.current_vessel(principal["username"]):
+            json_response(
+                self, HTTPStatus.BAD_REQUEST,
+                {"error": "Already assigned to a vessel — ask the office to transfer you",
+                 "reason": "already_assigned"},
+            )
+            return
         occupant = ACCOUNTS.current_engineer(str(body.get("vesselId", "")))
         if occupant and occupant != principal["username"]:
             vessel = ACCOUNTS.get_vessel(str(body.get("vesselId", "")))
