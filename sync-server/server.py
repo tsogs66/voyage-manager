@@ -855,9 +855,10 @@ class SyncHandler(BaseHTTPRequestHandler):
         account = None
         username = str(body.get("username", "")).strip()
         if username:
+            account_role = canonical_role(str(body.get("role", ROLE_VESSEL)))
             account = ACCOUNTS.create_account(
-                username, str(body.get("password", "")),
-                str(body.get("role", ROLE_VESSEL)), vessel["vesselId"],
+                username, str(body.get("password", "")), account_role, vessel["vesselId"],
+                generate=(account_role != ROLE_ADMIN),
             )
             # Open the assignment period too. accounts.vessel_id alone is not a
             # posting: reads and writes are decided by the assignments table, so
@@ -882,8 +883,13 @@ class SyncHandler(BaseHTTPRequestHandler):
         vessel_id = str(body.get("vesselId", "")).strip() or None
         if role != ROLE_ADMIN and vessel_id and not ACCOUNTS.get_vessel(vessel_id):
             raise AccountError(f"No vessel '{vessel_id}' is registered")
+        # A chief engineer's password is generated, never chosen by the office. These
+        # credentials end up on a laptop that sails and can be attacked offline, so
+        # the one thing that must not happen is a weak password picked for
+        # convenience. The plaintext comes back once, in this response.
         account = ACCOUNTS.create_account(
-            str(body.get("username", "")), str(body.get("password", "")), role, vessel_id
+            str(body.get("username", "")), str(body.get("password", "")), role, vessel_id,
+            generate=(role != ROLE_ADMIN),
         )
         # A ship may be named now, or left empty for the engineer to enter when he
         # joins. If one is named, open the assignment period too — accounts.vessel_id
@@ -895,7 +901,15 @@ class SyncHandler(BaseHTTPRequestHandler):
                 assigned_by=(principal.get("username") or "fleet_manager"),
                 note="created with account",
             )
-            account = ACCOUNTS.get_account(account["username"]) or account
+            # Re-reading the row would drop the generated password — it lives only
+            # in the create call's return value, and this response is its one
+            # chance to reach the office.
+            refreshed = ACCOUNTS.get_account(account["username"])
+            if refreshed:
+                refreshed = dict(refreshed)
+                if account.get("password"):
+                    refreshed["password"] = account["password"]
+                account = refreshed
         json_response(self, HTTPStatus.OK,
                       {"ok": True, "account": account,
                        "vessel": self._vessel_public(

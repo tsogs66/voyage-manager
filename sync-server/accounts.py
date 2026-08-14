@@ -34,6 +34,27 @@ SESSION_TTL_HOURS = 12
 TOKEN_LENGTH = 40
 SLUG_RE = re.compile(r"^[a-zA-Z0-9._-]{1,64}$")
 
+# No i, l, o, 0 or 1: this gets read off a handover sheet and typed on a ship's
+# laptop, and a password nobody can transcribe gets written on a sticky note.
+PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+PASSWORD_GROUPS = 4
+PASSWORD_GROUP_SIZE = 4
+
+
+def generate_password() -> str:
+    """A password the office cannot choose badly.
+
+    Chief engineer credentials end up on a laptop that sails, and a device that
+    signs in offline holds material an attacker can grind at leisure. Four groups
+    of four from a 31-character alphabet is about 79 bits — far past what anyone
+    types by hand, and the work factor on top of it makes offline grinding
+    hopeless.
+    """
+    return "-".join(
+        "".join(secrets.choice(PASSWORD_ALPHABET) for _ in range(PASSWORD_GROUP_SIZE))
+        for _ in range(PASSWORD_GROUPS)
+    )
+
 ROLE_ADMIN = "fleet_manager"
 ROLE_VESSEL = "chief_engineer"
 # Older databases wrote these names; both still authenticate.
@@ -204,8 +225,15 @@ class AccountStore:
         ).hex()
 
     def create_account(
-        self, username: str, password: str, role: str, vessel_id: str | None = None
+        self, username: str, password: str, role: str, vessel_id: str | None = None,
+        generate: bool = False
     ) -> dict:
+        """Create a login. With generate=True the supplied password is ignored and
+        a strong one is made instead; the plaintext comes back in the returned dict
+        under "password" and is never stored — that return value is the only copy."""
+        generated = generate_password() if generate else ""
+        if generate:
+            password = generated
         username = (username or "").strip().lower()
         if not SLUG_RE.match(username):
             raise AccountError(
@@ -227,7 +255,11 @@ class AccountStore:
                 )
         except sqlite3.IntegrityError as exc:
             raise AccountError(f"Username '{username}' already exists") from exc
-        return {"username": username, "role": role, "vesselId": vessel_id}
+        # The plaintext rides back on this one return value and is stored nowhere.
+        out = {"username": username, "role": role, "vesselId": vessel_id}
+        if generated:
+            out["password"] = generated
+        return out
 
     def set_password(self, username: str, password: str) -> None:
         salt = secrets.token_hex(16)

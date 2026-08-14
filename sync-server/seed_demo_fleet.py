@@ -14,6 +14,12 @@ Usage:
 
 Existing accounts are left alone unless --force is given. Prints every login and
 vessel token it creates — that output is the only copy of the passwords.
+
+This is a seeding tool for demo data, not the way the office creates crew. It talks
+to the database directly, so --password sets a shared password for every seeded
+login and the tests can rely on it. Real accounts are created through
+POST /api/admin/accounts, which ignores any password sent and generates one, because
+chief engineer credentials end up on a laptop that sails.
 """
 
 from __future__ import annotations

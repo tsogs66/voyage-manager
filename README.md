@@ -343,6 +343,21 @@ The fleet manager creates the account, and either:
   Setup with the vessel fields open, enters the ship he actually joined and presses
   **Register Vessel**.
 
+**The password is generated, not chosen.** `POST /api/admin/accounts` and
+`POST /api/admin/vessels` ignore any password in the request and generate one for a
+chief engineer, returning the plaintext once in that response — it is stored nowhere
+else. Four groups of four from a 31-character alphabet with no `i`, `l`, `o`, `0` or
+`1`, so it survives being read off a handover sheet and typed on a ship's laptop:
+
+```
+dktn-us5x-4x87-bjjb
+```
+
+That is roughly 79 bits. It matters because these credentials end up on a device that
+signs in offline, where an attacker who steals the laptop can grind at leisure — the
+one thing that must not happen is a weak password picked for convenience by the
+office. Fleet manager accounts still take a chosen password.
+
 Vessel identity is the manager's record, but only once there *is* a record. The name,
 IMO and company fields stay editable for an engineer who has no vessel yet, or whose
 vessel is still pending review, and lock as soon as he is on an established ship — so
@@ -483,6 +498,7 @@ Node and Python 3 — nothing to install.
 | `tests/check_js_syntax.js` | Every shipped `.js` file and each inline `<script>` in `voyage_manager.html` parses. There is no build step, so a syntax error otherwise ships silently. |
 | `tests/check_assets.js` | `sw.js`'s cache name and precache list still match `androidInstallCacheName` / `androidInstallAssets` in the app, and every precached file exists. A stale cache name leaves phones on the previous build. |
 | `tests/test_sync_auth.py` | Starts `sync-server/server.py` with and without `SYNC_API_TOKEN` and asserts who gets in, including the 401 `reason` codes and a non-ASCII token. |
+| `tests/browser_*_e2e.js` | Not in CI (no browser there). Run against a live seeded server with `NODE_PATH` pointing at a `playwright-core` install: `APP_BASE=http://127.0.0.1:8860 NODE_PATH=/path/to/node_modules node tests/browser_empty_vessel_e2e.js`. |
 | `tests/test_offline_verifier.js` | The offline password verifier across both languages — that the browser's WebCrypto PBKDF2 reproduces Python's digest exactly, including Unicode passwords, and that the comparison rejects near misses. |
 | `tests/test_rob_survey.js` | The R.O.B. chain across a bunker survey — that a survey re-bases it, that earlier reports are untouched, that a bunker taken before the survey is not counted twice, and that the later of two surveys wins. |
 | `tests/test_accounts.py` | Logins, derived vessel tokens, crew rotation, and the read-history/write-current rule — including that a transferred engineer still reads his old ship but can no longer write to it, and that the legacy shared token still works. |

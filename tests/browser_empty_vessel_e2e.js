@@ -50,12 +50,16 @@ const signIn = async (pg, user, pass) => {
     const res = await fetch(base + '/api/admin/accounts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Session-Token': login.sessionToken },
-      body: JSON.stringify({ username: u, password: 'no-ship-yet', role: 'chief_engineer' })
+      body: JSON.stringify({ username: u, role: 'chief_engineer' })
     }).then(r => r.json());
     return res;
   }, [user, BASE]);
   check('the office created him with no ship', made.vessel, null);
-  await signIn(pg, user, 'no-ship-yet');
+  /* The office does not choose this password — the server generates it and hands it
+     back once. Signing in with anything else is supposed to fail. */
+  const pass = made.account.password;
+  check('and handed back a generated password', typeof pass === 'string' && pass.length >= 16, true);
+  await signIn(pg, user, pass);
   const empty = await pg.evaluate(() => {
     switchTab('setup');
     return {
