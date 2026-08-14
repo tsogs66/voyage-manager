@@ -4,6 +4,46 @@ Offline-capable ship performance and fuel logging app for engine department noon
 
 Works on **Android phones** and **PC browsers** as a Progressive Web App (PWA), with optional sync to a **self-hosted Linux server** behind Cloudflare Tunnel.
 
+## Signing in at sea
+
+**The fleet manager creates the account, and the engineer must sign in online once
+before that device works offline.** That first sign-in is what fetches his vessel and
+his data; from then on the same laptop signs in with no connectivity at all.
+
+There is deliberately **no way to provision a device that has never authenticated** —
+no credential file to export, carry on a stick, or leak. A laptop earns offline access
+by proving itself against the live server, once.
+
+On that first sign-in the app fetches an offline bundle for the ship
+(`GET /api/vessel/offline-bundle`) and keeps it. The bundle holds the vessel, its sync
+token, and a PBKDF2-HMAC-SHA256 **verifier** for each engineer posted to that ship —
+never a password. Offline, the app recomputes the verifier with WebCrypto and compares.
+`tests/test_offline_verifier.js` checks the browser's digest against one Python
+produced, because if those two disagree by a byte then offline sign-in fails for
+everyone and a test of either side alone would not notice.
+
+The bundle is refreshed on every successful online sign-in, so a device that works
+today still works after it sails, and a transfer reaches it the next time it connects.
+
+Three rules keep the exposure bounded:
+
+- **A bare vessel token cannot mint credentials.** The token already grants sync;
+  issuing offline credentials requires a signed-in session, or the token alone would
+  unlock a laptop.
+- **Only engineers currently posted to that ship are included**, and fleet manager
+  accounts never are — office credentials have no business on a ship's laptop.
+- **The bundle expires.** Past that, the device must reach the server again.
+
+The offline path is narrow by design: it is used **only when the server cannot be
+reached at all**. If the server answers — including a 401 — its answer stands, so a
+revoked login cannot be resurrected by pulling the network cable.
+
+What remains true of any offline scheme: a stolen laptop carries crackable password
+material for whoever signed in on it, and a transferred engineer keeps working on the
+old device until it reconnects. He cannot *sync* the old ship — assignment is checked
+server-side — but he can read what is on that machine. Prefer generated passwords for
+chief engineer accounts.
+
 ## Bunkering and R.O.B. corrections
 
 R.O.B. is a chain: every report's opening figure is the previous report's closing
@@ -293,6 +333,49 @@ That single shape gives three things at once:
   here: opening ROB and meter readings carry over from the last entry, so a new
   chief engineer joining a ship with no history cannot start a voyage correctly.
 
+### Two ways an engineer gets a ship
+
+The fleet manager creates the account, and either:
+
+- **names a vessel** — `POST /api/admin/accounts` with a `vesselId` posts him to it,
+  and he is on that ship the moment he signs in; or
+- **leaves it empty** — the account is created with no vessel. He signs in, lands in
+  Setup with the vessel fields open, enters the ship he actually joined and presses
+  **Register Vessel**.
+
+**The password is generated, not chosen.** `POST /api/admin/accounts` and
+`POST /api/admin/vessels` ignore any password in the request and generate one for a
+chief engineer, returning the plaintext once in that response — it is stored nowhere
+else. Four groups of four from a 31-character alphabet with no `i`, `l`, `o`, `0` or
+`1`, so it survives being read off a handover sheet and typed on a ship's laptop:
+
+```
+dktn-us5x-4x87-bjjb
+```
+
+That is roughly 79 bits. It matters because these credentials end up on a device that
+signs in offline, where an attacker who steals the laptop can grind at leisure — the
+one thing that must not happen is a weak password picked for convenience.
+
+**Only the fleet manager changes a password**, and a chief engineer's replacement is
+generated too. A chief engineer cannot change his own at all: his password is
+generated precisely so it survives being on a laptop that signs in offline, and
+letting him replace it with one he can remember is the single move that undoes that.
+Resets go through the office — which is where a crew change is handled anyway.
+
+```
+POST /api/auth/password  {"username": "hberg"}      -> new generated password, once
+```
+
+Fleet manager accounts still take a chosen password, and changing your own still
+requires the current one, so a session left open cannot lock the office out of its
+own account.
+
+Vessel identity is the manager's record, but only once there *is* a record. The name,
+IMO and company fields stay editable for an engineer who has no vessel yet, or whose
+vessel is still pending review, and lock as soon as he is on an established ship — so
+he can enter the ship he joined but can never rename someone else's.
+
 ### Importing a vessel that is not in the database
 
 `POST /api/vessels/import` with the vessel name, IMO and company:
@@ -395,6 +478,7 @@ its vessel assignment instead of locking the crew out of their own records.
 | `GET /api/assignments/<username>` | own record, or manager | Service history |
 | `POST /api/vessels/import` | any login | Register a vessel absent from the database |
 | `GET /api/admin/vessels/pending` | manager | Ships registered from a device, awaiting review |
+| `GET /api/vessel/offline-bundle` | signed-in user | Earn/refresh this device's offline credentials |
 | `POST /api/admin/vessels/approve` | manager | Clear a ship's pending flag |
 
 Data routes are scoped: a vessel login reaching another ship gets `403 wrong_vessel`.
@@ -427,6 +511,8 @@ Node and Python 3 — nothing to install.
 | `tests/check_js_syntax.js` | Every shipped `.js` file and each inline `<script>` in `voyage_manager.html` parses. There is no build step, so a syntax error otherwise ships silently. |
 | `tests/check_assets.js` | `sw.js`'s cache name and precache list still match `androidInstallCacheName` / `androidInstallAssets` in the app, and every precached file exists. A stale cache name leaves phones on the previous build. |
 | `tests/test_sync_auth.py` | Starts `sync-server/server.py` with and without `SYNC_API_TOKEN` and asserts who gets in, including the 401 `reason` codes and a non-ASCII token. |
+| `tests/browser_*_e2e.js` | Not in CI (no browser there). Run against a live seeded server with `NODE_PATH` pointing at a `playwright-core` install: `APP_BASE=http://127.0.0.1:8860 NODE_PATH=/path/to/node_modules node tests/browser_empty_vessel_e2e.js`. |
+| `tests/test_offline_verifier.js` | The offline password verifier across both languages — that the browser's WebCrypto PBKDF2 reproduces Python's digest exactly, including Unicode passwords, and that the comparison rejects near misses. |
 | `tests/test_rob_survey.js` | The R.O.B. chain across a bunker survey — that a survey re-bases it, that earlier reports are untouched, that a bunker taken before the survey is not counted twice, and that the later of two surveys wins. |
 | `tests/test_accounts.py` | Logins, derived vessel tokens, crew rotation, and the read-history/write-current rule — including that a transferred engineer still reads his old ship but can no longer write to it, and that the legacy shared token still works. |
 | `tests/browser_login_e2e.js` | Not in CI (no browser there). Drives the real login UI in Chromium against a live seeded server. Run it after touching the gate. |

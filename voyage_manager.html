@@ -1362,6 +1362,7 @@
       <div class="login-status" id="loginStatus" role="status"></div>
       <div class="login-actions">
         <button class="primary" id="btnLoginSubmit">Sign in</button>
+        <div class="hint" id="offlineCredsStatus"></div>
         <button class="ghost" id="btnLoginOffline">Work offline</button>
       </div>
       <p class="login-note">Working offline opens the program with no vessel assigned. You can sign in or add a vessel token later from Setup → Server Sync.</p>
@@ -1534,6 +1535,9 @@
       </div>
       <div class="vessel-save-status" id="vesselSaveStatus" role="status" aria-live="polite"></div>
       <div class="vessel-locked-note" id="vesselIdentityNote"></div>
+      <div class="btn-row" id="registerVesselRow" hidden style="margin-top:8px;">
+        <button class="ghost small" id="btnRegisterVessel" type="button">Register Vessel</button>
+      </div>
       <div class="hint">Vessel name, company, Chief Engineer, DWT and IMO number are stored per vessel and used on printouts, CII and the e-ORB prefill.</div>
 
       <h3 class="sub">Vessel Stamp</h3>
@@ -14614,7 +14618,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v111';
+let androidInstallCacheName = 'noon-report-v114';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -16789,8 +16793,13 @@ function renderVesselLock(){
     const el = document.getElementById(id);
     if (el) el.disabled = lockSwitcher;
   });
-  /* Vessel identity is the fleet manager's record, not the ship's. */
-  const identityLocked = !!session.username && !isAdmin;
+  /* Vessel identity is the fleet manager's record — but only once there IS a
+     record. An engineer given an empty vessel has to be able to enter the ship he
+     joined, so the fields stay open until his vessel is established. Once he is on
+     a registered ship he can no longer rename it. */
+  const assignedVessel = session.vessel && session.vessel.vesselId;
+  const identityLocked = !!session.username && !isAdmin
+    && !!assignedVessel && !session.vessel.pendingReview;
   ['s_vesselName', 's_imoNo', 's_company'].forEach(id => {
     const el = document.getElementById(id);
     if (el){
@@ -16804,13 +16813,159 @@ function renderVesselLock(){
   if (idNote){
     idNote.textContent = identityLocked
       ? 'Vessel name, IMO and company come from the central database — changing them needs a fleet manager login.'
-      : '';
+      : (session.username && !isAdmin && !assignedVessel
+          ? 'No vessel is assigned to you yet. Enter this ship\u2019s name, IMO and company, then Register Vessel to add it to the fleet database.'
+          : '');
   }
+  const regRow = document.getElementById('registerVesselRow');
+  if (regRow) regRow.hidden = !(session.username && !isAdmin && !assignedVessel);
   const note = document.getElementById('vesselLockNote');
   if (note){
     note.textContent = lockSwitcher
       ? `This copy is assigned to ${vessel.vesselName || vessel.vesselId} by your login. Only this vessel can be loaded.`
       : '';
+  }
+}
+
+
+/* ---------------- offline credentials ----------------
+   A ship joining with a fresh laptop and no connectivity cannot reach the server
+   to sign in even once. A bundle exported by the fleet manager carries the vessel
+   and the password VERIFIERS for whoever is posted to it, so the login is checked
+   on the device. The verifier is the same PBKDF2-HMAC-SHA256 the server stores —
+   the device recomputes it and compares, it never sees a password.
+
+   The trade is deliberate and its cost is real: a stolen laptop carries crackable
+   password material, and a transferred engineer keeps working on the old device
+   until it reconnects. The bundle therefore expires, and carries only the
+   engineers currently posted to that one ship. */
+
+const OFFLINE_BUNDLE_KEY = 'nr_offline_bundle';
+
+function readOfflineBundle(){
+  try{
+    const raw = localStorage.getItem(OFFLINE_BUNDLE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(_){ return null; }
+}
+
+function writeOfflineBundle(bundle){
+  if (!bundle || bundle.version !== 1 || !bundle.vessel || !Array.isArray(bundle.logins)){
+    throw new Error('That file is not a vessel credentials bundle.');
+  }
+  localStorage.setItem(OFFLINE_BUNDLE_KEY, JSON.stringify(bundle));
+  return bundle;
+}
+
+function hexToBytes(hex){
+  const clean = String(hex || '').trim();
+  if (clean.length % 2) throw new Error('Bad salt in credentials bundle.');
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.substr(i * 2, 2), 16);
+  return out;
+}
+
+function bytesToHex(buf){
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Recompute the server's PBKDF2 verifier for a password, in the browser. */
+async function derivePasswordVerifier(password, saltHex, rounds){
+  if (!crypto?.subtle) throw new Error('This browser cannot verify credentials offline (no WebCrypto).');
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name:'PBKDF2', salt: hexToBytes(saltHex), iterations: rounds, hash:'SHA-256' },
+    key, 256
+  );
+  return bytesToHex(bits);
+}
+
+/** Constant-time-ish compare, so a wrong password does not leak how wrong it was. */
+function verifiersMatch(a, b){
+  const x = String(a || ''), y = String(b || '');
+  if (x.length !== y.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
+  return diff === 0;
+}
+
+/** Sign in against the bundle on this device. Returns a session, or throws. */
+async function offlineLogin(username, password){
+  const bundle = readOfflineBundle();
+  if (!bundle) throw new Error('This device has never signed in. The first sign-in needs the server — connect, sign in once, and it will work offline after that.');
+  if (bundle.expiresAt && new Date(bundle.expiresAt) < new Date()){
+    throw new Error(`Offline access for this device expired on ${String(bundle.expiresAt).slice(0,10)}. Connect to the server and sign in again.`);
+  }
+  const login = (bundle.logins || []).find(l => l.username === username.trim().toLowerCase());
+  /* Do the derivation even when the username is unknown, so the failure takes the
+     same time either way and does not reveal who is posted to this ship. */
+  const target = login || { salt: '00'.repeat(16), rounds: 240000, verifier: '' };
+  if (target.algorithm && target.algorithm !== 'pbkdf2-hmac-sha256'){
+    throw new Error('These credentials use a scheme this version cannot verify.');
+  }
+  const got = await derivePasswordVerifier(password, target.salt, target.rounds || 240000);
+  if (!login || !verifiersMatch(got, target.verifier)){
+    throw new Error('Username or password is incorrect.');
+  }
+  return writeStoredSession({
+    serverUrl: state.session?.serverUrl || document.getElementById('login_serverUrl')?.value || '',
+    sessionToken: null,           /* no server session exists — this is a local sign-in */
+    offline: true,
+    expiresAt: bundle.expiresAt,
+    username: login.username,
+    role: login.role,
+    vessel: bundle.vessel,
+    history: [bundle.vessel]
+  });
+}
+
+
+function bindOfflineCredsUi(){
+  /* There is no way to install credentials by hand. A device earns its offline
+     access by signing in online once, which is when the bundle is fetched. */
+  const status = document.getElementById('offlineCredsStatus');
+  if (!status) return;
+  const b = readOfflineBundle();
+  if (!b){
+    status.textContent = 'This device has not signed in yet. The first sign-in needs the server; after that it works at sea.';
+    return;
+  }
+  const expired = b.expiresAt && new Date(b.expiresAt) < new Date();
+  status.textContent = `Offline sign-in available for ${b.vessel?.vesselName || 'this vessel'}`
+    + (expired ? ` — EXPIRED ${String(b.expiresAt).slice(0,10)}, sign in online again.`
+               : ` — valid to ${String(b.expiresAt || '').slice(0,10)}.`);
+}
+
+
+/** An engineer given an empty vessel registers the ship he actually joined.
+ *  The server refuses to overwrite a ship that is already on the register, so this
+ *  can add a vessel but never rename someone else's. */
+async function registerAssignedVessel(){
+  const session = state.session;
+  if (!session?.username) return;
+  const base = session.serverUrl;
+  const vesselName = document.getElementById('s_vesselName')?.value.trim();
+  const imo = document.getElementById('s_imoNo')?.value.trim();
+  const company = document.getElementById('s_company')?.value.trim() || '';
+  if (!vesselName || !imo){
+    alert('Enter the vessel name and IMO number first.');
+    return;
+  }
+  try{
+    const out = await loginApiCall(base, '/api/vessels/import', {
+      method: 'POST', session, body: { vesselName, imo, company }
+    });
+    const vessel = out.vessel;
+    state.session = writeStoredSession(Object.assign({}, session, {
+      vessel, history: [vessel]
+    }));
+    await applyVesselAssignment(vessel);
+    alert(`${vessel.vesselName} is registered and assigned to you.`);
+    render();
+  }catch(err){
+    alert(err.message);
   }
 }
 
@@ -16837,8 +16992,42 @@ async function handleLoginSubmit(){
     });
     state.session = session;
     setLoginStatus('loginStatus', '', null);
+    /* Refresh the offline bundle while we have the connection. A device that can
+       sign in today should still sign in after it sails. */
+    if (out.vessel?.vesselId){
+      try{
+        /* sessionRequestHeaders reads .sessionToken off the object — handing it a
+           bare string sends no header at all. */
+        const b = await loginApiCall(base, '/api/vessel/offline-bundle', {
+          session: { sessionToken: out.sessionToken }
+        });
+        if (b?.bundle) writeOfflineBundle(b.bundle);
+      }catch(err){
+        /* Never block a good login on this, but do not swallow it silently either —
+           a device that quietly fails to earn offline access looks fine until the
+           ship sails. */
+        console.warn('Could not refresh offline credentials:', err.message);
+      }
+    }
     await enterAssignStep(session);
   }catch(err){
+    /* Only a transport failure means "offline". If the server answered at all —
+       including 401 — its answer stands, or a revoked login could be resurrected
+       by pulling the network cable. */
+    const unreachable = err instanceof TypeError || /Failed to fetch|NetworkError|load failed/i.test(err.message || '');
+    if (unreachable && readOfflineBundle()){
+      try{
+        setLoginStatus('loginStatus', 'Server unreachable — checking credentials on this device…', 'busy');
+        const session = await offlineLogin(username, password);
+        state.session = session;
+        setLoginStatus('loginStatus', '', null);
+        await enterAssignStep(session);
+        return;
+      }catch(offErr){
+        setLoginStatus('loginStatus', offErr.message, 'err');
+        return;
+      }
+    }
     setLoginStatus('loginStatus', err.message, 'err');
   }
 }
@@ -16914,6 +17103,14 @@ async function enterAssignStep(session){
       pick.hidden = false;
     } else {
       pick.hidden = true;
+      /* An engineer the office created without a ship — he joins and enters the
+         vessel himself. Leaving him on the gate would strand him: there is nothing
+         here for him to choose. Let him into the program, where Setup is open for
+         him to enter the ship and register it. */
+      await applyVesselAssignment(null);
+      writeStoredSession(state.session);
+      showLoginGate(false);
+      switchTab('setup');
     }
   }
 }
@@ -17082,6 +17279,8 @@ document.getElementById('btnOpenLogin')?.addEventListener('click', ()=>{
     bindReferenceCalculators();
     bindBunkerPlanUi();
     bindRobSurveyUi();
+    bindOfflineCredsUi();
+    document.getElementById('btnRegisterVessel')?.addEventListener('click', registerAssignedVessel);
     try{
       if (window.EORB){
         state.setup.orb = ensureOrbSetup(state.setup.orb);

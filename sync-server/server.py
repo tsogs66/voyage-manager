@@ -38,13 +38,14 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from accounts import (  # noqa: E402
     ROLE_ADMIN,
     ROLE_VESSEL,
     canonical_role,
+    generate_password,
     AccountError,
     AccountStore,
 )
@@ -527,6 +528,38 @@ class SyncHandler(BaseHTTPRequestHandler):
             )
             return
 
+        # There is deliberately no way for the office to export credentials for a
+        # laptop that has never been online. The fleet manager creates the account;
+        # the engineer signs in online once, which is when his device earns the
+        # bundle below. That keeps credential files out of circulation entirely and
+        # means a device only ever holds verifiers for someone who authenticated on
+        # it against the live server.
+        if parts == ["api", "vessel", "offline-bundle"]:
+            principal = self._principal()
+            if principal["reason"]:
+                self._reject_unauthorized(principal["reason"])
+                return
+            # A session only — a bare vessel token must not mint offline credentials,
+            # or the token alone would be enough to unlock a device.
+            if principal["kind"] != "session":
+                json_response(self, HTTPStatus.FORBIDDEN,
+                              {"error": "forbidden", "reason": "session_required",
+                               "message": "Offline credentials are issued only to a signed-in user."})
+                return
+            own = principal.get("writable") or principal.get("vesselId")
+            if principal["role"] != ROLE_ADMIN and not own:
+                json_response(self, HTTPStatus.FORBIDDEN,
+                              {"error": "forbidden", "reason": "no_vessel",
+                               "message": "This login is not assigned to a vessel."})
+                return
+            try:
+                bundle = ACCOUNTS.offline_bundle(own)
+            except AccountError as err:
+                json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(err)})
+                return
+            json_response(self, HTTPStatus.OK, {"ok": True, "bundle": bundle})
+            return
+
         if parts == ["api", "admin", "vessels", "pending"]:
             if self._require_admin() is None:
                 return
@@ -784,19 +817,54 @@ class SyncHandler(BaseHTTPRequestHandler):
         json_response(self, HTTPStatus.OK, {"ok": True})
 
     def _handle_password_change(self, body: dict) -> None:
+        """Only the fleet manager changes passwords.
+
+        A chief engineer cannot change his own. That is not about trust — his
+        password is generated precisely so it is strong enough to survive being on a
+        laptop that signs in offline, and letting him replace it with one he can
+        remember is the one move that undoes it. Resets go through the office, which
+        is also where a crew change is handled anyway.
+        """
         principal = self._principal()
         if principal["reason"] or principal["kind"] != "session":
             self._reject_unauthorized("missing_token")
             return
-        current = str(body.get("currentPassword", ""))
-        if not ACCOUNTS.verify_password(principal["username"], current):
+        if principal["role"] != ROLE_ADMIN:
             json_response(
-                self, HTTPStatus.UNAUTHORIZED,
-                {"error": "unauthorized", "message": "Current password is incorrect."},
+                self, HTTPStatus.FORBIDDEN,
+                {"error": "forbidden", "reason": "manager_only",
+                 "message": "Only the fleet manager can change a password. "
+                            "Ask the office for a reset."},
             )
             return
-        ACCOUNTS.set_password(principal["username"], str(body.get("newPassword", "")))
-        json_response(self, HTTPStatus.OK, {"ok": True})
+
+        target = str(body.get("username", "")).strip().lower() or principal["username"]
+        account = ACCOUNTS.get_account(target)
+        if not account:
+            raise AccountError(f"No account '{target}'")
+
+        # Changing your own still needs the current one, so a walked-away session
+        # cannot lock the office out of its own account.
+        if target == principal["username"]:
+            if not ACCOUNTS.verify_password(target, str(body.get("currentPassword", ""))):
+                json_response(
+                    self, HTTPStatus.UNAUTHORIZED,
+                    {"error": "unauthorized", "message": "Current password is incorrect."},
+                )
+                return
+
+        # A chief engineer's replacement is generated too — a reset that let the
+        # office type one in would reopen what generation closed.
+        if canonical_role(account["role"]) != ROLE_ADMIN:
+            new_password = generate_password()
+            ACCOUNTS.set_password(target, new_password)
+            json_response(self, HTTPStatus.OK,
+                          {"ok": True, "username": target, "password": new_password,
+                           "generated": True})
+            return
+
+        ACCOUNTS.set_password(target, str(body.get("newPassword", "")))
+        json_response(self, HTTPStatus.OK, {"ok": True, "username": target, "generated": False})
 
     def _handle_token_preview(self, body: dict) -> None:
         """The key generator: what token would this vessel name + IMO produce?"""
@@ -823,9 +891,10 @@ class SyncHandler(BaseHTTPRequestHandler):
         account = None
         username = str(body.get("username", "")).strip()
         if username:
+            account_role = canonical_role(str(body.get("role", ROLE_VESSEL)))
             account = ACCOUNTS.create_account(
-                username, str(body.get("password", "")),
-                str(body.get("role", ROLE_VESSEL)), vessel["vesselId"],
+                username, str(body.get("password", "")), account_role, vessel["vesselId"],
+                generate=(account_role != ROLE_ADMIN),
             )
             # Open the assignment period too. accounts.vessel_id alone is not a
             # posting: reads and writes are decided by the assignments table, so
@@ -845,14 +914,42 @@ class SyncHandler(BaseHTTPRequestHandler):
     def _handle_create_account(self, body: dict) -> None:
         if self._require_admin() is None:
             return
-        role = str(body.get("role", "vessel"))
+        principal = self._principal()
+        role = canonical_role(str(body.get("role", ROLE_VESSEL)))
         vessel_id = str(body.get("vesselId", "")).strip() or None
         if role != ROLE_ADMIN and vessel_id and not ACCOUNTS.get_vessel(vessel_id):
             raise AccountError(f"No vessel '{vessel_id}' is registered")
+        # A chief engineer's password is generated, never chosen by the office. These
+        # credentials end up on a laptop that sails and can be attacked offline, so
+        # the one thing that must not happen is a weak password picked for
+        # convenience. The plaintext comes back once, in this response.
         account = ACCOUNTS.create_account(
-            str(body.get("username", "")), str(body.get("password", "")), role, vessel_id
+            str(body.get("username", "")), str(body.get("password", "")), role, vessel_id,
+            generate=(role != ROLE_ADMIN),
         )
-        json_response(self, HTTPStatus.OK, {"ok": True, "account": account})
+        # A ship may be named now, or left empty for the engineer to enter when he
+        # joins. If one is named, open the assignment period too — accounts.vessel_id
+        # alone is not a posting, and without this the new engineer could not write
+        # to the very ship he was just given.
+        if role != ROLE_ADMIN and vessel_id:
+            ACCOUNTS.assign_vessel(
+                account["username"], vessel_id,
+                assigned_by=(principal.get("username") or "fleet_manager"),
+                note="created with account",
+            )
+            # Re-reading the row would drop the generated password — it lives only
+            # in the create call's return value, and this response is its one
+            # chance to reach the office.
+            refreshed = ACCOUNTS.get_account(account["username"])
+            if refreshed:
+                refreshed = dict(refreshed)
+                if account.get("password"):
+                    refreshed["password"] = account["password"]
+                account = refreshed
+        json_response(self, HTTPStatus.OK,
+                      {"ok": True, "account": account,
+                       "vessel": self._vessel_public(
+                           ACCOUNTS.get_vessel(vessel_id) if vessel_id else None, False)})
 
 
     def _handle_assign(self, body: dict) -> None:

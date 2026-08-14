@@ -160,7 +160,6 @@ def main() -> int:
             payload={
                 "vesselName": "M/V Fangcheng", "imo": "IMO 9722101",
                 "company": "Pacific Ocean Shipping", "username": "fangcheng",
-                "password": "vessel-secret",
             },
         )
         check("vessel is registered", status, 200)
@@ -170,19 +169,21 @@ def main() -> int:
         check("IMO is normalized to digits", vessel["imo"], "9722101")
         check("the vessel token matches the generator", vessel["token"], preview1["token"])
         check("the vessel account was created", created["account"]["username"], "fangcheng")
+        fangcheng_pw = created["account"].get("password")
+        check("its password was generated, not chosen", bool(fangcheng_pw), True)
+        check("and is long enough to be worth generating", len(fangcheng_pw or "") >= 16, True)
 
         _, second = request(
             f"{srv.base}/api/admin/vessels", session=admin_session, method="POST",
             payload={"vesselName": "M/V Roadstead", "imo": "9684412",
-                     "company": "Pacific Ocean Shipping", "username": "roadstead",
-                     "password": "vessel-secret"},
+                     "company": "Pacific Ocean Shipping", "username": "roadstead"},
         )
         vessel2 = second["vessel"]
 
         print("\nvessel login carries its own vessel and token")
         status, vlogin = request(
             f"{srv.base}/api/auth/login", method="POST",
-            payload={"username": "fangcheng", "password": "vessel-secret"},
+            payload={"username": "fangcheng", "password": fangcheng_pw},
         )
         check("vessel user logs in", status, 200)
         check("role is chief engineer", vlogin.get("role"), "chief_engineer")
@@ -276,7 +277,7 @@ def main() -> int:
 
         status, relogin = request(
             f"{srv.base}/api/auth/login", method="POST",
-            payload={"username": "fangcheng", "password": "vessel-secret"},
+            payload={"username": "fangcheng", "password": fangcheng_pw},
         )
         moved_session = relogin["sessionToken"]
         check("login now returns the new ship", relogin["vessel"]["vesselId"], "m-v-roadstead")
@@ -378,6 +379,194 @@ def main() -> int:
             payload={"vesselId": "no-such-ship"},
         )
         check("approving a ship that does not exist is refused", status, 400)
+
+
+        print("\noffline credentials are earned by signing in, not issued by the office")
+        # There is no manager export: a device that has never authenticated cannot
+        # be given credentials out of band.
+        status, _ = request(
+            f"{srv.base}/api/admin/vessels/m-v-roadstead/offline-bundle", session=admin_session)
+        check("the office cannot export credentials", status, 404)
+
+        status, own = request(f"{srv.base}/api/vessel/offline-bundle", session=moved_session)
+        check("a signed-in engineer earns his own", status, 200)
+        bundle = own["bundle"]
+        check("it is his ship", bundle["vessel"]["vesselId"], "m-v-local-only")
+        check("and carries the sync token", bool(bundle["vessel"]["token"]), True)
+        check("it expires", bool(bundle["expiresAt"]), True)
+        entry = next(l for l in bundle["logins"] if l["username"] == "fangcheng")
+        check("with a verifier, not a password", bool(entry["verifier"]), True)
+        check("and its salt", bool(entry["salt"]), True)
+        check("the scheme is named", entry["algorithm"], "pbkdf2-hmac-sha256")
+        check("and the work factor", entry["rounds"], 240000)
+        check("no plaintext password is present",
+              "password" in json.dumps(bundle).lower().replace("password_", ""), False)
+
+        status, _ = request(f"{srv.base}/api/vessel/offline-bundle")
+        check("an anonymous caller gets nothing", status, 401)
+
+        # The vessel token already grants sync. It must not also mint the credentials
+        # that unlock a laptop, or the token alone would be a master key.
+        status, tok = request(f"{srv.base}/api/vessel/offline-bundle", token=vessel["token"])
+        check("a bare vessel token cannot mint credentials", status, 403)
+        check("and says why", tok.get("reason"), "session_required")
+
+        # Signed off, he has no ship, so there are no offline credentials to earn.
+        request(f"{srv.base}/api/admin/release", session=admin_session, method="POST",
+                payload={"username": "fangcheng"})
+        status, released = request(f"{srv.base}/api/vessel/offline-bundle", session=moved_session)
+        check("a released engineer earns nothing", status, 403)
+        check("because he has no ship", released.get("reason"), "no_vessel")
+        # Put him back, so this section leaves the state it found.
+        request(f"{srv.base}/api/admin/assign", session=admin_session, method="POST",
+                payload={"username": "fangcheng", "vesselId": "m-v-local-only"})
+
+
+        print("\nthe manager creates an account, with a ship or without one")
+        status, withship = request(
+            f"{srv.base}/api/admin/accounts", session=admin_session, method="POST",
+            payload={"username": "newce", "role": "chief_engineer",
+                     "vesselId": "m-v-fangcheng"},
+        )
+        check("an account can be created with a ship", status, 200)
+        newce_pw = withship["account"].get("password")
+        check("with a generated password", bool(newce_pw), True)
+        check("the role is stored canonically", withship["account"]["role"], "chief_engineer")
+        status, ce = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "newce", "password": newce_pw},
+        )
+        newce_session = ce["sessionToken"]
+        check("he logs in onto that ship", ce["vessel"]["vesselId"], "m-v-fangcheng")
+        # The posting must be real, not just a column on the account.
+        status, _ = request(
+            f"{srv.base}/api/voyage/m-v-fangcheng/1/B", session=newce_session,
+            method="PUT", payload={"entries": []},
+        )
+        check("and can write to it immediately", status, 200)
+
+        status, empty = request(
+            f"{srv.base}/api/admin/accounts", session=admin_session, method="POST",
+            payload={"username": "joiner", "role": "chief_engineer"},
+        )
+        check("an account can be created with no ship", status, 200)
+        joiner_pw = empty["account"].get("password")
+        check("also with a generated password", bool(joiner_pw), True)
+        check("and every account gets a different one", joiner_pw != newce_pw, True)
+        check("and none is reported", empty["vessel"], None)
+
+        status, jl = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "joiner", "password": joiner_pw},
+        )
+        joiner_session = jl["sessionToken"]
+        check("he can sign in", status, 200)
+        check("with no vessel", jl["vessel"], None)
+        check("and an empty history", jl["history"], [])
+
+        # He enters the ship he actually joined.
+        status, made = request(
+            f"{srv.base}/api/vessels/import", session=joiner_session, method="POST",
+            payload={"vesselName": "M/V Newly Joined", "imo": "9800111",
+                     "company": "Pacific Ocean Shipping"},
+        )
+        check("the engineer registers the ship he joined", status, 200)
+        check("it is created", made["created"], True)
+        check("and he is posted to it", made["assignment"]["vesselId"], "m-v-newly-joined")
+        check("the office can see it arrived from a ship", made["vessel"]["pendingReview"], True)
+        status, _ = request(
+            f"{srv.base}/api/voyage/m-v-newly-joined/1/B", session=joiner_session,
+            method="PUT", payload={"entries": []},
+        )
+        check("he can log against it at once", status, 200)
+
+        # But he still cannot rename an established ship.
+        status, _ = request(
+            f"{srv.base}/api/vessels/import", session=joiner_session, method="POST",
+            payload={"vesselName": "M/V Not Yours", "imo": "9722101"},
+        )
+        check("an established ship is still not his to rename", status, 409)
+
+        print("\na password the office tries to choose is ignored")
+        status, weak = request(
+            f"{srv.base}/api/admin/accounts", session=admin_session, method="POST",
+            payload={"username": "weakling", "password": "123456", "role": "chief_engineer"},
+        )
+        check("the account is created", status, 200)
+        chosen = weak["account"].get("password")
+        check("but not with the password they asked for", chosen == "123456", False)
+        status, _ = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "weakling", "password": "123456"},
+        )
+        check("and that password does not work", status, 401)
+        status, _ = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "weakling", "password": chosen},
+        )
+        check("the generated one does", status, 200)
+
+
+        print("\nonly the office changes passwords")
+        status, refused = request(
+            f"{srv.base}/api/auth/password", session=moved_session, method="POST",
+            payload={"currentPassword": fangcheng_pw, "newPassword": "easy-to-remember"},
+        )
+        check("an engineer cannot change his own", status, 403)
+        check("and is told where to go", refused.get("reason"), "manager_only")
+        status, _ = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "fangcheng", "password": "easy-to-remember"},
+        )
+        check("the weak password he wanted does not work", status, 401)
+        status, _ = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "fangcheng", "password": fangcheng_pw},
+        )
+        check("his generated one still does", status, 200)
+
+        status, reset = request(
+            f"{srv.base}/api/auth/password", session=admin_session, method="POST",
+            payload={"username": "fangcheng", "newPassword": "office-picked-this"},
+        )
+        check("the manager can reset it", status, 200)
+        check("the replacement is generated, not the one asked for", reset["generated"], True)
+        check("and it is not what was sent", reset["password"] == "office-picked-this", False)
+        status, _ = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "fangcheng", "password": "office-picked-this"},
+        )
+        check("so that password does not work either", status, 401)
+        status, relog = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "fangcheng", "password": reset["password"]},
+        )
+        check("the generated replacement does", status, 200)
+        moved_session = relog["sessionToken"]
+
+        status, _ = request(
+            f"{srv.base}/api/auth/password", session=admin_session, method="POST",
+            payload={"username": "nobody-here", "newPassword": "x"},
+        )
+        check("resetting an account that does not exist is refused", status, 400)
+
+        # The manager's own password is still his to choose, and still needs the old one.
+        status, _ = request(
+            f"{srv.base}/api/auth/password", session=admin_session, method="POST",
+            payload={"currentPassword": "wrong", "newPassword": "new-admin-secret"},
+        )
+        check("changing his own with a wrong current password fails", status, 401)
+        status, own = request(
+            f"{srv.base}/api/auth/password", session=admin_session, method="POST",
+            payload={"currentPassword": "admin-secret", "newPassword": "new-admin-secret"},
+        )
+        check("with the right one it succeeds", status, 200)
+        check("and his is not generated for him", own["generated"], False)
+        status, _ = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "admin", "password": "new-admin-secret"},
+        )
+        check("the manager's chosen password works", status, 200)
 
         print("\nsession lifecycle")
         status, me = request(f"{srv.base}/api/auth/me", session=moved_session)

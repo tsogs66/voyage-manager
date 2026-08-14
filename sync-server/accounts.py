@@ -34,6 +34,27 @@ SESSION_TTL_HOURS = 12
 TOKEN_LENGTH = 40
 SLUG_RE = re.compile(r"^[a-zA-Z0-9._-]{1,64}$")
 
+# No i, l, o, 0 or 1: this gets read off a handover sheet and typed on a ship's
+# laptop, and a password nobody can transcribe gets written on a sticky note.
+PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+PASSWORD_GROUPS = 4
+PASSWORD_GROUP_SIZE = 4
+
+
+def generate_password() -> str:
+    """A password the office cannot choose badly.
+
+    Chief engineer credentials end up on a laptop that sails, and a device that
+    signs in offline holds material an attacker can grind at leisure. Four groups
+    of four from a 31-character alphabet is about 79 bits — far past what anyone
+    types by hand, and the work factor on top of it makes offline grinding
+    hopeless.
+    """
+    return "-".join(
+        "".join(secrets.choice(PASSWORD_ALPHABET) for _ in range(PASSWORD_GROUP_SIZE))
+        for _ in range(PASSWORD_GROUPS)
+    )
+
 ROLE_ADMIN = "fleet_manager"
 ROLE_VESSEL = "chief_engineer"
 # Older databases wrote these names; both still authenticate.
@@ -204,8 +225,15 @@ class AccountStore:
         ).hex()
 
     def create_account(
-        self, username: str, password: str, role: str, vessel_id: str | None = None
+        self, username: str, password: str, role: str, vessel_id: str | None = None,
+        generate: bool = False
     ) -> dict:
+        """Create a login. With generate=True the supplied password is ignored and
+        a strong one is made instead; the plaintext comes back in the returned dict
+        under "password" and is never stored — that return value is the only copy."""
+        generated = generate_password() if generate else ""
+        if generate:
+            password = generated
         username = (username or "").strip().lower()
         if not SLUG_RE.match(username):
             raise AccountError(
@@ -227,7 +255,11 @@ class AccountStore:
                 )
         except sqlite3.IntegrityError as exc:
             raise AccountError(f"Username '{username}' already exists") from exc
-        return {"username": username, "role": role, "vesselId": vessel_id}
+        # The plaintext rides back on this one return value and is stored nowhere.
+        out = {"username": username, "role": role, "vesselId": vessel_id}
+        if generated:
+            out["password"] = generated
+        return out
 
     def set_password(self, username: str, password: str) -> None:
         salt = secrets.token_hex(16)
@@ -530,6 +562,62 @@ class AccountStore:
         history = self.assignment_history(vessel_id=vessel_id)
         current = next((h["username"] for h in history if h["current"]), None)
         return {"vesselId": vessel_id, "chiefEngineer": current, "history": history}
+
+
+    # -------------------------------------------------------- offline bundles
+    #
+    # A ship joining with a fresh laptop and no connectivity cannot reach the
+    # server to log in even once. The bundle carries the vessel and the password
+    # VERIFIERS for whoever is posted to it, so the login can be checked entirely
+    # on the device.
+    #
+    # This is a deliberate trade, and its cost is real: a stolen laptop carries
+    # crackable password material, and a transferred engineer keeps working on the
+    # old device until it reconnects. Two things bound that cost — the bundle
+    # expires, and it carries only the engineers currently posted to that one ship.
+    # Fleet managers are never included: office credentials have no business on a
+    # ship's laptop.
+
+    def offline_bundle(self, vessel_id: str, ttl_days: int = 90) -> dict:
+        vessel = self.get_vessel(vessel_id)
+        if not vessel:
+            raise AccountError(f"No vessel '{vessel_id}' is registered")
+        if ttl_days < 1 or ttl_days > 3650:
+            raise AccountError("Bundle validity must be between 1 and 3650 days")
+
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT a.username, a.password_hash, a.password_salt, a.role, a.disabled "
+                "FROM accounts a "
+                "JOIN assignments s ON s.username = a.username AND s.released_at IS NULL "
+                "WHERE s.vessel_id = ? AND a.disabled = 0 AND a.role != ?",
+                (vessel["vesselId"], ROLE_ADMIN),
+            ).fetchall()
+
+        now = utc_now()
+        return {
+            "version": 1,
+            "issuedAt": iso(now),
+            "expiresAt": iso(now + timedelta(days=ttl_days)),
+            "vessel": {
+                "vesselId": vessel["vesselId"],
+                "vesselName": vessel["vesselName"],
+                "imo": vessel["imo"],
+                "company": vessel["company"],
+                "token": vessel["token"],
+            },
+            "logins": [
+                {
+                    "username": r["username"],
+                    "role": canonical_role(r["role"]),
+                    "algorithm": "pbkdf2-hmac-sha256",
+                    "rounds": PBKDF2_ROUNDS,
+                    "salt": r["password_salt"],
+                    "verifier": r["password_hash"],
+                }
+                for r in rows
+            ],
+        }
 
     # -------------------------------------------------------------- sessions
 
