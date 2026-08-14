@@ -37,7 +37,7 @@ When finished, it prints the container IP, web URL, and API token. Credentials a
 | `VOYAGE_DISK_GB` | `8` | Root disk size (GB) |
 | `VOYAGE_STORAGE` | `local-lvm` | Proxmox storage for rootfs |
 | `VOYAGE_BRIDGE` | `vmbr0` | Network bridge |
-| `VOYAGE_SYNC_TOKEN` | auto-generated | Sync API bearer token |
+| `VOYAGE_SYNC_TOKEN` | auto-generated | Sync API bearer token. Any characters are safe — spaces, `%`, quotes and backslashes are escaped into the systemd unit. The installer verifies the token reached the running server before it reports success. |
 | `VOYAGE_TEMPLATE_MATCH` | `debian-12-standard` | OS template name filter |
 
 Example — custom CT ID and token:
@@ -248,6 +248,7 @@ Node and Python 3 — nothing to install.
 | `tests/check_js_syntax.js` | Every shipped `.js` file and each inline `<script>` in `voyage_manager.html` parses. There is no build step, so a syntax error otherwise ships silently. |
 | `tests/check_assets.js` | `sw.js`'s cache name and precache list still match `androidInstallCacheName` / `androidInstallAssets` in the app, and every precached file exists. A stale cache name leaves phones on the previous build. |
 | `tests/test_sync_auth.py` | Starts `sync-server/server.py` with and without `SYNC_API_TOKEN` and asserts who gets in, including the 401 `reason` codes and a non-ASCII token. |
+| `tests/test_install_quoting.sh` | The installer's token quoting, checked against systemd's own parser via `systemd-analyze`. Unquoted, systemd splits an `Environment=` value on whitespace and reads `%` as a specifier, so a token with a space or a `%` reached the server truncated — leaving it on its default token, rejecting the very token the installer printed. |
 
 CI also runs `shellcheck` over the install scripts, which are piped from `curl` straight
 into `bash` as root.

@@ -52,6 +52,42 @@ find_ctid_from_creds(){
   return 1
 }
 
+# Ask the restarted server whether its API token actually reached the process.
+# server.py 1.4+ reports this on /api/health; older builds omit the field. Prints a
+# warning block for the summary, or nothing when all is well.
+check_sync_token(){
+  local port="${VOYAGE_SYNC_PORT:-8787}"
+  local payload
+  # The counter is only a bound, never read.
+  for _ in $(seq 1 15); do
+    payload="$(curl -fsS --max-time 5 "http://127.0.0.1:${port}/api/health" 2>/dev/null || true)"
+    if [[ -n "$payload" ]]; then
+      if printf '%s' "$payload" | python3 -c \
+        'import json,sys; sys.exit(0 if json.load(sys.stdin).get("tokenConfigured", True) else 1)' 2>/dev/null; then
+        return 0
+      fi
+      cat <<'WARN'
+
+ !! SYNC_API_TOKEN is not reaching the sync server.
+    It accepts EVERY request — anyone who can reach the URL can read and
+    overwrite voyage data. Check what the unit passes:
+
+      systemctl show voyage-sync -p Environment
+
+    Then set it (quote the value, and write any literal % as %%):
+
+      mkdir -p /etc/systemd/system/voyage-sync.service.d
+      printf '[Service]\nEnvironment="SYNC_API_TOKEN=<your token>"\n' \
+        > /etc/systemd/system/voyage-sync.service.d/token.conf
+      systemctl daemon-reload && systemctl restart voyage-sync
+WARN
+      return 0
+    fi
+    sleep 1
+  done
+  printf '\n !! Could not reach the sync server after restart — check: systemctl status voyage-sync\n'
+}
+
 ensure_git_safe_directory(){
   local dir="$1"
   if ! git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$dir"; then
@@ -87,9 +123,11 @@ update_in_container(){
     systemctl reload nginx
   fi
 
+  local token_warning=""
   if systemctl is-enabled voyage-sync >/dev/null 2>&1; then
     log "Restarting voyage-sync..."
     systemctl restart voyage-sync
+    token_warning="$(check_sync_token)"
   fi
 
   local ip
@@ -108,7 +146,7 @@ update_in_container(){
 
  Hard-refresh the browser (Ctrl+Shift+R) to load the new version.
  Sync data and API token are unchanged.
-
+${token_warning}
 ================================================================================
 EOF
 }
@@ -132,6 +170,7 @@ update_via_proxmox(){
     VOYAGE_INSTALL_DIR="$INSTALL_DIR" \
     VOYAGE_BRANCH="$BRANCH" \
     VOYAGE_WEB_PORT="${VOYAGE_WEB_PORT:-8080}" \
+    VOYAGE_SYNC_PORT="${VOYAGE_SYNC_PORT:-8787}" \
     bash -c "curl -fsSL '$SCRIPT_URL' | bash"
 }
 

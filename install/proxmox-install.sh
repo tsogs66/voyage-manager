@@ -62,6 +62,49 @@ ensure_sync_token(){
   fi
 }
 
+# Wrap a value in single quotes for a shell command line or env file, so it survives
+# copy-paste and re-sourcing whatever characters it holds.
+shell_squote(){
+  printf "'%s'" "${1//\'/\'\\\'\'}"
+}
+
+# Escape a value for a double-quoted systemd Environment= assignment.
+# Unquoted, systemd splits the value on whitespace and reads % as a specifier
+# prefix, so a token containing a space or a % reaches the process truncated or
+# rewritten — the server then falls back to its default token and rejects the
+# very token the installer printed. Order matters: backslashes first, or the
+# ones added for quotes get doubled.
+systemd_env_value(){
+  local v="$1"
+  v="${v//\\/\\\\}"
+  v="${v//\"/\\\"}"
+  v="${v//%/%%}"
+  printf '%s' "$v"
+}
+
+# Confirm SYNC_API_TOKEN survived the trip into the running process. server.py 1.4+
+# reports this on /api/health; older builds omit the field, so treat missing as fine.
+verify_sync_token_reached_server(){
+  local url="http://127.0.0.1:${SYNC_PORT}/api/health"
+  local payload
+  # The counter is only a bound, never read.
+  for _ in $(seq 1 20); do
+    payload="$(curl -fsS --max-time 5 "$url" 2>/dev/null || true)"
+    if [[ -n "$payload" ]]; then
+      if printf '%s' "$payload" | python3 -c \
+        'import json,sys; sys.exit(0 if json.load(sys.stdin).get("tokenConfigured", True) else 1)'; then
+        log "Sync server is up and using the configured API token."
+        return 0
+      fi
+      die "voyage-sync started WITHOUT its API token (health reports tokenConfigured:false).
+       The server would accept every request from anyone who can reach it.
+       Check the unit: systemctl show voyage-sync -p Environment"
+    fi
+    sleep 1
+  done
+  log "WARNING: could not reach $url to confirm the API token — check: systemctl status voyage-sync"
+}
+
 find_debian_template(){
   local volid
   volid="$(pveam list local 2>/dev/null | awk -v m="$VOYAGE_TEMPLATE_MATCH" '$0 ~ m {print $1; exit}')"
@@ -186,10 +229,10 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=${INSTALL_DIR}/sync-server
-Environment=SYNC_API_TOKEN=${SYNC_TOKEN}
-Environment=SYNC_PORT=${SYNC_PORT}
-Environment=SYNC_DATA_DIR=${INSTALL_DIR}/sync-server/sync-data
-Environment=SYNC_HOST=127.0.0.1
+Environment="SYNC_API_TOKEN=$(systemd_env_value "$SYNC_TOKEN")"
+Environment="SYNC_PORT=${SYNC_PORT}"
+Environment="SYNC_DATA_DIR=$(systemd_env_value "${INSTALL_DIR}/sync-server/sync-data")"
+Environment="SYNC_HOST=127.0.0.1"
 ExecStart=/usr/bin/python3 ${INSTALL_DIR}/sync-server/server.py
 Restart=on-failure
 RestartSec=5
@@ -201,6 +244,7 @@ UNIT
   systemctl daemon-reload
   systemctl enable voyage-sync
   systemctl restart voyage-sync
+  verify_sync_token_reached_server
 
   chown -R "$WEB_USER:$WEB_USER" "$INSTALL_DIR" 2>/dev/null || true
   ensure_git_safe_directory "$INSTALL_DIR"
@@ -282,7 +326,7 @@ provision_lxc_on_proxmox(){
 VOYAGE_CTID=${ctid}
 VOYAGE_WEB_URL=http://${ct_ip:-<container-ip>}:${WEB_PORT}/voyage_manager.html
 VOYAGE_SYNC_URL=http://${ct_ip:-<container-ip>}:${WEB_PORT}
-SYNC_API_TOKEN=${SYNC_TOKEN}
+SYNC_API_TOKEN=$(shell_squote "$SYNC_TOKEN")
 CREDS
   chmod 600 "$creds_file"
 
@@ -308,7 +352,7 @@ CREDS
    pct exec ${ctid} -- bash -c 'curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | gpg --dearmor -o /usr/share/keyrings/cloudflare.gpg; apt-get install -y cloudflared; cloudflared tunnel --url http://127.0.0.1:${WEB_PORT}'
 
  Reinstall app only (inside running CT):
-   pct exec ${ctid} -- env VOYAGE_IN_CONTAINER=1 VOYAGE_SYNC_TOKEN='${SYNC_TOKEN}' bash -c "curl -fsSL '${SCRIPT_URL}' | bash"
+   pct exec ${ctid} -- env VOYAGE_IN_CONTAINER=1 VOYAGE_SYNC_TOKEN=$(shell_squote "$SYNC_TOKEN") bash -c "curl -fsSL '${SCRIPT_URL}' | bash"
 
  Update to latest main (from Proxmox host):
    curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-update.sh | bash
