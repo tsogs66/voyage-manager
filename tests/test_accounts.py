@@ -379,6 +379,57 @@ def main() -> int:
         )
         check("approving a ship that does not exist is refused", status, 400)
 
+
+        print("\noffline credential bundles")
+        status, bundle_out = request(
+            f"{srv.base}/api/admin/vessels/m-v-roadstead/offline-bundle", session=admin_session)
+        check("the manager can export a bundle", status, 200)
+        bundle = bundle_out["bundle"]
+        check("it names the vessel", bundle["vessel"]["vesselId"], "m-v-roadstead")
+        check("and carries the sync token", bool(bundle["vessel"]["token"]), True)
+        check("it expires", bool(bundle["expiresAt"]), True)
+        names = [l["username"] for l in bundle["logins"]]
+        # fangcheng has since moved on; roadstead is the engineer still posted here.
+        check("the engineer posted there is included", "roadstead" in names, True)
+        check("one who has moved on is not", "fangcheng" in names, False)
+        entry = next(l for l in bundle["logins"] if l["username"] == "roadstead")
+        check("with a verifier, not a password", bool(entry["verifier"]), True)
+        check("and its salt", bool(entry["salt"]), True)
+        check("the scheme is named", entry["algorithm"], "pbkdf2-hmac-sha256")
+        check("and the work factor", entry["rounds"], 240000)
+        check("no plaintext password is present",
+              "password" in json.dumps(bundle).lower().replace("password_", ""), False)
+
+        # Office credentials have no business on a ship's laptop.
+        check("the fleet manager is not in the bundle", "admin" in names, False)
+
+        status, _ = request(
+            f"{srv.base}/api/admin/vessels/m-v-roadstead/offline-bundle", session=moved_session)
+        check("an engineer cannot export another ship's bundle", status, 403)
+
+        status, own = request(f"{srv.base}/api/vessel/offline-bundle", session=moved_session)
+        check("but he can pull his own ship's", status, 200)
+        check("and it is his ship", own["bundle"]["vessel"]["vesselId"], "m-v-local-only")
+
+        status, _ = request(f"{srv.base}/api/vessel/offline-bundle")
+        check("an anonymous caller gets nothing", status, 401)
+
+        status, gone = request(
+            f"{srv.base}/api/admin/vessels/no-such-ship/offline-bundle", session=admin_session)
+        check("a bundle for an unregistered ship is refused", status, 400)
+
+        # A released engineer must drop out of the next bundle, or a transfer would
+        # never reach the ship he left.
+        request(f"{srv.base}/api/admin/release", session=admin_session, method="POST",
+                payload={"username": "fangcheng"})
+        status, after_rel = request(
+            f"{srv.base}/api/admin/vessels/m-v-local-only/offline-bundle", session=admin_session)
+        check("a released engineer leaves the bundle",
+              [l["username"] for l in after_rel["bundle"]["logins"]], [])
+        # Put him back, so this section leaves the state it found for later checks.
+        request(f"{srv.base}/api/admin/assign", session=admin_session, method="POST",
+                payload={"username": "fangcheng", "vesselId": "m-v-local-only"})
+
         print("\nsession lifecycle")
         status, me = request(f"{srv.base}/api/auth/me", session=moved_session)
         check("me returns the ship he was last posted to", me["vessel"]["vesselId"], "m-v-local-only")

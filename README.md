@@ -4,6 +4,49 @@ Offline-capable ship performance and fuel logging app for engine department noon
 
 Works on **Android phones** and **PC browsers** as a Progressive Web App (PWA), with optional sync to a **self-hosted Linux server** behind Cloudflare Tunnel.
 
+## Signing in with no connectivity
+
+A ship joining with a fresh laptop cannot reach the server to sign in even once.
+An **offline credentials bundle** solves that: the fleet manager exports one per
+vessel, it is installed on the device from the login gate, and sign-in is then
+checked entirely on the laptop.
+
+```bash
+curl -H "X-Session-Token: $SESSION" \
+  "https://sync.example/api/admin/vessels/mv-roadstead/offline-bundle?days=30" \
+  > roadstead-credentials.json
+```
+
+The bundle carries the vessel, its sync token, and a PBKDF2-HMAC-SHA256 **verifier**
+for each engineer posted to that ship — never a password. The app recomputes the
+verifier with WebCrypto and compares; `tests/test_offline_verifier.js` checks the
+browser's digest against one Python produced, because if those two disagree by a
+byte then offline sign-in fails for everyone and a test of either side alone would
+not notice.
+
+A device that is already working refreshes its own bundle on every successful
+online login (`GET /api/vessel/offline-bundle`), so a laptop that can sign in today
+still can after it sails.
+
+**This is a real trade, and its cost is worth stating plainly:**
+
+- **A stolen laptop carries crackable password material.** PBKDF2 at 240,000 rounds
+  makes that expensive, not impossible — a weak password will fall. Prefer generated
+  passwords for chief engineer accounts.
+- **Revocation needs the device to reconnect.** A transferred engineer keeps working
+  on the old laptop until it next reaches the server. He cannot *sync* the old ship —
+  the assignment is checked server-side — but he can open the program and read what
+  is on that machine.
+
+Three things bound the exposure: the bundle **expires** (30–90 days is sensible), it
+contains only the engineers **currently posted to that one ship**, and fleet manager
+accounts are **never** included — office credentials have no business on a ship's
+laptop.
+
+The fallback is deliberately narrow. The app uses the bundle **only when the server
+cannot be reached at all**. If the server answers — including a 401 — its answer
+stands, so a revoked login cannot be resurrected by pulling the network cable.
+
 ## Bunkering and R.O.B. corrections
 
 R.O.B. is a chain: every report's opening figure is the previous report's closing
@@ -395,6 +438,8 @@ its vessel assignment instead of locking the crew out of their own records.
 | `GET /api/assignments/<username>` | own record, or manager | Service history |
 | `POST /api/vessels/import` | any login | Register a vessel absent from the database |
 | `GET /api/admin/vessels/pending` | manager | Ships registered from a device, awaiting review |
+| `GET /api/admin/vessels/<id>/offline-bundle` | manager | Export offline credentials (`?days=` sets validity) |
+| `GET /api/vessel/offline-bundle` | own vessel | Refresh this device's own bundle while online |
 | `POST /api/admin/vessels/approve` | manager | Clear a ship's pending flag |
 
 Data routes are scoped: a vessel login reaching another ship gets `403 wrong_vessel`.
@@ -427,6 +472,7 @@ Node and Python 3 — nothing to install.
 | `tests/check_js_syntax.js` | Every shipped `.js` file and each inline `<script>` in `voyage_manager.html` parses. There is no build step, so a syntax error otherwise ships silently. |
 | `tests/check_assets.js` | `sw.js`'s cache name and precache list still match `androidInstallCacheName` / `androidInstallAssets` in the app, and every precached file exists. A stale cache name leaves phones on the previous build. |
 | `tests/test_sync_auth.py` | Starts `sync-server/server.py` with and without `SYNC_API_TOKEN` and asserts who gets in, including the 401 `reason` codes and a non-ASCII token. |
+| `tests/test_offline_verifier.js` | The offline password verifier across both languages — that the browser's WebCrypto PBKDF2 reproduces Python's digest exactly, including Unicode passwords, and that the comparison rejects near misses. |
 | `tests/test_rob_survey.js` | The R.O.B. chain across a bunker survey — that a survey re-bases it, that earlier reports are untouched, that a bunker taken before the survey is not counted twice, and that the later of two surveys wins. |
 | `tests/test_accounts.py` | Logins, derived vessel tokens, crew rotation, and the read-history/write-current rule — including that a transferred engineer still reads his old ship but can no longer write to it, and that the legacy shared token still works. |
 | `tests/browser_login_e2e.js` | Not in CI (no browser there). Drives the real login UI in Chromium against a live seeded server. Run it after touching the gate. |

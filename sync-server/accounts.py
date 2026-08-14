@@ -531,6 +531,62 @@ class AccountStore:
         current = next((h["username"] for h in history if h["current"]), None)
         return {"vesselId": vessel_id, "chiefEngineer": current, "history": history}
 
+
+    # -------------------------------------------------------- offline bundles
+    #
+    # A ship joining with a fresh laptop and no connectivity cannot reach the
+    # server to log in even once. The bundle carries the vessel and the password
+    # VERIFIERS for whoever is posted to it, so the login can be checked entirely
+    # on the device.
+    #
+    # This is a deliberate trade, and its cost is real: a stolen laptop carries
+    # crackable password material, and a transferred engineer keeps working on the
+    # old device until it reconnects. Two things bound that cost — the bundle
+    # expires, and it carries only the engineers currently posted to that one ship.
+    # Fleet managers are never included: office credentials have no business on a
+    # ship's laptop.
+
+    def offline_bundle(self, vessel_id: str, ttl_days: int = 90) -> dict:
+        vessel = self.get_vessel(vessel_id)
+        if not vessel:
+            raise AccountError(f"No vessel '{vessel_id}' is registered")
+        if ttl_days < 1 or ttl_days > 3650:
+            raise AccountError("Bundle validity must be between 1 and 3650 days")
+
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT a.username, a.password_hash, a.password_salt, a.role, a.disabled "
+                "FROM accounts a "
+                "JOIN assignments s ON s.username = a.username AND s.released_at IS NULL "
+                "WHERE s.vessel_id = ? AND a.disabled = 0 AND a.role != ?",
+                (vessel["vesselId"], ROLE_ADMIN),
+            ).fetchall()
+
+        now = utc_now()
+        return {
+            "version": 1,
+            "issuedAt": iso(now),
+            "expiresAt": iso(now + timedelta(days=ttl_days)),
+            "vessel": {
+                "vesselId": vessel["vesselId"],
+                "vesselName": vessel["vesselName"],
+                "imo": vessel["imo"],
+                "company": vessel["company"],
+                "token": vessel["token"],
+            },
+            "logins": [
+                {
+                    "username": r["username"],
+                    "role": canonical_role(r["role"]),
+                    "algorithm": "pbkdf2-hmac-sha256",
+                    "rounds": PBKDF2_ROUNDS,
+                    "salt": r["password_salt"],
+                    "verifier": r["password_hash"],
+                }
+                for r in rows
+            ],
+        }
+
     # -------------------------------------------------------------- sessions
 
     def create_session(self, username: str) -> dict:

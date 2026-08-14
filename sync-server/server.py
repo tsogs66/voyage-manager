@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from accounts import (  # noqa: E402
@@ -525,6 +525,43 @@ class SyncHandler(BaseHTTPRequestHandler):
                 {"ok": True,
                  "vessels": [self._vessel_public(v, True) for v in ACCOUNTS.list_vessels()]},
             )
+            return
+
+        # The manager exports a bundle to provision a laptop that has never been
+        # online. An engineer may pull his OWN ship's bundle while connected, so a
+        # device that works today keeps working after it sails.
+        if len(parts) == 5 and parts[:3] == ["api", "admin", "vessels"] and parts[4] == "offline-bundle":
+            if self._require_admin() is None:
+                return
+            try:
+                ttl = int(parse_qs(urlparse(self.path).query).get("days", ["90"])[0])
+            except ValueError:
+                ttl = 90
+            try:
+                bundle = ACCOUNTS.offline_bundle(safe_slug(parts[3]), ttl)
+            except AccountError as err:
+                json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(err)})
+                return
+            json_response(self, HTTPStatus.OK, {"ok": True, "bundle": bundle})
+            return
+
+        if parts == ["api", "vessel", "offline-bundle"]:
+            principal = self._principal()
+            if principal["reason"]:
+                self._reject_unauthorized(principal["reason"])
+                return
+            own = principal.get("writable") or principal.get("vesselId")
+            if principal["role"] != ROLE_ADMIN and not own:
+                json_response(self, HTTPStatus.FORBIDDEN,
+                              {"error": "forbidden", "reason": "no_vessel",
+                               "message": "This login is not assigned to a vessel."})
+                return
+            try:
+                bundle = ACCOUNTS.offline_bundle(own)
+            except AccountError as err:
+                json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(err)})
+                return
+            json_response(self, HTTPStatus.OK, {"ok": True, "bundle": bundle})
             return
 
         if parts == ["api", "admin", "vessels", "pending"]:
