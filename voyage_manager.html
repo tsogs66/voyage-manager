@@ -1535,6 +1535,9 @@
       </div>
       <div class="vessel-save-status" id="vesselSaveStatus" role="status" aria-live="polite"></div>
       <div class="vessel-locked-note" id="vesselIdentityNote"></div>
+      <div class="btn-row" id="registerVesselRow" hidden style="margin-top:8px;">
+        <button class="ghost small" id="btnRegisterVessel" type="button">Register Vessel</button>
+      </div>
       <div class="hint">Vessel name, company, Chief Engineer, DWT and IMO number are stored per vessel and used on printouts, CII and the e-ORB prefill.</div>
 
       <h3 class="sub">Vessel Stamp</h3>
@@ -14615,7 +14618,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v113';
+let androidInstallCacheName = 'noon-report-v114';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -16790,8 +16793,13 @@ function renderVesselLock(){
     const el = document.getElementById(id);
     if (el) el.disabled = lockSwitcher;
   });
-  /* Vessel identity is the fleet manager's record, not the ship's. */
-  const identityLocked = !!session.username && !isAdmin;
+  /* Vessel identity is the fleet manager's record — but only once there IS a
+     record. An engineer given an empty vessel has to be able to enter the ship he
+     joined, so the fields stay open until his vessel is established. Once he is on
+     a registered ship he can no longer rename it. */
+  const assignedVessel = session.vessel && session.vessel.vesselId;
+  const identityLocked = !!session.username && !isAdmin
+    && !!assignedVessel && !session.vessel.pendingReview;
   ['s_vesselName', 's_imoNo', 's_company'].forEach(id => {
     const el = document.getElementById(id);
     if (el){
@@ -16805,8 +16813,12 @@ function renderVesselLock(){
   if (idNote){
     idNote.textContent = identityLocked
       ? 'Vessel name, IMO and company come from the central database — changing them needs a fleet manager login.'
-      : '';
+      : (session.username && !isAdmin && !assignedVessel
+          ? 'No vessel is assigned to you yet. Enter this ship\u2019s name, IMO and company, then Register Vessel to add it to the fleet database.'
+          : '');
   }
+  const regRow = document.getElementById('registerVesselRow');
+  if (regRow) regRow.hidden = !(session.username && !isAdmin && !assignedVessel);
   const note = document.getElementById('vesselLockNote');
   if (note){
     note.textContent = lockSwitcher
@@ -16924,6 +16936,37 @@ function bindOfflineCredsUi(){
   status.textContent = `Offline sign-in available for ${b.vessel?.vesselName || 'this vessel'}`
     + (expired ? ` — EXPIRED ${String(b.expiresAt).slice(0,10)}, sign in online again.`
                : ` — valid to ${String(b.expiresAt || '').slice(0,10)}.`);
+}
+
+
+/** An engineer given an empty vessel registers the ship he actually joined.
+ *  The server refuses to overwrite a ship that is already on the register, so this
+ *  can add a vessel but never rename someone else's. */
+async function registerAssignedVessel(){
+  const session = state.session;
+  if (!session?.username) return;
+  const base = session.serverUrl;
+  const vesselName = document.getElementById('s_vesselName')?.value.trim();
+  const imo = document.getElementById('s_imoNo')?.value.trim();
+  const company = document.getElementById('s_company')?.value.trim() || '';
+  if (!vesselName || !imo){
+    alert('Enter the vessel name and IMO number first.');
+    return;
+  }
+  try{
+    const out = await loginApiCall(base, '/api/vessels/import', {
+      method: 'POST', session, body: { vesselName, imo, company }
+    });
+    const vessel = out.vessel;
+    state.session = writeStoredSession(Object.assign({}, session, {
+      vessel, history: [vessel]
+    }));
+    await applyVesselAssignment(vessel);
+    alert(`${vessel.vesselName} is registered and assigned to you.`);
+    render();
+  }catch(err){
+    alert(err.message);
+  }
 }
 
 async function handleLoginSubmit(){
@@ -17060,6 +17103,14 @@ async function enterAssignStep(session){
       pick.hidden = false;
     } else {
       pick.hidden = true;
+      /* An engineer the office created without a ship — he joins and enters the
+         vessel himself. Leaving him on the gate would strand him: there is nothing
+         here for him to choose. Let him into the program, where Setup is open for
+         him to enter the ship and register it. */
+      await applyVesselAssignment(null);
+      writeStoredSession(state.session);
+      showLoginGate(false);
+      switchTab('setup');
     }
   }
 }
@@ -17229,6 +17280,7 @@ document.getElementById('btnOpenLogin')?.addEventListener('click', ()=>{
     bindBunkerPlanUi();
     bindRobSurveyUi();
     bindOfflineCredsUi();
+    document.getElementById('btnRegisterVessel')?.addEventListener('click', registerAssignedVessel);
     try{
       if (window.EORB){
         state.setup.orb = ensureOrbSetup(state.setup.orb);

@@ -420,6 +420,67 @@ def main() -> int:
         request(f"{srv.base}/api/admin/assign", session=admin_session, method="POST",
                 payload={"username": "fangcheng", "vesselId": "m-v-local-only"})
 
+
+        print("\nthe manager creates an account, with a ship or without one")
+        status, withship = request(
+            f"{srv.base}/api/admin/accounts", session=admin_session, method="POST",
+            payload={"username": "newce", "password": "joining-ship",
+                     "role": "chief_engineer", "vesselId": "m-v-fangcheng"},
+        )
+        check("an account can be created with a ship", status, 200)
+        check("the role is stored canonically", withship["account"]["role"], "chief_engineer")
+        status, ce = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "newce", "password": "joining-ship"},
+        )
+        newce_session = ce["sessionToken"]
+        check("he logs in onto that ship", ce["vessel"]["vesselId"], "m-v-fangcheng")
+        # The posting must be real, not just a column on the account.
+        status, _ = request(
+            f"{srv.base}/api/voyage/m-v-fangcheng/1/B", session=newce_session,
+            method="PUT", payload={"entries": []},
+        )
+        check("and can write to it immediately", status, 200)
+
+        status, empty = request(
+            f"{srv.base}/api/admin/accounts", session=admin_session, method="POST",
+            payload={"username": "joiner", "password": "no-ship-yet", "role": "chief_engineer"},
+        )
+        check("an account can be created with no ship", status, 200)
+        check("and none is reported", empty["vessel"], None)
+
+        status, jl = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "joiner", "password": "no-ship-yet"},
+        )
+        joiner_session = jl["sessionToken"]
+        check("he can sign in", status, 200)
+        check("with no vessel", jl["vessel"], None)
+        check("and an empty history", jl["history"], [])
+
+        # He enters the ship he actually joined.
+        status, made = request(
+            f"{srv.base}/api/vessels/import", session=joiner_session, method="POST",
+            payload={"vesselName": "M/V Newly Joined", "imo": "9800111",
+                     "company": "Pacific Ocean Shipping"},
+        )
+        check("the engineer registers the ship he joined", status, 200)
+        check("it is created", made["created"], True)
+        check("and he is posted to it", made["assignment"]["vesselId"], "m-v-newly-joined")
+        check("the office can see it arrived from a ship", made["vessel"]["pendingReview"], True)
+        status, _ = request(
+            f"{srv.base}/api/voyage/m-v-newly-joined/1/B", session=joiner_session,
+            method="PUT", payload={"entries": []},
+        )
+        check("he can log against it at once", status, 200)
+
+        # But he still cannot rename an established ship.
+        status, _ = request(
+            f"{srv.base}/api/vessels/import", session=joiner_session, method="POST",
+            payload={"vesselName": "M/V Not Yours", "imo": "9722101"},
+        )
+        check("an established ship is still not his to rename", status, 409)
+
         print("\nsession lifecycle")
         status, me = request(f"{srv.base}/api/auth/me", session=moved_session)
         check("me returns the ship he was last posted to", me["vessel"]["vesselId"], "m-v-local-only")

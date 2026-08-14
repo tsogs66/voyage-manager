@@ -333,6 +333,21 @@ That single shape gives three things at once:
   here: opening ROB and meter readings carry over from the last entry, so a new
   chief engineer joining a ship with no history cannot start a voyage correctly.
 
+### Two ways an engineer gets a ship
+
+The fleet manager creates the account, and either:
+
+- **names a vessel** — `POST /api/admin/accounts` with a `vesselId` posts him to it,
+  and he is on that ship the moment he signs in; or
+- **leaves it empty** — the account is created with no vessel. He signs in, lands in
+  Setup with the vessel fields open, enters the ship he actually joined and presses
+  **Register Vessel**.
+
+Vessel identity is the manager's record, but only once there *is* a record. The name,
+IMO and company fields stay editable for an engineer who has no vessel yet, or whose
+vessel is still pending review, and lock as soon as he is on an established ship — so
+he can enter the ship he joined but can never rename someone else's.
+
 ### Importing a vessel that is not in the database
 
 `POST /api/vessels/import` with the vessel name, IMO and company:

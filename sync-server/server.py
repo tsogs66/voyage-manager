@@ -877,14 +877,29 @@ class SyncHandler(BaseHTTPRequestHandler):
     def _handle_create_account(self, body: dict) -> None:
         if self._require_admin() is None:
             return
-        role = str(body.get("role", "vessel"))
+        principal = self._principal()
+        role = canonical_role(str(body.get("role", ROLE_VESSEL)))
         vessel_id = str(body.get("vesselId", "")).strip() or None
         if role != ROLE_ADMIN and vessel_id and not ACCOUNTS.get_vessel(vessel_id):
             raise AccountError(f"No vessel '{vessel_id}' is registered")
         account = ACCOUNTS.create_account(
             str(body.get("username", "")), str(body.get("password", "")), role, vessel_id
         )
-        json_response(self, HTTPStatus.OK, {"ok": True, "account": account})
+        # A ship may be named now, or left empty for the engineer to enter when he
+        # joins. If one is named, open the assignment period too — accounts.vessel_id
+        # alone is not a posting, and without this the new engineer could not write
+        # to the very ship he was just given.
+        if role != ROLE_ADMIN and vessel_id:
+            ACCOUNTS.assign_vessel(
+                account["username"], vessel_id,
+                assigned_by=(principal.get("username") or "fleet_manager"),
+                note="created with account",
+            )
+            account = ACCOUNTS.get_account(account["username"]) or account
+        json_response(self, HTTPStatus.OK,
+                      {"ok": True, "account": account,
+                       "vessel": self._vessel_public(
+                           ACCOUNTS.get_vessel(vessel_id) if vessel_id else None, False)})
 
 
     def _handle_assign(self, body: dict) -> None:
