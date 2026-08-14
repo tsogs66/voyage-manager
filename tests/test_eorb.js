@@ -62,6 +62,32 @@ check('exactly 7 days is accepted', EORB.weeklyInventoryDateError('2026-08-08', 
 checkTrue('later than 7 days is refused', !!EORB.weeklyInventoryDateError('2026-08-09', '2026-08-01'));
 checkTrue('before last weekly is refused', !!EORB.weeklyInventoryDateError('2026-07-31', '2026-08-01'));
 check('first inventory has no window', EORB.weeklyInventoryDateError('2026-08-14', null), null);
+checkTrue('OWS label is used in the 7-day error',
+  String(EORB.weeklyInventoryDateError('2026-08-09', '2026-08-01', 'Weekly 15 ppm / OWS test') || '')
+    .indexOf('Weekly 15 ppm / OWS test') !== -1);
+checkTrue('due date itself is not overdue (day 7 is allowed)',
+  EORB.weeklyDueStatus('2026-08-01', '2026-08-08').overdue === false);
+checkTrue('due date itself is dueSoon', EORB.weeklyDueStatus('2026-08-01', '2026-08-08').dueSoon);
+checkTrue('warning flag when past 7 days', EORB.weeklyDueStatus('2026-08-01', '2026-08-09').overdue);
+
+console.log('\ndisclaimerAck survives setup rebuild');
+const ackOnce = EORB.defaultOrbSetup({ disclaimerAck: true, shipName: 'Test Vessel' });
+check('first defaultOrbSetup keeps ack', ackOnce.disclaimerAck, true);
+check('second defaultOrbSetup keeps ack', EORB.defaultOrbSetup(ackOnce).disclaimerAck, true);
+check('unset ack stays false', EORB.defaultOrbSetup({ shipName: 'X' }).disclaimerAck, false);
+
+console.log('\nweekly OWS test recognition');
+checkTrue('scenario id counts as weekly OWS test',
+  EORB.isWeeklyOwsTest({ scenarioId: 'ows-weekly-test', code: 'I' }));
+checkTrue('weeklyKind counts as weekly OWS test',
+  EORB.isWeeklyOwsTest({ weeklyKind: 'ows-test', code: 'I' }));
+check('voided OWS test is ignored',
+  EORB.isWeeklyOwsTest({ scenarioId: 'ows-weekly-test', voided: true }), false);
+check('last OWS date ignores voided',
+  EORB.lastMatchingEntryDate([
+    { date: '2026-08-01', scenarioId: 'ows-weekly-test' },
+    { date: '2026-08-10', scenarioId: 'ows-weekly-test', voided: true }
+  ], EORB.isWeeklyOwsTest), '2026-08-01');
 
 const book = [
   { code: 'C', part: 1, date: '2026-08-01', weeklyInventory: true, selectedItems: ['11.1', '11.2', '11.3'] },

@@ -454,6 +454,12 @@
   .orb-weekly-due{margin-top:10px;}
   .orb-weekly-due.warn{border-left-color:var(--brass);}
   .orb-weekly-due.err{border-left-color:var(--alert);}
+  /* Disclaimer must stay visible on short/landscape views — do not use .hint (those hide). */
+  .orb-disclaimer{
+    display:flex; gap:8px; align-items:flex-start; margin-top:12px;
+    font-size:12px; color:var(--paper-dim); line-height:1.45; cursor:pointer;
+  }
+  .orb-disclaimer input{margin-top:3px; flex-shrink:0;}
   .orb-table tr.orb-voided td{color:var(--paper-dim); text-decoration:line-through;}
   .orb-table tr.orb-voided td .hint{text-decoration:none; color:var(--alert);}
   /* Chronology guidance for ORB dates — must stay visible on phones, so not .hint */
@@ -2638,8 +2644,8 @@
           <div class="field"><label>Capacity warning tolerance (%)</label><input type="number" step="1" id="orb_capTol" value="15"></div>
         </div>
         <div class="hint">Rated capacities drive auto-ROB checks: incinerator quantity vs burn hours, and pump quantity vs start/stop time. Mismatches above the tolerance show a warning before save.</div>
-        <label class="hint" style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;">
-          <input type="checkbox" id="orb_disclaimer" style="margin-top:3px;">
+        <label class="orb-disclaimer">
+          <input type="checkbox" id="orb_disclaimer">
           <span>I understand this guided e-ORB is for operational logging/training/printouts. Using it as the official ORB requires flag-approved software and a ship-specific Declaration.</span>
         </label>
         <div class="btn-row">
@@ -2682,6 +2688,7 @@
         </div>
         <div class="orb-date-note" id="orbDateNote"></div>
         <div class="orb-flag-box orb-weekly-due" id="orbWeeklyDueNote" hidden></div>
+        <div class="orb-flag-box orb-weekly-due" id="orbOwsDueNote" hidden></div>
         <div class="hint" id="orbNewHint">Start with <strong>Weekly inventory — sludge and bilge tanks</strong> (within 7 days of the last sounding) and the <strong>weekly 15 ppm / OWS test</strong>, or pick another operation below.</div>
 
         <h3 class="sub">What operation did you carry out?</h3>
@@ -2733,6 +2740,7 @@
           <div class="field"><label>Officer in charge</label><select id="orb_officerSelect"></select></div>
         </div>
         <div class="orb-date-note" id="orbWizardDateNote"></div>
+        <div class="orb-flag-box orb-weekly-due" id="orbOwsWizardDueNote" hidden></div>
         <div class="form-grid cols3" style="margin-top:10px;">
           <div class="field"><label>Officer in charge — name</label><input id="orb_officerName"></div>
           <div class="field"><label>Rank</label><input id="orb_officerRank" placeholder="e.g. 2/E, 3/E, C/E"></div>
@@ -14713,7 +14721,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v117';
+let androidInstallCacheName = 'noon-report-v118';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -15649,6 +15657,30 @@ function orbSetup(){
   return state.setup.orb;
 }
 
+/** Disclaimer is sticky once acknowledged. Live checkbox, stored flag, or a confirm
+ *  on first wizard open all count — the old alert-only gate left chiefs stuck when
+ *  render() wiped an unsaved tick. */
+function ensureOrbDisclaimerAck(){
+  const setup = orbSetup();
+  const el = document.getElementById('orb_disclaimer');
+  if (el && el.checked) setup.disclaimerAck = true;
+  if (setup.disclaimerAck){
+    if (el) el.checked = true;
+    state.setup.orb = setup;
+    saveSetup().catch(()=>{});
+    return true;
+  }
+  const ok = confirm(
+    'This guided e-ORB is for operational logging, training and printouts. Using it as the official Oil Record Book requires flag-approved software and a ship-specific Declaration.\n\nAcknowledge and continue?'
+  );
+  if (!ok) return false;
+  setup.disclaimerAck = true;
+  if (el) el.checked = true;
+  state.setup.orb = setup;
+  saveSetup().catch(()=>{});
+  return true;
+}
+
 /* ---- ORB entry dating -------------------------------------------------
    Entries are recorded in chronological order, so a new operation may be
    back-dated only as far as the most recent entry already in the book, and
@@ -15698,19 +15730,19 @@ function fillOrbWeeklyDueBox(el, status, label){
   el.hidden = false;
   if (status.overdue){
     el.className = 'orb-flag-box orb-weekly-due err';
-    el.textContent = label + ' is overdue. Last: ' + last + '. Due by: ' + due +
-      ' (7 days). Record it now — the interval must not exceed 7 days.';
+    el.textContent = 'Warning: ' + label + ' is past 7 days. Last: ' + last + '. Was due by: ' + due +
+      '. The next one must be sooner than 7 days, never later. Record it now.';
     return;
   }
   if (status.dueSoon){
     el.className = 'orb-flag-box orb-weekly-due warn';
-    el.textContent = label + ' is due. Last: ' + last + '. Next by: ' + due +
-      '. It may be sooner than 7 days, never later.';
+    el.textContent = 'Warning: ' + label + ' is due. Last: ' + last + '. Next by: ' + due +
+      ' (7 days). It may be sooner than 7 days, never later.';
     return;
   }
   el.className = 'orb-flag-box orb-weekly-due';
   el.textContent = 'Last ' + label.toLowerCase() + ': ' + last + '. Next due by ' + due +
-    ' (' + status.daysLeft + ' day' + (status.daysLeft === 1 ? '' : 's') + ' left). Sooner is allowed.';
+    ' (' + status.daysLeft + ' day' + (status.daysLeft === 1 ? '' : 's') + ' left). Sooner is allowed, later than 7 days is not.';
 }
 
 function renderOrbWeeklyDueNotes(){
@@ -15719,22 +15751,16 @@ function renderOrbWeeklyDueNotes(){
   const inv = EORB.weeklyDueStatus(orbLastWeeklyInventoryDate(), today);
   const ows = EORB.weeklyDueStatus(orbLastWeeklyOwsDate(), today);
   fillOrbWeeklyDueBox(document.getElementById('orbWeeklyDueNote'), inv, 'Weekly sludge and bilge inventory');
-  const newBox = document.getElementById('orbWeeklyDueNote');
-  if (newBox && !newBox.hidden){
-    const owsLine = ows.first
-      ? 'No weekly 15 ppm / OWS test recorded yet.'
-      : (ows.overdue
-        ? ('Weekly 15 ppm / OWS test is overdue (last ' + EORB.formatOrbDate(ows.lastDate) +
-           ', due by ' + EORB.formatOrbDate(ows.dueBy) + ').')
-        : ('Weekly 15 ppm / OWS test: last ' + EORB.formatOrbDate(ows.lastDate) +
-           ', next by ' + EORB.formatOrbDate(ows.dueBy) + '.'));
-    newBox.appendChild(document.createTextNode(' '));
-    const extra = document.createElement('div');
-    extra.style.marginTop = '6px';
-    extra.textContent = owsLine;
-    newBox.appendChild(extra);
-  }
+  fillOrbWeeklyDueBox(document.getElementById('orbOwsDueNote'), ows, 'Weekly 15 ppm / OWS test');
   fillOrbWeeklyDueBox(document.getElementById('orbWeeklyWizardDueNote'), inv, 'Weekly sludge and bilge inventory');
+  const owsWiz = document.getElementById('orbOwsWizardDueNote');
+  if (owsWiz){
+    if (_orbWizard && _orbWizard.scenarioId === 'ows-weekly-test'){
+      fillOrbWeeklyDueBox(owsWiz, ows, 'Weekly 15 ppm / OWS test');
+    } else {
+      owsWiz.hidden = true;
+    }
+  }
 }
 
 /** Apply min/max to every ORB date input so the picker itself blocks bad dates. */
@@ -15755,6 +15781,15 @@ function applyOrbDateBounds(){
     const dueBy = lastWeekly ? EORB.addDaysIso(lastWeekly, EORB.WEEKLY_INTERVAL_DAYS) : null;
     if (dueBy && dueBy >= (min || dueBy) && dueBy < max){
       wk.max = dueBy;
+    }
+  }
+  /* Weekly 15 ppm / OWS test: same 7-day window when that wizard is open. */
+  const wizDate = document.getElementById('orb_wizardEntryDate');
+  if (wizDate && window.EORB && _orbWizard && _orbWizard.scenarioId === 'ows-weekly-test'){
+    const lastOws = orbLastWeeklyOwsDate();
+    const dueBy = lastOws ? EORB.addDaysIso(lastOws, EORB.WEEKLY_INTERVAL_DAYS) : null;
+    if (dueBy && dueBy >= (min || dueBy) && dueBy < max){
+      wizDate.max = dueBy;
     }
   }
   renderOrbDateNotes();
@@ -15925,7 +15960,7 @@ function readOrbSetupFromForm(){
   setup.equipment.transferPumpM3PerH = nOr('orb_xferPump');
   const tol = nOr('orb_capTol');
   setup.equipment.capacityWarnTolerancePct = tol != null ? tol : 15;
-  setup.disclaimerAck = !!document.getElementById('orb_disclaimer')?.checked;
+  setup.disclaimerAck = !!setup.disclaimerAck || !!document.getElementById('orb_disclaimer')?.checked;
   /* tanks from editors */
   const tanks = { sludge:[], bilge:[], bilgeWells:[], fuel:[], lube:[], cargo:[], slop:[], cbt:[], dirtyBallast: setup.tanks.dirtyBallast || [] };
   document.querySelectorAll('#orbTankEditors [data-orb-tank-row]').forEach(row=>{
@@ -15981,7 +16016,13 @@ function fillOrbSetupForm(){
   set('orb_xferPump', setup.equipment?.transferPumpM3PerH);
   set('orb_capTol', setup.equipment?.capacityWarnTolerancePct != null ? setup.equipment.capacityWarnTolerancePct : 15);
   const ack = document.getElementById('orb_disclaimer');
-  if (ack) ack.checked = !!setup.disclaimerAck;
+  if (ack){
+    /* Keep a live tick if the user checked the box since the last persist — render()
+       used to overwrite it from a stale false and Save then stored false. */
+    if (setup.disclaimerAck) ack.checked = true;
+    else if (ack.checked) setup.disclaimerAck = true;
+    else ack.checked = false;
+  }
   renderOrbFlagInfo('orbFlagInfo', setup.flag);
   renderOrbTankEditors();
   renderOrbOfficerEditors();
@@ -16076,11 +16117,8 @@ function renderWeeklyPreview(){
 
 function openWeeklyInventoryWizard(){
   if (!window.EORB) return;
+  if (!ensureOrbDisclaimerAck()) return;
   const setup = orbSetup();
-  if (!setup.disclaimerAck){
-    alert('Acknowledge the e-ORB disclaimer in Vessel Setup before logging entries.');
-    return;
-  }
   document.getElementById('orbEntryWizard').style.display = 'none';
   const wiz = document.getElementById('orbWeeklyWizard');
   if (wiz) wiz.style.display = '';
@@ -16204,11 +16242,8 @@ function renderOrbPreview(){
 function openOrbWizard(code, opts){
   if (!window.EORB) return;
   opts = opts || {};
+  if (!ensureOrbDisclaimerAck()) return;
   const setup = orbSetup();
-  if (!setup.disclaimerAck){
-    alert('Acknowledge the e-ORB disclaimer in Vessel Setup before logging entries.');
-    return;
-  }
   const part = Number(document.getElementById('orb_part')?.value || 1);
   const op = EORB.getOperation(part, code);
   if (!op) return;
@@ -16269,7 +16304,13 @@ function openOrbWizard(code, opts){
   const iso = orbTodayIso();
   const lastDate = orbLastEntryDate();
   /* Default to today, but never earlier than the last entry already in the book. */
-  const suggested = (lastDate && lastDate > iso) ? lastDate : iso;
+  let suggested = (lastDate && lastDate > iso) ? lastDate : iso;
+  if (opts.scenarioId === 'ows-weekly-test' && window.EORB){
+    const lastOws = orbLastWeeklyOwsDate();
+    const dueBy = lastOws ? EORB.addDaysIso(lastOws, EORB.WEEKLY_INTERVAL_DAYS) : null;
+    if (dueBy && dueBy < iso && (!lastDate || dueBy >= lastDate)) suggested = dueBy;
+    if (lastDate && suggested < lastDate) suggested = lastDate;
+  }
   const topDate = document.getElementById('orb_entryDate');
   if (topDate && !topDate.value) topDate.value = suggested;
   const wizDate = document.getElementById('orb_wizardEntryDate');
@@ -16406,6 +16447,18 @@ document.getElementById('btnOrbSaveSetup')?.addEventListener('click', async ()=>
   readOrbSetupFromForm();
   await saveSetup();
   alert('ORB vessel setup saved for ' + (orbSetup().shipName || 'this vessel') + '.\nFlag: ' + EORB.getFlag(orbSetup().flag).name);
+});
+document.getElementById('orb_disclaimer')?.addEventListener('change', ()=>{
+  const setup = orbSetup();
+  const el = document.getElementById('orb_disclaimer');
+  if (el && el.checked){
+    setup.disclaimerAck = true;
+    state.setup.orb = setup;
+    saveSetup().catch(()=>{});
+  } else if (setup.disclaimerAck && el){
+    /* Sticky — once acknowledged it stays, so render() cannot un-ack it. */
+    el.checked = true;
+  }
 });
 document.querySelectorAll('[data-orb-tank-add]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
