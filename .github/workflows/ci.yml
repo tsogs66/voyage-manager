@@ -51,6 +51,11 @@ jobs:
       - name: Run auth matrix
         run: python3 tests/test_sync_auth.py
 
+      # Logins, derived vessel tokens, and the rule that one login reaches
+      # exactly one vessel.
+      - name: Run account database matrix
+        run: python3 tests/test_accounts.py
+
   install-scripts:
     name: Install scripts (shellcheck)
     runs-on: ubuntu-latest

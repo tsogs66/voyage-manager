@@ -14,7 +14,8 @@ Works on **Android phones** and **PC browsers** as a Progressive Web App (PWA), 
 - **Weather & sea state**: Beaufort wind, Douglas sea state, swell, air/sea temp on Voyage Summary
 - **Server sync**: push/pull JSON snapshots per vessel + voyage; merge by record id; delete tombstones; multi-device
 - **Export/import**: JSON backup and CSV exports
-- **Multi-vessel**: keep several ships in one browser and sync each by vessel slug
+- **Central vessel database**: per-vessel logins and an admin account on the sync server; tokens derived from vessel name + IMO
+- **One vessel per login**: the account decides which ship the program loads
 
 ## Proxmox install (one-liner)
 
@@ -185,6 +186,9 @@ Environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `SYNC_ADMIN_USER` | `admin` | Username of the first administrator |
+| `SYNC_ADMIN_PASSWORD` | generated | Password for the first administrator, printed once at startup if generated |
+| `SYNC_ACCOUNTS_DB` | `<data>/accounts.db` | SQLite file holding logins, vessels and sessions |
 | `SYNC_API_TOKEN` | `change-me-in-production` | Bearer token for API auth. Left unset, the server has no secret to check and accepts **every** request — `/api/health` then reports `"tokenConfigured": false` and the app warns on Test Connection. |
 | `SYNC_PORT` | `8787` | Listen port |
 | `SYNC_HOST` | `0.0.0.0` | Bind address |
@@ -222,6 +226,86 @@ Use the generated `https://….trycloudflare.com` or your custom domain in the a
 
 Sync merges records by `id`, keeping the newest `updatedAt` per entry/receipt/document. Deletes propagate via tombstones so a second device does not resurrect removed rows.
 
+
+## Central Vessel Database & Login
+
+The sync server holds every login and every vessel. Signing in both authenticates
+the user and decides which **single** vessel this copy of the program loads.
+
+### Roles
+
+| Role | Sees | Vessel |
+|------|------|--------|
+| `admin` | The whole fleet, plus vessel/account management | Picks one ship to load, one at a time |
+| `vessel` | Only its own ship | Fixed — the switcher is locked |
+
+The first administrator is created on first start. Set `SYNC_ADMIN_PASSWORD` to
+choose the password, or let the server generate one — it is printed once, at
+startup, and only its hash is stored.
+
+### Vessel tokens are derived, not random
+
+A vessel's sync token is `HMAC-SHA256(server secret, VESSEL NAME | IMO)`. The same
+name and IMO always regenerate the same token on the same server, so a ship that
+loses its token gets it back by typing its name and IMO again — no reset, no
+re-issue. Name matching ignores case and extra spaces; `IMO 9722101`, `imo9722101`
+and `9722101` are the same ship.
+
+The secret lives in the account database, so tokens survive a restart but cannot
+be recomputed by anyone without that file.
+
+### Registering a vessel (admin)
+
+```bash
+# Log in
+SESSION=$(curl -s -X POST -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"..."}' \
+  https://sync.example.com/api/auth/login | python3 -c 'import json,sys;print(json.load(sys.stdin)["sessionToken"])')
+
+# What token would this ship get? (key generator — creates nothing)
+curl -s -X POST -H "X-Session-Token: $SESSION" -H 'Content-Type: application/json' \
+  -d '{"vesselName":"M/V Fangcheng","imo":"IMO 9722101"}' \
+  https://sync.example.com/api/admin/token-preview
+
+# Register it, with a login for the crew
+curl -s -X POST -H "X-Session-Token: $SESSION" -H 'Content-Type: application/json' \
+  -d '{"vesselName":"M/V Fangcheng","imo":"IMO 9722101","company":"Pacific Ocean Shipping",
+       "username":"fangcheng","password":"..."}' \
+  https://sync.example.com/api/admin/vessels
+```
+
+### In the app
+
+On first launch the program shows a login screen. After signing in:
+
+- **Vessel account** — its ship loads immediately, with the company name and IMO
+  from the database, and sync is pointed at that vessel using its own token.
+- **Administrator** — pick one vessel from the fleet to load.
+- **A token instead of an account** — paste the vessel token to verify it against
+  the database and adopt whatever ship it names.
+- **No token** — continue with a blank program and no vessel assignment; add a
+  vessel later from Setup → Account & Vessel Assignment.
+
+The session is cached locally, so a later boot at sea with no connectivity keeps
+its vessel assignment instead of locking the crew out of their own records.
+
+### Auth API
+
+| Endpoint | Who | Purpose |
+|----------|-----|---------|
+| `POST /api/auth/login` | anyone | Returns a session token, role, and the vessel (with its sync token) |
+| `POST /api/auth/logout` | session | Ends the session |
+| `GET /api/auth/me` | session or vessel token | Who am I, and which vessel |
+| `POST /api/auth/password` | session | Change own password |
+| `GET/POST /api/admin/vessels` | admin | List / register vessels |
+| `DELETE /api/admin/vessels/<id>` | admin | Remove a vessel and its accounts |
+| `POST /api/admin/token-preview` | admin | Token for a name + IMO, without creating anything |
+| `GET/POST /api/admin/accounts` | admin | List / create logins |
+
+Data routes are scoped: a vessel login reaching another ship gets `403 wrong_vessel`.
+The legacy shared `SYNC_API_TOKEN` still works and still reaches every vessel, so
+existing single-token installs keep working untouched.
+
 ## Files
 
 | File | Purpose |
@@ -248,6 +332,7 @@ Node and Python 3 — nothing to install.
 | `tests/check_js_syntax.js` | Every shipped `.js` file and each inline `<script>` in `voyage_manager.html` parses. There is no build step, so a syntax error otherwise ships silently. |
 | `tests/check_assets.js` | `sw.js`'s cache name and precache list still match `androidInstallCacheName` / `androidInstallAssets` in the app, and every precached file exists. A stale cache name leaves phones on the previous build. |
 | `tests/test_sync_auth.py` | Starts `sync-server/server.py` with and without `SYNC_API_TOKEN` and asserts who gets in, including the 401 `reason` codes and a non-ASCII token. |
+| `tests/test_accounts.py` | Logins, derived vessel tokens, and the rule that one login reaches exactly one vessel — including that a vessel account is refused another ship and that the legacy shared token still works. |
 | `tests/test_install_quoting.sh` | The installer's token quoting, checked against systemd's own parser via `systemd-analyze`. Unquoted, systemd splits an `Environment=` value on whitespace and reads `%` as a specifier, so a token with a space or a `%` reached the server truncated — leaving it on its default token, rejecting the very token the installer printed. |
 
 CI also runs `shellcheck` over the install scripts, which are piped from `curl` straight

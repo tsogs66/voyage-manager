@@ -11,3 +11,5 @@ android/**/build/
 android/.gradle/
 *.apk
 *.aab
+__pycache__/
+*.pyc

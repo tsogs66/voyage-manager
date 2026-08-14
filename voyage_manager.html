@@ -1300,9 +1300,103 @@
   .pr-cols{ display:grid; grid-template-columns:1fr 1fr; gap:1.5mm; margin-bottom:1.5mm; }
   .pr-title{ display:none; }
   .pr-header{ display:none; }
+
+/* ---- Login gate ---- */
+.login-gate{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
+  background:rgba(8,14,24,.94);backdrop-filter:blur(3px);padding:16px;overflow:auto;}
+.login-gate[hidden]{display:none;}
+.login-card{width:min(460px,100%);background:var(--panel,#131c2b);border:1px solid rgba(255,255,255,.12);
+  border-radius:14px;padding:22px;box-shadow:0 18px 60px rgba(0,0,0,.55);}
+.login-head{display:flex;gap:12px;align-items:center;margin-bottom:18px;}
+.login-head h2{margin:0;font-size:20px;}
+.login-sub{margin:2px 0 0;font-size:13px;opacity:.75;}
+.login-field{display:block;margin-bottom:12px;}
+.login-field span{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;opacity:.7;margin-bottom:5px;}
+.login-field input,.login-field select{width:100%;padding:10px 12px;border-radius:8px;
+  border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:inherit;font-size:15px;}
+.login-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+.login-actions-end{margin-top:14px;justify-content:flex-end;}
+.login-actions button{flex:1 1 auto;padding:10px 14px;font-size:14px;border-radius:8px;cursor:pointer;}
+.login-actions button.small{flex:0 0 auto;}
+/* Explicit colours: the app's .primary/.ghost resolve differently inside this
+   overlay and rendered gold-on-gold, i.e. an invisible button label. */
+.login-gate .login-actions button.primary{background:#c99a53;border:1px solid #c99a53;color:#0a1420;font-weight:600;}
+.login-gate .login-actions button.primary:hover{background:#d8ac68;border-color:#d8ac68;color:#0a1420;}
+.login-gate .login-actions button.ghost{background:transparent;border:1px solid rgba(255,255,255,.28);color:#e8eef7;}
+.login-gate .login-actions button.ghost:hover{background:rgba(255,255,255,.08);color:#fff;}
+.login-gate .login-actions button:disabled{opacity:.5;cursor:not-allowed;}
+.login-note{font-size:12px;opacity:.65;margin:10px 0 0;line-height:1.45;}
+.login-status{min-height:18px;font-size:13px;margin:10px 0 2px;}
+.login-status.err{color:#ff9c9c;}
+.login-status.ok{color:#8fe3a8;}
+.login-status.busy{opacity:.75;}
+.login-signed{font-size:14px;margin:0 0 14px;padding:10px 12px;border-radius:8px;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);}
+.login-token{margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.1);}
+.vessel-locked-note{margin:8px 0 0;font-size:12px;opacity:.75;}
 </style>
 </head>
 <body>
+<!--
+  Login gate. Sits above the app until the user signs in to the central vessel
+  database, or chooses to work offline. A vessel account brings exactly one
+  vessel with it — the app loads that ship and no other.
+-->
+<div id="loginGate" class="login-gate" hidden aria-live="polite">
+  <div class="login-card" role="dialog" aria-modal="true" aria-labelledby="loginGateTitle">
+    <div class="login-head">
+      <img src="icons/logoBG.png" width="44" height="44" alt="">
+      <div>
+        <h2 id="loginGateTitle">Noon Report</h2>
+        <p class="login-sub" id="loginGateSub">Sign in to load your vessel</p>
+      </div>
+    </div>
+
+    <div class="login-step" id="loginStepSignIn">
+      <label class="login-field"><span>Sync Server URL</span>
+        <input id="login_serverUrl" placeholder="https://sync.example.com" autocomplete="url"></label>
+      <label class="login-field"><span>Username</span>
+        <input id="login_username" autocomplete="username"></label>
+      <label class="login-field"><span>Password</span>
+        <input id="login_password" type="password" autocomplete="current-password"></label>
+      <div class="login-status" id="loginStatus" role="status"></div>
+      <div class="login-actions">
+        <button class="primary" id="btnLoginSubmit">Sign in</button>
+        <button class="ghost" id="btnLoginOffline">Work offline</button>
+      </div>
+      <p class="login-note">Working offline opens the program with no vessel assigned. You can sign in or add a vessel token later from Setup → Server Sync.</p>
+    </div>
+
+    <div class="login-step" id="loginStepAssign" hidden>
+      <p class="login-signed" id="loginSignedAs"></p>
+
+      <div id="loginVesselPick" hidden>
+        <label class="login-field"><span>Load which vessel?</span>
+          <select id="login_vesselSelect"></select></label>
+        <div class="login-actions">
+          <button class="primary" id="btnLoginLoadVessel">Load vessel</button>
+        </div>
+        <p class="login-note">Only one vessel is loaded at a time. Sign out and back in to change ship.</p>
+      </div>
+
+      <div class="login-token">
+        <label class="login-field"><span>Vessel token</span>
+          <input id="login_vesselToken" placeholder="paste the token issued for your ship" autocomplete="off"></label>
+        <div class="login-actions">
+          <button class="primary" id="btnLoginUseToken">Verify token &amp; load vessel</button>
+          <button class="ghost" id="btnLoginNoToken">Continue with no vessel</button>
+        </div>
+        <p class="login-note">No token? Continue with a blank program and add a vessel later.</p>
+      </div>
+
+      <div class="login-status" id="loginAssignStatus" role="status"></div>
+      <div class="login-actions login-actions-end">
+        <button class="ghost small" id="btnLoginBack">Sign in as someone else</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="wrap">
 
   <div class="masthead">
@@ -1389,7 +1483,18 @@
   <!-- VESSEL DATA (internal page id: setup) -->
   <div class="page" id="page-setup">
     <div class="panel">
+      <h2>Account &amp; Vessel Assignment</h2>
+      <div class="login-signed" id="assignedVesselLabel">Not signed in — no vessel assigned</div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="primary small" id="btnOpenLogin">Sign in / change vessel…</button>
+        <button class="ghost small" id="btnSignOut">Sign out</button>
+      </div>
+      <div class="hint">Your login decides which vessel this program loads. A vessel account is fixed to one ship; an administrator picks one ship at a time. Without a vessel the program runs blank until you add one.</div>
+    </div>
+
+    <div class="panel">
       <h2>Fleet — Vessel Selection</h2>
+      <div class="vessel-locked-note" id="vesselLockNote"></div>
       <div class="form-grid cols3">
         <div class="field span2">
           <label>Active Vessel</label>
@@ -1418,6 +1523,7 @@
       <h2>Vessel</h2>
       <div class="form-grid cols2">
         <div class="field"><label>Vessel Name</label><input id="s_vesselName"></div>
+        <div class="field"><label>Company</label><input id="s_company" placeholder="e.g. Pacific Ocean Shipping"></div>
         <div class="field"><label>Chief Engineer</label><input id="s_chEng"></div>
         <div class="field"><label>DWT (tonnes) — for CII</label><input type="number" step="1" id="s_dwt" placeholder="e.g. 60000"></div>
         <div class="field"><label>IMO No.</label><input id="s_imoNo" placeholder="IMO 1234567"></div>
@@ -1426,7 +1532,7 @@
         <button class="primary small" id="btnSaveVesselIdentity">Save Vessel Details</button>
       </div>
       <div class="vessel-save-status" id="vesselSaveStatus" role="status" aria-live="polite"></div>
-      <div class="hint">Vessel name, Chief Engineer, DWT and IMO number are stored per vessel and used on printouts, CII and the e-ORB prefill.</div>
+      <div class="hint">Vessel name, company, Chief Engineer, DWT and IMO number are stored per vessel and used on printouts, CII and the e-ORB prefill.</div>
 
       <h3 class="sub">Vessel Stamp</h3>
       <div class="stamp-row">
@@ -3662,7 +3768,7 @@ const state = {
     initDateTime:'', initRuntime:null,
     pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
     sfoc100:null, sfoc85:null, lcvRef:42700, lcvActual:null, alternatorMaxKw:null,
-    dwt:null, imoNo:'',
+    dwt:null, imoNo:'', company:'',
     geArrangement:'SINGLE',
     generatorCount:1,
     meCylinderCount:6,
@@ -7242,6 +7348,8 @@ function render(){
   if (dwtEl) dwtEl.value = state.setup.dwt ?? '';
   const imoEl = document.getElementById('s_imoNo');
   if (imoEl) imoEl.value = state.setup.imoNo || '';
+  const companyEl = document.getElementById('s_company');
+  if (companyEl) companyEl.value = state.setup.company || '';
   renderVesselStampPreview();
   renderChEngSignaturePreview();
 
@@ -9677,6 +9785,7 @@ async function saveVoyageDetails(){
   state.setup.chEng = document.getElementById('s_chEng').value;
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value)||null;
   state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
+  state.setup.company = document.getElementById('s_company')?.value || '';
   state.setup.voyageNumber = document.getElementById('s_voyageNumber').value;
   state.setup.shipCondition = normalizeCondition(document.getElementById('s_shipCondition').value);
   state.setup.departPort = document.getElementById('s_departPort').value;
@@ -9734,6 +9843,7 @@ async function saveVesselIdentity(){
   state.setup.chEng = document.getElementById('s_chEng').value;
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value) || null;
   state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
+  state.setup.company = document.getElementById('s_company')?.value || '';
   const v = activeVessel();
   if (v) v.name = document.getElementById('s_vesselName').value.trim() || v.name;
   const status = document.getElementById('vesselSaveStatus');
@@ -9885,6 +9995,7 @@ async function saveSetupFromForm(){
   state.setup.chEng = document.getElementById('s_chEng').value;
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value)||null;
   state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
+  state.setup.company = document.getElementById('s_company')?.value || '';
   const v = activeVessel();
   if (v) v.name = document.getElementById('s_vesselName').value.trim() || v.name;
 
@@ -14295,7 +14406,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v106';
+let androidInstallCacheName = 'noon-report-v107';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -16308,6 +16419,387 @@ document.addEventListener('blur', (e)=>{
   if (e.target?.dataset?.vmNumeric === '1') normalisePenNumericField(e.target);
 }, true);
 
+
+/* ============================================================================
+ * Login gate — central vessel database
+ *
+ * The sync server holds every login and every vessel. A vessel account carries
+ * exactly one vessel and its sync token, so signing in both authenticates the
+ * user and decides which single ship this copy of the program loads. An admin
+ * account sees the whole fleet and picks one ship to load, one at a time.
+ *
+ * The session is cached locally because this runs at sea: once a ship has
+ * signed in, a later boot with no connectivity keeps its vessel assignment
+ * instead of locking the crew out of their own records.
+ * ========================================================================== */
+
+const SESSION_LS_KEY = 'noonReportSession';
+
+function readStoredSession(){
+  try{
+    const raw = localStorage.getItem(SESSION_LS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : null;
+  }catch(_){ return null; }
+}
+
+function writeStoredSession(session){
+  if (!session){
+    localStorage.removeItem(SESSION_LS_KEY);
+    return null;
+  }
+  localStorage.setItem(SESSION_LS_KEY, JSON.stringify(session));
+  return session;
+}
+
+function sessionRequestHeaders(session){
+  const s = session || readStoredSession();
+  const headers = { 'Content-Type': 'application/json' };
+  if (s && s.sessionToken) headers['X-Session-Token'] = s.sessionToken;
+  return headers;
+}
+
+/* Same URL cleanup the sync settings use, so a pasted app URL still works. */
+function loginApiBase(raw){
+  const url = normalizeSyncServerUrl(raw || '');
+  return url ? url.replace(/\/+$/, '') : '';
+}
+
+async function loginApiCall(base, path, { method='GET', body=null, session=null, token=null } = {}){
+  const headers = sessionRequestHeaders(session);
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const res = await fetch(`${base}${path}`, {
+    method,
+    cache: 'no-store',
+    headers,
+    body: body == null ? undefined : JSON.stringify(body)
+  });
+  const text = await res.text();
+  let parsed = null;
+  if (text.trim()){
+    try{ parsed = JSON.parse(text); }
+    catch(_){
+      throw new Error(res.ok
+        ? 'The server answered with something that is not JSON — check the Sync Server URL points at the sync root.'
+        : `HTTP ${res.status} from the server.`);
+    }
+  }
+  if (!res.ok){
+    const detail = (parsed && (parsed.message || parsed.error)) || `HTTP ${res.status}`;
+    const err = new Error(detail);
+    err.status = res.status;
+    err.reason = parsed && parsed.reason;
+    throw err;
+  }
+  return parsed || {};
+}
+
+function setLoginStatus(id, message, kind){
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = message || '';
+  el.classList.remove('err', 'ok', 'busy');
+  if (kind) el.classList.add(kind);
+}
+
+function showLoginGate(show){
+  const gate = document.getElementById('loginGate');
+  if (gate) gate.hidden = !show;
+}
+
+function showLoginStep(step){
+  const signIn = document.getElementById('loginStepSignIn');
+  const assign = document.getElementById('loginStepAssign');
+  if (signIn) signIn.hidden = step !== 'signin';
+  if (assign) assign.hidden = step !== 'assign';
+}
+
+/**
+ * Bind the app to one vessel from the central database.
+ *
+ * Creates the local vessel record if this device has never seen the ship, then
+ * makes it the active vessel and points sync at it with the vessel's own token.
+ * Passing null clears the assignment — the blank program.
+ */
+async function applyVesselAssignment(vessel, serverUrl){
+  if (state.session) state.session.vessel = vessel || null;
+
+  if (!vessel){
+    renderVesselLock();
+    return null;
+  }
+
+  const wantedSlug = vessel.vesselId;
+  let record = state.vessels.find(v => v.slug === wantedSlug || v.assignedVesselId === wantedSlug);
+  if (!record){
+    record = await createNewVessel(vessel.vesselName || wantedSlug);
+    if (!record) throw new Error('Could not create a local record for ' + wantedSlug);
+    record.slug = wantedSlug;
+  }
+  record.assignedVesselId = wantedSlug;
+  record.name = vessel.vesselName || record.name;
+  await saveVesselRegistry();
+
+  if (state.activeVesselId !== record.id){
+    await switchVessel(record.id);
+  }
+
+  /* Identity from the central database wins — it is the registered ship. */
+  if (vessel.vesselName) state.setup.vesselName = vessel.vesselName;
+  if (vessel.company) state.setup.company = vessel.company;
+  if (vessel.imo && !state.setup.imoNo) state.setup.imoNo = vessel.imo;
+
+  const sync = ensureSyncConfig();
+  if (serverUrl) sync.serverUrl = serverUrl;
+  sync.vesselId = wantedSlug;
+  if (vessel.token) sync.apiToken = vessel.token;
+  await persistSyncCredentialsMirror(sync);
+  await saveSetup();
+
+  render();
+  renderSyncUi();
+  renderVesselLock();
+  return record;
+}
+
+/** Show which vessel this login owns, and hide the switcher when it is fixed. */
+function renderVesselLock(){
+  const session = state.session || {};
+  const vessel = session.vessel;
+  const isAdmin = session.role === 'admin';
+  const who = session.username ? `Signed in as ${session.username}` : 'Not signed in';
+  const label = document.getElementById('assignedVesselLabel');
+  if (label){
+    label.textContent = vessel
+      ? `${who} — vessel ${vessel.vesselName || vessel.vesselId}${vessel.company ? ' (' + vessel.company + ')' : ''}`
+      : `${who} — no vessel assigned`;
+  }
+  /* A vessel account is bound to one ship: switching would be a lie. */
+  const lockSwitcher = !!vessel && !isAdmin;
+  ['s_vesselSelect', 'btnLoadVessel', 'btnAddVessel', 'btnInstallTestFleet'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = lockSwitcher;
+  });
+  const note = document.getElementById('vesselLockNote');
+  if (note){
+    note.textContent = lockSwitcher
+      ? `This copy is assigned to ${vessel.vesselName || vessel.vesselId} by your login. Only this vessel can be loaded.`
+      : '';
+  }
+}
+
+async function handleLoginSubmit(){
+  const base = loginApiBase(document.getElementById('login_serverUrl').value);
+  const username = document.getElementById('login_username').value.trim();
+  const password = document.getElementById('login_password').value;
+  if (!base){ setLoginStatus('loginStatus', 'Enter the Sync Server URL.', 'err'); return; }
+  if (!username || !password){ setLoginStatus('loginStatus', 'Enter your username and password.', 'err'); return; }
+
+  setLoginStatus('loginStatus', 'Signing in…', 'busy');
+  try{
+    const out = await loginApiCall(base, '/api/auth/login', {
+      method: 'POST', body: { username, password }
+    });
+    const session = writeStoredSession({
+      serverUrl: base,
+      sessionToken: out.sessionToken,
+      expiresAt: out.expiresAt,
+      username: out.username,
+      role: out.role,
+      vessel: out.vessel || null
+    });
+    state.session = session;
+    setLoginStatus('loginStatus', '', null);
+    await enterAssignStep(session);
+  }catch(err){
+    setLoginStatus('loginStatus', err.message, 'err');
+  }
+}
+
+/** After sign-in: a vessel account is already assigned; an admin picks one. */
+async function enterAssignStep(session){
+  showLoginStep('assign');
+  const signedAs = document.getElementById('loginSignedAs');
+  if (signedAs){
+    signedAs.textContent = session.role === 'admin'
+      ? `Signed in as ${session.username} (administrator) — choose the vessel to load.`
+      : `Signed in as ${session.username}.`;
+  }
+  setLoginStatus('loginAssignStatus', '', null);
+
+  if (session.vessel){
+    setLoginStatus('loginAssignStatus', `Loading ${session.vessel.vesselName || session.vessel.vesselId}…`, 'busy');
+    try{
+      await applyVesselAssignment(session.vessel, session.serverUrl);
+      writeStoredSession(state.session);
+      showLoginGate(false);
+    }catch(err){
+      setLoginStatus('loginAssignStatus', 'Could not load the vessel: ' + err.message, 'err');
+    }
+    return;
+  }
+
+  const pick = document.getElementById('loginVesselPick');
+  if (session.role === 'admin'){
+    try{
+      const out = await loginApiCall(session.serverUrl, '/api/admin/vessels', { session });
+      const sel = document.getElementById('login_vesselSelect');
+      const vessels = out.vessels || [];
+      state.session.fleet = vessels;
+      if (sel){
+        sel.innerHTML = vessels.length
+          ? vessels.map(v => `<option value="${v.vesselId}">${v.vesselName} — IMO ${v.imo}${v.company ? ' — ' + v.company : ''}</option>`).join('')
+          : '<option value="">No vessels registered yet</option>';
+      }
+      if (pick) pick.hidden = false;
+      if (!vessels.length){
+        setLoginStatus('loginAssignStatus', 'No vessels are registered yet. Continue with no vessel and add one from Setup.', null);
+      }
+    }catch(err){
+      setLoginStatus('loginAssignStatus', 'Could not list vessels: ' + err.message, 'err');
+    }
+  } else if (pick){
+    pick.hidden = true;
+  }
+}
+
+async function handleAdminLoadVessel(){
+  const session = state.session || readStoredSession();
+  const sel = document.getElementById('login_vesselSelect');
+  const vesselId = sel && sel.value;
+  if (!vesselId){ setLoginStatus('loginAssignStatus', 'No vessel selected.', 'err'); return; }
+  const vessel = (session.fleet || []).find(v => v.vesselId === vesselId);
+  if (!vessel){ setLoginStatus('loginAssignStatus', 'That vessel is no longer listed.', 'err'); return; }
+  setLoginStatus('loginAssignStatus', `Loading ${vessel.vesselName}…`, 'busy');
+  try{
+    await applyVesselAssignment(vessel, session.serverUrl);
+    session.vessel = vessel;
+    writeStoredSession(session);
+    showLoginGate(false);
+  }catch(err){
+    setLoginStatus('loginAssignStatus', 'Could not load the vessel: ' + err.message, 'err');
+  }
+}
+
+/**
+ * Verify a vessel token against the database and adopt whatever ship it names.
+ * This is the path for a crew that was handed a token rather than an account.
+ */
+async function handleVesselTokenVerify(){
+  const session = state.session || readStoredSession() || {};
+  const base = session.serverUrl || loginApiBase(document.getElementById('login_serverUrl').value);
+  const token = document.getElementById('login_vesselToken').value.trim();
+  if (!base){ setLoginStatus('loginAssignStatus', 'Enter the Sync Server URL first.', 'err'); return; }
+  if (!token){ setLoginStatus('loginAssignStatus', 'Paste the vessel token.', 'err'); return; }
+
+  setLoginStatus('loginAssignStatus', 'Verifying token…', 'busy');
+  try{
+    const out = await loginApiCall(base, '/api/auth/me', { token, session: null });
+    if (!out.vessel){
+      setLoginStatus('loginAssignStatus', 'That token is valid but names no vessel.', 'err');
+      return;
+    }
+    await applyVesselAssignment(out.vessel, base);
+    const merged = Object.assign({}, session, { serverUrl: base, vessel: out.vessel });
+    state.session = merged;
+    writeStoredSession(merged);
+    showLoginGate(false);
+  }catch(err){
+    setLoginStatus('loginAssignStatus',
+      err.status === 401
+        ? 'The database does not recognise that token. Check it with your administrator.'
+        : 'Could not verify the token: ' + err.message,
+      'err');
+  }
+}
+
+/** No token: a blank program, no vessel assignment, add one later. */
+async function handleContinueWithoutVessel(){
+  const session = state.session || readStoredSession() || {};
+  session.vessel = null;
+  state.session = session;
+  writeStoredSession(session.sessionToken ? session : null);
+  await applyVesselAssignment(null, session.serverUrl);
+  showLoginGate(false);
+}
+
+async function handleSignOut(){
+  const session = state.session || readStoredSession();
+  if (session && session.serverUrl && session.sessionToken){
+    try{ await loginApiCall(session.serverUrl, '/api/auth/logout', { method:'POST', session }); }catch(_){}
+  }
+  writeStoredSession(null);
+  state.session = null;
+  renderVesselLock();
+  showLoginStep('signin');
+  showLoginGate(true);
+  setLoginStatus('loginStatus', 'Signed out.', null);
+}
+
+/**
+ * Decide on boot whether to show the gate.
+ * A cached session goes straight through — the ship may have no connectivity,
+ * and its vessel assignment is already known.
+ */
+async function initLoginGate(){
+  const stored = readStoredSession();
+  const sync = ensureSyncConfig();
+
+  const serverField = document.getElementById('login_serverUrl');
+  if (serverField) serverField.value = (stored && stored.serverUrl) || sync.serverUrl || '';
+
+  if (stored && stored.sessionToken){
+    state.session = stored;
+    if (stored.vessel){
+      try{ await applyVesselAssignment(stored.vessel, stored.serverUrl); }
+      catch(err){ console.warn('Stored vessel assignment could not be applied', err); }
+    } else {
+      renderVesselLock();
+    }
+    showLoginGate(false);
+    /* Refresh in the background: a revoked login should not last forever, but a
+       server we cannot reach must not strand the ship either. */
+    loginApiCall(stored.serverUrl, '/api/auth/me', { session: stored })
+      .then(out => {
+        const merged = Object.assign({}, stored, { role: out.role, vessel: out.vessel || stored.vessel });
+        state.session = writeStoredSession(merged);
+        renderVesselLock();
+      })
+      .catch(err => {
+        if (err.status === 401){
+          writeStoredSession(null);
+          state.session = null;
+          renderVesselLock();
+        }
+      });
+    return;
+  }
+
+  showLoginStep('signin');
+  showLoginGate(true);
+}
+
+document.getElementById('btnLoginSubmit')?.addEventListener('click', handleLoginSubmit);
+document.getElementById('login_password')?.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') handleLoginSubmit(); });
+document.getElementById('btnLoginOffline')?.addEventListener('click', async ()=>{
+  state.session = null;
+  await applyVesselAssignment(null, '');
+  showLoginGate(false);
+});
+document.getElementById('btnLoginLoadVessel')?.addEventListener('click', handleAdminLoadVessel);
+document.getElementById('btnLoginUseToken')?.addEventListener('click', handleVesselTokenVerify);
+document.getElementById('btnLoginNoToken')?.addEventListener('click', handleContinueWithoutVessel);
+document.getElementById('btnLoginBack')?.addEventListener('click', ()=>{
+  showLoginStep('signin');
+  setLoginStatus('loginStatus', '', null);
+});
+document.getElementById('btnSignOut')?.addEventListener('click', handleSignOut);
+document.getElementById('btnOpenLogin')?.addEventListener('click', ()=>{
+  showLoginStep(state.session && state.session.sessionToken ? 'assign' : 'signin');
+  showLoginGate(true);
+});
+
 (async function init(){
   try {
     if (penInputLikely()) enablePenInputMode();
@@ -16362,6 +16854,9 @@ document.addEventListener('blur', (e)=>{
     await applyMirroredSyncCredentials();
     registerServiceWorker();
     renderSyncUi();
+    /* Last, so a stored session can switch the active vessel over a loaded app. */
+    try{ await initLoginGate(); }
+    catch(gateErr){ console.error('Login gate failed to start', gateErr); showLoginGate(true); }
     document.getElementById('dbStatus').textContent = '● local database ready';
   } catch(e){
     console.error('Startup error:', e);
