@@ -4,6 +4,40 @@ Offline-capable ship performance and fuel logging app for engine department noon
 
 Works on **Android phones** and **PC browsers** as a Progressive Web App (PWA), with optional sync to a **self-hosted Linux server** behind Cloudflare Tunnel.
 
+## Bunkering and R.O.B. corrections
+
+R.O.B. is a chain: every report's opening figure is the previous report's closing
+figure. Two things break that chain, and both are handled.
+
+**Bunkers received** are logged as receipts — date, grade, tank, quantity, BDN
+number, supplier, port, and optionally density, LCV and viscosity. A receipt dated
+on or before a report is added to that report's R.O.B., so the delivery flows into
+the next report automatically and stays on file as the record of what was taken.
+
+**A bunker survey** corrects the book figure to what the tanks actually sound. It
+works either way round: after bunkering, to check the delivery against the tanks —
+the panel's Received column shows what landed that day, so a negative difference is
+a short delivery, while the receipt stays on file at the BDN quantity for the claim
+— or on its own, as a plain survey of the tanks with no bunkering involved.
+Record it against the report it was taken with, in Voyage Summary → Bunker Survey /
+R.O.B. Correction. From that report onward R.O.B. counts from the **measured**
+figure, plus anything bunkered after it, less what has been burnt since — so the
+book and the tank reconverge instead of carrying the difference for the rest of the
+voyage. The survey stores the calculated figure and the difference beside the
+measurement, so the correction is auditable rather than a silent rewrite.
+
+Two rules worth knowing:
+
+- **Bunkers delivered up to the survey day are already inside the measured figure**
+  and are not added again, because the survey is taken after bunkering. Bunkers
+  received after it are added on top.
+- **A tank the surveyor did not sound** falls back to what the book said at the
+  moment of the survey, not to the voyage-opening figure — consumption is counted
+  only from the survey, so the opening figure has to be the survey's too.
+
+Tank soundings recorded in the Soundings table are still for handover only and do
+not touch R.O.B.; the survey panel is the one that corrects it.
+
 ## Features
 
 - **Offline-first**: all voyage data stored in IndexedDB — works without internet on Android and PC
@@ -14,7 +48,8 @@ Works on **Android phones** and **PC browsers** as a Progressive Web App (PWA), 
 - **Weather & sea state**: Beaufort wind, Douglas sea state, swell, air/sea temp on Voyage Summary
 - **Server sync**: push/pull JSON snapshots per vessel + voyage; merge by record id; delete tombstones; multi-device
 - **Export/import**: JSON backup and CSV exports
-- **Multi-vessel**: keep several ships in one browser and sync each by vessel slug
+- **Central vessel database**: per-vessel logins and an admin account on the sync server; tokens derived from vessel name + IMO
+- **One vessel per login**: the account decides which ship the program loads
 
 ## Proxmox install (one-liner)
 
@@ -185,6 +220,9 @@ Environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `SYNC_ADMIN_USER` | `admin` | Username of the first administrator |
+| `SYNC_ADMIN_PASSWORD` | generated | Password for the first administrator, printed once at startup if generated |
+| `SYNC_ACCOUNTS_DB` | `<data>/accounts.db` | SQLite file holding logins, vessels and sessions |
 | `SYNC_API_TOKEN` | `change-me-in-production` | Bearer token for API auth. Left unset, the server has no secret to check and accepts **every** request — `/api/health` then reports `"tokenConfigured": false` and the app warns on Test Connection. |
 | `SYNC_PORT` | `8787` | Listen port |
 | `SYNC_HOST` | `0.0.0.0` | Bind address |
@@ -222,6 +260,147 @@ Use the generated `https://….trycloudflare.com` or your custom domain in the a
 
 Sync merges records by `id`, keeping the newest `updatedAt` per entry/receipt/document. Deletes propagate via tombstones so a second device does not resurrect removed rows.
 
+
+## Central Vessel Database & Login
+
+The sync server holds every login and every vessel. Signing in both authenticates
+the user and decides which **single** vessel this copy of the program loads.
+
+### Roles
+
+| Role | Reads | Writes | Manages |
+|------|-------|--------|---------|
+| `fleet_manager` | Every vessel | Every vessel | Vessels, logins, assignments, transfers |
+| `chief_engineer` | Every ship he has **ever** been assigned to | Only the ship he is assigned to **right now** | Nothing |
+
+### Assignments are periods, not fields
+
+```
+assignments(username, vessel_id, assigned_at, released_at, assigned_by, note)
+```
+
+A posting is a row with `released_at` empty. Re-posting an engineer closes the old
+row and opens a new one in the same transaction, so an engineer is never on two
+ships or none. One partial unique index enforces a single live posting each.
+
+That single shape gives three things at once:
+
+- **Transfer** — one `POST /api/admin/assign` moves an engineer; the app follows on
+  his next login.
+- **Service history** — every ship he sailed, and when, for him and for the vessel.
+- **The access rule** — a relieved engineer keeps the records he sailed but can no
+  longer change them, while his relief inherits the full prior log. That matters
+  here: opening ROB and meter readings carry over from the last entry, so a new
+  chief engineer joining a ship with no history cannot start a voyage correctly.
+
+### Importing a vessel that is not in the database
+
+`POST /api/vessels/import` with the vessel name, IMO and company:
+
+- **Fleet manager** — registers it, or updates an existing registration.
+- **Chief engineer** — may register a ship that is **not yet listed** (this is how a
+  device holding local records for an unlisted vessel gets it into the fleet) and is
+  posted to it immediately. The vessel is flagged `pendingReview` so the manager can
+  see it arrived from a ship rather than the office. Those ships are listed at
+  `GET /api/admin/vessels/pending` and called out on the manager's vessel picker at
+  sign-in — with the IMO and who registered them — and cleared with
+  `POST /api/admin/vessels/approve`.
+- Neither path lets an engineer overwrite an existing registration — that returns
+  `409 already_registered`. Vessel name, IMO and company are the manager's record,
+  and the app makes those fields read-only for anyone else.
+
+### Sample fleet
+
+The four scenario vessels built into the app double as the sample data:
+
+```bash
+python3 sync-server/seed_demo_fleet.py --db /opt/voyage-manager/sync-server/sync-data/accounts.db
+```
+
+| Vessel | IMO | Slug | Chief engineer |
+|--------|-----|------|----------------|
+| M/V HARBOUR KEY | 9722101 | `mv-harbour-key` | `aruiz` |
+| M/V ROADSTEAD | 9684412 | `mv-roadstead` | `hberg` |
+| M/V CIRCUMNAV | 9810024 | `mv-circumnav` | `pnair` |
+| M/V PACIFIC TRADER | 9756231 | `mv-pacific-trader` | `mdalisay` |
+
+Slugs match the app's Test Fleet, so the seeded database and the local demo data
+line up and can actually sync. Passwords are printed once.
+
+The first administrator is created on first start. Set `SYNC_ADMIN_PASSWORD` to
+choose the password, or let the server generate one — it is printed once, at
+startup, and only its hash is stored.
+
+### Vessel tokens are derived, not random
+
+A vessel's sync token is `HMAC-SHA256(server secret, VESSEL NAME | IMO)`. The same
+name and IMO always regenerate the same token on the same server, so a ship that
+loses its token gets it back by typing its name and IMO again — no reset, no
+re-issue. Name matching ignores case and extra spaces; `IMO 9722101`, `imo9722101`
+and `9722101` are the same ship.
+
+The secret lives in the account database, so tokens survive a restart but cannot
+be recomputed by anyone without that file.
+
+### Registering a vessel (admin)
+
+```bash
+# Log in
+SESSION=$(curl -s -X POST -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"..."}' \
+  https://sync.example.com/api/auth/login | python3 -c 'import json,sys;print(json.load(sys.stdin)["sessionToken"])')
+
+# What token would this ship get? (key generator — creates nothing)
+curl -s -X POST -H "X-Session-Token: $SESSION" -H 'Content-Type: application/json' \
+  -d '{"vesselName":"M/V Fangcheng","imo":"IMO 9722101"}' \
+  https://sync.example.com/api/admin/token-preview
+
+# Register it, with a login for the crew
+curl -s -X POST -H "X-Session-Token: $SESSION" -H 'Content-Type: application/json' \
+  -d '{"vesselName":"M/V Fangcheng","imo":"IMO 9722101","company":"Pacific Ocean Shipping",
+       "username":"fangcheng","password":"..."}' \
+  https://sync.example.com/api/admin/vessels
+```
+
+### In the app
+
+On first launch the program shows a login screen. After signing in:
+
+- **Vessel account** — its ship loads immediately, with the company name and IMO
+  from the database, and sync is pointed at that vessel using its own token.
+- **Administrator** — pick one vessel from the fleet to load.
+- **A token instead of an account** — paste the vessel token to verify it against
+  the database and adopt whatever ship it names.
+- **No token** — continue with a blank program and no vessel assignment; add a
+  vessel later from Setup → Account & Vessel Assignment.
+
+The session is cached locally, so a later boot at sea with no connectivity keeps
+its vessel assignment instead of locking the crew out of their own records.
+
+### Auth API
+
+| Endpoint | Who | Purpose |
+|----------|-----|---------|
+| `POST /api/auth/login` | anyone | Returns a session token, role, and the vessel (with its sync token) |
+| `POST /api/auth/logout` | session | Ends the session |
+| `GET /api/auth/me` | session or vessel token | Who am I, and which vessel |
+| `POST /api/auth/password` | session | Change own password |
+| `GET/POST /api/admin/vessels` | admin | List / register vessels |
+| `DELETE /api/admin/vessels/<id>` | admin | Remove a vessel and its accounts |
+| `POST /api/admin/token-preview` | manager | Token for a name + IMO, without creating anything |
+| `GET/POST /api/admin/accounts` | manager | List / create logins |
+| `POST /api/admin/assign` | manager | Post an engineer to a ship (this is also the transfer) |
+| `POST /api/admin/release` | manager | Sign an engineer off without re-posting |
+| `GET /api/admin/crew/<vesselId>` | manager | Who is on a ship now, and who has been |
+| `GET /api/assignments/<username>` | own record, or manager | Service history |
+| `POST /api/vessels/import` | any login | Register a vessel absent from the database |
+| `GET /api/admin/vessels/pending` | manager | Ships registered from a device, awaiting review |
+| `POST /api/admin/vessels/approve` | manager | Clear a ship's pending flag |
+
+Data routes are scoped: a vessel login reaching another ship gets `403 wrong_vessel`.
+The legacy shared `SYNC_API_TOKEN` still works and still reaches every vessel, so
+existing single-token installs keep working untouched.
+
 ## Files
 
 | File | Purpose |
@@ -248,6 +427,9 @@ Node and Python 3 — nothing to install.
 | `tests/check_js_syntax.js` | Every shipped `.js` file and each inline `<script>` in `voyage_manager.html` parses. There is no build step, so a syntax error otherwise ships silently. |
 | `tests/check_assets.js` | `sw.js`'s cache name and precache list still match `androidInstallCacheName` / `androidInstallAssets` in the app, and every precached file exists. A stale cache name leaves phones on the previous build. |
 | `tests/test_sync_auth.py` | Starts `sync-server/server.py` with and without `SYNC_API_TOKEN` and asserts who gets in, including the 401 `reason` codes and a non-ASCII token. |
+| `tests/test_rob_survey.js` | The R.O.B. chain across a bunker survey — that a survey re-bases it, that earlier reports are untouched, that a bunker taken before the survey is not counted twice, and that the later of two surveys wins. |
+| `tests/test_accounts.py` | Logins, derived vessel tokens, crew rotation, and the read-history/write-current rule — including that a transferred engineer still reads his old ship but can no longer write to it, and that the legacy shared token still works. |
+| `tests/browser_login_e2e.js` | Not in CI (no browser there). Drives the real login UI in Chromium against a live seeded server. Run it after touching the gate. |
 | `tests/test_install_quoting.sh` | The installer's token quoting, checked against systemd's own parser via `systemd-analyze`. Unquoted, systemd splits an `Environment=` value on whitespace and reads `%` as a specifier, so a token with a space or a `%` reached the server truncated — leaving it on its default token, rejecting the very token the installer printed. |
 
 CI also runs `shellcheck` over the install scripts, which are piped from `curl` straight

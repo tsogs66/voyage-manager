@@ -32,11 +32,22 @@ import json
 import mimetypes
 import os
 import re
+import secrets
+import sys
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from accounts import (  # noqa: E402
+    ROLE_ADMIN,
+    ROLE_VESSEL,
+    canonical_role,
+    AccountError,
+    AccountStore,
+)
 
 DATA_DIR = Path(os.environ.get("SYNC_DATA_DIR", "./sync-data"))
 DEFAULT_API_TOKEN = "change-me-in-production"
@@ -52,6 +63,10 @@ ALLOWED_ORIGINS = [
     if o.strip()
 ]
 STATIC_DIR = Path(os.environ["SYNC_STATIC_DIR"]).resolve() if os.environ.get("SYNC_STATIC_DIR") else None
+ACCOUNTS_DB = Path(os.environ.get("SYNC_ACCOUNTS_DB", str(DATA_DIR / "accounts.db")))
+ADMIN_USER = os.environ.get("SYNC_ADMIN_USER", "admin")
+ADMIN_PASSWORD = os.environ.get("SYNC_ADMIN_PASSWORD", "")
+ACCOUNTS = AccountStore(ACCOUNTS_DB)
 
 SLUG_RE = re.compile(r"^[a-zA-Z0-9._-]{1,64}$")
 COND_RE = re.compile(r"^(B|L|BALLAST|LADEN|LOADED)$", re.IGNORECASE)
@@ -135,10 +150,10 @@ def send_cors(handler: BaseHTTPRequestHandler) -> None:
         handler.send_header("Access-Control-Allow-Origin", "*")
     elif origin in ALLOWED_ORIGINS:
         handler.send_header("Access-Control-Allow-Origin", origin)
-    handler.send_header("Access-Control-Allow-Methods", "GET, PUT, OPTIONS")
+    handler.send_header("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
     handler.send_header(
         "Access-Control-Allow-Headers",
-        "Authorization, Content-Type, If-None-Match, X-Device-Id, X-Device-Name",
+        "Authorization, Content-Type, If-None-Match, X-Device-Id, X-Device-Name, X-Session-Token",
     )
     handler.send_header("Access-Control-Expose-Headers", "ETag")
     handler.send_header("Access-Control-Max-Age", "86400")
@@ -255,6 +270,135 @@ class SyncHandler(BaseHTTPRequestHandler):
         send_cors(self)
         self.end_headers()
 
+    def _bearer(self) -> str:
+        auth = self.headers.get("Authorization", "")
+        if auth[:7].lower() == "bearer ":
+            return auth[7:].strip()
+        return ""
+
+    def _principal(self) -> dict:
+        """Who is calling, and which vessels they may touch.
+
+        Four ways in, most specific first:
+          session   a login from /api/auth/login — admin sees every vessel,
+                    a vessel user sees exactly one
+          vessel    the derived per-vessel token, good for that vessel's sync only
+          master    the legacy shared SYNC_API_TOKEN — full access, kept so
+                    existing single-token installs keep working untouched
+          open      no token configured at all; the server guards nothing
+
+        Returns {"kind", "vesselId"|None, "role", "username"|None, "reason"}.
+        reason is set only when the caller is rejected.
+        """
+        token = self._bearer()
+        session_header = self.headers.get("X-Session-Token", "").strip()
+
+        session = ACCOUNTS.get_session(session_header or token)
+        if session:
+            if session["role"] == ROLE_ADMIN:
+                # The fleet manager sees the whole database.
+                return {"kind": "session", "role": session["role"],
+                        "username": session["username"], "vesselId": None,
+                        "readable": None, "writable": None, "reason": ""}
+            # A chief engineer reads every ship he has sailed, writes only the
+            # one he is on now.
+            username = session["username"]
+            return {
+                "kind": "session",
+                "role": session["role"],
+                "username": username,
+                "vesselId": ACCOUNTS.current_vessel(username),
+                "readable": set(ACCOUNTS.readable_vessels(username)),
+                "writable": ACCOUNTS.current_vessel(username),
+                "reason": "",
+            }
+
+        if token:
+            vessel = ACCOUNTS.get_vessel_by_token(token)
+            if vessel:
+                return {
+                    "kind": "vessel", "role": ROLE_VESSEL, "username": None,
+                    "vesselId": vessel["vesselId"],
+                    "readable": {vessel["vesselId"]}, "writable": vessel["vesselId"],
+                    "reason": "",
+                }
+
+        if not TOKEN_CONFIGURED:
+            return {"kind": "open", "role": ROLE_ADMIN, "username": None, "vesselId": None,
+                    "readable": None, "writable": None, "reason": ""}
+
+        if not token:
+            return {"kind": "none", "role": "", "username": None, "vesselId": None,
+                    "readable": set(), "writable": None, "reason": "missing_token"}
+
+        if hmac.compare_digest(
+            self.headers.get("Authorization", "").encode("latin-1", "replace"),
+            f"Bearer {API_TOKEN}".encode("utf-8"),
+        ):
+            return {"kind": "master", "role": ROLE_ADMIN, "username": None, "vesselId": None,
+                    "readable": None, "writable": None, "reason": ""}
+
+        return {"kind": "none", "role": "", "username": None, "vesselId": None,
+                "readable": set(), "writable": None, "reason": "token_mismatch"}
+
+    def _authorize_vessel(self, vessel: str, write: bool = False) -> dict | None:
+        """Principal for a request about one vessel, or None after replying 4xx.
+
+        Reading is allowed for any ship in the caller's service history; writing
+        only for the ship they are assigned to right now. A relieved engineer
+        keeps his records but can no longer change them.
+        """
+        principal = self._principal()
+        if principal["reason"]:
+            self._reject_unauthorized(principal["reason"])
+            return None
+
+        readable = principal.get("readable")
+        if readable is None:          # fleet manager, master token, or open mode
+            return principal
+
+        if write:
+            if principal.get("writable") != vessel:
+                current = principal.get("writable")
+                json_response(
+                    self, HTTPStatus.FORBIDDEN,
+                    {"error": "forbidden", "reason": "not_current_vessel",
+                     "message": (
+                         f"This login may only write to the vessel it is currently "
+                         f"assigned to ({current or 'none'}), not '{vessel}'."
+                         if current else
+                         f"This login is not assigned to any vessel, so it cannot "
+                         f"write to '{vessel}'.")},
+                )
+                return None
+            return principal
+
+        if vessel not in readable:
+            json_response(
+                self, HTTPStatus.FORBIDDEN,
+                {"error": "forbidden", "reason": "wrong_vessel",
+                 "message": (
+                     f"This login has never been assigned to '{vessel}', so its "
+                     f"records are not available.")},
+            )
+            return None
+        return principal
+
+    def _require_admin(self) -> dict | None:
+        principal = self._principal()
+        if principal["reason"]:
+            self._reject_unauthorized(principal["reason"])
+            return None
+        if principal["role"] != ROLE_ADMIN:
+            json_response(
+                self,
+                HTTPStatus.FORBIDDEN,
+                {"error": "forbidden", "reason": "admin_only",
+                 "message": "This action needs an administrator login."},
+            )
+            return None
+        return principal
+
     def _auth_reason(self) -> str:
         """'' when the request may proceed, otherwise why it may not."""
         auth = self.headers.get("Authorization", "")
@@ -279,8 +423,8 @@ class SyncHandler(BaseHTTPRequestHandler):
     def _authorized(self) -> bool:
         return self._auth_reason() == ""
 
-    def _reject_unauthorized(self) -> None:
-        reason = self._auth_reason()
+    def _reject_unauthorized(self, reason: str | None = None) -> None:
+        reason = reason or self._auth_reason()
         json_response(
             self,
             HTTPStatus.UNAUTHORIZED,
@@ -341,14 +485,95 @@ class SyncHandler(BaseHTTPRequestHandler):
                     # request is accepted. The app surfaces this as a warning.
                     "tokenConfigured": TOKEN_CONFIGURED,
                     "authRequired": TOKEN_CONFIGURED,
+                    # True once any account exists: the app should show its login
+                    # screen instead of asking for a bare sync token.
+                    "accountsEnabled": not ACCOUNTS.is_empty(),
+                    "loginRequired": ACCOUNTS.has_admin(),
                 },
             )
             return
 
         parts = [p for p in parsed.path.strip("/").split("/") if p]
+
+        if parts == ["api", "auth", "me"]:
+            principal = self._principal()
+            if principal["reason"] or principal["kind"] not in ("session", "vessel"):
+                self._reject_unauthorized("missing_token")
+                return
+            vessel = (
+                ACCOUNTS.get_vessel(principal["vesselId"]) if principal["vesselId"] else None
+            )
+            json_response(
+                self,
+                HTTPStatus.OK,
+                {
+                    "ok": True,
+                    "username": principal["username"],
+                    "role": principal["role"],
+                    "vessel": self._vessel_public(vessel, include_token=True),
+                    "history": self._readable_fleet(principal),
+                },
+            )
+            return
+
+        if parts == ["api", "admin", "vessels"]:
+            if self._require_admin() is None:
+                return
+            json_response(
+                self,
+                HTTPStatus.OK,
+                {"ok": True,
+                 "vessels": [self._vessel_public(v, True) for v in ACCOUNTS.list_vessels()]},
+            )
+            return
+
+        if parts == ["api", "admin", "vessels", "pending"]:
+            if self._require_admin() is None:
+                return
+            json_response(self, HTTPStatus.OK,
+                          {"ok": True,
+                           "vessels": [self._vessel_public(v, True) for v in ACCOUNTS.pending_vessels()]})
+            return
+
+        if parts == ["api", "admin", "accounts"]:
+            if self._require_admin() is None:
+                return
+            json_response(self, HTTPStatus.OK, {"ok": True, "accounts": ACCOUNTS.list_accounts()})
+            return
+
+        if len(parts) == 4 and parts[:3] == ["api", "admin", "crew"]:
+            if self._require_admin() is None:
+                return
+            json_response(self, HTTPStatus.OK,
+                          {"ok": True, "crew": ACCOUNTS.vessel_crew(safe_slug(parts[3]))})
+            return
+
+        # An engineer's own service record. A fleet manager may read anyone's.
+        if len(parts) >= 3 and parts[:2] == ["api", "assignments"]:
+            principal = self._principal()
+            if principal["reason"]:
+                self._reject_unauthorized(principal["reason"])
+                return
+            who = parts[2] if len(parts) > 2 else principal["username"]
+            if principal["role"] != ROLE_ADMIN and who != principal["username"]:
+                json_response(self, HTTPStatus.FORBIDDEN,
+                              {"error": "forbidden", "reason": "not_your_record",
+                               "message": "You may only read your own assignment history."})
+                return
+            json_response(self, HTTPStatus.OK,
+                          {"ok": True, "username": who,
+                           "assignments": ACCOUNTS.assignment_history(username=who)})
+            return
+
         if len(parts) >= 2 and parts[0] == "api" and parts[1] == "voyage":
-            if not self._authorized():
-                self._reject_unauthorized()
+            try:
+                requested_vessel = safe_slug(parts[2]) if len(parts) >= 3 else ""
+            except ValueError:
+                json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid path"})
+                return
+            # Authorize against the vessel in the path: a vessel login may only
+            # reach its own ship, an admin login any of them.
+            if self._authorize_vessel(requested_vessel) is None:
                 return
             try:
                 if len(parts) == 3:
@@ -413,14 +638,312 @@ class SyncHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # ------------------------------------------------------------ auth API
+
+    def _vessel_public(self, vessel: dict | None, include_token: bool) -> dict | None:
+        """A vessel for the app. The token is only ever handed to someone who
+        already proved they are entitled to it."""
+        if not vessel:
+            return None
+        out = {
+            "vesselId": vessel["vesselId"],
+            "vesselName": vessel["vesselName"],
+            "imo": vessel["imo"],
+            "company": vessel["company"],
+            "pendingReview": bool(vessel.get("pendingReview")),
+            "createdBy": vessel.get("createdBy") or "",
+        }
+        if include_token:
+            out["token"] = vessel["token"]
+        return out
+
+
+    def _readable_fleet(self, principal: dict) -> list:
+        """Ships this caller may read: the fleet for a manager, the engineer's
+        service history otherwise."""
+        if principal.get("role") == ROLE_ADMIN:
+            return [self._vessel_public(v, False) for v in ACCOUNTS.list_vessels()]
+        out = []
+        for vessel_id in sorted(principal.get("readable") or []):
+            vessel = ACCOUNTS.get_vessel(vessel_id)
+            if vessel:
+                out.append(self._vessel_public(vessel, False))
+        return out
+
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        parts = [p for p in parsed.path.strip("/").split("/") if p]
+        try:
+            body = self._read_json()
+        except (ValueError, json.JSONDecodeError):
+            json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid JSON body"})
+            return
+
+        try:
+            if parts == ["api", "auth", "login"]:
+                return self._handle_login(body)
+            if parts == ["api", "auth", "logout"]:
+                return self._handle_logout()
+            if parts == ["api", "auth", "password"]:
+                return self._handle_password_change(body)
+            if parts == ["api", "admin", "vessels"]:
+                return self._handle_create_vessel(body)
+            if parts == ["api", "admin", "token-preview"]:
+                return self._handle_token_preview(body)
+            if parts == ["api", "admin", "accounts"]:
+                return self._handle_create_account(body)
+            if parts == ["api", "admin", "assign"]:
+                return self._handle_assign(body)
+            if parts == ["api", "admin", "release"]:
+                return self._handle_release(body)
+            if parts == ["api", "admin", "vessels", "approve"]:
+                if self._require_admin() is None:
+                    return
+                vessel = ACCOUNTS.approve_vessel(str(body.get("vesselId", "")))
+                return json_response(self, HTTPStatus.OK,
+                                     {"ok": True, "vessel": self._vessel_public(vessel, True)})
+            if parts == ["api", "vessels", "import"]:
+                return self._handle_vessel_import(body)
+        except AccountError as err:
+            json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(err)})
+            return
+
+        json_response(self, HTTPStatus.NOT_FOUND, {"error": "not found"})
+
+    def do_DELETE(self) -> None:
+        parsed = urlparse(self.path)
+        parts = [p for p in parsed.path.strip("/").split("/") if p]
+        try:
+            if len(parts) == 4 and parts[:3] == ["api", "admin", "vessels"]:
+                if self._require_admin() is None:
+                    return
+                ACCOUNTS.delete_vessel(safe_slug(parts[3]))
+                json_response(self, HTTPStatus.OK, {"ok": True, "deleted": parts[3]})
+                return
+            if len(parts) == 4 and parts[:3] == ["api", "admin", "accounts"]:
+                principal = self._require_admin()
+                if principal is None:
+                    return
+                if principal.get("username") == parts[3].strip().lower():
+                    json_response(
+                        self,
+                        HTTPStatus.BAD_REQUEST,
+                        {"error": "You cannot delete the account you are logged in with"},
+                    )
+                    return
+                ACCOUNTS.delete_account(parts[3])
+                json_response(self, HTTPStatus.OK, {"ok": True, "deleted": parts[3]})
+                return
+        except AccountError as err:
+            json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(err)})
+            return
+        except ValueError:
+            json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid path"})
+            return
+
+        json_response(self, HTTPStatus.NOT_FOUND, {"error": "not found"})
+
+    def _handle_login(self, body: dict) -> None:
+        username = str(body.get("username", ""))
+        password = str(body.get("password", ""))
+        account = ACCOUNTS.verify_password(username, password)
+        if not account:
+            json_response(
+                self,
+                HTTPStatus.UNAUTHORIZED,
+                {"error": "unauthorized", "reason": "bad_credentials",
+                 "message": "Username or password is incorrect."},
+            )
+            return
+        session = ACCOUNTS.create_session(account["username"])
+        current = ACCOUNTS.current_vessel(account["username"]) or account["vessel_id"]
+        vessel = ACCOUNTS.get_vessel(current) if current else None
+        json_response(
+            self,
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "sessionToken": session["sessionToken"],
+                "expiresAt": session["expiresAt"],
+                "username": account["username"],
+                "role": canonical_role(account["role"]),
+                # The engineer gets his ship's token so the app can sync at once.
+                "vessel": self._vessel_public(vessel, include_token=True),
+                # Ships he has sailed before — readable, not writable.
+                "history": self._readable_fleet({
+                    "role": canonical_role(account["role"]),
+                    "username": account["username"],
+                    "readable": set(ACCOUNTS.readable_vessels(account["username"])),
+                }),
+            },
+        )
+
+    def _handle_logout(self) -> None:
+        token = self.headers.get("X-Session-Token", "").strip() or self._bearer()
+        ACCOUNTS.delete_session(token)
+        json_response(self, HTTPStatus.OK, {"ok": True})
+
+    def _handle_password_change(self, body: dict) -> None:
+        principal = self._principal()
+        if principal["reason"] or principal["kind"] != "session":
+            self._reject_unauthorized("missing_token")
+            return
+        current = str(body.get("currentPassword", ""))
+        if not ACCOUNTS.verify_password(principal["username"], current):
+            json_response(
+                self, HTTPStatus.UNAUTHORIZED,
+                {"error": "unauthorized", "message": "Current password is incorrect."},
+            )
+            return
+        ACCOUNTS.set_password(principal["username"], str(body.get("newPassword", "")))
+        json_response(self, HTTPStatus.OK, {"ok": True})
+
+    def _handle_token_preview(self, body: dict) -> None:
+        """The key generator: what token would this vessel name + IMO produce?"""
+        if self._require_admin() is None:
+            return
+        token = ACCOUNTS.derive_token(
+            str(body.get("vesselName", "")), str(body.get("imo", ""))
+        )
+        json_response(
+            self,
+            HTTPStatus.OK,
+            {"ok": True, "token": token, "vesselId": None},
+        )
+
+    def _handle_create_vessel(self, body: dict) -> None:
+        if self._require_admin() is None:
+            return
+        vessel = ACCOUNTS.upsert_vessel(
+            vessel_name=str(body.get("vesselName", "")),
+            imo=str(body.get("imo", "")),
+            company=str(body.get("company", "")),
+            vessel_id=(str(body.get("vesselId", "")).strip() or None),
+        )
+        account = None
+        username = str(body.get("username", "")).strip()
+        if username:
+            account = ACCOUNTS.create_account(
+                username, str(body.get("password", "")),
+                str(body.get("role", ROLE_VESSEL)), vessel["vesselId"],
+            )
+            # Open the assignment period too. accounts.vessel_id alone is not a
+            # posting: reads and writes are decided by the assignments table, so
+            # without this the new engineer could not touch his own ship.
+            ACCOUNTS.assign_vessel(
+                username, vessel["vesselId"],
+                assigned_by=(self._principal().get("username") or "fleet_manager"),
+                note="created with vessel",
+            )
+        json_response(
+            self,
+            HTTPStatus.OK,
+            {"ok": True, "vessel": self._vessel_public(vessel, include_token=True),
+             "account": account},
+        )
+
+    def _handle_create_account(self, body: dict) -> None:
+        if self._require_admin() is None:
+            return
+        role = str(body.get("role", "vessel"))
+        vessel_id = str(body.get("vesselId", "")).strip() or None
+        if role != ROLE_ADMIN and vessel_id and not ACCOUNTS.get_vessel(vessel_id):
+            raise AccountError(f"No vessel '{vessel_id}' is registered")
+        account = ACCOUNTS.create_account(
+            str(body.get("username", "")), str(body.get("password", "")), role, vessel_id
+        )
+        json_response(self, HTTPStatus.OK, {"ok": True, "account": account})
+
+
+    def _handle_assign(self, body: dict) -> None:
+        """Post an engineer to a ship. Re-posting is the transfer: the previous
+        assignment is closed in the same transaction, so there is never a moment
+        where an engineer is on two ships or none."""
+        principal = self._require_admin()
+        if principal is None:
+            return
+        out = ACCOUNTS.assign_vessel(
+            username=str(body.get("username", "")),
+            vessel_id=str(body.get("vesselId", "")),
+            assigned_by=principal.get("username") or "fleet_manager",
+            note=str(body.get("note", "")),
+        )
+        json_response(self, HTTPStatus.OK, {"ok": True, "assignment": out})
+
+    def _handle_release(self, body: dict) -> None:
+        if self._require_admin() is None:
+            return
+        ACCOUNTS.release_vessel(str(body.get("username", "")))
+        json_response(self, HTTPStatus.OK, {"ok": True})
+
+    def _handle_vessel_import(self, body: dict) -> None:
+        """Register a ship that is not in the database yet, from local data.
+
+        A fleet manager may register anything. A chief engineer may register a
+        ship that does not exist — that is how a device with local records for an
+        unlisted vessel gets it into the fleet — and is posted to it immediately,
+        but the vessel is flagged pending_review so the manager sees it appeared
+        from a ship rather than from the office. Neither may quietly overwrite an
+        existing registration: vessel identity is the manager's to change.
+        """
+        principal = self._principal()
+        if principal["reason"] or principal["kind"] != "session":
+            self._reject_unauthorized("missing_token")
+            return
+
+        imo = str(body.get("imo", ""))
+        existing = None
+        try:
+            existing = ACCOUNTS.get_vessel_by_imo(imo)
+        except AccountError:
+            raise
+
+        is_manager = principal["role"] == ROLE_ADMIN
+        if existing and not is_manager:
+            json_response(
+                self, HTTPStatus.CONFLICT,
+                {"error": "already_registered", "reason": "already_registered",
+                 "message": (
+                     f"IMO {existing['imo']} is already registered as "
+                     f"'{existing['vesselName']}'. Ask the fleet manager to change "
+                     f"vessel details."),
+                 "vessel": self._vessel_public(existing, include_token=False)},
+            )
+            return
+
+        vessel = ACCOUNTS.upsert_vessel(
+            vessel_name=str(body.get("vesselName", "")),
+            imo=imo,
+            company=str(body.get("company", "")),
+            vessel_id=(str(body.get("vesselId", "")).strip() or None),
+            created_by=principal["username"] or "",
+            pending_review=not is_manager,
+        )
+        assignment = None
+        if not is_manager:
+            assignment = ACCOUNTS.assign_vessel(
+                principal["username"], vessel["vesselId"],
+                assigned_by=principal["username"], note="self-registered from local data",
+            )
+        json_response(
+            self, HTTPStatus.OK,
+            {"ok": True, "created": existing is None,
+             "vessel": self._vessel_public(vessel, include_token=True),
+             "assignment": assignment},
+        )
+
     def do_PUT(self) -> None:
         parsed = urlparse(self.path)
         parts = [p for p in parsed.path.strip("/").split("/") if p]
         if not (parts and parts[0] == "api" and parts[1] == "voyage"):
             json_response(self, HTTPStatus.NOT_FOUND, {"error": "not found"})
             return
-        if not self._authorized():
-            self._reject_unauthorized()
+        try:
+            requested_vessel = safe_slug(parts[2]) if len(parts) >= 3 else ""
+        except ValueError:
+            json_response(self, HTTPStatus.BAD_REQUEST, {"error": "invalid path"})
+            return
+        if self._authorize_vessel(requested_vessel, write=True) is None:
             return
 
         try:
@@ -582,8 +1105,41 @@ def record_ts(item: dict) -> str:
     )
 
 
+def bootstrap_admin() -> None:
+    """Create the first administrator, once.
+
+    With SYNC_ADMIN_PASSWORD set, that password is used. Without it, one is
+    generated and printed — the only time it is ever shown, since only its hash
+    is stored. A database that already has an admin is left alone, so a restart
+    never resets anyone's password.
+    """
+    if ACCOUNTS.has_admin():
+        return
+    password = ADMIN_PASSWORD
+    generated = False
+    if not password:
+        password = secrets.token_urlsafe(12)
+        generated = True
+    try:
+        ACCOUNTS.ensure_admin(ADMIN_USER, password)
+    except AccountError as err:
+        print(f"WARNING: could not create the admin account: {err}")
+        return
+    print("=" * 78)
+    print("Created the administrator account for the vessel database:")
+    print(f"  username: {ADMIN_USER}")
+    if generated:
+        print(f"  password: {password}")
+        print("  ^ shown once only — store it now. Set SYNC_ADMIN_PASSWORD to choose your own.")
+    else:
+        print("  password: (from SYNC_ADMIN_PASSWORD)")
+    print("=" * 78)
+
+
 def main() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    bootstrap_admin()
+    ACCOUNTS.purge_expired_sessions()
     httpd = ThreadingHTTPServer((HOST, PORT), SyncHandler)
     print(f"Noon Report sync server listening on http://{HOST}:{PORT}")
     print(f"Data directory: {DATA_DIR.resolve()}")

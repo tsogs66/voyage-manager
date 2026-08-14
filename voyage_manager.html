@@ -1300,9 +1300,104 @@
   .pr-cols{ display:grid; grid-template-columns:1fr 1fr; gap:1.5mm; margin-bottom:1.5mm; }
   .pr-title{ display:none; }
   .pr-header{ display:none; }
+
+/* ---- Login gate ---- */
+.login-gate{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
+  background:rgba(8,14,24,.94);backdrop-filter:blur(3px);padding:16px;overflow:auto;}
+.login-gate[hidden]{display:none;}
+.login-card{width:min(460px,100%);background:var(--panel,#131c2b);border:1px solid rgba(255,255,255,.12);
+  border-radius:14px;padding:22px;box-shadow:0 18px 60px rgba(0,0,0,.55);}
+.login-head{display:flex;gap:12px;align-items:center;margin-bottom:18px;}
+.login-head h2{margin:0;font-size:20px;}
+.login-sub{margin:2px 0 0;font-size:13px;opacity:.75;}
+.login-field{display:block;margin-bottom:12px;}
+.login-field span{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;opacity:.7;margin-bottom:5px;}
+.login-field input,.login-field select{width:100%;padding:10px 12px;border-radius:8px;
+  border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:inherit;font-size:15px;}
+.login-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+.login-actions-end{margin-top:14px;justify-content:flex-end;}
+.login-actions button{flex:1 1 auto;padding:10px 14px;font-size:14px;border-radius:8px;cursor:pointer;}
+.login-actions button.small{flex:0 0 auto;}
+/* Explicit colours: the app's .primary/.ghost resolve differently inside this
+   overlay and rendered gold-on-gold, i.e. an invisible button label. */
+.login-gate .login-actions button.primary{background:#c99a53;border:1px solid #c99a53;color:#0a1420;font-weight:600;}
+.login-gate .login-actions button.primary:hover{background:#d8ac68;border-color:#d8ac68;color:#0a1420;}
+.login-gate .login-actions button.ghost{background:transparent;border:1px solid rgba(255,255,255,.28);color:#e8eef7;}
+.login-gate .login-actions button.ghost:hover{background:rgba(255,255,255,.08);color:#fff;}
+.login-gate .login-actions button:disabled{opacity:.5;cursor:not-allowed;}
+.login-note{font-size:12px;opacity:.65;margin:10px 0 0;line-height:1.45;}
+.login-status{min-height:18px;font-size:13px;margin:10px 0 2px;}
+.login-status.err{color:#ff9c9c;}
+.login-status.ok{color:#8fe3a8;}
+.login-status.busy{opacity:.75;}
+.login-signed{font-size:14px;margin:0 0 14px;padding:10px 12px;border-radius:8px;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);}
+.login-token{margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.1);}
+.vessel-locked-note{margin:8px 0 0;font-size:12px;opacity:.75;}
 </style>
 </head>
 <body>
+<!--
+  Login gate. Sits above the app until the user signs in to the central vessel
+  database, or chooses to work offline. A vessel account brings exactly one
+  vessel with it — the app loads that ship and no other.
+-->
+<div id="loginGate" class="login-gate" hidden aria-live="polite">
+  <div class="login-card" role="dialog" aria-modal="true" aria-labelledby="loginGateTitle">
+    <div class="login-head">
+      <img src="icons/logoBG.png" width="44" height="44" alt="">
+      <div>
+        <h2 id="loginGateTitle">Noon Report</h2>
+        <p class="login-sub" id="loginGateSub">Sign in to load your vessel</p>
+      </div>
+    </div>
+
+    <div class="login-step" id="loginStepSignIn">
+      <label class="login-field"><span>Sync Server URL</span>
+        <input id="login_serverUrl" placeholder="https://sync.example.com" autocomplete="url"></label>
+      <label class="login-field"><span>Username</span>
+        <input id="login_username" autocomplete="username"></label>
+      <label class="login-field"><span>Password</span>
+        <input id="login_password" type="password" autocomplete="current-password"></label>
+      <div class="login-status" id="loginStatus" role="status"></div>
+      <div class="login-actions">
+        <button class="primary" id="btnLoginSubmit">Sign in</button>
+        <button class="ghost" id="btnLoginOffline">Work offline</button>
+      </div>
+      <p class="login-note">Working offline opens the program with no vessel assigned. You can sign in or add a vessel token later from Setup → Server Sync.</p>
+    </div>
+
+    <div class="login-step" id="loginStepAssign" hidden>
+      <p class="login-signed" id="loginSignedAs"></p>
+
+      <div id="loginVesselPick" hidden>
+        <label class="login-field"><span>Load which vessel?</span>
+          <select id="login_vesselSelect"></select></label>
+        <div class="hint" id="loginPendingNotice" hidden></div>
+        <div class="login-actions">
+          <button class="primary" id="btnLoginLoadVessel">Load vessel</button>
+        </div>
+        <p class="login-note">Only one vessel is loaded at a time. Sign out and back in to change ship.</p>
+      </div>
+
+      <div class="login-token">
+        <label class="login-field"><span>Vessel token</span>
+          <input id="login_vesselToken" placeholder="paste the token issued for your ship" autocomplete="off"></label>
+        <div class="login-actions">
+          <button class="primary" id="btnLoginUseToken">Verify token &amp; load vessel</button>
+          <button class="ghost" id="btnLoginNoToken">Continue with no vessel</button>
+        </div>
+        <p class="login-note">No token? Continue with a blank program and add a vessel later.</p>
+      </div>
+
+      <div class="login-status" id="loginAssignStatus" role="status"></div>
+      <div class="login-actions login-actions-end">
+        <button class="ghost small" id="btnLoginBack">Sign in as someone else</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="wrap">
 
   <div class="masthead">
@@ -1389,7 +1484,18 @@
   <!-- VESSEL DATA (internal page id: setup) -->
   <div class="page" id="page-setup">
     <div class="panel">
+      <h2>Account &amp; Vessel Assignment</h2>
+      <div class="login-signed" id="assignedVesselLabel">Not signed in — no vessel assigned</div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="primary small" id="btnOpenLogin">Sign in / change vessel…</button>
+        <button class="ghost small" id="btnSignOut">Sign out</button>
+      </div>
+      <div class="hint">Your login decides which vessel this program loads. A vessel account is fixed to one ship; an administrator picks one ship at a time. Without a vessel the program runs blank until you add one.</div>
+    </div>
+
+    <div class="panel">
       <h2>Fleet — Vessel Selection</h2>
+      <div class="vessel-locked-note" id="vesselLockNote"></div>
       <div class="form-grid cols3">
         <div class="field span2">
           <label>Active Vessel</label>
@@ -1418,6 +1524,7 @@
       <h2>Vessel</h2>
       <div class="form-grid cols2">
         <div class="field"><label>Vessel Name</label><input id="s_vesselName"></div>
+        <div class="field"><label>Company</label><input id="s_company" placeholder="e.g. Pacific Ocean Shipping"></div>
         <div class="field"><label>Chief Engineer</label><input id="s_chEng"></div>
         <div class="field"><label>DWT (tonnes) — for CII</label><input type="number" step="1" id="s_dwt" placeholder="e.g. 60000"></div>
         <div class="field"><label>IMO No.</label><input id="s_imoNo" placeholder="IMO 1234567"></div>
@@ -1426,7 +1533,8 @@
         <button class="primary small" id="btnSaveVesselIdentity">Save Vessel Details</button>
       </div>
       <div class="vessel-save-status" id="vesselSaveStatus" role="status" aria-live="polite"></div>
-      <div class="hint">Vessel name, Chief Engineer, DWT and IMO number are stored per vessel and used on printouts, CII and the e-ORB prefill.</div>
+      <div class="vessel-locked-note" id="vesselIdentityNote"></div>
+      <div class="hint">Vessel name, company, Chief Engineer, DWT and IMO number are stored per vessel and used on printouts, CII and the e-ORB prefill.</div>
 
       <h3 class="sub">Vessel Stamp</h3>
       <div class="stamp-row">
@@ -1936,7 +2044,27 @@
             <tbody id="vsSoundingsBody"></tbody>
           </table>
         </div>
-        <div class="hint">Record ullage/sounding and observed temperature for handover. Volume is manual (from sounding tables) — does not override calculated R.O.B.</div>
+        <div class="hint">Record ullage/sounding and observed temperature for handover. Volume is manual (from sounding tables) — does not override calculated R.O.B. To correct R.O.B. from a survey, use Bunker Survey below.</div>
+
+        <h3 class="sub">Bunker Survey / R.O.B. Correction</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Tank</th><th>Received</th><th>Calculated</th><th>Measured (survey)</th><th>Difference</th></tr></thead>
+            <tbody id="vsSurveyBody"></tbody>
+          </table>
+        </div>
+        <div class="form-grid cols3" style="margin-top:10px;">
+          <div class="field"><label>Place / Port</label><input type="text" id="vs_surveyPlace"></div>
+          <div class="field"><label>Surveyor</label><input type="text" id="vs_surveyor"></div>
+          <div class="field"><label>Remark</label><input type="text" id="vs_surveyRemark"></div>
+        </div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button class="ghost small" id="btnApplyRobSurvey" type="button">Apply Survey — Correct R.O.B.</button>
+          <button class="ghost small" id="btnClearRobSurvey" type="button">Remove Survey</button>
+        </div>
+        <div class="hint" id="vsSurveyStatus"></div>
+        <div class="hint">Use it either way: after bunkering, to check the delivery against the tanks — the Received column shows what landed that day, so a negative difference is a short delivery; or on its own, as a plain survey of the tanks with no bunkering involved.</div>
+        <div class="hint">A survey re-bases R.O.B. from this report onward: later reports open from the measured figure, and bunkers received after it are added on top. The calculated figure and the difference are kept with the report as the record of what was corrected.</div>
       </div>
 
       <div class="panel" style="margin:0 0 16px; padding:16px;">
@@ -3662,7 +3790,7 @@ const state = {
     initDateTime:'', initRuntime:null,
     pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
     sfoc100:null, sfoc85:null, lcvRef:42700, lcvActual:null, alternatorMaxKw:null,
-    dwt:null, imoNo:'',
+    dwt:null, imoNo:'', company:'',
     geArrangement:'SINGLE',
     generatorCount:1,
     meCylinderCount:6,
@@ -3853,6 +3981,7 @@ function entryFromSnap(id, datetime, operation, condition, snap, extra){
     fwProd: snap.fwProd,
     fwRob: snap.fwRob,
     miscCons: e.miscCons || { 'MDO/MGO':0, 'LSMGO':0 },
+    robSurvey: e.robSurvey || null,
     consOverride: e.consOverride || null,
     unitOverride: e.unitOverride || { ME:null, GE:null, BLR:null },
     weather: e.weather || weather(),
@@ -6424,9 +6553,162 @@ function getComputedRow(entryId){
   return rows.find(r=>r.id===entryId) || null;
 }
 
+/**
+ * The bunker survey in force at a given moment: the latest entry at or before the
+ * cutoff that carries one. Returns null for the ordinary case of no survey, which
+ * keeps the ROB engine on its original path.
+ */
+function latestRobSurveyAtOrBefore(cutoff){
+  const limit = cutoff instanceof Date ? cutoff.getTime() : new Date(cutoff).getTime();
+  let best = null, bestTime = -Infinity;
+  for (const e of (state.entries || [])){
+    if (!e || !e.robSurvey) continue;
+    const t = new Date(e.datetime).getTime();
+    if (!isFinite(t) || t > limit || t <= bestTime) continue;
+    bestTime = t;
+    best = Object.assign({ entryId: e.id, date: e.datetime }, e.robSurvey);
+  }
+  return best;
+}
+
+/** Day-resolution compare. Receipts carry a date, entries a datetime, so bunkers are
+ *  attributed by day: anything delivered on or before the survey day is already inside
+ *  the measured figure — a survey is normally taken to verify the delivery just made. */
+function receiptDayAfter(receiptDate, surveyDatetime){
+  const d = String(receiptDate || '').slice(0, 10);
+  const s = String(surveyDatetime || '').slice(0, 10);
+  return d > s;
+}
+
+
+/**
+ * Record a bunker survey against an entry. The measured figures become the new ROB
+ * baseline from this report on; the book figure and the difference are stored with
+ * it so the correction is auditable — a survey that silently rewrote ROB with no
+ * record of what it changed would be worse than no survey at all.
+ */
+async function recordRobSurvey(entryId, { measured = {}, measuredLube = {}, place = '', remark = '', surveyor = '' } = {}){
+  const entry = state.entries.find(e=>e.id===entryId);
+  if (!entry) throw new Error('No such entry');
+  const before = robAsOfEntry(entryId) || { rob:{}, robLube:{} };
+  const num = v => (v===''||v==null||isNaN(Number(v))) ? null : Number(v);
+
+  const clean = {}, cleanLube = {};
+  fuelTankList().forEach(t=>{ const v = num(measured[t.id]); if (v!=null) clean[t.id] = v; });
+  [...lubeTankList(), ...fwTankList()].forEach(t=>{ const v = num(measuredLube[t.id]); if (v!=null) cleanLube[t.id] = v; });
+
+  const diff = {}, diffLube = {};
+  Object.keys(clean).forEach(k=> diff[k] = clean[k] - (before.rob?.[k] ?? 0));
+  Object.keys(cleanLube).forEach(k=> diffLube[k] = cleanLube[k] - (before.robLube?.[k] ?? 0));
+
+  entry.robSurvey = {
+    takenAt: new Date().toISOString(),
+    place, remark, surveyor,
+    measured: clean, measuredLube: cleanLube,
+    calculated: { ...(before.rob||{}) }, calculatedLube: { ...(before.robLube||{}) },
+    difference: diff, differenceLube: diffLube
+  };
+  await dbPut('entries', tagVesselId(entry));
+  markPendingSync();
+  render();
+  return entry.robSurvey;
+}
+
+/** Remove a survey, putting the ROB chain back on the book figures. */
+async function clearRobSurvey(entryId){
+  const entry = state.entries.find(e=>e.id===entryId);
+  if (!entry || !entry.robSurvey) return;
+  entry.robSurvey = null;
+  await dbPut('entries', tagVesselId(entry));
+  markPendingSync();
+  render();
+}
+
+
+/** Bunker survey panel: book figure beside the measured one, with the difference. */
+function renderVsSurvey(){
+  const body = document.getElementById('vsSurveyBody');
+  if (!body || !currentVsEntryId) return;
+  const entry = state.entries.find(e=>e.id===currentVsEntryId);
+  if (!entry) return;
+  const calc = robAsOfEntry(currentVsEntryId) || { rob:{}, robLube:{} };
+  const sv = entry.robSurvey;
+  const rows = [
+    ...fuelTankList().map(t=>({t, cat:'fuel', store:'rob'})),
+    ...lubeTankList().map(t=>({t, cat:'lube', store:'robLube'})),
+    ...fwTankList().map(t=>({t, cat:'fw', store:'robLube'}))
+  ];
+  /* Bunkers landed on the day being surveyed — the delivery this survey checks.
+     A plain tank survey with no bunkering simply shows nothing here. */
+  const surveyDay = String((sv ? sv.date : entry.datetime) || '').slice(0,10);
+  const receivedOnDay = (tank, category) => state.receipts
+    .filter(r=> receiptMatchesTank(r, tank, category) && String(r.date||'').slice(0,10) === surveyDay)
+    .reduce((a,r)=> a + (Number(r.qty)||0), 0);
+
+  body.innerHTML = rows.map(({t, cat, store})=>{
+    /* With a survey applied the calculated column would echo the measurement, which
+       tells the reader nothing. Show what the book said when it was taken. */
+    const book = sv
+      ? (store==='rob' ? sv.calculated?.[t.id] : sv.calculatedLube?.[t.id])
+      : (store==='rob' ? calc.rob?.[t.id] : calc.robLube?.[t.id]);
+    const meas = sv ? (store==='rob' ? sv.measured?.[t.id] : sv.measuredLube?.[t.id]) : null;
+    const diff = (meas!=null && book!=null) ? meas - book : null;
+    const cls = diff==null ? '' : (Math.abs(diff) < 1e-9 ? '' : (diff < 0 ? ' style="color:var(--danger,#c66)"' : ' style="color:var(--teal)"'));
+    const recv = receivedOnDay(t, cat==='fuel' ? 'fuel' : (cat==='lube' ? 'lube' : 'fw'));
+    return `<tr><td class="row-lbl">${t.name}</td>`
+      + `<td>${recv ? fmtRob(recv, cat) : '—'}</td>`
+      + `<td>${fmtRob(book, cat)}</td>`
+      + `<td><input type="number" step="any" data-survey-tank="${t.id}" data-survey-store="${store}" value="${meas!=null?meas:''}" placeholder="${book!=null?fmtRob(book,cat):''}"></td>`
+      + `<td${cls}>${diff==null?'—':(diff>0?'+':'')+fmtRob(diff, cat)}</td></tr>`;
+  }).join('');
+
+  const status = document.getElementById('vsSurveyStatus');
+  if (status){
+    status.textContent = sv
+      ? `Survey applied${sv.place?` at ${sv.place}`:''}${sv.surveyor?` by ${sv.surveyor}`:''} — R.O.B. from this report onward counts from the measured figures.`
+      : 'No survey on this report. R.O.B. is the calculated figure.';
+  }
+  const place = document.getElementById('vs_surveyPlace');
+  const who = document.getElementById('vs_surveyor');
+  const rem = document.getElementById('vs_surveyRemark');
+  if (place && document.activeElement !== place) place.value = sv?.place || '';
+  if (who && document.activeElement !== who) who.value = sv?.surveyor || '';
+  if (rem && document.activeElement !== rem) rem.value = sv?.remark || '';
+}
+
+function bindRobSurveyUi(){
+  const apply = document.getElementById('btnApplyRobSurvey');
+  const clear = document.getElementById('btnClearRobSurvey');
+  if (apply) apply.addEventListener('click', async ()=>{
+    if (!currentVsEntryId){ alert('Open a log entry first.'); return; }
+    const measured = {}, measuredLube = {};
+    document.querySelectorAll('[data-survey-tank]').forEach(el=>{
+      if (el.value === '') return;
+      (el.dataset.surveyStore === 'rob' ? measured : measuredLube)[el.dataset.surveyTank] = el.value;
+    });
+    if (!Object.keys(measured).length && !Object.keys(measuredLube).length){
+      alert('Enter at least one measured figure.'); return;
+    }
+    await recordRobSurvey(currentVsEntryId, {
+      measured, measuredLube,
+      place: document.getElementById('vs_surveyPlace')?.value || '',
+      surveyor: document.getElementById('vs_surveyor')?.value || '',
+      remark: document.getElementById('vs_surveyRemark')?.value || ''
+    });
+    renderVsSurvey();
+  });
+  if (clear) clear.addEventListener('click', async ()=>{
+    if (!currentVsEntryId) return;
+    if (!confirm('Remove the survey? R.O.B. goes back to the calculated figures.')) return;
+    await clearRobSurvey(currentVsEntryId);
+    renderVsSurvey();
+  });
+}
+
 /* ROB as it stood at the time of a specific entry (not the voyage's final/current ROB) */
 function robAsOfEntry(entryId){
-  return robAsOfComputedRow(getComputedRow(entryId));
+  const {rows} = computeDerived();
+  return robAsOfComputedRow(rows.find(r=>r.id===entryId) || null, rows);
 }
 
 /**
@@ -6434,25 +6716,56 @@ function robAsOfEntry(entryId){
  * many entries (Voyage Abstract, CSV export) can run computeDerived() once instead of
  * once per row.
  */
-function robAsOfComputedRow(row){
+function robAsOfComputedRow(row, rowsHint){
   if (!row) return null;
   const cutoff = new Date(row.datetime);
+
+  /* A bunker survey re-bases the ROB chain. Everything before it is history; from
+     the survey onward ROB counts from the MEASURED figure, plus anything bunkered
+     after it, less what has been burnt since. Without this the book figure and the
+     tank never reconverge — the survey difference would be carried, silently, for
+     the rest of the voyage. */
+  const survey = latestRobSurveyAtOrBefore(cutoff);
+  let sRow = null;
+  if (survey){
+    sRow = survey.entryId === row.id
+      ? row
+      : (rowsHint || computeDerived().rows).find(r=>r.id===survey.entryId) || null;
+  }
+  /* A re-based tank must never fall back to the voyage-initial figure: consumption
+     is being counted only since the survey, so the opening figure has to be the
+     survey's too. Any tank the surveyor did not sound falls back to what the book
+     said at that moment, which the survey stores alongside the measurement. */
+  const base = (store, t, measured, calculated) => {
+    if (!survey) return tankRobValue(store, t);
+    if (measured?.[t.id] != null) return Number(measured[t.id]);
+    if (calculated?.[t.id] != null) return Number(calculated[t.id]);
+    return tankRobValue(store, t);
+  };
+  const countReceipt = (r) => {
+    if (new Date(r.date) > cutoff) return false;
+    /* Bunkers delivered up to the survey are already inside the measured figure —
+       counting them again would double the delivery. */
+    return !survey || receiptDayAfter(r.date, survey.date);
+  };
+
   const rob = {};
   fuelTankList().forEach(t=>{
-    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'fuel') && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
-    rob[t.id] = tankRobValue(state.setup.rob, t) + received;
+    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'fuel') && countReceipt(r)).reduce((s,r)=>s+r.qty,0);
+    rob[t.id] = base(state.setup.rob, t, survey?.measured, survey?.calculated) + received;
   });
-  FUEL_TYPES.forEach(g=> deductGradeConsumption(rob, fuelTankList(), g, 'grade', row.cumFuel?.[g]||0));
+  FUEL_TYPES.forEach(g=> deductGradeConsumption(rob, fuelTankList(), g, 'grade',
+    Math.max(0, (row.cumFuel?.[g]||0) - (survey ? (sRow?.cumFuel?.[g]||0) : 0))));
 
   const robLube = {};
   lubeTankList().forEach(t=>{
-    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'lube') && new Date(r.date)<=cutoff).reduce((s,r)=>s+r.qty,0);
-    robLube[t.id] = tankRobValue(state.setup.robLube, t) + received;
+    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'lube') && countReceipt(r)).reduce((s,r)=>s+r.qty,0);
+    robLube[t.id] = base(state.setup.robLube, t, survey?.measuredLube, survey?.calculatedLube) + received;
   });
-  deductLubeConsumption(robLube, 'cylHigh', row.cumLube?.['CYL HIGH']||0);
-  deductLubeConsumption(robLube, 'cylLow', row.cumLube?.['CYL LOW']||0);
-  deductLubeConsumption(robLube, 'meSys', row.cumLube?.['ME SYS OIL']||0);
-  deductLubeConsumption(robLube, 'geSys', row.cumLube?.['GE SYS OIL']||0);
+  deductLubeConsumption(robLube, 'cylHigh', Math.max(0, (row.cumLube?.['CYL HIGH']||0) - (survey ? (sRow?.cumLube?.['CYL HIGH']||0) : 0)));
+  deductLubeConsumption(robLube, 'cylLow', Math.max(0, (row.cumLube?.['CYL LOW']||0) - (survey ? (sRow?.cumLube?.['CYL LOW']||0) : 0)));
+  deductLubeConsumption(robLube, 'meSys', Math.max(0, (row.cumLube?.['ME SYS OIL']||0) - (survey ? (sRow?.cumLube?.['ME SYS OIL']||0) : 0)));
+  deductLubeConsumption(robLube, 'geSys', Math.max(0, (row.cumLube?.['GE SYS OIL']||0) - (survey ? (sRow?.cumLube?.['GE SYS OIL']||0) : 0)));
   const primaryFw = fwTankList()[0];
   if (primaryFw) robLube[primaryFw.id] = row.fwRob!=null ? row.fwRob : latestFwRob(cutoff);
   return {rob, robLube};
@@ -7242,6 +7555,8 @@ function render(){
   if (dwtEl) dwtEl.value = state.setup.dwt ?? '';
   const imoEl = document.getElementById('s_imoNo');
   if (imoEl) imoEl.value = state.setup.imoNo || '';
+  const companyEl = document.getElementById('s_company');
+  if (companyEl) companyEl.value = state.setup.company || '';
   renderVesselStampPreview();
   renderChEngSignaturePreview();
 
@@ -9677,6 +9992,7 @@ async function saveVoyageDetails(){
   state.setup.chEng = document.getElementById('s_chEng').value;
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value)||null;
   state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
+  state.setup.company = document.getElementById('s_company')?.value || '';
   state.setup.voyageNumber = document.getElementById('s_voyageNumber').value;
   state.setup.shipCondition = normalizeCondition(document.getElementById('s_shipCondition').value);
   state.setup.departPort = document.getElementById('s_departPort').value;
@@ -9734,6 +10050,7 @@ async function saveVesselIdentity(){
   state.setup.chEng = document.getElementById('s_chEng').value;
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value) || null;
   state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
+  state.setup.company = document.getElementById('s_company')?.value || '';
   const v = activeVessel();
   if (v) v.name = document.getElementById('s_vesselName').value.trim() || v.name;
   const status = document.getElementById('vesselSaveStatus');
@@ -9885,6 +10202,7 @@ async function saveSetupFromForm(){
   state.setup.chEng = document.getElementById('s_chEng').value;
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value)||null;
   state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
+  state.setup.company = document.getElementById('s_company')?.value || '';
   const v = activeVessel();
   if (v) v.name = document.getElementById('s_vesselName').value.trim() || v.name;
 
@@ -10710,6 +11028,7 @@ function openVoyageSummary(entryId){
   const entryCeEl = document.getElementById('vs_entryChEng');
   if (entryCeEl) entryCeEl.value = entry.chEng ?? state.setup.chEng ?? '';
   // Tank soundings
+  renderVsSurvey();
   const sndBody = document.getElementById('vsSoundingsBody');
   if (sndBody){
     const snd = r.soundings || {};
@@ -14295,7 +14614,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v106';
+let androidInstallCacheName = 'noon-report-v111';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -16308,6 +16627,437 @@ document.addEventListener('blur', (e)=>{
   if (e.target?.dataset?.vmNumeric === '1') normalisePenNumericField(e.target);
 }, true);
 
+
+/* ============================================================================
+ * Login gate — central vessel database
+ *
+ * The sync server holds every login and every vessel. A vessel account carries
+ * exactly one vessel and its sync token, so signing in both authenticates the
+ * user and decides which single ship this copy of the program loads. An admin
+ * account sees the whole fleet and picks one ship to load, one at a time.
+ *
+ * The session is cached locally because this runs at sea: once a ship has
+ * signed in, a later boot with no connectivity keeps its vessel assignment
+ * instead of locking the crew out of their own records.
+ * ========================================================================== */
+
+const SESSION_LS_KEY = 'noonReportSession';
+
+function readStoredSession(){
+  try{
+    const raw = localStorage.getItem(SESSION_LS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : null;
+  }catch(_){ return null; }
+}
+
+function writeStoredSession(session){
+  if (!session){
+    localStorage.removeItem(SESSION_LS_KEY);
+    return null;
+  }
+  localStorage.setItem(SESSION_LS_KEY, JSON.stringify(session));
+  return session;
+}
+
+function sessionRequestHeaders(session){
+  const s = session || readStoredSession();
+  const headers = { 'Content-Type': 'application/json' };
+  if (s && s.sessionToken) headers['X-Session-Token'] = s.sessionToken;
+  return headers;
+}
+
+/* Same URL cleanup the sync settings use, so a pasted app URL still works. */
+function loginApiBase(raw){
+  const url = normalizeSyncServerUrl(raw || '');
+  return url ? url.replace(/\/+$/, '') : '';
+}
+
+async function loginApiCall(base, path, { method='GET', body=null, session=null, token=null } = {}){
+  const headers = sessionRequestHeaders(session);
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const res = await fetch(`${base}${path}`, {
+    method,
+    cache: 'no-store',
+    headers,
+    body: body == null ? undefined : JSON.stringify(body)
+  });
+  const text = await res.text();
+  let parsed = null;
+  if (text.trim()){
+    try{ parsed = JSON.parse(text); }
+    catch(_){
+      throw new Error(res.ok
+        ? 'The server answered with something that is not JSON — check the Sync Server URL points at the sync root.'
+        : `HTTP ${res.status} from the server.`);
+    }
+  }
+  if (!res.ok){
+    const detail = (parsed && (parsed.message || parsed.error)) || `HTTP ${res.status}`;
+    const err = new Error(detail);
+    err.status = res.status;
+    err.reason = parsed && parsed.reason;
+    throw err;
+  }
+  return parsed || {};
+}
+
+function setLoginStatus(id, message, kind){
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = message || '';
+  el.classList.remove('err', 'ok', 'busy');
+  if (kind) el.classList.add(kind);
+}
+
+function showLoginGate(show){
+  const gate = document.getElementById('loginGate');
+  if (gate) gate.hidden = !show;
+}
+
+function showLoginStep(step){
+  const signIn = document.getElementById('loginStepSignIn');
+  const assign = document.getElementById('loginStepAssign');
+  if (signIn) signIn.hidden = step !== 'signin';
+  if (assign) assign.hidden = step !== 'assign';
+}
+
+/**
+ * Bind the app to one vessel from the central database.
+ *
+ * Creates the local vessel record if this device has never seen the ship, then
+ * makes it the active vessel and points sync at it with the vessel's own token.
+ * Passing null clears the assignment — the blank program.
+ */
+async function applyVesselAssignment(vessel, serverUrl){
+  if (state.session) state.session.vessel = vessel || null;
+
+  if (!vessel){
+    renderVesselLock();
+    return null;
+  }
+
+  const wantedSlug = vessel.vesselId;
+  let record = state.vessels.find(v => v.slug === wantedSlug || v.assignedVesselId === wantedSlug);
+  if (!record){
+    record = await createNewVessel(vessel.vesselName || wantedSlug);
+    if (!record) throw new Error('Could not create a local record for ' + wantedSlug);
+    record.slug = wantedSlug;
+  }
+  record.assignedVesselId = wantedSlug;
+  record.name = vessel.vesselName || record.name;
+  await saveVesselRegistry();
+
+  if (state.activeVesselId !== record.id){
+    await switchVessel(record.id);
+  }
+
+  /* Identity from the central database wins — it is the registered ship. */
+  if (vessel.vesselName) state.setup.vesselName = vessel.vesselName;
+  if (vessel.company) state.setup.company = vessel.company;
+  if (vessel.imo && !state.setup.imoNo) state.setup.imoNo = vessel.imo;
+
+  const sync = ensureSyncConfig();
+  if (serverUrl) sync.serverUrl = serverUrl;
+  sync.vesselId = wantedSlug;
+  if (vessel.token) sync.apiToken = vessel.token;
+  await persistSyncCredentialsMirror(sync);
+  await saveSetup();
+
+  render();
+  renderSyncUi();
+  renderVesselLock();
+  return record;
+}
+
+/** Show which vessel this login owns, and hide the switcher when it is fixed. */
+function renderVesselLock(){
+  const session = state.session || {};
+  const vessel = session.vessel;
+  const isAdmin = session.role === 'fleet_manager' || session.role === 'admin';
+  const who = session.username ? `Signed in as ${session.username}` : 'Not signed in';
+  const label = document.getElementById('assignedVesselLabel');
+  if (label){
+    label.textContent = vessel
+      ? `${who} — vessel ${vessel.vesselName || vessel.vesselId}${vessel.company ? ' (' + vessel.company + ')' : ''}`
+      : `${who} — no vessel assigned`;
+  }
+  /* A vessel account is bound to one ship: switching would be a lie. */
+  const lockSwitcher = !!vessel && !isAdmin;
+  ['s_vesselSelect', 'btnLoadVessel', 'btnAddVessel', 'btnInstallTestFleet'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = lockSwitcher;
+  });
+  /* Vessel identity is the fleet manager's record, not the ship's. */
+  const identityLocked = !!session.username && !isAdmin;
+  ['s_vesselName', 's_imoNo', 's_company'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el){
+      el.readOnly = identityLocked;
+      el.title = identityLocked
+        ? 'Vessel name, IMO and company are held in the central database. Ask the fleet manager to change them.'
+        : '';
+    }
+  });
+  const idNote = document.getElementById('vesselIdentityNote');
+  if (idNote){
+    idNote.textContent = identityLocked
+      ? 'Vessel name, IMO and company come from the central database — changing them needs a fleet manager login.'
+      : '';
+  }
+  const note = document.getElementById('vesselLockNote');
+  if (note){
+    note.textContent = lockSwitcher
+      ? `This copy is assigned to ${vessel.vesselName || vessel.vesselId} by your login. Only this vessel can be loaded.`
+      : '';
+  }
+}
+
+async function handleLoginSubmit(){
+  const base = loginApiBase(document.getElementById('login_serverUrl').value);
+  const username = document.getElementById('login_username').value.trim();
+  const password = document.getElementById('login_password').value;
+  if (!base){ setLoginStatus('loginStatus', 'Enter the Sync Server URL.', 'err'); return; }
+  if (!username || !password){ setLoginStatus('loginStatus', 'Enter your username and password.', 'err'); return; }
+
+  setLoginStatus('loginStatus', 'Signing in…', 'busy');
+  try{
+    const out = await loginApiCall(base, '/api/auth/login', {
+      method: 'POST', body: { username, password }
+    });
+    const session = writeStoredSession({
+      serverUrl: base,
+      sessionToken: out.sessionToken,
+      expiresAt: out.expiresAt,
+      username: out.username,
+      role: out.role,
+      vessel: out.vessel || null,
+      history: out.history || []
+    });
+    state.session = session;
+    setLoginStatus('loginStatus', '', null);
+    await enterAssignStep(session);
+  }catch(err){
+    setLoginStatus('loginStatus', err.message, 'err');
+  }
+}
+
+/** After sign-in: a vessel account is already assigned; an admin picks one. */
+async function enterAssignStep(session){
+  showLoginStep('assign');
+  const signedAs = document.getElementById('loginSignedAs');
+  if (signedAs){
+    signedAs.textContent = session.role === 'admin'
+      ? `Signed in as ${session.username} (fleet manager) — choose the vessel to load.`
+      : `Signed in as ${session.username}.`;
+  }
+  setLoginStatus('loginAssignStatus', '', null);
+
+  if (session.vessel){
+    setLoginStatus('loginAssignStatus', `Loading ${session.vessel.vesselName || session.vessel.vesselId}…`, 'busy');
+    try{
+      await applyVesselAssignment(session.vessel, session.serverUrl);
+      writeStoredSession(state.session);
+      showLoginGate(false);
+    }catch(err){
+      setLoginStatus('loginAssignStatus', 'Could not load the vessel: ' + err.message, 'err');
+    }
+    return;
+  }
+
+  const pick = document.getElementById('loginVesselPick');
+  const manager = session.role === 'fleet_manager' || session.role === 'admin';
+  if (manager){
+    try{
+      const out = await loginApiCall(session.serverUrl, '/api/admin/vessels', { session });
+      const sel = document.getElementById('login_vesselSelect');
+      const vessels = out.vessels || [];
+      state.session.fleet = vessels;
+      if (sel){
+        sel.innerHTML = vessels.length
+          ? vessels.map(v => `<option value="${v.vesselId}">${v.vesselName} — IMO ${v.imo}${v.company ? ' — ' + v.company : ''}${v.pendingReview ? ` — PENDING REVIEW${v.createdBy ? ' (from ' + v.createdBy + ')' : ''}` : ''}</option>`).join('')
+          : '<option value="">No vessels registered yet</option>';
+      }
+      /* A ship registered from a device rather than the office is held for review.
+         The flag was being recorded and never shown, which is the same as not
+         recording it. */
+      const waiting = vessels.filter(v => v.pendingReview);
+      const notice = document.getElementById('loginPendingNotice');
+      if (notice){
+        notice.textContent = waiting.length
+          ? `${waiting.length} vessel${waiting.length > 1 ? 's' : ''} registered from a ship and awaiting review: `
+            + waiting.map(v => `${v.vesselName} (IMO ${v.imo}${v.createdBy ? ', from ' + v.createdBy : ''})`).join('; ')
+          : '';
+        notice.hidden = !waiting.length;
+      }
+      if (pick) pick.hidden = false;
+      if (!vessels.length){
+        setLoginStatus('loginAssignStatus', 'No vessels are registered yet. Continue with no vessel and add one from Setup.', null);
+      }
+    }catch(err){
+      setLoginStatus('loginAssignStatus', 'Could not list vessels: ' + err.message, 'err');
+    }
+  } else if (pick){
+    /* An engineer with a service history may load a previous ship to review it.
+       The server refuses writes to anything but his current posting, so this is
+       read-only in practice — the note says so. */
+    const history = session.history || [];
+    if (history.length > 1){
+      const sel = document.getElementById('login_vesselSelect');
+      state.session.fleet = history;
+      if (sel){
+        sel.innerHTML = history.map(v =>
+          `<option value="${v.vesselId}"${v.vesselId === (session.vessel && session.vessel.vesselId) ? ' selected' : ''}>${v.vesselName} — IMO ${v.imo}${v.vesselId === (session.vessel && session.vessel.vesselId) ? ' (current)' : ' (past — read only)'}</option>`
+        ).join('');
+      }
+      pick.hidden = false;
+    } else {
+      pick.hidden = true;
+    }
+  }
+}
+
+async function handleAdminLoadVessel(){
+  const session = state.session || readStoredSession();
+  const sel = document.getElementById('login_vesselSelect');
+  const vesselId = sel && sel.value;
+  if (!vesselId){ setLoginStatus('loginAssignStatus', 'No vessel selected.', 'err'); return; }
+  const vessel = (session.fleet || []).find(v => v.vesselId === vesselId);
+  if (!vessel){ setLoginStatus('loginAssignStatus', 'That vessel is no longer listed.', 'err'); return; }
+  setLoginStatus('loginAssignStatus', `Loading ${vessel.vesselName}…`, 'busy');
+  try{
+    await applyVesselAssignment(vessel, session.serverUrl);
+    session.vessel = vessel;
+    writeStoredSession(session);
+    showLoginGate(false);
+  }catch(err){
+    setLoginStatus('loginAssignStatus', 'Could not load the vessel: ' + err.message, 'err');
+  }
+}
+
+/**
+ * Verify a vessel token against the database and adopt whatever ship it names.
+ * This is the path for a crew that was handed a token rather than an account.
+ */
+async function handleVesselTokenVerify(){
+  const session = state.session || readStoredSession() || {};
+  const base = session.serverUrl || loginApiBase(document.getElementById('login_serverUrl').value);
+  const token = document.getElementById('login_vesselToken').value.trim();
+  if (!base){ setLoginStatus('loginAssignStatus', 'Enter the Sync Server URL first.', 'err'); return; }
+  if (!token){ setLoginStatus('loginAssignStatus', 'Paste the vessel token.', 'err'); return; }
+
+  setLoginStatus('loginAssignStatus', 'Verifying token…', 'busy');
+  try{
+    const out = await loginApiCall(base, '/api/auth/me', { token, session: null });
+    if (!out.vessel){
+      setLoginStatus('loginAssignStatus', 'That token is valid but names no vessel.', 'err');
+      return;
+    }
+    await applyVesselAssignment(out.vessel, base);
+    const merged = Object.assign({}, session, { serverUrl: base, vessel: out.vessel });
+    state.session = merged;
+    writeStoredSession(merged);
+    showLoginGate(false);
+  }catch(err){
+    setLoginStatus('loginAssignStatus',
+      err.status === 401
+        ? 'The database does not recognise that token. Check it with your administrator.'
+        : 'Could not verify the token: ' + err.message,
+      'err');
+  }
+}
+
+/** No token: a blank program, no vessel assignment, add one later. */
+async function handleContinueWithoutVessel(){
+  const session = state.session || readStoredSession() || {};
+  session.vessel = null;
+  state.session = session;
+  writeStoredSession(session.sessionToken ? session : null);
+  await applyVesselAssignment(null, session.serverUrl);
+  showLoginGate(false);
+}
+
+async function handleSignOut(){
+  const session = state.session || readStoredSession();
+  if (session && session.serverUrl && session.sessionToken){
+    try{ await loginApiCall(session.serverUrl, '/api/auth/logout', { method:'POST', session }); }catch(_){}
+  }
+  writeStoredSession(null);
+  state.session = null;
+  renderVesselLock();
+  showLoginStep('signin');
+  showLoginGate(true);
+  setLoginStatus('loginStatus', 'Signed out.', null);
+}
+
+/**
+ * Decide on boot whether to show the gate.
+ * A cached session goes straight through — the ship may have no connectivity,
+ * and its vessel assignment is already known.
+ */
+async function initLoginGate(){
+  const stored = readStoredSession();
+  const sync = ensureSyncConfig();
+
+  const serverField = document.getElementById('login_serverUrl');
+  if (serverField) serverField.value = (stored && stored.serverUrl) || sync.serverUrl || '';
+
+  if (stored && stored.sessionToken){
+    state.session = stored;
+    if (stored.vessel){
+      try{ await applyVesselAssignment(stored.vessel, stored.serverUrl); }
+      catch(err){ console.warn('Stored vessel assignment could not be applied', err); }
+    } else {
+      renderVesselLock();
+    }
+    showLoginGate(false);
+    /* Refresh in the background: a revoked login should not last forever, but a
+       server we cannot reach must not strand the ship either. */
+    loginApiCall(stored.serverUrl, '/api/auth/me', { session: stored })
+      .then(out => {
+        const merged = Object.assign({}, stored, {
+          role: out.role,
+          vessel: out.vessel || stored.vessel,
+          history: out.history || stored.history || []
+        });
+        state.session = writeStoredSession(merged);
+        renderVesselLock();
+      })
+      .catch(err => {
+        if (err.status === 401){
+          writeStoredSession(null);
+          state.session = null;
+          renderVesselLock();
+        }
+      });
+    return;
+  }
+
+  showLoginStep('signin');
+  showLoginGate(true);
+}
+
+document.getElementById('btnLoginSubmit')?.addEventListener('click', handleLoginSubmit);
+document.getElementById('login_password')?.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') handleLoginSubmit(); });
+document.getElementById('btnLoginOffline')?.addEventListener('click', async ()=>{
+  state.session = null;
+  await applyVesselAssignment(null, '');
+  showLoginGate(false);
+});
+document.getElementById('btnLoginLoadVessel')?.addEventListener('click', handleAdminLoadVessel);
+document.getElementById('btnLoginUseToken')?.addEventListener('click', handleVesselTokenVerify);
+document.getElementById('btnLoginNoToken')?.addEventListener('click', handleContinueWithoutVessel);
+document.getElementById('btnLoginBack')?.addEventListener('click', ()=>{
+  showLoginStep('signin');
+  setLoginStatus('loginStatus', '', null);
+});
+document.getElementById('btnSignOut')?.addEventListener('click', handleSignOut);
+document.getElementById('btnOpenLogin')?.addEventListener('click', ()=>{
+  showLoginStep(state.session && state.session.sessionToken ? 'assign' : 'signin');
+  showLoginGate(true);
+});
+
 (async function init(){
   try {
     if (penInputLikely()) enablePenInputMode();
@@ -16331,6 +17081,7 @@ document.addEventListener('blur', (e)=>{
     renderReportCategoryButtons();
     bindReferenceCalculators();
     bindBunkerPlanUi();
+    bindRobSurveyUi();
     try{
       if (window.EORB){
         state.setup.orb = ensureOrbSetup(state.setup.orb);
@@ -16362,6 +17113,9 @@ document.addEventListener('blur', (e)=>{
     await applyMirroredSyncCredentials();
     registerServiceWorker();
     renderSyncUi();
+    /* Last, so a stored session can switch the active vessel over a loaded app. */
+    try{ await initLoginGate(); }
+    catch(gateErr){ console.error('Login gate failed to start', gateErr); showLoginGate(true); }
     document.getElementById('dbStatus').textContent = '● local database ready';
   } catch(e){
     console.error('Startup error:', e);
