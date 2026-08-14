@@ -381,42 +381,103 @@ def main() -> int:
         check("approving a ship that does not exist is refused", status, 400)
 
 
-        print("\noffline credentials are earned by signing in, not issued by the office")
+        print("\noffline access is a device enrollment, not a password verifier")
         # There is no manager export: a device that has never authenticated cannot
-        # be given credentials out of band.
+        # be given credentials out of band. The old verifier-bundle path is gone.
         status, _ = request(
             f"{srv.base}/api/admin/vessels/m-v-roadstead/offline-bundle", session=admin_session)
         check("the office cannot export credentials", status, 404)
+        status, _ = request(f"{srv.base}/api/vessel/offline-bundle", session=moved_session)
+        check("the password-verifier bundle is gone", status, 404)
 
-        status, own = request(f"{srv.base}/api/vessel/offline-bundle", session=moved_session)
-        check("a signed-in engineer earns his own", status, 200)
-        bundle = own["bundle"]
-        check("it is his ship", bundle["vessel"]["vesselId"], "m-v-local-only")
-        check("and carries the sync token", bool(bundle["vessel"]["token"]), True)
-        check("it expires", bool(bundle["expiresAt"]), True)
-        entry = next(l for l in bundle["logins"] if l["username"] == "fangcheng")
-        check("with a verifier, not a password", bool(entry["verifier"]), True)
-        check("and its salt", bool(entry["salt"]), True)
-        check("the scheme is named", entry["algorithm"], "pbkdf2-hmac-sha256")
-        check("and the work factor", entry["rounds"], 240000)
-        check("no plaintext password is present",
-              "password" in json.dumps(bundle).lower().replace("password_", ""), False)
+        import secrets as _secrets
+        device_id = "dev_" + _secrets.token_urlsafe(16)
+        device_secret = _secrets.token_urlsafe(32)
+        status, enrolled = request(
+            f"{srv.base}/api/auth/devices", session=moved_session, method="POST",
+            payload={"deviceId": device_id, "secret": device_secret, "label": "Chief PC"},
+        )
+        check("a signed-in engineer enrolls this laptop", status, 200)
+        check("the enrollment names him", enrolled["device"]["username"], "fangcheng")
+        check("and is not revoked", enrolled["device"]["revoked"], False)
+        check("no secret is stored in the listing", "secret" in enrolled["device"], False)
 
-        status, _ = request(f"{srv.base}/api/vessel/offline-bundle")
-        check("an anonymous caller gets nothing", status, 401)
+        status, _ = request(
+            f"{srv.base}/api/auth/devices", session=admin_session, method="POST",
+            payload={"deviceId": "dev_" + _secrets.token_urlsafe(16),
+                     "secret": _secrets.token_urlsafe(32)},
+        )
+        check("a fleet manager cannot enroll a device", status, 403)
 
-        # The vessel token already grants sync. It must not also mint the credentials
-        # that unlock a laptop, or the token alone would be a master key.
-        status, tok = request(f"{srv.base}/api/vessel/offline-bundle", token=vessel["token"])
-        check("a bare vessel token cannot mint credentials", status, 403)
+        status, _ = request(
+            f"{srv.base}/api/auth/devices", method="POST",
+            payload={"deviceId": device_id, "secret": device_secret},
+        )
+        check("an anonymous caller cannot enroll", status, 401)
+
+        status, tok = request(
+            f"{srv.base}/api/auth/devices", token=vessel["token"], method="POST",
+            payload={"deviceId": "dev_" + _secrets.token_urlsafe(16),
+                     "secret": _secrets.token_urlsafe(32)},
+        )
+        check("a bare vessel token cannot enroll a laptop", status, 403)
         check("and says why", tok.get("reason"), "session_required")
 
-        # Signed off, he has no ship, so there are no offline credentials to earn.
+        status, dlogin = request(
+            f"{srv.base}/api/auth/device-login", method="POST",
+            payload={"deviceId": device_id, "secret": device_secret},
+        )
+        check("the enrolled device can sign in", status, 200)
+        check("as the same engineer", dlogin.get("username"), "fangcheng")
+        check("onto his current ship", dlogin["vessel"]["vesselId"], "m-v-local-only")
+
+        status, _ = request(
+            f"{srv.base}/api/auth/device-login", method="POST",
+            payload={"deviceId": device_id, "secret": "wrong-secret-wrong-secret-wrong-secret"},
+        )
+        check("a wrong device secret is refused", status, 401)
+
+        status, listed = request(f"{srv.base}/api/admin/devices", session=admin_session)
+        check("the office can list devices", status, 200)
+        check("and sees this laptop",
+              any(d["deviceId"] == device_id for d in listed["devices"]), True)
+
+        status, rev = request(
+            f"{srv.base}/api/admin/devices/revoke", session=admin_session, method="POST",
+            payload={"deviceId": device_id},
+        )
+        check("the office can revoke it", status, 200)
+        check("and it is marked revoked", rev["device"]["revoked"], True)
+        status, dead = request(
+            f"{srv.base}/api/auth/device-login", method="POST",
+            payload={"deviceId": device_id, "secret": device_secret},
+        )
+        check("the revoked device cannot sign in", status, 401)
+        check("and names the cause", dead.get("reason"), "device_revoked")
+        status, reenroll = request(
+            f"{srv.base}/api/auth/devices", session=moved_session, method="POST",
+            payload={"deviceId": device_id, "secret": device_secret},
+        )
+        check("a revoked device cannot be re-enrolled under the same id", status, 400)
+
+        # Fresh device after revoke still works — a replacement laptop.
+        new_id = "dev_" + _secrets.token_urlsafe(16)
+        new_secret = _secrets.token_urlsafe(32)
+        status, _ = request(
+            f"{srv.base}/api/auth/devices", session=moved_session, method="POST",
+            payload={"deviceId": new_id, "secret": new_secret, "label": "Spare PC"},
+        )
+        check("a new laptop can still enroll", status, 200)
+
+        # Signed off, he has no ship, but the device still authenticates him.
         request(f"{srv.base}/api/admin/release", session=admin_session, method="POST",
                 payload={"username": "fangcheng"})
-        status, released = request(f"{srv.base}/api/vessel/offline-bundle", session=moved_session)
-        check("a released engineer earns nothing", status, 403)
-        check("because he has no ship", released.get("reason"), "no_vessel")
+        status, released = request(
+            f"{srv.base}/api/auth/device-login", method="POST",
+            payload={"deviceId": new_id, "secret": new_secret},
+        )
+        check("a released engineer can still unlock his laptop", status, 200)
+        check("with no ship", released.get("vessel"), None)
         # Put him back, so this section leaves the state it found.
         request(f"{srv.base}/api/admin/assign", session=admin_session, method="POST",
                 payload={"username": "fangcheng", "vesselId": "m-v-local-only"})
@@ -464,7 +525,49 @@ def main() -> int:
         check("with no vessel", jl["vessel"], None)
         check("and an empty history", jl["history"], [])
 
-        # He enters the ship he actually joined.
+        status, fleet = request(f"{srv.base}/api/vessels", session=joiner_session)
+        check("an unassigned engineer can see the fleet register", status, 200)
+        check("without being given a vessel token",
+              all("token" not in v for v in fleet["vessels"]), True)
+        check("and Fangcheng is on it",
+              any(v["vesselId"] == "m-v-fangcheng" for v in fleet["vessels"]), True)
+
+        status, claimed = request(
+            f"{srv.base}/api/vessels/claim", session=joiner_session, method="POST",
+            payload={"vesselId": "m-v-fangcheng"},
+        )
+        check("he can claim a ship that is already registered", status, 200)
+        check("and he is posted to it", claimed["assignment"]["vesselId"], "m-v-fangcheng")
+        check("with the sync token so the app can follow",
+              bool(claimed["vessel"].get("token")), True)
+        status, _ = request(
+            f"{srv.base}/api/voyage/m-v-fangcheng/1/B", session=joiner_session,
+            method="PUT", payload={"entries": [{"id": "join1", "updatedAt": "2026-02-01T00:00:00Z"}]},
+        )
+        check("and can write to the claimed ship", status, 200)
+
+        status, twice = request(
+            f"{srv.base}/api/vessels/claim", session=joiner_session, method="POST",
+            payload={"vesselId": "m-v-roadstead"},
+        )
+        check("claiming a second ship is refused — that is a transfer", status, 400)
+
+        status, _ = request(
+            f"{srv.base}/api/vessels/claim", session=admin_session, method="POST",
+            payload={"vesselId": "m-v-fangcheng"},
+        )
+        check("a manager cannot claim a posting", status, 403)
+
+        # Release him so the later import path still has an unassigned engineer.
+        request(f"{srv.base}/api/admin/release", session=admin_session, method="POST",
+                payload={"username": "joiner"})
+        status, jl2 = request(
+            f"{srv.base}/api/auth/login", method="POST",
+            payload={"username": "joiner", "password": joiner_pw},
+        )
+        joiner_session = jl2["sessionToken"]
+
+        # He enters a ship that is not on the register yet.
         status, made = request(
             f"{srv.base}/api/vessels/import", session=joiner_session, method="POST",
             payload={"vesselName": "M/V Newly Joined", "imo": "9800111",

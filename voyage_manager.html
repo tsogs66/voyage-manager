@@ -1334,6 +1334,15 @@
   background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);}
 .login-token{margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.1);}
 .vessel-locked-note{margin:8px 0 0;font-size:12px;opacity:.75;}
+.fo-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;}
+.fo-table th,.fo-table td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+.fo-table th{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--paper-dim);font-weight:600;}
+.fo-table td.mono{font-family:'IBM Plex Mono',monospace;font-size:12px;}
+.fo-password{margin-top:10px;padding:12px 14px;border:1px solid var(--brass-dim);border-radius:6px;background:rgba(201,154,83,.08);}
+.fo-password code{font-family:'IBM Plex Mono',monospace;font-size:18px;color:var(--brass);letter-spacing:.08em;}
+.fo-empty{opacity:.65;font-size:13px;padding:8px 0;}
+#fleetOfficePanel h3.sub{margin-top:22px;}
+
 </style>
 </head>
 <body>
@@ -1363,6 +1372,7 @@
       <div class="login-actions">
         <button class="primary" id="btnLoginSubmit">Sign in</button>
         <div class="hint" id="offlineCredsStatus"></div>
+        <button class="ghost" id="btnUnlockDevice" type="button" hidden>Continue on this device</button>
         <button class="ghost" id="btnLoginOffline">Work offline</button>
       </div>
       <p class="login-note">Working offline opens the program with no vessel assigned. You can sign in or add a vessel token later from Setup → Server Sync.</p>
@@ -1377,11 +1387,22 @@
         <div class="hint" id="loginPendingNotice" hidden></div>
         <div class="login-actions">
           <button class="primary" id="btnLoginLoadVessel">Load vessel</button>
+          <button class="ghost" id="btnLoginFleetOffice" type="button">Open Fleet Office</button>
         </div>
-        <p class="login-note">Only one vessel is loaded at a time. Sign out and back in to change ship.</p>
+        <p class="login-note">Only one vessel is loaded at a time. Fleet Office manages crew and ships without loading a noon report.</p>
       </div>
 
-      <div class="login-token">
+      <div id="loginVesselClaim" hidden>
+        <label class="login-field"><span>Which ship did you join?</span>
+          <select id="login_claimSelect"></select></label>
+        <div class="login-actions">
+          <button class="primary" id="btnLoginClaimVessel" type="button">Join this vessel</button>
+          <button class="ghost" id="btnLoginClaimLater" type="button">Ship not listed — enter it in Setup</button>
+        </div>
+        <p class="login-note">The office already registered the fleet. Pick the ship you joined. If it is not listed, continue and Register Vessel from Setup.</p>
+      </div>
+
+      <div class="login-token" id="loginTokenPath">
         <label class="login-field"><span>Vessel token</span>
           <input id="login_vesselToken" placeholder="paste the token issued for your ship" autocomplete="off"></label>
         <div class="login-actions">
@@ -1491,7 +1512,58 @@
         <button class="primary small" id="btnOpenLogin">Sign in / change vessel…</button>
         <button class="ghost small" id="btnSignOut">Sign out</button>
       </div>
-      <div class="hint">Your login decides which vessel this program loads. A vessel account is fixed to one ship; an administrator picks one ship at a time. Without a vessel the program runs blank until you add one.</div>
+      <div class="hint">Your login decides which vessel this program loads. A chief engineer is fixed to one ship; a fleet manager picks one ship at a time, or stays in Fleet Office with none loaded.</div>
+    </div>
+
+    <div class="panel" id="fleetOfficePanel" hidden>
+      <h2>Fleet Office</h2>
+      <p class="hint">Create engineers, post them to ships, reset passwords, revoke a stolen laptop, and approve vessels that arrived from a device. Generated passwords are shown once — copy them onto the handover sheet.</p>
+      <div class="login-status" id="foStatus" role="status"></div>
+
+      <h3 class="sub">Pending review</h3>
+      <div id="foPendingList" class="fo-empty">None waiting.</div>
+
+      <h3 class="sub">Register a vessel</h3>
+      <div class="form-grid cols3">
+        <div class="field"><label>Vessel name</label><input id="fo_vesselName" placeholder="M/V Harbour Key"></div>
+        <div class="field"><label>IMO</label><input id="fo_vesselImo" placeholder="IMO 9722101"></div>
+        <div class="field"><label>Company</label><input id="fo_vesselCompany" placeholder="Pacific Ocean Shipping"></div>
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="primary small" type="button" id="btnFoCreateVessel">Register vessel</button>
+      </div>
+      <div class="table-scroll" style="margin-top:12px;">
+        <table class="fo-table" id="foVesselTable"><thead>
+          <tr><th>Vessel</th><th>IMO</th><th>Chief engineer</th><th></th></tr>
+        </thead><tbody></tbody></table>
+      </div>
+
+      <h3 class="sub">Create a chief engineer</h3>
+      <div class="form-grid cols3">
+        <div class="field"><label>Username</label><input id="fo_username" placeholder="hberg" autocomplete="off"></div>
+        <div class="field"><label>Post to vessel</label><select id="fo_accountVessel"><option value="">— none yet, he will pick —</option></select></div>
+        <div class="field" style="display:flex;align-items:flex-end;">
+          <button class="primary" type="button" id="btnFoCreateAccount" style="width:100%;">Create account</button>
+        </div>
+      </div>
+      <div class="fo-password" id="foPasswordBox" hidden>
+        <div class="hint" style="margin:0 0 6px;">Hand this to the engineer. It is shown once and stored nowhere else.</div>
+        <code id="foPasswordValue"></code>
+        <div class="hint" id="foPasswordWho" style="margin:6px 0 0;"></div>
+      </div>
+      <div class="table-scroll" style="margin-top:12px;">
+        <table class="fo-table" id="foAccountTable"><thead>
+          <tr><th>Username</th><th>Role</th><th>Vessel</th><th></th></tr>
+        </thead><tbody></tbody></table>
+      </div>
+
+      <h3 class="sub">Devices</h3>
+      <p class="hint">A stolen or handed-over laptop is revoked here. The engineer signs in with his password on the replacement machine to enroll it.</p>
+      <div class="table-scroll">
+        <table class="fo-table" id="foDeviceTable"><thead>
+          <tr><th>Device</th><th>Engineer</th><th>Last seen</th><th></th></tr>
+        </thead><tbody></tbody></table>
+      </div>
     </div>
 
     <div class="panel">
@@ -14618,7 +14690,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v114';
+let androidInstallCacheName = 'noon-report-v115';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -16825,117 +16897,119 @@ function renderVesselLock(){
       ? `This copy is assigned to ${vessel.vesselName || vessel.vesselId} by your login. Only this vessel can be loaded.`
       : '';
   }
+  const office = document.getElementById('fleetOfficePanel');
+  if (office) office.hidden = !isAdmin;
+  if (isAdmin) renderFleetOffice();
 }
 
 
-/* ---------------- offline credentials ----------------
-   A ship joining with a fresh laptop and no connectivity cannot reach the server
-   to sign in even once. A bundle exported by the fleet manager carries the vessel
-   and the password VERIFIERS for whoever is posted to it, so the login is checked
-   on the device. The verifier is the same PBKDF2-HMAC-SHA256 the server stores —
-   the device recomputes it and compares, it never sees a password.
+/* ---------------- device enrollment ----------------
+   A laptop earns offline access by signing in online once. The device then
+   holds a random secret the server hashed — never a password. Offline unlock
+   proves this laptop, so the generated password is only typed at first
+   enrollment (and on a replacement machine). A stolen laptop is revoked from
+   Fleet Office; pulling the network cable cannot resurrect a revocation the
+   server has already answered. */
 
-   The trade is deliberate and its cost is real: a stolen laptop carries crackable
-   password material, and a transferred engineer keeps working on the old device
-   until it reconnects. The bundle therefore expires, and carries only the
-   engineers currently posted to that one ship. */
+const DEVICE_ENROLL_KEY = 'nr_device_enrollment';
 
-const OFFLINE_BUNDLE_KEY = 'nr_offline_bundle';
-
-function readOfflineBundle(){
+function readDeviceEnrollment(){
   try{
-    const raw = localStorage.getItem(OFFLINE_BUNDLE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const raw = localStorage.getItem(DEVICE_ENROLL_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!parsed || !parsed.deviceId || !parsed.secret || !parsed.username) return null;
+    return parsed;
   }catch(_){ return null; }
 }
 
-function writeOfflineBundle(bundle){
-  if (!bundle || bundle.version !== 1 || !bundle.vessel || !Array.isArray(bundle.logins)){
-    throw new Error('That file is not a vessel credentials bundle.');
+function writeDeviceEnrollment(enroll){
+  if (!enroll){
+    localStorage.removeItem(DEVICE_ENROLL_KEY);
+    return null;
   }
-  localStorage.setItem(OFFLINE_BUNDLE_KEY, JSON.stringify(bundle));
-  return bundle;
+  localStorage.setItem(DEVICE_ENROLL_KEY, JSON.stringify(enroll));
+  return enroll;
 }
 
-function hexToBytes(hex){
-  const clean = String(hex || '').trim();
-  if (clean.length % 2) throw new Error('Bad salt in credentials bundle.');
-  const out = new Uint8Array(clean.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.substr(i * 2, 2), 16);
-  return out;
+function newDeviceSecret(){
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function bytesToHex(buf){
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+function newDeviceId(){
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  const raw = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  return 'dev_' + raw;
 }
 
-/** Recompute the server's PBKDF2 verifier for a password, in the browser. */
-async function derivePasswordVerifier(password, saltHex, rounds){
-  if (!crypto?.subtle) throw new Error('This browser cannot verify credentials offline (no WebCrypto).');
-  const key = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']
-  );
-  const bits = await crypto.subtle.deriveBits(
-    { name:'PBKDF2', salt: hexToBytes(saltHex), iterations: rounds, hash:'SHA-256' },
-    key, 256
-  );
-  return bytesToHex(bits);
+function deviceLabel(){
+  const ua = (navigator.userAgent || '').slice(0, 80);
+  return (ua.match(/Windows|Mac OS|Android|Linux|iPhone|iPad/i) || ['PC'])[0] + ' laptop';
 }
 
-/** Constant-time-ish compare, so a wrong password does not leak how wrong it was. */
-function verifiersMatch(a, b){
-  const x = String(a || ''), y = String(b || '');
-  if (x.length !== y.length) return false;
-  let diff = 0;
-  for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
-  return diff === 0;
-}
-
-/** Sign in against the bundle on this device. Returns a session, or throws. */
-async function offlineLogin(username, password){
-  const bundle = readOfflineBundle();
-  if (!bundle) throw new Error('This device has never signed in. The first sign-in needs the server — connect, sign in once, and it will work offline after that.');
-  if (bundle.expiresAt && new Date(bundle.expiresAt) < new Date()){
-    throw new Error(`Offline access for this device expired on ${String(bundle.expiresAt).slice(0,10)}. Connect to the server and sign in again.`);
+async function enrollThisDevice(session){
+  if (!session?.sessionToken || session.role === 'fleet_manager' || session.role === 'admin'){
+    return null;
   }
-  const login = (bundle.logins || []).find(l => l.username === username.trim().toLowerCase());
-  /* Do the derivation even when the username is unknown, so the failure takes the
-     same time either way and does not reveal who is posted to this ship. */
-  const target = login || { salt: '00'.repeat(16), rounds: 240000, verifier: '' };
-  if (target.algorithm && target.algorithm !== 'pbkdf2-hmac-sha256'){
-    throw new Error('These credentials use a scheme this version cannot verify.');
+  let enroll = readDeviceEnrollment();
+  if (!enroll || enroll.username !== session.username){
+    enroll = {
+      deviceId: newDeviceId(),
+      secret: newDeviceSecret(),
+      username: session.username,
+      role: session.role,
+      serverUrl: session.serverUrl,
+      vessel: session.vessel || null
+    };
   }
-  const got = await derivePasswordVerifier(password, target.salt, target.rounds || 240000);
-  if (!login || !verifiersMatch(got, target.verifier)){
-    throw new Error('Username or password is incorrect.');
-  }
-  return writeStoredSession({
-    serverUrl: state.session?.serverUrl || document.getElementById('login_serverUrl')?.value || '',
-    sessionToken: null,           /* no server session exists — this is a local sign-in */
-    offline: true,
-    expiresAt: bundle.expiresAt,
-    username: login.username,
-    role: login.role,
-    vessel: bundle.vessel,
-    history: [bundle.vessel]
+  const out = await loginApiCall(session.serverUrl, '/api/auth/devices', {
+    method: 'POST',
+    session: { sessionToken: session.sessionToken },
+    body: { deviceId: enroll.deviceId, secret: enroll.secret, label: deviceLabel() }
   });
+  enroll.username = session.username;
+  enroll.role = session.role;
+  enroll.serverUrl = session.serverUrl;
+  enroll.vessel = session.vessel || enroll.vessel || null;
+  enroll.enrolledAt = new Date().toISOString();
+  if (out?.device?.deviceId) enroll.deviceId = out.device.deviceId;
+  return writeDeviceEnrollment(enroll);
 }
 
+function sessionFromEnrollment(enroll, extra){
+  return writeStoredSession(Object.assign({
+    serverUrl: enroll.serverUrl || '',
+    sessionToken: null,
+    offline: true,
+    deviceId: enroll.deviceId,
+    username: enroll.username,
+    role: enroll.role,
+    vessel: enroll.vessel || null,
+    history: enroll.vessel ? [enroll.vessel] : []
+  }, extra || {}));
+}
+
+/** Unlock this laptop from its enrollment, without a password. */
+async function unlockEnrolledDevice(){
+  const enroll = readDeviceEnrollment();
+  if (!enroll) throw new Error('This device has never signed in. The first sign-in needs the server — connect, sign in once, and it will work offline after that.');
+  return sessionFromEnrollment(enroll);
+}
 
 function bindOfflineCredsUi(){
-  /* There is no way to install credentials by hand. A device earns its offline
-     access by signing in online once, which is when the bundle is fetched. */
   const status = document.getElementById('offlineCredsStatus');
-  if (!status) return;
-  const b = readOfflineBundle();
-  if (!b){
-    status.textContent = 'This device has not signed in yet. The first sign-in needs the server; after that it works at sea.';
-    return;
+  const unlock = document.getElementById('btnUnlockDevice');
+  const enroll = readDeviceEnrollment();
+  if (status){
+    status.textContent = enroll
+      ? ('This device is enrolled as ' + enroll.username
+        + (enroll.vessel?.vesselName ? ' on ' + enroll.vessel.vesselName : '')
+        + ' — it unlocks with no connectivity.')
+      : 'This device has not signed in yet. The first sign-in needs the server; after that it unlocks at sea.';
   }
-  const expired = b.expiresAt && new Date(b.expiresAt) < new Date();
-  status.textContent = `Offline sign-in available for ${b.vessel?.vesselName || 'this vessel'}`
-    + (expired ? ` — EXPIRED ${String(b.expiresAt).slice(0,10)}, sign in online again.`
-               : ` — valid to ${String(b.expiresAt || '').slice(0,10)}.`);
+  if (unlock) unlock.hidden = !enroll;
 }
 
 
@@ -16992,39 +17066,38 @@ async function handleLoginSubmit(){
     });
     state.session = session;
     setLoginStatus('loginStatus', '', null);
-    /* Refresh the offline bundle while we have the connection. A device that can
-       sign in today should still sign in after it sails. */
-    if (out.vessel?.vesselId){
-      try{
-        /* sessionRequestHeaders reads .sessionToken off the object — handing it a
-           bare string sends no header at all. */
-        const b = await loginApiCall(base, '/api/vessel/offline-bundle', {
-          session: { sessionToken: out.sessionToken }
-        });
-        if (b?.bundle) writeOfflineBundle(b.bundle);
-      }catch(err){
-        /* Never block a good login on this, but do not swallow it silently either —
-           a device that quietly fails to earn offline access looks fine until the
-           ship sails. */
-        console.warn('Could not refresh offline credentials:', err.message);
-      }
+    /* Enroll this laptop while we have the connection. A device that can sign
+       in today should still unlock after it sails — by proving the laptop, not
+       by storing a password hash. */
+    try{
+      await enrollThisDevice(session);
+      bindOfflineCredsUi();
+    }catch(err){
+      console.warn('Could not enroll this device for offline unlock:', err.message);
     }
     await enterAssignStep(session);
   }catch(err){
-    /* Only a transport failure means "offline". If the server answered at all —
-       including 401 — its answer stands, or a revoked login could be resurrected
-       by pulling the network cable. */
+    /* Only a transport failure means "offline". If the server answers — including
+       401 — its answer stands, or a revoked login could be resurrected by pulling
+       the network cable. */
     const unreachable = err instanceof TypeError || /Failed to fetch|NetworkError|load failed/i.test(err.message || '');
-    if (unreachable && readOfflineBundle()){
-      try{
-        setLoginStatus('loginStatus', 'Server unreachable — checking credentials on this device…', 'busy');
-        const session = await offlineLogin(username, password);
-        state.session = session;
-        setLoginStatus('loginStatus', '', null);
-        await enterAssignStep(session);
-        return;
-      }catch(offErr){
-        setLoginStatus('loginStatus', offErr.message, 'err');
+    if (unreachable){
+      const enroll = readDeviceEnrollment();
+      if (enroll && enroll.username === username.trim().toLowerCase()){
+        try{
+          setLoginStatus('loginStatus', 'Server unreachable — unlocking this device…', 'busy');
+          const session = await unlockEnrolledDevice();
+          state.session = session;
+          setLoginStatus('loginStatus', '', null);
+          await enterAssignStep(session);
+          return;
+        }catch(offErr){
+          setLoginStatus('loginStatus', offErr.message, 'err');
+          return;
+        }
+      }
+      if (enroll){
+        setLoginStatus('loginStatus', 'Server unreachable. This device is enrolled as ' + enroll.username + ' — use Continue on this device, or wait for a connection.', 'err');
         return;
       }
     }
@@ -17036,12 +17109,19 @@ async function handleLoginSubmit(){
 async function enterAssignStep(session){
   showLoginStep('assign');
   const signedAs = document.getElementById('loginSignedAs');
+  const manager = session.role === 'fleet_manager' || session.role === 'admin';
   if (signedAs){
-    signedAs.textContent = session.role === 'admin'
-      ? `Signed in as ${session.username} (fleet manager) — choose the vessel to load.`
+    signedAs.textContent = manager
+      ? `Signed in as ${session.username} (fleet manager) — choose a vessel to load, or continue into Fleet Office.`
       : `Signed in as ${session.username}.`;
   }
   setLoginStatus('loginAssignStatus', '', null);
+  renderFleetOffice();
+
+  const tokenPath = document.getElementById('loginTokenPath');
+  if (tokenPath) tokenPath.hidden = !!session.username;
+  const claimBox = document.getElementById('loginVesselClaim');
+  if (claimBox) claimBox.hidden = true;
 
   if (session.vessel){
     setLoginStatus('loginAssignStatus', `Loading ${session.vessel.vesselName || session.vessel.vesselId}…`, 'busy');
@@ -17056,7 +17136,6 @@ async function enterAssignStep(session){
   }
 
   const pick = document.getElementById('loginVesselPick');
-  const manager = session.role === 'fleet_manager' || session.role === 'admin';
   if (manager){
     try{
       const out = await loginApiCall(session.serverUrl, '/api/admin/vessels', { session });
@@ -17065,12 +17144,9 @@ async function enterAssignStep(session){
       state.session.fleet = vessels;
       if (sel){
         sel.innerHTML = vessels.length
-          ? vessels.map(v => `<option value="${v.vesselId}">${v.vesselName} — IMO ${v.imo}${v.company ? ' — ' + v.company : ''}${v.pendingReview ? ` — PENDING REVIEW${v.createdBy ? ' (from ' + v.createdBy + ')' : ''}` : ''}</option>`).join('')
+          ? vessels.map(v => `<option value="${escAttr(v.vesselId)}">${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}${v.company ? ' — ' + escHtml(v.company) : ''}${v.pendingReview ? ` — PENDING REVIEW${v.createdBy ? ' (from ' + escHtml(v.createdBy) + ')' : ''}` : ''}</option>`).join('')
           : '<option value="">No vessels registered yet</option>';
       }
-      /* A ship registered from a device rather than the office is held for review.
-         The flag was being recorded and never shown, which is the same as not
-         recording it. */
       const waiting = vessels.filter(v => v.pendingReview);
       const notice = document.getElementById('loginPendingNotice');
       if (notice){
@@ -17081,38 +17157,86 @@ async function enterAssignStep(session){
         notice.hidden = !waiting.length;
       }
       if (pick) pick.hidden = false;
+      const foBtn = document.getElementById('btnLoginFleetOffice');
+      if (foBtn) foBtn.hidden = false;
       if (!vessels.length){
-        setLoginStatus('loginAssignStatus', 'No vessels are registered yet. Continue with no vessel and add one from Setup.', null);
+        setLoginStatus('loginAssignStatus', 'No vessels are registered yet. Continue with no vessel and add one from Fleet Office.', null);
       }
     }catch(err){
       setLoginStatus('loginAssignStatus', 'Could not list vessels: ' + err.message, 'err');
     }
   } else if (pick){
-    /* An engineer with a service history may load a previous ship to review it.
-       The server refuses writes to anything but his current posting, so this is
-       read-only in practice — the note says so. */
     const history = session.history || [];
     if (history.length > 1){
       const sel = document.getElementById('login_vesselSelect');
       state.session.fleet = history;
       if (sel){
         sel.innerHTML = history.map(v =>
-          `<option value="${v.vesselId}"${v.vesselId === (session.vessel && session.vessel.vesselId) ? ' selected' : ''}>${v.vesselName} — IMO ${v.imo}${v.vesselId === (session.vessel && session.vessel.vesselId) ? ' (current)' : ' (past — read only)'}</option>`
+          `<option value="${escAttr(v.vesselId)}">${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}${v.vesselId === (session.vessel && session.vessel.vesselId) ? ' (current)' : ' (past — read only)'}</option>`
         ).join('');
       }
       pick.hidden = false;
+      if (claimBox) claimBox.hidden = true;
+      const foBtn = document.getElementById('btnLoginFleetOffice');
+      if (foBtn) foBtn.hidden = true;
     } else {
       pick.hidden = true;
-      /* An engineer the office created without a ship — he joins and enters the
-         vessel himself. Leaving him on the gate would strand him: there is nothing
-         here for him to choose. Let him into the program, where Setup is open for
-         him to enter the ship and register it. */
-      await applyVesselAssignment(null);
-      writeStoredSession(state.session);
-      showLoginGate(false);
-      switchTab('setup');
+      /* Unassigned engineer: pick from the register rather than minting a ship. */
+      try{
+        const out = await loginApiCall(session.serverUrl, '/api/vessels', { session });
+        const vessels = out.vessels || [];
+        state.session.fleet = vessels;
+        const sel = document.getElementById('login_claimSelect');
+        if (sel){
+          sel.innerHTML = vessels.length
+            ? vessels.map(v => `<option value="${escAttr(v.vesselId)}">${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}${v.company ? ' — ' + escHtml(v.company) : ''}</option>`).join('')
+            : '<option value="">No vessels registered yet</option>';
+        }
+        if (claimBox) claimBox.hidden = false;
+      }catch(err){
+        setLoginStatus('loginAssignStatus', 'Could not list the fleet: ' + err.message, 'err');
+        await applyVesselAssignment(null);
+        writeStoredSession(state.session);
+        showLoginGate(false);
+        switchTab('setup');
+      }
     }
   }
+}
+
+async function handleClaimVessel(){
+  const session = state.session || readStoredSession();
+  const sel = document.getElementById('login_claimSelect');
+  const vesselId = sel && sel.value;
+  if (!session?.sessionToken){ setLoginStatus('loginAssignStatus', 'Sign in first.', 'err'); return; }
+  if (!vesselId){ setLoginStatus('loginAssignStatus', 'No vessel selected.', 'err'); return; }
+  setLoginStatus('loginAssignStatus', 'Joining vessel…', 'busy');
+  try{
+    const out = await loginApiCall(session.serverUrl, '/api/vessels/claim', {
+      method: 'POST', session, body: { vesselId }
+    });
+    const vessel = out.vessel;
+    state.session = writeStoredSession(Object.assign({}, session, {
+      vessel, history: [vessel]
+    }));
+    const enroll = readDeviceEnrollment();
+    if (enroll && enroll.username === session.username){
+      enroll.vessel = vessel;
+      writeDeviceEnrollment(enroll);
+    }
+    await applyVesselAssignment(vessel, session.serverUrl);
+    showLoginGate(false);
+  }catch(err){
+    setLoginStatus('loginAssignStatus', err.message, 'err');
+  }
+}
+
+async function handleClaimLater(){
+  const session = state.session || readStoredSession() || {};
+  await applyVesselAssignment(null);
+  writeStoredSession(session);
+  showLoginGate(false);
+  switchTab('setup');
 }
 
 async function handleAdminLoadVessel(){
@@ -17170,9 +17294,26 @@ async function handleContinueWithoutVessel(){
   const session = state.session || readStoredSession() || {};
   session.vessel = null;
   state.session = session;
-  writeStoredSession(session.sessionToken ? session : null);
+  writeStoredSession(session.sessionToken || session.username ? session : null);
   await applyVesselAssignment(null, session.serverUrl);
   showLoginGate(false);
+  const manager = session.role === 'fleet_manager' || session.role === 'admin';
+  if (manager || (session.username && !session.vessel)){
+    switchTab('setup');
+    renderFleetOffice();
+  }
+}
+
+async function handleUnlockDevice(){
+  try{
+    setLoginStatus('loginStatus', 'Unlocking this device…', 'busy');
+    const session = await unlockEnrolledDevice();
+    state.session = session;
+    setLoginStatus('loginStatus', '', null);
+    await enterAssignStep(session);
+  }catch(err){
+    setLoginStatus('loginStatus', err.message, 'err');
+  }
 }
 
 async function handleSignOut(){
@@ -17183,10 +17324,257 @@ async function handleSignOut(){
   writeStoredSession(null);
   state.session = null;
   renderVesselLock();
+  renderFleetOffice();
+  bindOfflineCredsUi();
   showLoginStep('signin');
   showLoginGate(true);
   setLoginStatus('loginStatus', 'Signed out.', null);
 }
+
+function foSession(){
+  const session = state.session || readStoredSession();
+  const manager = session && (session.role === 'fleet_manager' || session.role === 'admin');
+  return manager ? session : null;
+}
+
+function setFoStatus(message, kind){
+  setLoginStatus('foStatus', message, kind);
+}
+
+function foVesselName(vesselId, fleet){
+  const v = (fleet || []).find(x => x.vesselId === vesselId);
+  return v ? v.vesselName : (vesselId || '—');
+}
+
+async function renderFleetOffice(){
+  const panel = document.getElementById('fleetOfficePanel');
+  const session = foSession();
+  if (panel) panel.hidden = !session;
+  if (!session || !session.sessionToken){
+    if (panel && !session) panel.hidden = true;
+    return;
+  }
+  try{
+    const [vesselsOut, accountsOut, devicesOut, pendingOut] = await Promise.all([
+      loginApiCall(session.serverUrl, '/api/admin/vessels', { session }),
+      loginApiCall(session.serverUrl, '/api/admin/accounts', { session }),
+      loginApiCall(session.serverUrl, '/api/admin/devices', { session }),
+      loginApiCall(session.serverUrl, '/api/admin/vessels/pending', { session })
+    ]);
+    const vessels = vesselsOut.vessels || [];
+    const accounts = accountsOut.accounts || [];
+    const devices = devicesOut.devices || [];
+    const pending = pendingOut.vessels || [];
+    state.session.fleet = vessels;
+
+    const pendingEl = document.getElementById('foPendingList');
+    if (pendingEl){
+      if (!pending.length){
+        pendingEl.className = 'fo-empty';
+        pendingEl.textContent = 'None waiting.';
+      } else {
+        pendingEl.className = '';
+        pendingEl.innerHTML = pending.map(v =>
+          `<div class="btn-row" style="margin-top:6px;align-items:center;">
+            <span>${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}${v.createdBy ? ' (from ' + escHtml(v.createdBy) + ')' : ''}</span>
+            <button class="primary small" type="button" data-fo-approve="${escAttr(v.vesselId)}">Approve</button>
+          </div>`
+        ).join('');
+      }
+    }
+
+    const vSel = document.getElementById('fo_accountVessel');
+    if (vSel){
+      const prev = vSel.value;
+      vSel.innerHTML = '<option value="">— none yet, he will pick —</option>'
+        + vessels.map(v => `<option value="${escAttr(v.vesselId)}">${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}</option>`).join('');
+      if (prev && vessels.some(v => v.vesselId === prev)) vSel.value = prev;
+    }
+
+    const vBody = document.querySelector('#foVesselTable tbody');
+    if (vBody){
+      const byShip = {};
+      accounts.filter(a => a.role === 'chief_engineer' && a.vesselId).forEach(a => {
+        byShip[a.vesselId] = (byShip[a.vesselId] || []).concat(a.username);
+      });
+      vBody.innerHTML = vessels.length
+        ? vessels.map(v => `<tr>
+            <td>${escHtml(v.vesselName)}${v.pendingReview ? ' <span class="badge">pending</span>' : ''}</td>
+            <td class="mono">${escHtml(v.imo)}</td>
+            <td>${escHtml((byShip[v.vesselId] || []).join(', ') || '—')}</td>
+            <td><button class="ghost small" type="button" data-fo-load="${escAttr(v.vesselId)}">Load</button></td>
+          </tr>`).join('')
+        : '<tr><td colspan="4" class="fo-empty">No vessels registered yet.</td></tr>';
+    }
+
+    const aBody = document.querySelector('#foAccountTable tbody');
+    if (aBody){
+      aBody.innerHTML = accounts.length
+        ? accounts.map(a => `<tr>
+            <td class="mono">${escHtml(a.username)}</td>
+            <td>${escHtml(a.role === 'fleet_manager' || a.role === 'admin' ? 'fleet manager' : 'chief engineer')}</td>
+            <td>${escHtml(foVesselName(a.vesselId, vessels))}</td>
+            <td>${a.role === 'chief_engineer' ? `
+              <button class="ghost small" type="button" data-fo-assign="${escAttr(a.username)}">Post</button>
+              <button class="ghost small" type="button" data-fo-release="${escAttr(a.username)}">Release</button>
+              <button class="ghost small" type="button" data-fo-reset="${escAttr(a.username)}">Reset password</button>
+            ` : ''}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="4" class="fo-empty">No accounts yet.</td></tr>';
+    }
+
+    const dBody = document.querySelector('#foDeviceTable tbody');
+    if (dBody){
+      dBody.innerHTML = devices.length
+        ? devices.map(d => `<tr>
+            <td>${escHtml(d.label || d.deviceId)}</td>
+            <td class="mono">${escHtml(d.username)}</td>
+            <td class="mono">${escHtml(String(d.lastSeenAt || '').slice(0, 16).replace('T', ' '))}</td>
+            <td>${d.revoked
+              ? '<span class="badge">revoked</span>'
+              : `<button class="danger small" type="button" data-fo-revoke="${escAttr(d.deviceId)}">Revoke</button>`}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="4" class="fo-empty">No devices enrolled yet. An engineer\'s first online sign-in enrolls that laptop.</td></tr>';
+    }
+  }catch(err){
+    setFoStatus(err.message, 'err');
+  }
+}
+
+function showGeneratedPassword(username, password, vesselId){
+  const box = document.getElementById('foPasswordBox');
+  const val = document.getElementById('foPasswordValue');
+  const who = document.getElementById('foPasswordWho');
+  if (val) val.textContent = password || '';
+  if (who) who.textContent = username
+    + (vesselId ? ' — posted to ' + vesselId : ' — no vessel yet; he will pick one at sign-in');
+  if (box) box.hidden = !password;
+}
+
+async function handleFoCreateVessel(){
+  const session = foSession();
+  if (!session) return;
+  const vesselName = document.getElementById('fo_vesselName')?.value.trim();
+  const imo = document.getElementById('fo_vesselImo')?.value.trim();
+  const company = document.getElementById('fo_vesselCompany')?.value.trim() || '';
+  if (!vesselName || !imo){ setFoStatus('Enter the vessel name and IMO.', 'err'); return; }
+  setFoStatus('Registering…', 'busy');
+  try{
+    await loginApiCall(session.serverUrl, '/api/admin/vessels', {
+      method: 'POST', session, body: { vesselName, imo, company }
+    });
+    document.getElementById('fo_vesselName').value = '';
+    document.getElementById('fo_vesselImo').value = '';
+    document.getElementById('fo_vesselCompany').value = '';
+    setFoStatus('Vessel registered.', 'ok');
+    await renderFleetOffice();
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoCreateAccount(){
+  const session = foSession();
+  if (!session) return;
+  const username = document.getElementById('fo_username')?.value.trim();
+  const vesselId = document.getElementById('fo_accountVessel')?.value || '';
+  if (!username){ setFoStatus('Enter a username.', 'err'); return; }
+  setFoStatus('Creating account…', 'busy');
+  try{
+    const out = await loginApiCall(session.serverUrl, '/api/admin/accounts', {
+      method: 'POST', session,
+      body: { username, role: 'chief_engineer', vesselId: vesselId || undefined }
+    });
+    const password = out.account && out.account.password;
+    document.getElementById('fo_username').value = '';
+    showGeneratedPassword(out.account?.username || username, password, vesselId);
+    setFoStatus('Account created. Copy the password now — it is not stored.', 'ok');
+    await renderFleetOffice();
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoApprove(vesselId){
+  const session = foSession();
+  if (!session) return;
+  try{
+    await loginApiCall(session.serverUrl, '/api/admin/vessels/approve', {
+      method: 'POST', session, body: { vesselId }
+    });
+    setFoStatus('Vessel approved.', 'ok');
+    await renderFleetOffice();
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoAssign(username){
+  const session = foSession();
+  if (!session) return;
+  const vesselId = document.getElementById('fo_accountVessel')?.value;
+  if (!vesselId){ setFoStatus('Choose a vessel in “Post to vessel”, then press Post.', 'err'); return; }
+  try{
+    await loginApiCall(session.serverUrl, '/api/admin/assign', {
+      method: 'POST', session, body: { username, vesselId }
+    });
+    setFoStatus(username + ' posted to ' + vesselId + '.', 'ok');
+    await renderFleetOffice();
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoRelease(username){
+  const session = foSession();
+  if (!session) return;
+  try{
+    await loginApiCall(session.serverUrl, '/api/admin/release', {
+      method: 'POST', session, body: { username }
+    });
+    setFoStatus(username + ' signed off.', 'ok');
+    await renderFleetOffice();
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoReset(username){
+  const session = foSession();
+  if (!session) return;
+  try{
+    const out = await loginApiCall(session.serverUrl, '/api/auth/password', {
+      method: 'POST', session, body: { username }
+    });
+    showGeneratedPassword(username, out.password, '');
+    setFoStatus('Password reset. Copy the new one now.', 'ok');
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoRevoke(deviceId){
+  const session = foSession();
+  if (!session) return;
+  try{
+    await loginApiCall(session.serverUrl, '/api/admin/devices/revoke', {
+      method: 'POST', session, body: { deviceId }
+    });
+    setFoStatus('Device revoked. It will not unlock once it next reaches the server.', 'ok');
+    await renderFleetOffice();
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoLoadVessel(vesselId){
+  const session = foSession() || state.session;
+  const vessel = (session.fleet || []).find(v => v.vesselId === vesselId);
+  if (!vessel){ setFoStatus('That vessel is no longer listed.', 'err'); return; }
+  try{
+    await applyVesselAssignment(vessel, session.serverUrl);
+    session.vessel = vessel;
+    state.session = writeStoredSession(session);
+    setFoStatus('Loaded ' + vessel.vesselName + '.', 'ok');
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+document.getElementById('fleetOfficePanel')?.addEventListener('click', (e)=>{
+  const t = e.target.closest('[data-fo-approve],[data-fo-assign],[data-fo-release],[data-fo-reset],[data-fo-revoke],[data-fo-load]');
+  if (!t) return;
+  if (t.dataset.foApprove) handleFoApprove(t.dataset.foApprove);
+  else if (t.dataset.foAssign) handleFoAssign(t.dataset.foAssign);
+  else if (t.dataset.foRelease) handleFoRelease(t.dataset.foRelease);
+  else if (t.dataset.foReset) handleFoReset(t.dataset.foReset);
+  else if (t.dataset.foRevoke) handleFoRevoke(t.dataset.foRevoke);
+  else if (t.dataset.foLoad) handleFoLoadVessel(t.dataset.foLoad);
+});
 
 /**
  * Decide on boot whether to show the gate.
@@ -17196,11 +17584,13 @@ async function handleSignOut(){
 async function initLoginGate(){
   const stored = readStoredSession();
   const sync = ensureSyncConfig();
+  const enroll = readDeviceEnrollment();
 
   const serverField = document.getElementById('login_serverUrl');
-  if (serverField) serverField.value = (stored && stored.serverUrl) || sync.serverUrl || '';
+  if (serverField) serverField.value = (stored && stored.serverUrl) || (enroll && enroll.serverUrl) || sync.serverUrl || '';
+  bindOfflineCredsUi();
 
-  if (stored && stored.sessionToken){
+  if (stored && (stored.sessionToken || stored.offline || stored.deviceId)){
     state.session = stored;
     if (stored.vessel){
       try{ await applyVesselAssignment(stored.vessel, stored.serverUrl); }
@@ -17209,25 +17599,50 @@ async function initLoginGate(){
       renderVesselLock();
     }
     showLoginGate(false);
+    renderFleetOffice();
     /* Refresh in the background: a revoked login should not last forever, but a
-       server we cannot reach must not strand the ship either. */
-    loginApiCall(stored.serverUrl, '/api/auth/me', { session: stored })
-      .then(out => {
-        const merged = Object.assign({}, stored, {
-          role: out.role,
-          vessel: out.vessel || stored.vessel,
-          history: out.history || stored.history || []
-        });
-        state.session = writeStoredSession(merged);
-        renderVesselLock();
-      })
-      .catch(err => {
-        if (err.status === 401){
-          writeStoredSession(null);
-          state.session = null;
+       server we cannot reach must not strand the ship either. Prefer device-login
+       when enrolled, so a revocation the server has already recorded stands. */
+    const refresh = enroll && enroll.secret
+      ? loginApiCall(enroll.serverUrl || stored.serverUrl, '/api/auth/device-login', {
+          method: 'POST', body: { deviceId: enroll.deviceId, secret: enroll.secret }
+        })
+      : (stored.sessionToken
+          ? loginApiCall(stored.serverUrl, '/api/auth/me', { session: stored })
+          : null);
+    if (refresh){
+      refresh
+        .then(out => {
+          const merged = Object.assign({}, stored, {
+            sessionToken: out.sessionToken || stored.sessionToken,
+            role: out.role,
+            vessel: out.vessel || stored.vessel,
+            history: out.history || stored.history || [],
+            offline: false
+          });
+          state.session = writeStoredSession(merged);
+          if (enroll){
+            enroll.vessel = out.vessel || enroll.vessel;
+            enroll.role = out.role || enroll.role;
+            writeDeviceEnrollment(enroll);
+          }
           renderVesselLock();
-        }
-      });
+          renderFleetOffice();
+        })
+        .catch(err => {
+          if (err.status === 401){
+            writeStoredSession(null);
+            state.session = null;
+            if (enroll) writeDeviceEnrollment(null);
+            renderVesselLock();
+            renderFleetOffice();
+            bindOfflineCredsUi();
+            showLoginStep('signin');
+            showLoginGate(true);
+            setLoginStatus('loginStatus', 'This device is no longer enrolled. Sign in with your password.', 'err');
+          }
+        });
+    }
     return;
   }
 
@@ -17237,23 +17652,30 @@ async function initLoginGate(){
 
 document.getElementById('btnLoginSubmit')?.addEventListener('click', handleLoginSubmit);
 document.getElementById('login_password')?.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') handleLoginSubmit(); });
+document.getElementById('btnUnlockDevice')?.addEventListener('click', handleUnlockDevice);
 document.getElementById('btnLoginOffline')?.addEventListener('click', async ()=>{
   state.session = null;
   await applyVesselAssignment(null, '');
   showLoginGate(false);
 });
 document.getElementById('btnLoginLoadVessel')?.addEventListener('click', handleAdminLoadVessel);
+document.getElementById('btnLoginFleetOffice')?.addEventListener('click', handleContinueWithoutVessel);
+document.getElementById('btnLoginClaimVessel')?.addEventListener('click', handleClaimVessel);
+document.getElementById('btnLoginClaimLater')?.addEventListener('click', handleClaimLater);
 document.getElementById('btnLoginUseToken')?.addEventListener('click', handleVesselTokenVerify);
 document.getElementById('btnLoginNoToken')?.addEventListener('click', handleContinueWithoutVessel);
 document.getElementById('btnLoginBack')?.addEventListener('click', ()=>{
   showLoginStep('signin');
   setLoginStatus('loginStatus', '', null);
+  bindOfflineCredsUi();
 });
 document.getElementById('btnSignOut')?.addEventListener('click', handleSignOut);
 document.getElementById('btnOpenLogin')?.addEventListener('click', ()=>{
-  showLoginStep(state.session && state.session.sessionToken ? 'assign' : 'signin');
+  showLoginStep(state.session && (state.session.sessionToken || state.session.username) ? 'assign' : 'signin');
   showLoginGate(true);
 });
+document.getElementById('btnFoCreateVessel')?.addEventListener('click', handleFoCreateVessel);
+document.getElementById('btnFoCreateAccount')?.addEventListener('click', handleFoCreateAccount);
 
 (async function init(){
   try {

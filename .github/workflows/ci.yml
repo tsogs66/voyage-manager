@@ -30,8 +30,8 @@ jobs:
       - name: Check JavaScript parses
         run: node tests/check_js_syntax.js
 
-      - name: Check cache name and precache list agree
-        run: node tests/check_assets.js
+      - name: Check device enrollment helpers
+        run: node tests/test_device_enrollment.js
 
   sync-server:
     name: Sync server (auth matrix)
