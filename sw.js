@@ -1,7 +1,8 @@
-const CACHE = 'noon-report-v118';
+const CACHE = 'noon-report-v119';
 const PRECACHE = [
   './voyage_manager.html',
   './eorb.js',
+  './ship_time.js',
   './sw.js',
   './manifest.webmanifest',
   './icons/logoBG.png',

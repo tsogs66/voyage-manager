@@ -13,7 +13,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
-const STANDALONE = ['eorb.js', 'sw.js', 'scripts/sync-www.js'];
+const STANDALONE = ['eorb.js', 'ship_time.js', 'sw.js', 'scripts/sync-www.js'];
 const HTML = 'voyage_manager.html';
 
 const failures = [];

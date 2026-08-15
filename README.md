@@ -92,6 +92,7 @@ not touch R.O.B.; the survey panel is the one that corrects it.
 - **Offline-first**: all voyage data stored in IndexedDB — works without internet on Android and PC
 - **PWA install**: add to home screen (requires HTTPS or localhost); optional persistent storage
 - **Fuel & performance**: flowmeter-based consumption, cubic power law (%MCR/kW), engine vs ship distance, slip
+- **Ship's clocks**: log-entry date/time has a zone picker and ±30 min / ±1 h buttons. Changing zone adjusts the time and records clocks advanced/retarded so period hours stay on actual elapsed time.
 - **SFOC monitoring**: actual vs reference (g/kWh) with 85%/100% curve calibration and optional LCV ISO correction
 - **CII / CO₂ estimate**: voyage-level attained CII from IMO Cf factors × fuel × DWT × distance
 - **Weather & sea state**: Beaufort wind, Douglas sea state, swell, air/sea temp on Voyage Summary
@@ -517,6 +518,7 @@ existing single-token installs keep working untouched.
 | File | Purpose |
 |------|---------|
 | `voyage_manager.html` | Main application (single-file SPA) |
+| `ship_time.js` | Ship's zone / clock-change math for log-entry hours |
 | `manifest.webmanifest` | PWA manifest |
 | `sw.js` | Service worker for offline caching |
 | `icons/` | App icons |
@@ -541,6 +543,7 @@ Node and Python 3 — nothing to install.
 | `tests/browser_*_e2e.js` | Not in CI (no browser there). Run against a live seeded server with `NODE_PATH` pointing at a `playwright-core` install: `APP_BASE=http://127.0.0.1:8860 NODE_PATH=/path/to/node_modules node tests/browser_empty_vessel_e2e.js`. |
 | `tests/test_device_enrollment.js` | Device enrollment helpers — that a generated id matches the server pattern, that a device that has never signed in is refused, and that unlock after enrollment needs no password. |
 | `tests/test_eorb.js` | e-ORB scenario item numbers match Appendix III, weekly inventory cannot be dated more than 7 days after the last one, bunkering print uses tank total not the split string, and voided lines stay struck through on the printout. |
+| `tests/test_clock_change.js` | Changing ship's zone advances or retards the log time (30 min or 1 h steps) and period hours subtract clocks advanced so noon-to-noon stays on actual time. |
 | `tests/test_accounts.py` | Logins, derived vessel tokens, crew rotation, device enrollment/revocation, claiming an empty registered ship, refusing an occupied claim, office assign displacing the incumbent, and the read-history/write-current rule — including that a transferred engineer still reads his old ship but can no longer write to it, and that the legacy shared token still works. |
 | `tests/browser_login_e2e.js` | Not in CI (no browser there). Drives the real login UI in Chromium against a live seeded server. Run it after touching the gate. |
 | `tests/test_install_quoting.sh` | The installer's token quoting, checked against systemd's own parser via `systemd-analyze`. Unquoted, systemd splits an `Environment=` value on whitespace and reads `%` as a specifier, so a token with a space or a `%` reached the server truncated — leaving it on its default token, rejecting the very token the installer printed. |
