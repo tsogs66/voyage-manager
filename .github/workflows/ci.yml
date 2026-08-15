@@ -30,6 +30,9 @@ jobs:
       - name: Check JavaScript parses
         run: node tests/check_js_syntax.js
 
+      - name: Check e-ORB scenarios and weekly inventory window
+        run: node tests/test_eorb.js
+
       - name: Check device enrollment helpers
         run: node tests/test_device_enrollment.js
 

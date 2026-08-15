@@ -475,6 +475,20 @@
    * `requires` gates a scenario on fitted equipment / ship type.
    */
   const SCENARIOS = [
+    /* ---- Routine (weekly) ---- */
+    { id: 'weekly-sludge-bilge', group: 'Routine', part: 1, code: 'C',
+      title: 'Weekly inventory — sludge and bilge tanks',
+      blurb: 'Sound every IOPP 3.1 sludge tank (Code C 11.1–11.3) and oily bilge / wells (Code I). Must be within 7 days of the last weekly inventory — sooner is allowed, later is not.',
+      items: ['11.1', '11.2', '11.3'],
+      wizard: 'weekly' },
+    { id: 'ows-weekly-test', group: 'Routine', part: 1, code: 'I',
+      title: 'Weekly test of 15 ppm equipment (OWS)',
+      blurb: 'Routine weekly operational test of the oily-water separator / 15 ppm bilge alarm. Recorded under Code I. Use Code F if the equipment failed.',
+      items: ['I'],
+      requires: { ows: true },
+      weeklyKind: 'ows-test',
+      presets: { remarks: 'Weekly operational test of 15 ppm bilge alarm / oily-water separator carried out. Equipment found in good working order.' } },
+
     /* ---- Fuel oil ---- */
     { id: 'bunker-fuel', group: 'Fuel oil', part: 1, code: 'H',
       title: 'Bunkering fuel oil',
@@ -491,21 +505,17 @@
     { id: 'fo-dirty-ballast', group: 'Fuel oil', part: 1, code: 'B',
       title: 'Discharging dirty ballast / cleaning water from a fuel tank',
       blurb: 'Discharge of dirty ballast or tank-cleaning water from an oil fuel tank.',
-      items: ['5', '6', '7', '8', '9.1', '9.2', '9.3', '10'] },
+      items: ['5', '6', '7', '8', '9.1', '9.2', '10'] },
 
     /* ---- Sludge / oil residue (IOPP 3.1) ---- */
-    { id: 'sludge-weekly', group: 'Sludge / oil residue', part: 1, code: 'C',
-      title: 'Weekly sludge tank inventory',
-      blurb: 'Routine weekly sounding of every oil residue (sludge) tank. Use the Weekly Inventory card to do all tanks at once.',
-      items: ['11.1', '11.2', '11.3'] },
     { id: 'sludge-purifier', group: 'Sludge / oil residue', part: 1, code: 'C',
       title: 'Sludge collected from purifier / separator drain tank',
       blurb: 'Oil residue drained from fuel or lube oil separators into a sludge tank.',
-      items: ['11.1', '11.2', '11.3'] },
+      items: ['11.1', '11.2', '11.3', '11.4'] },
     { id: 'sludge-sump', group: 'Sludge / oil residue', part: 1, code: 'C',
       title: 'Sludge collected by draining an engine sump',
       blurb: 'Oil residue collected by draining engine sump tanks.',
-      items: ['11.1', '11.2', '11.3'] },
+      items: ['11.1', '11.2', '11.3', '11.4'] },
     { id: 'sludge-manual', group: 'Sludge / oil residue', part: 1, code: 'C',
       title: 'Fuel oil / residue added manually to a sludge tank',
       blurb: 'Manual collection into a sludge tank — all content of a sludge tank counts as sludge.',
@@ -519,15 +529,20 @@
     { id: 'bilge-well-to-tank', group: 'Bilge water', part: 1, code: 'D',
       title: 'Bilge water transfer — bilge well to holding tank',
       blurb: 'Pumping engine room bilge wells into the oily bilge water holding tank (manual start).',
-      items: ['13', '14', '15.3'] },
+      items: ['13', '14', '15.3'],
+      fieldTankGroups: { fromTank: 'bilgeWells' } },
     { id: 'bilge-ows-sea', group: 'Bilge water', part: 1, code: 'D',
       title: 'Bilge water discharged overboard via 15 ppm equipment',
       blurb: 'Discharge to sea through the oily water separator / 15 ppm equipment, started manually.',
       items: ['13', '14', '15.1'], requires: { ows: true } },
-    { id: 'bilge-ows-auto', group: 'Bilge water', part: 1, code: 'E',
-      title: 'Bilge water discharged automatically via 15 ppm equipment',
-      blurb: 'Automatic-mode discharge or transfer of bilge water. Use code D instead when started by hand.',
-      items: ['16', '17', '18'], requires: { ows: true } },
+    { id: 'bilge-ows-auto-overboard', group: 'Bilge water', part: 1, code: 'E',
+      title: 'Bilge system placed in automatic overboard mode (15 ppm)',
+      blurb: 'Automatic-mode discharge overboard via 15 ppm equipment. Use Code D when started by hand, and Code E item 18 when returned to manual.',
+      items: ['16'], requires: { ows: true } },
+    { id: 'bilge-ows-auto-transfer', group: 'Bilge water', part: 1, code: 'E',
+      title: 'Bilge system placed in automatic transfer-to-holding mode',
+      blurb: 'Automatic-mode transfer of bilge water to a holding tank. Item 18 is a separate entry when the system is put back to manual.',
+      items: ['17'], requires: { ows: true } },
     { id: 'bilge-ashore', group: 'Bilge water', part: 1, code: 'D',
       title: 'Bilge water landed ashore to reception facility',
       blurb: 'Bilge water discharged to a shore reception facility — keep the receipt with the ORB.',
@@ -557,7 +572,7 @@
     { id: 'ows-failure', group: 'Machinery & equipment', part: 1, code: 'F',
       title: '15 ppm / OWS equipment failure',
       blurb: 'Any failure of the oil filtering equipment must be recorded, with the reason and the date repaired.',
-      items: ['17'] },
+      items: ['19', '20', '21'] },
     { id: 'general-remarks', group: 'Machinery & equipment', part: 1, code: 'I',
       title: 'Additional procedure or general remark',
       blurb: 'Additional operational procedures and remarks. Never use this in place of codes A–H.',
@@ -567,27 +582,27 @@
     { id: 'accidental-discharge', group: 'Exceptional', part: 1, code: 'G',
       title: 'Accidental or exceptional discharge of oil',
       blurb: 'Time, place, quantity, type of oil and the full circumstances and reasons for the discharge.',
-      items: ['19', '20', '21'] },
+      items: ['22', '23', '24', '25'] },
 
     /* ---- Part II — tankers ---- */
     { id: 'cargo-load', group: 'Cargo (tankers)', part: 2, code: 'A',
       title: 'Loading oil cargo', blurb: 'Place, type of oil, tanks loaded.', items: ['1', '2', '3'] },
     { id: 'cargo-internal', group: 'Cargo (tankers)', part: 2, code: 'B',
-      title: 'Internal transfer of oil cargo during voyage', blurb: 'Moving cargo between tanks at sea.', items: ['4', '5', '6'] },
+      title: 'Internal transfer of oil cargo during voyage', blurb: 'Moving cargo between tanks at sea.', items: ['4.1', '4.2', '5'] },
     { id: 'cargo-unload', group: 'Cargo (tankers)', part: 2, code: 'C',
-      title: 'Unloading oil cargo', blurb: 'Place, tanks unloaded, tanks emptied.', items: ['7', '8', '9'] },
+      title: 'Unloading oil cargo', blurb: 'Place, tanks unloaded, tanks emptied.', items: ['6', '7', '8'] },
     { id: 'cargo-cow', group: 'Cargo (tankers)', part: 2, code: 'D',
-      title: 'Crude oil washing (COW)', blurb: 'COW operation record for crude carriers.', items: ['10', '11', '12', '13'], requires: { cow: true } },
+      title: 'Crude oil washing (COW)', blurb: 'COW operation record for crude carriers.', items: ['9', '10', '12', '15'], requires: { cow: true } },
     { id: 'cargo-ballast', group: 'Cargo (tankers)', part: 2, code: 'E',
-      title: 'Ballasting cargo tanks', blurb: 'Taking ballast into cargo tanks.', items: ['14', '15', '16'] },
+      title: 'Ballasting cargo tanks', blurb: 'Taking ballast into cargo tanks.', items: ['18', '19.1', '19.2', '19.3'] },
     { id: 'slop-decant', group: 'Cargo (tankers)', part: 2, code: 'I',
-      title: 'Discharge of water from slop tanks into the sea', blurb: 'Decanting slop tank water — ODME record required.', items: ['40', '41', '42', '43', '44', '45', '46'] },
+      title: 'Discharge of water from slop tanks into the sea', blurb: 'Decanting slop tank water — ODME record required.', items: ['41', '44', '49', '50', '54'] },
     { id: 'dirty-ballast-discharge', group: 'Cargo (tankers)', part: 2, code: 'H',
-      title: 'Discharge of dirty ballast', blurb: 'Discharge of dirty ballast from cargo tanks.', items: ['33', '34', '35', '36', '37', '38', '39'] },
+      title: 'Discharge of dirty ballast', blurb: 'Discharge of dirty ballast from cargo tanks.', items: ['32', '33', '34', '35', '36', '37'] },
     { id: 'residue-transfer', group: 'Cargo (tankers)', part: 2, code: 'J',
-      title: 'Collection / transfer / disposal of residues', blurb: 'Slop and residue movements. Retained and receiving totals are calculated for you.', items: ['55', '56', '57.1', '57.2', '57.3', '57.4'] },
+      title: 'Collection / transfer / disposal of residues', blurb: 'Slop and residue movements. Retained and receiving totals are calculated for you.', items: ['55', '56', '57.3'] },
     { id: 'odme-condition', group: 'Cargo (tankers)', part: 2, code: 'M',
-      title: 'Condition of the ODME system', blurb: 'Failure or condition of the oil discharge monitoring and control system.', items: ['72', '73', '74'], requires: { odme: true } }
+      title: 'Condition of the ODME system', blurb: 'Failure or condition of the oil discharge monitoring and control system.', items: ['70', '71', '72'], requires: { odme: true } }
   ];
 
   /** Scenarios available for a part, filtered by what the ship is actually fitted with. */
@@ -618,6 +633,97 @@
       g.scenarios.push(s);
     });
     return groups;
+  }
+
+  /** MARPOL / SMS: weekly sludge (C.11) inventory at most every 7 days — sooner is allowed. */
+  const WEEKLY_INTERVAL_DAYS = 7;
+
+  function addDaysIso(isoDate, days) {
+    const d = new Date(String(isoDate).slice(0, 10) + 'T12:00:00');
+    if (isNaN(d.getTime())) return null;
+    d.setDate(d.getDate() + Number(days));
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  function daysBetweenIso(fromIso, toIso) {
+    const a = new Date(String(fromIso).slice(0, 10) + 'T12:00:00');
+    const b = new Date(String(toIso).slice(0, 10) + 'T12:00:00');
+    if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+    return Math.round((b.getTime() - a.getTime()) / 86400000);
+  }
+
+  function isWeeklySludgeInventory(entry) {
+    if (!entry || entry.voided) return false;
+    if (Number(entry.part) === 2) return false;
+    if (entry.weeklyInventory && entry.code === 'C') return true;
+    if (entry.scenarioId === 'weekly-sludge-bilge' || entry.scenarioId === 'sludge-weekly') return true;
+    const items = entry.selectedItems || [];
+    if (entry.code === 'C' && items.indexOf('11.3') !== -1 &&
+        !items.some(n => String(n).indexOf('12') === 0)) return true;
+    return false;
+  }
+
+  function isWeeklyOwsTest(entry) {
+    if (!entry || entry.voided) return false;
+    if (entry.scenarioId === 'ows-weekly-test' || entry.weeklyKind === 'ows-test') return true;
+    return !!(entry.code === 'I' && entry.values && entry.values.weeklyOwsTest);
+  }
+
+  function lastMatchingEntryDate(entries, pred) {
+    let last = null;
+    (entries || []).forEach(e => {
+      if (!pred(e) || !e.date) return;
+      const d = String(e.date).slice(0, 10);
+      if (!last || d > last) last = d;
+    });
+    return last;
+  }
+
+  /**
+   * Status of a 7-day weekly routine relative to today.
+   * dueBy = lastDate + 7. overdue when today is after dueBy.
+   */
+  function weeklyDueStatus(lastDate, todayIso, intervalDays) {
+    const interval = intervalDays != null ? Number(intervalDays) : WEEKLY_INTERVAL_DAYS;
+    const today = String(todayIso || '').slice(0, 10);
+    if (!lastDate) {
+      return { lastDate: null, dueBy: null, daysSince: null, daysLeft: null,
+        overdue: false, dueSoon: false, first: true, intervalDays: interval };
+    }
+    const dueBy = addDaysIso(lastDate, interval);
+    const daysSince = daysBetweenIso(lastDate, today);
+    const daysLeft = daysBetweenIso(today, dueBy);
+    return {
+      lastDate, dueBy, daysSince, daysLeft, intervalDays: interval,
+      overdue: !!(dueBy && today > dueBy),
+      dueSoon: !!(dueBy && today <= dueBy && daysLeft != null && daysLeft <= 1),
+      first: false
+    };
+  }
+
+  /**
+   * A new weekly inventory may be dated on or after the last weekly sounding,
+   * and not after last+7 days. Sooner is allowed; later is not.
+   * Returns an error string, or null when the date is inside the window.
+   */
+  function weeklyInventoryDateError(date, lastWeeklyDate, label) {
+    const what = label || 'Weekly inventory';
+    if (!date) return 'Date of operation is required.';
+    if (!lastWeeklyDate) return null;
+    const dueBy = addDaysIso(lastWeeklyDate, WEEKLY_INTERVAL_DAYS);
+    if (date < lastWeeklyDate) {
+      return what + ' date cannot be before the last one (' +
+        formatOrbDate(lastWeeklyDate) + ').';
+    }
+    if (dueBy && date > dueBy) {
+      return what + ' must be recorded within 7 days of the last one (' +
+        formatOrbDate(lastWeeklyDate) + '; due by ' + formatOrbDate(dueBy) +
+        '). It may be sooner, never later.';
+    }
+    return null;
   }
 
   function defaultOrbSetup(seed) {
@@ -1381,8 +1487,19 @@
       if (code === 'D' && item.no === '15.2') text = 'to reception facilities at ' + resolve(item.fields[0]);
       if (code === 'D' && item.no === '15.3') text = 'to ' + resolve(item.fields[0]) + (resolve(item.fields[1]) !== '' ? (', ' + resolve(item.fields[1]) + ' m³ retained') : '');
       if (code === 'H' && item.no === '26.3') {
+        const split = item.fields[3] ? resolve(item.fields[3]) : '';
+        const total = item.fields[4] ? resolve(item.fields[4]) : '';
         text = resolve(item.fields[0]) + ' ' + resolve(item.fields[1]) + ' t to ' + resolve(item.fields[2]) +
-          (resolve(item.fields[3]) !== '' ? (', total content ' + resolve(item.fields[3]) + ' t') : '');
+          (split ? (', split ' + split) : '') +
+          (total !== '' ? (', total content ' + total + ' t') : '');
+      }
+      if (code === 'H' && item.no === '26.4') {
+        const tank = resolve(item.fields[2]) || resolve(item.fields[3]);
+        const split = item.fields[4] ? resolve(item.fields[4]) : '';
+        const total = item.fields[5] ? resolve(item.fields[5]) : '';
+        text = resolve(item.fields[0]) + ' ' + resolve(item.fields[1]) + ' t to ' + tank +
+          (split ? (', split ' + split) : '') +
+          (total !== '' ? (', total content ' + total + ' t') : '');
       }
       if ((code === 'I' || code === 'O') && (item.no === 'I' || item.no === 'O')) text = resolve(item.fields[0]);
       if (!text) return;
@@ -1439,21 +1556,25 @@
    */
   function buildPrintHtml(setup, entries, rangeLabel, opts) {
     const flag = getFlag(setup.flag);
-    const rows = (entries || []).filter(e => !e.voided).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+    const rows = (entries || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
     let body = '';
     rows.forEach(e => {
       const lines = e.lines || [];
+      const voided = !!e.voided;
       lines.forEach((ln, idx) => {
-        body += '<tr>' +
+        const text = escapeHtml(ln.text);
+        const signed = idx === lines.length - 1
+          ? '<div class="orb-sign">Signed: ' + escapeHtml(e.officerName || '') +
+              (e.officerRank ? (', ' + escapeHtml(e.officerRank)) : '') +
+              (e.officerSignedAt ? (' — ' + escapeHtml(formatOrbDate(e.officerSignedAt.slice(0, 10)))) : '') +
+              (voided ? (' — VOID' + (e.voidReason ? (': ' + escapeHtml(e.voidReason)) : '')) : '') +
+              '</div>'
+          : '';
+        body += '<tr' + (voided ? ' class="orb-voided"' : '') + '>' +
           '<td>' + (idx === 0 ? escapeHtml(formatOrbDate(e.date)) : '') + '</td>' +
           '<td>' + (idx === 0 ? escapeHtml(e.code) : '') + '</td>' +
           '<td>' + escapeHtml(ln.itemNo) + '</td>' +
-          '<td>' + escapeHtml(ln.text) +
-            (idx === lines.length - 1 ? '<div class="orb-sign">Signed: ' + escapeHtml(e.officerName || '') +
-              (e.officerRank ? (', ' + escapeHtml(e.officerRank)) : '') +
-              (e.officerSignedAt ? (' — ' + escapeHtml(formatOrbDate(e.officerSignedAt.slice(0, 10)))) : '') +
-              '</div>' : '') +
-          '</td></tr>';
+          '<td>' + (voided ? ('<s>' + text + '</s>') : text) + signed + '</td></tr>';
       });
     });
     if (!body) body = '<tr><td colspan="4" style="text-align:center;padding:24px;">No entries in selected period.</td></tr>';
@@ -1469,6 +1590,7 @@
       'th,td{border:1px solid #333;padding:5px 6px;vertical-align:top}' +
       'th{background:#eee;font-size:10px;text-transform:uppercase}' +
       'td:nth-child(1){width:90px}td:nth-child(2){width:48px;text-align:center}td:nth-child(3){width:52px;text-align:center}' +
+      '.orb-voided td{color:#666}' +
       '.orb-sign{margin-top:6px;font-size:10px;font-style:italic}' +
       '.foot{margin-top:14px;font-size:9px;color:#444;line-height:1.4}' +
       '.master{margin-top:18px;display:flex;justify-content:space-between;gap:24px}' +
@@ -1525,6 +1647,14 @@
     validateEntry,
     formatOrbDate,
     buildPrintHtml,
-    selectedItemNos
+    selectedItemNos,
+    WEEKLY_INTERVAL_DAYS,
+    addDaysIso,
+    daysBetweenIso,
+    isWeeklySludgeInventory,
+    isWeeklyOwsTest,
+    lastMatchingEntryDate,
+    weeklyDueStatus,
+    weeklyInventoryDateError
   };
 })(typeof window !== 'undefined' ? window : globalThis);
