@@ -545,6 +545,7 @@ Node and Python 3 — nothing to install.
 | `tests/test_eorb.js` | e-ORB scenario item numbers match Appendix III, weekly inventory cannot be dated more than 7 days after the last one, bunkering print uses tank total not the split string, and voided lines stay struck through on the printout. |
 | `tests/test_clock_change.js` | Changing ship's zone advances or retards the log time (30 min or 1 h steps) and period hours subtract clocks advanced so noon-to-noon stays on actual time. |
 | `tests/test_flow_cons.js` | SINGLE / DUAL GE / DUAL ME / DUAL BOTH consumption, and multi-tank fresh-water production (meter quantity added) / consumption (previous total + production − present total) booked on the chosen tanks. |
+| `tests/test_noon_print.js` | Noon print title is the operation (IN PORT - NOON, AT SEA - NOON) and flag registry names resolve from the e-ORB list. |
 | `tests/test_accounts.py` | Logins, derived vessel tokens, crew rotation, device enrollment/revocation, claiming an empty registered ship, refusing an occupied claim, office assign displacing the incumbent, and the read-history/write-current rule — including that a transferred engineer still reads his old ship but can no longer write to it, and that the legacy shared token still works. |
 | `tests/browser_login_e2e.js` | Not in CI (no browser there). Drives the real login UI in Chromium against a live seeded server. Run it after touching the gate. |
 | `tests/test_install_quoting.sh` | The installer's token quoting, checked against systemd's own parser via `systemd-analyze`. Unquoted, systemd splits an `Environment=` value on whitespace and reads `%` as a specifier, so a token with a space or a `%` reached the server truncated — leaving it on its default token, rejecting the very token the installer printed. |
@@ -563,6 +564,7 @@ into `bash` as root.
 
 - **Fleet Office** (fleet manager) — register vessels, create engineers, post/transfer/release, reset passwords, revoke devices, approve pending ships
 - Fleet vessel selection, machinery, tanks, capacities, and related vessel configuration
+- **Flag registry** — set on Vessel Details (same list as the e-ORB). Printed on the noon sheet with IMO number.
 - **Flowmeter setup type** — SINGLE is present − previous on every unit. DUAL GE gives the D/G inlet and outlet (D/G cons = inlet Δ − outlet Δ; M/E cons = M/E meter Δ − D/G cons). DUAL ME is the same idea with the M/E inlet/outlet (M/E cons = inlet Δ − outlet Δ; D/G cons = D/G meter Δ − M/E cons). Editing a saved log entry and saving again recalculates that watch and every later watch.
 - **Fresh water tanks** — with more than one FW tank the log entry picks a tank for production (produced water is added) and a tank for consumption. Production is the flowmeter quantity added; consumption is previous total + production − present total. Total water across all tanks is shown, and each tank's ROB follows the booking or the sounding entered for it.
 
