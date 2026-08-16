@@ -6413,6 +6413,9 @@ function fwPrevByTank(prev){
       if (prev.fwRobByTank[id] != null) o[id] = Number(prev.fwRobByTank[id]);
     });
   } else if (prev && prev.fwRob != null && tanks[0]){
+    /* Legacy entries store one ship total. Do not keep other tanks' opening
+       figures beside it — that would double-count the water. */
+    tanks.forEach(t => { o[t.id] = 0; });
     o[tanks[0].id] = Number(prev.fwRob);
   }
   return o;
@@ -6842,6 +6845,7 @@ function latestFwRobByTank(cutoffDate){
         if (src.fwRobByTank[id] != null) o[id] = src.fwRobByTank[id];
       });
     } else if (src.fwRob != null && fwTankList()[0]){
+      fwTankList().forEach(t => { o[t.id] = 0; });
       o[fwTankList()[0].id] = src.fwRob;
     }
   };
