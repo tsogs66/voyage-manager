@@ -36,6 +36,9 @@ jobs:
       - name: Check ship's clock / timezone change hours
         run: node tests/test_clock_change.js
 
+      - name: Check flowmeter and fresh-water consumption formulas
+        run: node tests/test_flow_cons.js
+
       - name: Check device enrollment helpers
         run: node tests/test_device_enrollment.js
 
