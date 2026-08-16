@@ -1210,6 +1210,7 @@
   }
   .pr-meta.cols3{ grid-template-columns:repeat(3,1fr); }
   .pr-meta.cols4{ grid-template-columns:repeat(4,1fr); }
+  .pr-meta.cols6{ grid-template-columns:repeat(3,1fr); }
   .pr-meta-cell{ background:#f7f9fc; padding:0.9mm 1.2mm; }
   .pr-meta-lbl{
     display:block; font-size:9px; text-transform:uppercase; letter-spacing:0.08em;
@@ -1633,6 +1634,7 @@
         <div class="field"><label>Chief Engineer</label><input id="s_chEng"></div>
         <div class="field"><label>DWT (tonnes) — for CII</label><input type="number" step="1" id="s_dwt" placeholder="e.g. 60000"></div>
         <div class="field"><label>IMO No.</label><input id="s_imoNo" placeholder="IMO 1234567"></div>
+        <div class="field"><label>Flag registry</label><select id="s_flag"></select></div>
       </div>
       <div class="btn-row" style="margin-top:12px;">
         <button class="primary small" id="btnSaveVesselIdentity">Save Vessel Details</button>
@@ -1642,7 +1644,7 @@
       <div class="btn-row" id="registerVesselRow" hidden style="margin-top:8px;">
         <button class="ghost small" id="btnRegisterVessel" type="button">Register Vessel</button>
       </div>
-      <div class="hint">Vessel name, company, Chief Engineer, DWT and IMO number are stored per vessel and used on printouts, CII and the e-ORB prefill.</div>
+      <div class="hint">Vessel name, company, Chief Engineer, DWT, IMO number and flag registry are stored per vessel and used on printouts, CII and the e-ORB prefill. Flag here is the same register as on the e-ORB tab.</div>
 
       <h3 class="sub">Vessel Stamp</h3>
       <div class="stamp-row">
@@ -3950,7 +3952,7 @@ const state = {
     initDateTime:'', initRuntime:null,
     pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
     sfoc100:null, sfoc85:null, lcvRef:42700, lcvActual:null, alternatorMaxKw:null,
-    dwt:null, imoNo:'', company:'',
+    dwt:null, imoNo:'', company:'', flag:'',
     geArrangement:'SINGLE',
     generatorCount:1,
     meCylinderCount:6,
@@ -5340,7 +5342,8 @@ async function activateVoyageLeg(vesselId, voyageNumber, condition){
     vesselName: state.setup?.vesselName,
     chEng: state.setup?.chEng,
     dwt: state.setup?.dwt,
-    imoNo: state.setup?.imoNo
+    imoNo: state.setup?.imoNo,
+    flag: state.setup?.flag
   };
   const setup = migrateSetup(leg.setup || state.setup);
   setup.voyageNumber = vn;
@@ -8169,6 +8172,7 @@ function render(){
   if (imoEl) imoEl.value = state.setup.imoNo || '';
   const companyEl = document.getElementById('s_company');
   if (companyEl) companyEl.value = state.setup.company || '';
+  fillFlagRegistrySelect('s_flag', vesselFlagCode());
   renderVesselStampPreview();
   renderChEngSignaturePreview();
 
@@ -9101,6 +9105,46 @@ function canShowMeDetailOp(op){
 function isNoonReportOp(op){
   const u = (op || '').toUpperCase();
   return u.includes('NOON') || u === 'HEAVY WEATHER';
+}
+
+/** Print title is the operation (IN PORT - NOON, AT SEA - NOON, …); the old
+ *  generic "Noon Report — Voyage Summary" becomes the subtitle. */
+function noonSheetTitles(operation){
+  const op = (operation || '').trim();
+  const noon = isNoonReportOp(op);
+  const kind = noon ? 'Noon Report — Voyage Summary' : 'Voyage Summary';
+  return { title: op || kind, subtitle: op ? kind : '' };
+}
+
+function flagRegistryName(code){
+  if (code==null || code==='') return '';
+  const api = (typeof EORB !== 'undefined' && EORB) ? EORB
+    : (typeof window !== 'undefined' ? window.EORB : null);
+  if (api && typeof api.getFlag === 'function'){
+    const f = api.getFlag(code);
+    if (f && f.name && f.code === code) return f.name;
+  }
+  return String(code);
+}
+
+function vesselFlagCode(){
+  return state.setup.flag || state.setup.orb?.flag || '';
+}
+
+function fillFlagRegistrySelect(selId, selected){
+  const sel = document.getElementById(selId);
+  if (!sel) return;
+  const flags = (typeof EORB !== 'undefined' && EORB && EORB.FLAGS) ? EORB.FLAGS
+    : (typeof window !== 'undefined' && window.EORB ? window.EORB.FLAGS : []);
+  const cur = selected || sel.value || '';
+  sel.innerHTML = '<option value="">—</option>' + (flags || []).map(f=>`<option value="${f.code}">${f.name}</option>`).join('');
+  if (cur && ![...sel.options].some(o => o.value === cur)){
+    const opt = document.createElement('option');
+    opt.value = cur;
+    opt.textContent = cur;
+    sel.appendChild(opt);
+  }
+  if (cur) sel.value = cur;
 }
 
 /** Main engine was turning / burning this period — prefer measured Δrevs / cons over stale typed RPM. */
@@ -10612,6 +10656,8 @@ async function saveVoyageDetails(){
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value)||null;
   state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
   state.setup.company = document.getElementById('s_company')?.value || '';
+  state.setup.flag = document.getElementById('s_flag')?.value || state.setup.flag || '';
+  if (state.setup.orb) state.setup.orb.flag = state.setup.flag || state.setup.orb.flag;
   state.setup.voyageNumber = document.getElementById('s_voyageNumber').value;
   state.setup.shipCondition = normalizeCondition(document.getElementById('s_shipCondition').value);
   state.setup.departPort = document.getElementById('s_departPort').value;
@@ -10670,6 +10716,8 @@ async function saveVesselIdentity(){
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value) || null;
   state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
   state.setup.company = document.getElementById('s_company')?.value || '';
+  state.setup.flag = document.getElementById('s_flag')?.value || '';
+  if (state.setup.orb) state.setup.orb.flag = state.setup.flag || state.setup.orb.flag;
   const v = activeVessel();
   if (v) v.name = document.getElementById('s_vesselName').value.trim() || v.name;
   const status = document.getElementById('vesselSaveStatus');
@@ -10825,6 +10873,8 @@ async function saveSetupFromForm(){
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value)||null;
   state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
   state.setup.company = document.getElementById('s_company')?.value || '';
+  state.setup.flag = document.getElementById('s_flag')?.value || state.setup.flag || '';
+  if (state.setup.orb) state.setup.orb.flag = state.setup.flag || state.setup.orb.flag;
   const v = activeVessel();
   if (v) v.name = document.getElementById('s_vesselName').value.trim() || v.name;
 
@@ -12520,23 +12570,27 @@ function buildVoyageNoonSheetHTML(entry){
 
   /* With the engine stopped a stored RPM is stale — do not fall back to it. */
   const printRpm = row.meStopped ? null : (row.rpmEff!=null ? row.rpmEff : entry.rpm);
-  const kpiItems = [
+  const meRunningEarly = mainEngineInUse(entry, row);
+  const kpiItems = meRunningEarly ? [
     {label:'Run Hrs', value:fmt(row.hrs, 2)},
     {label:'Ship Dist (nm)', value:fmt(entry.distanceShip, 2)},
     {label:'RPM', value:fmt(printRpm, 2)},
     {label:'Speed (kn)', value:fmt(row.speedShip,2)},
     {label:'% MCR', value:fmt(row.mcrPct, 2)},
     {label:'Est. kW', value:fmt(row.kwEst, 2)}
+  ] : [
+    {label:'Run Hrs', value:fmt(row.hrs, 2)},
+    {label:'Ship Dist (nm)', value:fmt(entry.distanceShip, 2)}
   ];
 
-  const voyageSection = printSection('Voyage Progress', [
+  const voyageSection = meRunningEarly ? printSection('Voyage Progress', [
     printRow('Engine Distance', `${fmt(row.distEngine,2)} nm`),
     printRow('Distance To Go', distanceToGo!=null?`${fmt(distanceToGo, 2)} nm`:'—'),
     printRow('Days To Go', daysToGoVal!=null?fmt(daysToGoVal,2):'—'),
     printRow('ETA', etaStr),
     printRow('Slip %', fmt(row.slip,2)),
     printRow('Daily Revs.', fmt(row.dailyRevs, 2))
-  ].join(''));
+  ].join('')) : '';
 
   const fuelSection = printSection('Fuel Consumption (MT)', [
     printRow('Main Engine', fmtFuel(row.meCons)),
@@ -12569,18 +12623,19 @@ function buildVoyageNoonSheetHTML(entry){
   const geN = geUnitCount();
   const geRows = Array.from({length:geN}, (_,i)=>{
     const p = row.gePeriod?.[i] || {};
+    const cum = geCumulativeRunHours(entry, i+1);
     return `<tr>
       <td class="row-lbl">A/E #${i+1}</td>
       <td>${p.hrs==null?'—':fmt(p.hrs, 2)}</td>
+      <td>${cum==null?'—':fmt(cum, 2)}</td>
       <td>${p.kw==null?'—':fmt(p.kw, 2)}</td>
       <td>${p.loadPct==null?'—':fmt(p.loadPct, 2)}</td>
       <td>${p.fuelCons==null?'—':fmtFuel(p.fuelCons)}</td>
     </tr>`;
   }).join('');
-  /* Compact period-only generator table fits a 3-column portrait sheet. */
   const geSection = geN>0 ? printSection(`Generators — ${geArrangementLabelFor(entryActiveGeCount(entry))}`, `
     <table class="pr-table">
-      <tr><th>Unit</th><th>Hrs</th><th>kW</th><th>Load%</th><th>Fuel</th></tr>
+      <tr><th>Unit</th><th>Hrs</th><th>Accum.</th><th>kW</th><th>Load%</th><th>Fuel</th></tr>
       ${geRows}
     </table>
     ${printRow('Voy Avg Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct, 2)}%`)}
@@ -12601,13 +12656,18 @@ function buildVoyageNoonSheetHTML(entry){
     printRow('Incinerator Load %', incLoadPrint==null?'—':`${fmt(incLoadPrint, 2)}%`)
   ].join(''));
 
-  const voyageAvgSection = printSection('Voyage Time Averages', [
+  const voyageAvgRows = [
     printRow('Total Voyage Hours', fmt(perf.totalHrs,2)),
-    printRow('Total Generator Hours', fmt(perf.totalGeHrs,2)),
-    printRow('Avg %MCR (hrs-wtd)', perf.avgMcrTimeWeighted==null?'—':fmt(perf.avgMcrTimeWeighted,2)),
-    printRow('Avg Ship Speed', perf.avgSpeedShip==null?'—':`${fmt(perf.avgSpeedShip,2)} kn`),
-    printRow('Avg Voyage kW', perf.avgKw==null?'—':fmt(perf.avgKw,2))
-  ].join(''));
+    printRow('Total Generator Hours', fmt(perf.totalGeHrs,2))
+  ];
+  if (meRunningEarly){
+    voyageAvgRows.push(
+      printRow('Avg %MCR (hrs-wtd)', perf.avgMcrTimeWeighted==null?'—':fmt(perf.avgMcrTimeWeighted,2)),
+      printRow('Avg Ship Speed', perf.avgSpeedShip==null?'—':`${fmt(perf.avgSpeedShip,2)} kn`),
+      printRow('Avg Voyage kW', perf.avgKw==null?'—':fmt(perf.avgKw,2))
+    );
+  }
+  const voyageAvgSection = printSection('Voyage Time Averages', voyageAvgRows.join(''));
 
   const robTable = printSection('Remaining On Board', `
     <table class="pr-table">
@@ -12632,13 +12692,9 @@ function buildVoyageNoonSheetHTML(entry){
   const weatherSection = (noonOp || isSea || weatherHtml) ? weatherHtml : '';
   const cylSection = showMeDetail ? printMeCylinderSection(report) : '';
   const turboOthersSection = printTurboOthersSection(report, { includeMeAux: showMeDetail });
-  /* Engine stopped: replace the M/E block with a one-line statement of fact, so an
-     inspector reads "not running" rather than wondering about a missing section. */
-  const meSectionPrint = meRunning
-    ? meSection
-    : (row.meStopped
-        ? printSection('M/E Performance', printRow('Main Engine', 'STOPPED — no revolutions this period'))
-        : '');
+  /* Engine stopped: omit M/E performance entirely — voyage progress and M/E KPIs
+     are already dropped, so a blank "STOPPED" block is not needed. */
+  const meSectionPrint = meRunning ? meSection : '';
 
   const ecaSection = printEcaSection(report);
   const soundingsSection = printSoundingsSection(report);
@@ -12665,14 +12721,18 @@ function buildVoyageNoonSheetHTML(entry){
       <div class="pr-remarks-body">${escPrint(report.remarks||'') || '—'}</div>
     </div>`;
 
+  const titles = noonSheetTitles(entry.operation);
+  const flagName = flagRegistryName(vesselFlagCode());
   return `<div class="pr-sheet pr-sheet-noon">
-    ${printDocHeader({ title: noonOp ? 'Noon Report — Voyage Summary' : 'Voyage Summary', subtitle: entry.operation, badge: entry.condition })}
+    ${printDocHeader({ title: titles.title, subtitle: titles.subtitle, badge: entry.condition })}
     ${printMetaGrid([
       {label:'Date & Time', value:dtStr},
       {label:'Voyage No.', value:state.setup.voyageNumber||'—'},
       {label:'Condition', value:entry.condition},
-      {label:'Route', value:`${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}`}
-    ], 4)}
+      {label:'Route', value:`${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}`},
+      {label:'IMO No.', value:state.setup.imoNo||'—'},
+      {label:'Flag', value:flagName||'—'}
+    ], 6)}
     ${printKpiRow(kpiItems)}
     <div class="pr-noon-body">
       <div class="pr-noon-cols">
@@ -15332,7 +15392,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v120';
+let androidInstallCacheName = 'noon-report-v121';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -16223,6 +16283,7 @@ function migrateSetup(setup){
   if (setup.voyageDistance===undefined) setup.voyageDistance = null;
   if (setup.dwt===undefined) setup.dwt = null;
   if (setup.imoNo===undefined) setup.imoNo = '';
+  if (setup.flag===undefined || setup.flag==='') setup.flag = setup.orb?.flag || setup.flag || '';
   if (setup.lcvRef==null) setup.lcvRef = DEFAULT_LCV_REF;
   if (setup.lcvActual===undefined) setup.lcvActual = null;
   if (setup.ciiShipType===undefined) setup.ciiShipType = '';
@@ -16262,6 +16323,7 @@ function ensureOrbSetup(raw){
   const seed = raw && typeof raw === 'object' ? raw : {};
   if (!seed.shipName && state.setup?.vesselName) seed.shipName = state.setup.vesselName;
   if (!seed.imo && state.setup?.imoNo) seed.imo = state.setup.imoNo;
+  if (!seed.flag && state.setup?.flag) seed.flag = state.setup.flag;
   if (!seed.chiefEng && state.setup?.chEng) seed.chiefEng = state.setup.chEng;
   return EORB.defaultOrbSetup(seed);
 }
@@ -16461,14 +16523,16 @@ function syncOrbEntryDate(sourceId){
 
 function fillOrbFlagSelects(){
   if (!window.EORB) return;
+  const prefer = vesselFlagCode() || orbSetup().flag || 'LR';
   ['orb_flag','orb_codesFlag'].forEach(id=>{
     const sel = document.getElementById(id);
     if (!sel) return;
     const cur = sel.value;
     sel.innerHTML = EORB.FLAGS.map(f => `<option value="${f.code}">${f.name}</option>`).join('');
-    const prefer = cur || orbSetup().flag || 'LR';
-    if ([...sel.options].some(o => o.value === prefer)) sel.value = prefer;
+    const pick = cur || prefer;
+    if ([...sel.options].some(o => o.value === pick)) sel.value = pick;
   });
+  fillFlagRegistrySelect('s_flag', prefer);
 }
 
 function renderOrbFlagInfo(targetId, flagCode){
@@ -16554,6 +16618,7 @@ function escHtml(s){
 function readOrbSetupFromForm(){
   const setup = orbSetup();
   setup.flag = document.getElementById('orb_flag')?.value || setup.flag;
+  if (setup.flag) state.setup.flag = setup.flag;
   setup.shipType = document.getElementById('orb_shipType')?.value || setup.shipType;
   setup.ioppForm = document.getElementById('orb_ioppForm')?.value || setup.ioppForm;
   setup.shipName = document.getElementById('orb_shipName')?.value || '';
@@ -17043,11 +17108,20 @@ document.getElementById('orbSubtabs')?.addEventListener('click', (e)=>{
 document.getElementById('orb_flag')?.addEventListener('change', ()=>{
   readOrbSetupFromForm();
   renderOrbFlagInfo('orbFlagInfo', document.getElementById('orb_flag').value);
+  fillFlagRegistrySelect('s_flag', vesselFlagCode());
+});
+document.getElementById('s_flag')?.addEventListener('change', ()=>{
+  state.setup.flag = document.getElementById('s_flag').value || '';
+  if (state.setup.orb) state.setup.orb.flag = state.setup.flag || state.setup.orb.flag;
+  const orbSel = document.getElementById('orb_flag');
+  if (orbSel && state.setup.flag) orbSel.value = state.setup.flag;
+  renderOrbFlagInfo('orbFlagInfo', state.setup.flag);
 });
 document.getElementById('btnOrbPrefillFromVessel')?.addEventListener('click', ()=>{
   const setup = orbSetup();
   setup.shipName = state.setup.vesselName || setup.shipName;
   setup.imo = state.setup.imoNo || setup.imo;
+  setup.flag = state.setup.flag || setup.flag;
   setup.chiefEng = state.setup.chEng || setup.chiefEng;
   setup.gt = state.setup.dwt != null ? setup.gt : setup.gt;
   if (state.setup.fuelTanks?.length && !(setup.tanks.fuel||[]).length){
