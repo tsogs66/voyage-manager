@@ -1490,11 +1490,13 @@
         <div class="field"><label>Voyage No.</label><input id="s_voyageNumber"></div>
         <div class="field"><label>Ships Condition</label><select id="s_shipCondition"><option value="B">B — Ballast</option><option value="L">L — Laden</option></select></div>
         <div class="field"><label>Date &amp; Time (initial)</label><input type="datetime-local" id="s_initDateTime"></div>
+        <div class="field"><label>Time zone</label><select id="s_initTzOffset"></select></div>
         <div class="field"><label>Departure</label><input id="s_departPort"></div>
         <div class="field"><label>Arrival</label><input id="s_arrivePort"></div>
         <div class="field"><label>Voyage Distance (nm)</label><input type="number" step="0.1" id="s_voyageDistance"></div>
         <div class="field span2"><label>Chief Engineer</label><input id="s_chEngVoyage" placeholder="Update at crew change"></div>
       </div>
+      <div class="hint">Date &amp; Time (initial) and Time zone are the voyage-start reference for the first log entry — period hours are measured from this ship's-clock stamp. The time-zone list only labels the clock; use Change clocks on the log entry when the watch actually advances or retards time.</div>
       <div class="hint">Chief Engineer is the same record as on Vessel Data — update it here at a crew change and it carries forward to the following voyages. Entries already saved keep the officer who was aboard when they were made, so their reports still print the correct signature.</div>
 
       <h3 class="sub">Chief Engineer Signature</h3>
@@ -1528,7 +1530,7 @@
         <button class="primary" id="btnSaveVoyageDetails">Update Voyage Details</button>
         <button class="danger" id="btnResetVoyage">Create New Voyage…</button>
       </div>
-      <div class="hint" style="margin-top:12px; text-align:center;">Create New Voyage clears the voyage log and receipts to start fresh, but keeps everything continuous: your last entry's meter readings carry over as the opening reference for the next entry, current ROB becomes the new opening ROB, and Departure Port is set to this voyage's Arrival Port. Before it runs, Voyage No., Ships Condition, and Date &amp; Time above must be updated to reflect the new voyage.</div>
+      <div class="hint" style="margin-top:12px; text-align:center;">Create New Voyage clears the voyage log and receipts to start fresh, but keeps everything continuous: your last entry's meter readings carry over as the opening reference for the next entry, current ROB becomes the new opening ROB, and Departure Port is set to this voyage's Arrival Port. Before it runs, Voyage No., Ships Condition, Date &amp; Time, and Time zone above must be updated to reflect the new voyage.</div>
     </div>
   </div>
 
@@ -3950,7 +3952,7 @@ const state = {
   setup: {
     vesselName:'M/V FANGCHENG', chEng:'', voyageNumber:'11', shipCondition:'B',
     departPort:'CHINA', arrivePort:'BRAZIL', place:'', flowArr:'SINGLE',
-    initDateTime:'', initRuntime:null,
+    initDateTime:'', tzOffsetMin:null, initRuntime:null,
     pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
     sfoc100:null, sfoc85:null, lcvRef:42700, lcvActual:null, alternatorMaxKw:null,
     dwt:null, imoNo:'', company:'', flag:'',
@@ -4009,7 +4011,7 @@ function defaultSetupTemplate(overrides){
   const base = {
     vesselName:'New Vessel', chEng:'', voyageNumber:'', shipCondition:'B',
     departPort:'', arrivePort:'', place:'', flowArr:'SINGLE',
-    initDateTime:'', initRuntime:null,
+    initDateTime:'', tzOffsetMin:null, initRuntime:null,
     pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
     sfoc100:null, sfoc85:null, alternatorMaxKw:660,
     geArrangement:'SINGLE', generatorCount:1, meCylinderCount:6, turboCount:2,
@@ -5813,19 +5815,52 @@ async function pushVesselToServer(vesselId){
   }
 }
 
+/** Voyage-start stamp from Voyage Specifics — the reference for the first log entry. */
+function voyageInitReference(setup){
+  const s = setup || {};
+  if (!s.initDateTime) return null;
+  const raw = s.tzOffsetMin;
+  const tz = (raw != null && isFinite(Number(raw)))
+    ? (typeof ShipTime !== 'undefined' && ShipTime ? ShipTime.clampTzOffsetMin(raw) : Number(raw))
+    : null;
+  return { datetime: s.initDateTime, tzOffsetMin: tz };
+}
+
+function formVoyageTzOffsetMin(){
+  const n = parseInt(document.getElementById('s_initTzOffset')?.value, 10);
+  if (isFinite(n)) return window.ShipTime ? ShipTime.clampTzOffsetMin(n) : n;
+  const init = voyageInitReference(state.setup);
+  if (init && init.tzOffsetMin != null) return init.tzOffsetMin;
+  return defaultShipTzOffsetMin();
+}
+
+function fillVoyageTzOffsetSelect(){
+  const fromSetup = state.setup && state.setup.tzOffsetMin != null && Number.isFinite(Number(state.setup.tzOffsetMin))
+    ? state.setup.tzOffsetMin
+    : defaultShipTzOffsetMin();
+  fillTzOffsetSelect('s_initTzOffset', fromSetup);
+}
+
 /* Synthetic starting baseline built from Setup's initial readings, used only when no explicit
    carryover (from Create New Voyage) and no log entries exist yet. */
 function effectiveCarryover(){
-  if (state.setup.carryover) return state.setup.carryover;
+  if (state.setup.carryover){
+    const c = state.setup.carryover;
+    if ((c.tzOffsetMin == null || !Number.isFinite(Number(c.tzOffsetMin))) && state.setup.tzOffsetMin != null)
+      c.tzOffsetMin = state.setup.tzOffsetMin;
+    return c;
+  }
+  const init = voyageInitReference(state.setup);
+  if (!init) return null;
   const fm = state.setup.flowmeters || {};
   const arr = state.setup.flowArr || 'SINGLE';
   const meDual = arr==='DUAL_ME' || arr==='DUAL_BOTH';
   const geDual = arr==='DUAL_GE' || arr==='DUAL_BOTH';
-  const hasAny = fm.main?.reading!=null || fm.aux?.reading!=null || fm.boiler?.reading!=null || fm.cyl?.reading!=null || fm.rc?.reading!=null;
-  if (!state.setup.initDateTime || !hasAny) return null;
   const d = state.setup.defaults || {};
   return {
-    datetime: state.setup.initDateTime,
+    datetime: init.datetime,
+    tzOffsetMin: init.tzOffsetMin,
+    clockChangeMin: 0,
     me: {
       meter: fm.main?.reading ?? null,
       meterIn: fm.main?.reading ?? null,
@@ -5976,13 +6011,15 @@ function formClockChangeMin(){
   const raw = isFinite(n) ? n : 0;
   return window.ShipTime ? ShipTime.sanitizeClockChangeMin(raw) : (Math.abs(raw) > 180 ? 0 : raw);
 }
-function fillTzOffsetSelect(){
-  const sel = document.getElementById('in_tzOffset');
+function fillTzOffsetSelect(selId, selectedMin){
+  const sel = document.getElementById(selId || 'in_tzOffset');
   if (!sel || !window.ShipTime) return;
-  const prev = sel.value;
+  const chosen = selectedMin != null && isFinite(Number(selectedMin))
+    ? String(ShipTime.clampTzOffsetMin(selectedMin))
+    : sel.value;
   sel.innerHTML = ShipTime.tzOffsetOptions().map(m =>
     `<option value="${m}">${ShipTime.formatTzOffset(m)}</option>`).join('');
-  if (prev !== '' && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  if (chosen !== '' && [...sel.options].some(o => o.value === chosen)) sel.value = chosen;
   else sel.value = String(defaultShipTzOffsetMin());
 }
 function updateClockChangeNote(){
@@ -7313,6 +7350,19 @@ function renderLastEntryRef(){
   const title = document.getElementById('lastEntryPanelTitle');
   const source = list.length ? list[list.length-1] : state.setup.carryover;
   if (!source){
+    const init = voyageInitReference(state.setup);
+    if (init){
+      title.textContent = 'Voyage Start — Reference';
+      const item = (label, val) => `<div class="ref-item"><div class="rv">${val===null||val===undefined||val===''?'—':val}</div><div class="rl">${label}</div></div>`;
+      const dtStr = String(init.datetime).replace('T', ' ');
+      const zone = window.ShipTime ? ShipTime.formatTzOffset(init.tzOffsetMin) : (init.tzOffsetMin != null ? init.tzOffsetMin : '—');
+      box.innerHTML = `<div class="hint">No log entries yet. The first entry is measured from this voyage-start date, time and zone (Voyage Setup → Voyage Specifics).</div>
+        <div class="ref-grid">
+          ${item('Date/Time', dtStr)}
+          ${item('Time zone', zone)}
+        </div>`;
+      return;
+    }
     title.textContent = 'Last Saved Entry — Reference';
     box.innerHTML = `<div class="hint">No entries saved yet — this panel will show your most recent entry's readings here once you add one, so you can check new meter values against it.</div>`;
     return;
@@ -8225,6 +8275,7 @@ function render(){
   document.getElementById('s_departPort').value = state.setup.departPort;
   document.getElementById('s_arrivePort').value = state.setup.arrivePort;
   document.getElementById('s_initDateTime').value = state.setup.initDateTime || '';
+  fillVoyageTzOffsetSelect();
   document.getElementById('s_voyageDistance').value = state.setup.voyageDistance ?? '';
   document.getElementById('s_flowArr').value = state.setup.flowArr;
   updateFlowArrHint();
@@ -10699,6 +10750,7 @@ async function saveVoyageDetails(){
   state.setup.departPort = document.getElementById('s_departPort').value;
   state.setup.arrivePort = document.getElementById('s_arrivePort').value;
   state.setup.initDateTime = document.getElementById('s_initDateTime').value;
+  state.setup.tzOffsetMin = formVoyageTzOffsetMin();
   state.setup.voyageDistance = parseFloat(document.getElementById('s_voyageDistance').value)||null;
 
   const v = activeVessel();
@@ -10715,6 +10767,11 @@ async function saveVoyageDetails(){
   alert('Voyage Details saved.');
 }
 document.getElementById('btnSaveVoyageDetails').addEventListener('click', saveVoyageDetails);
+document.getElementById('s_initTzOffset')?.addEventListener('change', ()=>{
+  const n = parseInt(document.getElementById('s_initTzOffset').value, 10);
+  if (!isFinite(n)) return;
+  state.setup.tzOffsetMin = window.ShipTime ? ShipTime.clampTzOffsetMin(n) : n;
+});
 
 /* Chief Engineer appears on Vessel Data and on Voyage Setup. Both are views of the
    same vessel-level record — a crew change is edited wherever the engineer happens to
@@ -10999,6 +11056,7 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
     alert('Cannot create a new voyage: Voyage No., Ships Condition, and Date & Time must all be filled in first.');
     return;
   }
+  const newTzOffsetMin = formVoyageTzOffsetMin();
   if (newDateTime === oldDateTime){
     alert('Cannot create a new voyage: Date & Time must be updated to reflect the new voyage before proceeding.');
     return;
@@ -11065,6 +11123,7 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
   state.setup.voyageNumber = newVoyageNo;
   state.setup.shipCondition = newCondition;
   state.setup.initDateTime = newDateTime;
+  state.setup.tzOffsetMin = newTzOffsetMin;
 
   state.setup.carryover = JSON.parse(JSON.stringify(last));
   state.setup.rob = rob;
@@ -13927,8 +13986,12 @@ function prefillFromLastEntry(){
   /* Fresh form → the runtime counter goes back to tracking the selected date/time. */
   clearMeRuntimeUserEdit();
   applyEntryDefaults();
+  const voyageTz = state.setup && state.setup.tzOffsetMin != null && Number.isFinite(Number(state.setup.tzOffsetMin))
+    ? state.setup.tzOffsetMin
+    : null;
+  const useVoyageTz = !sortedEntries().length && voyageTz != null;
   if (!last){
-    setShipTzUi(defaultShipTzOffsetMin(), 0);
+    setShipTzUi(useVoyageTz ? voyageTz : defaultShipTzOffsetMin(), 0);
     syncMeRuntimeFromPeriod();
     return;
   }
@@ -13965,7 +14028,7 @@ function prefillFromLastEntry(){
   document.getElementById('in_rpm').value = '';
   const rpmDisp = document.getElementById('in_rpm_display');
   if (rpmDisp) rpmDisp.value = '—';
-  setShipTzUi(last.tzOffsetMin != null ? last.tzOffsetMin : defaultShipTzOffsetMin(), 0);
+  setShipTzUi(useVoyageTz ? voyageTz : (last.tzOffsetMin != null ? last.tzOffsetMin : defaultShipTzOffsetMin()), 0);
   /* Runs after me_runtime was seeded from `last`, so the counter re-tracks the clock. */
   syncMeRuntimeFromPeriod();
   updateLivePreview();
@@ -15429,7 +15492,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v122';
+let androidInstallCacheName = 'noon-report-v123';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -18707,6 +18770,7 @@ document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPa
     document.getElementById('in_datetime').value = now.toISOString().slice(0,16);
     try{
       fillTzOffsetSelect();
+      fillVoyageTzOffsetSelect();
       setShipTzUi(defaultShipTzOffsetMin(), 0);
     }catch(_){}
     document.getElementById('rcpt_date').value = now.toISOString().slice(0,10);
