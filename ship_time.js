@@ -13,6 +13,10 @@
   const TZ_MIN = -12 * 60;
   const TZ_MAX = 14 * 60;
   const TZ_STEP = 30;
+  /* A watch never advances/retards more than 3 h. Larger figures are a timezone
+     (e.g. UTC+8 = 480 min) mistakenly stored as the period clock change, which
+     turns a noon-to-noon into 16 h. */
+  const MAX_CLOCK_CHANGE_MIN = 3 * 60;
 
   function clampTzOffsetMin(min) {
     const n = Number(min);
@@ -37,7 +41,7 @@
   }
 
   function formatClockChange(min) {
-    const n = Number(min) || 0;
+    const n = sanitizeClockChangeMin(min);
     if (!n) return 'No clock change this period.';
     const abs = Math.abs(n);
     const h = Math.floor(abs / 60);
@@ -50,7 +54,7 @@
   }
 
   function formatClockChangeShort(min) {
-    const n = Number(min) || 0;
+    const n = sanitizeClockChangeMin(min);
     if (!n) return '';
     const abs = Math.abs(n);
     const h = Math.floor(abs / 60);
@@ -69,6 +73,45 @@
       'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
 
+  /**
+   * Ship's-clock stamp as a stable millisecond value.
+   * Reads the civil YYYY-MM-DDTHH:mm from the log and ignores any Z / offset,
+   * so 15 Aug 12:00 → 16 Aug 12:00 is always 24 h whether one side was saved
+   * as datetime-local or as an ISO UTC string.
+   */
+  function parseShipDateTimeMs(value) {
+    if (value == null || value === '') return null;
+    const s = String(value).trim();
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?/);
+    if (m) {
+      return Date.UTC(
+        Number(m[1]), Number(m[2]) - 1, Number(m[3]),
+        Number(m[4]), Number(m[5]), Number(m[6] || 0)
+      );
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }
+
+  function sanitizeClockChangeMin(min) {
+    const n = Number(min) || 0;
+    if (!n) return 0;
+    if (Math.abs(n) > MAX_CLOCK_CHANGE_MIN) return 0;
+    return n;
+  }
+
+  /** Record a clock change only for a real mid-voyage zone step (≤ 3 h),
+   *  not when the engineer first picks the ship's register timezone. */
+  function shouldRecordClockChange(fromOffsetMin, toOffsetMin, prevHadZone, entryHadZone) {
+    const from = clampTzOffsetMin(fromOffsetMin);
+    const to = clampTzOffsetMin(toOffsetMin);
+    const delta = to - from;
+    if (!delta) return false;
+    if (!prevHadZone && !entryHadZone) return false;
+    if (Math.abs(delta) > MAX_CLOCK_CHANGE_MIN) return false;
+    return true;
+  }
+
   function addMinutesToDatetimeLocal(value, minutes) {
     if (!value) return value || '';
     const delta = Number(minutes) || 0;
@@ -85,9 +128,12 @@
    */
   function elapsedShipHours(prevDt, curDt, clockChangeMin) {
     if (!prevDt || !curDt) return null;
-    const naive = (new Date(curDt) - new Date(prevDt)) / 3600000;
+    const a = parseShipDateTimeMs(prevDt);
+    const b = parseShipDateTimeMs(curDt);
+    if (a == null || b == null) return null;
+    const naive = (b - a) / 3600000;
     if (!isFinite(naive)) return null;
-    const adj = naive - (Number(clockChangeMin) || 0) / 60;
+    const adj = naive - sanitizeClockChangeMin(clockChangeMin) / 60;
     return adj > 0 ? adj : null;
   }
 
@@ -102,7 +148,7 @@
     return {
       datetime: addMinutesToDatetimeLocal(datetime, deltaMin),
       tzOffsetMin: to,
-      clockChangeMin: (Number(prevClockChangeMin) || 0) + deltaMin,
+      clockChangeMin: sanitizeClockChangeMin(prevClockChangeMin) + deltaMin,
       deltaMin: deltaMin
     };
   }
@@ -117,9 +163,13 @@
     formatClockChange: formatClockChange,
     formatClockChangeShort: formatClockChangeShort,
     toDatetimeLocalValue: toDatetimeLocalValue,
+    parseShipDateTimeMs: parseShipDateTimeMs,
+    sanitizeClockChangeMin: sanitizeClockChangeMin,
+    shouldRecordClockChange: shouldRecordClockChange,
     addMinutesToDatetimeLocal: addMinutesToDatetimeLocal,
     elapsedShipHours: elapsedShipHours,
-    applyTimezoneChange: applyTimezoneChange
+    applyTimezoneChange: applyTimezoneChange,
+    MAX_CLOCK_CHANGE_MIN: MAX_CLOCK_CHANGE_MIN
   };
 
   if (typeof module === 'object' && module.exports) module.exports = api;

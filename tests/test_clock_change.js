@@ -62,7 +62,24 @@ check('noon-to-noon after clocks +30 min is 23.5 h',
   ShipTime.elapsedShipHours('2026-08-14T12:00', '2026-08-15T12:00', 30), 23.5);
 check('time also moved +1 h and logged +1 h stays 24 h',
   ShipTime.elapsedShipHours('2026-08-14T12:00', '2026-08-15T13:00', 60), 24);
+check('15 Aug noon → 16 Aug noon is 24 h',
+  ShipTime.elapsedShipHours('2026-08-15T12:00', '2026-08-16T12:00', 0), 24);
+check('UTC+8 stored as clock change is ignored (was 16 h)',
+  ShipTime.elapsedShipHours('2026-08-15T12:00', '2026-08-16T12:00', 480), 24);
+check('ISO Z suffix still reads as civil noon',
+  ShipTime.elapsedShipHours('2026-08-15T12:00', '2026-08-16T12:00:00.000Z', 0), 24);
+check('sanitize drops a timezone-sized clock change', ShipTime.sanitizeClockChangeMin(480), 0);
+check('sanitize keeps a real +1 h', ShipTime.sanitizeClockChangeMin(60), 60);
+check('first zone pick is not a clock change',
+  ShipTime.shouldRecordClockChange(0, 480, false, false), false);
+check('mid-voyage +1 h is a clock change',
+  ShipTime.shouldRecordClockChange(480, 540, true, true), true);
+check('zone jump larger than 3 h is not a clock change',
+  ShipTime.shouldRecordClockChange(0, 480, true, true), false);
+const fromBad = ShipTime.applyTimezoneChange('2026-08-16T12:00', 0, 60, 480);
+check('real +1 h after a bogus +8 h log starts from 0', fromBad.clockChangeMin, 60);
 checkTrue('wording says advanced', ShipTime.formatClockChange(60).indexOf('advanced 1 hour') !== -1);
+check('bogus +8 h wording is cleared', ShipTime.formatClockChange(480), 'No clock change this period.');
 checkTrue('wording says retarded', ShipTime.formatClockChange(-30).indexOf('retarded 30 min') !== -1);
 check('short form', ShipTime.formatClockChangeShort(60), 'clocks +1h');
 check('no change is empty short form', ShipTime.formatClockChangeShort(0), '');
