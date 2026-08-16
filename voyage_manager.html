@@ -4151,7 +4151,7 @@ function entryFromSnap(id, datetime, operation, condition, snap, extra){
     unitOverride: e.unitOverride || { ME:null, GE:null, BLR:null },
     weather: e.weather || weather(),
     tzOffsetMin: e.tzOffsetMin != null ? e.tzOffsetMin : 0,
-    clockChangeMin: window.ShipTime ? ShipTime.sanitizeClockChangeMin(e.clockChangeMin) : (e.clockChangeMin || 0),
+    clockChangeMin: sanitizeClockChangeMin(e.clockChangeMin),
     report
   };
 }
@@ -5975,14 +5975,39 @@ async function cascadeSucceedingEntries(startIdx, { clearOverrides = true, persi
   }
 }
 
+/** Drop a timezone-sized figure (e.g. UTC+8 = 480 min) stored as a clock change.
+ *  Works even when a stale cached ship_time.js has ShipTime but not this helper. */
+function sanitizeClockChangeMin(min){
+  try{
+    if (window.ShipTime && typeof ShipTime.sanitizeClockChangeMin === 'function')
+      return ShipTime.sanitizeClockChangeMin(min);
+  }catch(_e){}
+  const n = Number(min) || 0;
+  return Math.abs(n) > 180 ? 0 : n;
+}
+
+function shouldRecordShipClockChange(fromOffsetMin, toOffsetMin, prevHadZone, entryHadZone){
+  try{
+    if (window.ShipTime && typeof ShipTime.shouldRecordClockChange === 'function')
+      return ShipTime.shouldRecordClockChange(fromOffsetMin, toOffsetMin, prevHadZone, entryHadZone);
+  }catch(_e){}
+  const from = Number(fromOffsetMin) || 0;
+  const to = Number(toOffsetMin) || 0;
+  const delta = to - from;
+  if (!delta) return false;
+  if (!prevHadZone && !entryHadZone) return false;
+  if (Math.abs(delta) > 180) return false;
+  return true;
+}
+
 /** Actual hours between two ship's-clock stamps (clocks advanced are subtracted). */
 function elapsedShipHours(prevDt, curDt, clockChangeMin){
-  if (window.ShipTime) return ShipTime.elapsedShipHours(prevDt, curDt, clockChangeMin);
+  const clk = sanitizeClockChangeMin(clockChangeMin);
+  if (window.ShipTime && typeof ShipTime.elapsedShipHours === 'function')
+    return ShipTime.elapsedShipHours(prevDt, curDt, clk);
   if (!prevDt || !curDt) return null;
   const naive = (new Date(curDt) - new Date(prevDt)) / 3600000;
   if (!isFinite(naive)) return null;
-  const rawClk = Number(clockChangeMin) || 0;
-  const clk = Math.abs(rawClk) > 180 ? 0 : rawClk;
   const adj = naive - clk / 60;
   return adj > 0 ? adj : null;
 }
@@ -6008,8 +6033,7 @@ function formTzOffsetMin(){
 }
 function formClockChangeMin(){
   const n = parseFloat(document.getElementById('in_clockChangeMin')?.value);
-  const raw = isFinite(n) ? n : 0;
-  return window.ShipTime ? ShipTime.sanitizeClockChangeMin(raw) : (Math.abs(raw) > 180 ? 0 : raw);
+  return sanitizeClockChangeMin(isFinite(n) ? n : 0);
 }
 function fillTzOffsetSelect(selId, selectedMin){
   const sel = document.getElementById(selId || 'in_tzOffset');
@@ -6035,7 +6059,7 @@ function setShipTzUi(offsetMin, clockChangeMin){
   const sel = document.getElementById('in_tzOffset');
   if (sel) sel.value = String(_shipTzCurrent);
   const hid = document.getElementById('in_clockChangeMin');
-  const clk = window.ShipTime ? ShipTime.sanitizeClockChangeMin(clockChangeMin) : (Number(clockChangeMin) || 0);
+  const clk = sanitizeClockChangeMin(clockChangeMin);
   if (hid) hid.value = String(clk);
   _shipTzFill = false;
   updateClockChangeNote();
@@ -6050,7 +6074,7 @@ function applyShipTzChange(toOffsetMin){
   const prevHadZone = !!(prev && prev.tzOffsetMin != null && Number.isFinite(Number(prev.tzOffsetMin)));
   const editing = editingId ? state.entries.find(x => x.id === editingId) : null;
   const entryHadZone = !!(editing && editing.tzOffsetMin != null && Number.isFinite(Number(editing.tzOffsetMin)));
-  if (!ShipTime.shouldRecordClockChange(from, to, prevHadZone, entryHadZone)){
+  if (!shouldRecordShipClockChange(from, to, prevHadZone, entryHadZone)){
     setShipTzUi(to, formClockChangeMin());
     if (state.setup) state.setup.tzOffsetMin = to;
     syncMeRuntimeFromPeriod();
@@ -6091,7 +6115,7 @@ async function recalculateCurrentEntries({ persist = true, clearOverrides = fals
   let rpmFixed = 0;
   for (const e of sorted){
     let changed = false;
-    const sanitizedClk = window.ShipTime ? ShipTime.sanitizeClockChangeMin(e.clockChangeMin) : (Number(e.clockChangeMin) || 0);
+    const sanitizedClk = sanitizeClockChangeMin(e.clockChangeMin);
     if (sanitizedClk !== (Number(e.clockChangeMin) || 0)){
       e.clockChangeMin = sanitizedClk;
       changed = true;
@@ -10956,7 +10980,7 @@ function normalizeEntry(e){
   if (!e.id) e.id = uid();
   if (!e.vesselId) e.vesselId = state.activeVesselId || LEGACY_VESSEL_ID;
   e.condition = normalizeCondition(e.condition || state.setup?.shipCondition);
-  e.clockChangeMin = window.ShipTime ? ShipTime.sanitizeClockChangeMin(e.clockChangeMin) : (Number(e.clockChangeMin) || 0);
+  e.clockChangeMin = sanitizeClockChangeMin(e.clockChangeMin);
   return e;
 }
 
@@ -12943,7 +12967,7 @@ function getActivePeriodContext(){
     if (entry){
       const formRt = parseFloat(document.getElementById('me_runtime')?.value);
       const meRuntime = (editingId === currentVsEntryId && !isNaN(formRt)) ? formRt : (entry.meRuntime ?? (isNaN(formRt)?null:formRt));
-      return { datetime: entry.datetime, clockChangeMin: (window.ShipTime ? ShipTime.sanitizeClockChangeMin(entry.clockChangeMin) : (Number(entry.clockChangeMin) || 0)), excludeId: currentVsEntryId, meRuntime, entry };
+      return { datetime: entry.datetime, clockChangeMin: sanitizeClockChangeMin(entry.clockChangeMin), excludeId: currentVsEntryId, meRuntime, entry };
     }
   }
   const formRt = parseFloat(document.getElementById('me_runtime')?.value);
@@ -15492,7 +15516,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v123';
+let androidInstallCacheName = 'noon-report-v124';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',

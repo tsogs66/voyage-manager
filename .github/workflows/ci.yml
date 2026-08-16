@@ -39,6 +39,9 @@ jobs:
       - name: Check voyage-start time zone reference
         run: node tests/test_voyage_init_tz.js
 
+      - name: Check stale ship_time.js does not crash startup
+        run: node tests/test_shiptime_compat.js
+
       - name: Check flowmeter and fresh-water consumption formulas
         run: node tests/test_flow_cons.js
 
