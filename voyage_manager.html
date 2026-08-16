@@ -2499,7 +2499,7 @@
     <div class="panel">
       <h2>Machinery Running Hours (voyage)</h2>
       <div class="stat-strip cols5" id="runningHoursStrip"></div>
-      <div class="hint">Period totals from log / report hour-meters — useful for PMS planning. M/E hours = steaming periods with engine distance; A/E / boiler / incinerator from supplementary / voyage-summary runtime.</div>
+      <div class="hint">Period totals from log / report hour-meters — useful for PMS planning. M/E hours = steaming periods with engine distance. Each A/E shows only that generator's own running hours (A/E #1, A/E #2, A/E #3) — not a combined total. Boiler / incinerator from supplementary / voyage-summary runtime.</div>
     </div>
     <div class="panel">
       <h2>Departure / Arrival ROB Comparison</h2>
@@ -3556,6 +3556,18 @@ function totalLubeRob(robLube){
 function geUnitCount(){
   if (state.setup.generatorCount!=null) return Math.max(1, Math.min(3, state.setup.generatorCount));
   return GE_ARR_COUNTS[state.setup.geArrangement || 'SINGLE'] || 1;
+}
+
+/** Voyage A/E hours by generator number — never a combined total of every unit. */
+function machineryGeHourCells(geTotalsHrs, generatorCount){
+  const n = Math.max(1, Math.min(3, parseInt(generatorCount, 10) || 1));
+  const src = Array.isArray(geTotalsHrs) ? geTotalsHrs : [];
+  const out = [];
+  for (let i = 0; i < n; i++){
+    const hours = Number(src[i]) || 0;
+    out.push({ n: i + 1, hours: hours, used: hours > 0 });
+  }
+  return out;
 }
 function meCylinderCount(){ return Math.max(1, Math.min(14, state.setup.meCylinderCount || 6)); }
 function turboCount(){ return Math.max(1, Math.min(4, state.setup.turboCount || 2)); }
@@ -8527,17 +8539,22 @@ function render(){
   renderRunningHoursStrip(rows, perf);
   renderDepArrRobTable(consByFuel, consByLube);
 
+  const geCells = machineryGeHourCells(perf.geTotals?.hrs, geUnitCount());
+  const geShown = geCells.some(c => c.used) ? geCells.filter(c => c.used) : geCells;
+  const geStats = geShown.map(c =>
+    `<div class="stat"><div class="num">${c.used ? fmt(c.hours, 2) : '—'}</div><div class="lbl">A/E #${c.n} hrs</div></div>`
+  ).join('');
   document.getElementById('voyageTimeAvgStrip').innerHTML = `
     <div class="stat"><div class="num">${fmt(perf.totalHrs/24,2)}</div><div class="lbl">Days at sea</div></div>
     <div class="stat"><div class="num">${perf.avgMcrTimeWeighted===null?'—':fmt(perf.avgMcrTimeWeighted,2)}</div><div class="lbl">%MCR (hrs-wtd)</div></div>
     <div class="stat"><div class="num">${perf.avgGeLoadPct===null?'—':fmt(perf.avgGeLoadPct,2)}</div><div class="lbl">Gen load % (hrs-wtd)</div></div>
     <div class="stat"><div class="num">${perf.avgGeKwTimeWeighted===null?'—':fmt(perf.avgGeKwTimeWeighted,2)}</div><div class="lbl">Gen kW (hrs-wtd)</div></div>
-    <div class="stat"><div class="num">${fmt(perf.totalGeHrs,2)}</div><div class="lbl">Total gen hours</div></div>
+    ${geStats}
   `;
   const geHint = document.getElementById('geHoursHint');
   if (geHint){
-    geHint.textContent = perf.totalGeHrs>0 ? '' :
-      'Generator hours are blank — after saving a log entry, open its Supplementary Report and enter A/E runtime (cumulative) and avg kW under Generators & Boiler.';
+    geHint.textContent = geCells.some(c => c.used) ? '' :
+      'Generator hours are blank — after saving a log entry, open Voyage Summary and tick each A/E that ran, then enter that generator\'s run hours.';
   }
 
   document.getElementById('entryCount').textContent = `${state.entries.length} log entries · ${state.receipts.length} receipts stored locally.`;
@@ -9504,11 +9521,15 @@ function renderRunningHoursStrip(rows, perf){
     }
     if (e.report?.purifierHrs!=null && !isNaN(e.report.purifierHrs)) purHrs += Number(e.report.purifierHrs)||0;
   });
-  const geHrs = perf?.totalGeHrs || 0;
   const stat = (num,lbl)=>`<div class="stat"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`;
+  const geCells = machineryGeHourCells(perf?.geTotals?.hrs, geUnitCount());
+  const geShown = geCells.some(c => c.used) ? geCells.filter(c => c.used) : geCells;
+  const geHtml = geShown.map(c =>
+    stat(c.used ? fmt(c.hours, 1) : '—', `A/E #${c.n} hrs`)
+  ).join('');
   el.innerHTML =
     stat(fmt(meHrs,1), 'M/E steaming hrs') +
-    stat(fmt(geHrs,1), 'A/E hrs (voyage)') +
+    geHtml +
     stat(fmt(blrHrs,1), 'Boiler hrs') +
     stat(fmt(incHrs,1), 'Incinerator hrs') +
     stat(fmt(purHrs,1), 'LO purifier hrs');
@@ -11926,7 +11947,9 @@ function openVoyageSummary(entryId){
   }
   document.getElementById('vsVoyageAvgStrip').innerHTML = `
     ${stat('Voyage Hours', fmt(perf.totalHrs, 2))}
-    ${stat('Generator Hours', fmt(perf.totalGeHrs, 2))}
+    ${machineryGeHourCells(perf.geTotals?.hrs, geUnitCount()).map(c =>
+      stat(`A/E #${c.n} Hours`, c.used ? fmt(c.hours, 2) : '—')
+    ).join('')}
     ${stat('Avg Gen Load %', perf.avgGeLoadPct==null?'—':fmt(perf.avgGeLoadPct, 2))}
     ${stat('Avg Gen kW (hrs-wtd)', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted, 2))}
   `;
@@ -12778,7 +12801,9 @@ function buildVoyageNoonSheetHTML(entry){
 
   const voyageAvgRows = [
     printRow('Total Voyage Hours', fmt(perf.totalHrs,2)),
-    printRow('Total Generator Hours', fmt(perf.totalGeHrs,2))
+    ...machineryGeHourCells(perf.geTotals?.hrs, geUnitCount()).map(c =>
+      printRow(`A/E #${c.n} Hours`, c.used ? fmt(c.hours, 2) : '—')
+    )
   ];
   if (meRunningEarly){
     voyageAvgRows.push(
@@ -15516,7 +15541,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v124';
+let androidInstallCacheName = 'noon-report-v125';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
