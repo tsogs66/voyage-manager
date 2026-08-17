@@ -99,7 +99,13 @@ check('its closing figure is the water total', HTML.includes('totalFwRob(asOf.ro
 check('the ROB page has a water total strip', HTML.includes('id="fwTotalStrip"'), true);
 check('the summary page has a water total strip', HTML.includes('id="fwTotalSummaryStrip"'), true);
 check('summary consumption vs ROB splits water from lube', HTML.includes('id="fwDualGauges"'), true);
-check('fresh water has its own panel below lube', HTML.includes('<h2>Fresh Water</h2>'), true);
+{
+  const consRob = HTML.slice(HTML.indexOf('CONSUMPTION VS ROB'), HTML.indexOf('id="page-reports"'));
+  check('fw gauges stay in the consumption vs ROB panel', consRob.includes('id="fwDualGauges"'), true);
+  check('fw gauges sit on rows below total lube oil', consRob.indexOf('lubeTotalSummaryStrip') < consRob.indexOf('fwDualGauges'), true);
+  check('fw is a sub-heading in that panel, not a fifth lube gauge', consRob.includes('<h3 class="sub">Fresh Water</h3>'), true);
+}
+check('summary has no standalone fresh-water panel', HTML.includes('<h2>Fresh Water</h2>'), false);
 check('summary per-day splits water from lube', HTML.includes('id="fwPerDayStrip"'), true);
 check('lube per-day no longer lists fresh water', /lubePerDayStrip[\s\S]*FRESH WATER/.test(HTML.slice(HTML.indexOf('lubePerDayStrip'), HTML.indexOf('lubePerDayStrip')+400)), false);
 check('setup opening ROB for water is m³', HTML.includes('Opening ROB (m³)'), true);
