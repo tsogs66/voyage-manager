@@ -2117,7 +2117,7 @@
               <div class="field"><label>S/T Temp — Stern Tube (°C)</label><input type="number" step="0.1" id="vs_stTemp"></div>
               <div class="field"><label>Bilge ROB (m³)</label><input type="number" step="0.01" id="vs_bilgeRob"></div>
               <div class="field"><label>Sludge ROB (m³)</label><input type="number" step="0.01" id="vs_sludgeRob"></div>
-              <div class="field"><label>Sea Temp (°C)</label><input type="number" step="0.1" id="vs_erSeaTemp"></div>
+              <div class="field"><label>S/W Temp — Sea Water (°C)</label><input type="number" step="0.1" id="vs_erSeaTemp"></div>
             </div>
             <div class="hint" style="margin-top:8px;">Sea temp here is the same reading as Weather &amp; Sea State — type it in either place.</div>
           </div>
@@ -2609,7 +2609,7 @@
         <div class="field"><label>Bilge ROB (m³)</label><input type="number" step="0.01" id="rep_bilgeRob"></div>
         <div class="field"><label>Sludge ROB (m³)</label><input type="number" step="0.01" id="rep_sludgeRob"></div>
         <div class="field"><label>S/T Temp — Stern Tube (°C)</label><input type="number" step="0.1" id="rep_stTemp"></div>
-        <div class="field"><label>Sea Temp (°C)</label><input type="number" step="0.1" id="rep_swTemp"></div>
+        <div class="field"><label>S/W Temp — Sea Water (°C)</label><input type="number" step="0.1" id="rep_swTemp"></div>
       </div>
 
       <div id="reportSeaFields">
@@ -9545,7 +9545,7 @@ function printTurboOthersSection(report, { includeMeAux = true } = {}){
     if (report.shaftKw!=null) parts.push(printRow('Shaft kW (meter)', fmtP(report.shaftKw, 2)));
   }
   parts.push(printRow('E.R. Temperature', `${fmtP(report.erTemp, 2)} °C`));
-  parts.push(printRow('Sea Temp', `${fmtP(report.swTemp, 2)} °C`));
+  parts.push(printRow('S/W Temperature (Sea Water)', `${fmtP(report.swTemp, 2)} °C`));
   parts.push(printRow('S/T Temperature (Stern Tube)', `${fmtP(report.stTemp, 2)} °C`));
   parts.push(printRow('Bilge R.O.B.', `${fmtP(report.bilgeRob,2)} m³`));
   parts.push(printRow('Sludge R.O.B.', `${fmtP(report.sludgeRob,2)} m³`));
@@ -15672,7 +15672,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v126';
+let androidInstallCacheName = 'noon-report-v127';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
