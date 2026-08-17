@@ -6417,6 +6417,19 @@ function fmt(n,d=2){
   return Number(n).toFixed(decimals);
 }
 /* Fuel consumption & fuel ROB — always 3 decimals (MT). */
+/* Generator load band for the printed report: the recorded load percentage taken
+   down to 90% and up to 110% of itself, so the sheet carries the operating range
+   either side of the figure rather than the single point. Both return null for a
+   missing load, so an unrecorded unit prints a dash instead of 0.00. */
+function geLoadBandMin(loadPct){
+  const n = Number(loadPct);
+  return (loadPct == null || loadPct === '' || !isFinite(n)) ? null : n * 0.9;
+}
+function geLoadBandMax(loadPct){
+  const n = Number(loadPct);
+  return (loadPct == null || loadPct === '' || !isFinite(n)) ? null : n * 1.1;
+}
+
 function fmtFuel(n){ return fmt(n, 3); }
 /* Lube oil quantities — whole litres, no decimals. */
 function fmtLube(n){ return fmt(n, 0); }
@@ -12879,15 +12892,19 @@ function buildVoyageNoonSheetHTML(entry){
       <td>${cum==null?'—':fmt(cum, 2)}</td>
       <td>${p.kw==null?'—':fmt(p.kw, 2)}</td>
       <td>${p.loadPct==null?'—':fmt(p.loadPct, 2)}</td>
+      <td>${fmt(geLoadBandMin(p.loadPct), 2)}</td>
+      <td>${fmt(geLoadBandMax(p.loadPct), 2)}</td>
       <td>${p.fuelCons==null?'—':fmtFuel(p.fuelCons)}</td>
     </tr>`;
   }).join('');
   const geSection = geN>0 ? printSection(`Generators — ${geArrangementLabelFor(entryActiveGeCount(entry))}`, `
     <table class="pr-table">
-      <tr><th>Unit</th><th>Hrs</th><th>Accum.</th><th>kW</th><th>Load%</th><th>Fuel</th></tr>
+      <tr><th>Unit</th><th>Hrs</th><th>Accum.</th><th>kW</th><th>Load%</th><th>Min%</th><th>Max%</th><th>Fuel</th></tr>
       ${geRows}
     </table>
     ${printRow('Voy Avg Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct, 2)}%`)}
+    ${printRow('Voy Min / Max Load %', perf.avgGeLoadPct==null ? '—'
+      : `${fmt(geLoadBandMin(perf.avgGeLoadPct), 2)}% / ${fmt(geLoadBandMax(perf.avgGeLoadPct), 2)}%`)}
     ${printRow('Voy Avg kW', perf.avgGeKwTimeWeighted==null?'—':fmt(perf.avgGeKwTimeWeighted, 2))}`) : '';
 
   const blrCur = blrCumulativeRunHours(entry) ?? entryBlrRuntime(entry);
@@ -15672,7 +15689,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v127';
+let androidInstallCacheName = 'noon-report-v128';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
