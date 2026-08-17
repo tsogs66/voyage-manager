@@ -511,6 +511,7 @@
     #androidInstallProgressWrap{display:block !important;}
     #androidInstallProgressWrap .install-progress-meta{display:flex !important;}
   }
+  .rob-total td{border-top:1px solid var(--brass-dim); color:var(--brass);}
   .bunker-plan-head{display:flex; flex-wrap:wrap; gap:12px 18px; align-items:end; margin-bottom:14px;}
   .bunker-plan-head .field{min-width:140px; flex:1 1 140px;}
   .bunker-plan-head .btn-row{flex:1 1 100%;}
@@ -11808,8 +11809,29 @@ function openRobSnapshot(entryId){
     return { label:r.label, prevVal, consVal, nowVal, dec, consDec: dec };
   });
 
-  document.getElementById('robSnapshotBody').innerHTML = rowsForPrint.map(r=>`<tr>
-      <td>${r.label}</td>
+  /* Total lubes: cylinder oil high and low, plus ME and GE system oil. Fresh water
+     is not a lube and is deliberately outside it — totalLubeRob sums lubeTankList,
+     which is those four, and the fw rows are already filtered out above. Summing
+     consumption skips the tanks that recorded none rather than reading them as
+     zero, so a total only appears when something was actually drawn. */
+  const lubeRowsForTotal = getRobRows().filter(r=>r.cat==='lube');
+  if (lubeRowsForTotal.length){
+    const lubeCons = lubeRowsForTotal
+      .map(r=>robRowCons(row, r))
+      .filter(v=>v!=null && !isNaN(v));
+    rowsForPrint.push({
+      label: 'TOTAL LUBES',
+      prevVal: totalLubeRob(prevRobData.robLube),
+      consVal: lubeCons.length ? lubeCons.reduce((a,b)=>a+b, 0) : null,
+      nowVal: totalLubeRob(asOf.robLube),
+      dec: robDec('lube'),
+      consDec: robDec('lube'),
+      strong: true
+    });
+  }
+
+  document.getElementById('robSnapshotBody').innerHTML = rowsForPrint.map(r=>`<tr${r.strong?' class="rob-total"':''}>
+      <td>${r.strong?`<strong>${r.label}</strong>`:r.label}</td>
       <td>${fmt(r.prevVal,r.dec)}</td>
       <td>${r.consVal===null||r.consVal===undefined?'—':fmt(r.consVal,r.consDec)}</td>
       <td>${fmt(r.nowVal,r.dec)}</td>
@@ -11829,7 +11851,7 @@ function printRobSnapshot(entry, dt, rowsForPrint){
   const dateStr = dt.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'2-digit'});
   const timeStr = dt.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
   const tableRows = rowsForPrint.map(r=>`
-    <tr><td class="row-lbl">${r.label}</td><td>${fmt(r.prevVal,r.dec)}</td><td>${r.consVal===null||r.consVal===undefined?'—':fmt(r.consVal,r.consDec)}</td><td>${fmt(r.nowVal,r.dec)}</td></tr>`).join('');
+    <tr${r.strong?' class="rob-total"':''}><td class="row-lbl">${r.strong?`<strong>${r.label}</strong>`:r.label}</td><td>${fmt(r.prevVal,r.dec)}</td><td>${r.consVal===null||r.consVal===undefined?'—':fmt(r.consVal,r.consDec)}</td><td>${fmt(r.nowVal,r.dec)}</td></tr>`).join('');
   const sheetHtml = `<div class="pr-sheet">
     ${printDocHeader({ title: 'Remaining On Board', subtitle: 'Fuel & Lube Inventory Snapshot', badge: entry.operation })}
     ${printMetaGrid([
@@ -15697,7 +15719,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v129';
+let androidInstallCacheName = 'noon-report-v130';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
