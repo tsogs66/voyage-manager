@@ -2547,6 +2547,8 @@
       <div class="stat-strip" id="fuelPerDayStrip"></div>
       <h3 class="sub">Lube Oil (L/day)</h3>
       <div class="stat-strip cols4" id="lubePerDayStrip"></div>
+      <h3 class="sub">Fresh Water (m³/day)</h3>
+      <div class="stat-strip cols3" id="fwPerDayStrip"></div>
     </div>
     <div class="panel">
       <h2>CONSUMPTION VS ROB</h2>
@@ -2555,15 +2557,10 @@
       <h3 class="sub">Lube Oil</h3>
       <div class="gauge-grid cols4" id="lubeDualGauges"></div>
       <div class="stat-strip cols3" id="lubeTotalSummaryStrip" style="margin-top:14px;"></div>
-      <div class="hint">The brass arc shows the current R.O.B. level; the white tick mark shows where R.O.B. started this voyage. The gap between them is what's been consumed.</div>
-    </div>
-    <div class="panel">
-      <h2>Fresh Water</h2>
-      <h3 class="sub">Average consumption (m³/day)</h3>
-      <div class="stat-strip cols3" id="fwPerDayStrip"></div>
-      <h3 class="sub">Consumption vs R.O.B.</h3>
+      <h3 class="sub">Fresh Water</h3>
       <div class="gauge-grid cols4" id="fwDualGauges"></div>
       <div class="stat-strip cols3" id="fwTotalSummaryStrip" style="margin-top:14px;"></div>
+      <div class="hint">The brass arc shows the current R.O.B. level; the white tick mark shows where R.O.B. started this voyage. The gap between them is what's been consumed.</div>
       <div class="hint">The blue arc shows the current R.O.B. in m³; the white tick mark shows where R.O.B. started this voyage. When more than one tank is fitted, the total is the sum of those tanks.</div>
     </div>
   </div>
@@ -15895,7 +15892,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v132';
+let androidInstallCacheName = 'noon-report-v133';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
