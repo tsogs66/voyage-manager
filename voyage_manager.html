@@ -16,6 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="eorb.js"></script>
+<script src="ship_time.js"></script>
 <script>
 /* Prefer bottom nav in Capacitor/Android and on touch devices (WebView CSS width is often >720). */
 (function(){
@@ -364,6 +365,15 @@
   .receipt-row span.desc{overflow:hidden; text-overflow:ellipsis;}
 
   .hint{font-size:11px; color:var(--paper-dim); margin-top:4px; line-height:1.5;}
+  .tz-clock-row{
+    display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px;
+  }
+  .tz-clock-row .tz-clock-label{
+    font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:0.06em; text-transform:uppercase;
+    color:var(--paper-dim); margin-right:4px;
+  }
+  .tz-clock-row button[data-tz-step]{min-height:36px;}
+  .clock-change-note.warn{color:var(--brass); border-left-color:var(--brass);}
   .orb-subtabs{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px;}
   .orb-subtab{
     font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:0.06em; text-transform:uppercase;
@@ -450,6 +460,18 @@
     display:inline-block; margin-top:6px; font-family:'IBM Plex Mono',monospace; font-size:10px;
     color:var(--brass); border:1px solid var(--brass-dim); border-radius:10px; padding:1px 7px;
   }
+  .orb-scenario-card.routine{border-color:var(--brass) !important;}
+  .orb-weekly-due{margin-top:10px;}
+  .orb-weekly-due.warn{border-left-color:var(--brass);}
+  .orb-weekly-due.err{border-left-color:var(--alert);}
+  /* Disclaimer must stay visible on short/landscape views — do not use .hint (those hide). */
+  .orb-disclaimer{
+    display:flex; gap:8px; align-items:flex-start; margin-top:12px;
+    font-size:12px; color:var(--paper-dim); line-height:1.45; cursor:pointer;
+  }
+  .orb-disclaimer input{margin-top:3px; flex-shrink:0;}
+  .orb-table tr.orb-voided td{color:var(--paper-dim); text-decoration:line-through;}
+  .orb-table tr.orb-voided td .hint{text-decoration:none; color:var(--alert);}
   /* Chronology guidance for ORB dates — must stay visible on phones, so not .hint */
   .orb-date-note{
     font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--teal);
@@ -1188,6 +1210,7 @@
   }
   .pr-meta.cols3{ grid-template-columns:repeat(3,1fr); }
   .pr-meta.cols4{ grid-template-columns:repeat(4,1fr); }
+  .pr-meta.cols6{ grid-template-columns:repeat(3,1fr); }
   .pr-meta-cell{ background:#f7f9fc; padding:0.9mm 1.2mm; }
   .pr-meta-lbl{
     display:block; font-size:9px; text-transform:uppercase; letter-spacing:0.08em;
@@ -1334,6 +1357,21 @@
   background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);}
 .login-token{margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.1);}
 .vessel-locked-note{margin:8px 0 0;font-size:12px;opacity:.75;}
+.fo-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;}
+.fo-table th,.fo-table td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+.fo-table th{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--paper-dim);font-weight:600;}
+.fo-table td.mono{font-family:'IBM Plex Mono',monospace;font-size:12px;}
+.fo-password{margin-top:10px;padding:12px 14px;border:1px solid var(--brass-dim);border-radius:6px;background:rgba(201,154,83,.08);}
+.fo-password code{font-family:'IBM Plex Mono',monospace;font-size:18px;color:var(--brass);letter-spacing:.08em;}
+.fo-table select{
+  max-width:240px; width:100%;
+  background:var(--ink); color:var(--paper); border:1px solid var(--line-strong);
+  border-radius:3px; padding:6px 8px; font-family:inherit; font-size:13px;
+}
+.fo-password .btn-row{margin-top:10px;}
+
+#fleetOfficePanel h3.sub{margin-top:22px;}
+
 </style>
 </head>
 <body>
@@ -1363,6 +1401,7 @@
       <div class="login-actions">
         <button class="primary" id="btnLoginSubmit">Sign in</button>
         <div class="hint" id="offlineCredsStatus"></div>
+        <button class="ghost" id="btnUnlockDevice" type="button" hidden>Continue on this device</button>
         <button class="ghost" id="btnLoginOffline">Work offline</button>
       </div>
       <p class="login-note">Working offline opens the program with no vessel assigned. You can sign in or add a vessel token later from Setup → Server Sync.</p>
@@ -1377,11 +1416,22 @@
         <div class="hint" id="loginPendingNotice" hidden></div>
         <div class="login-actions">
           <button class="primary" id="btnLoginLoadVessel">Load vessel</button>
+          <button class="ghost" id="btnLoginFleetOffice" type="button">Open Fleet Office</button>
         </div>
-        <p class="login-note">Only one vessel is loaded at a time. Sign out and back in to change ship.</p>
+        <p class="login-note">Only one vessel is loaded at a time. Fleet Office manages crew and ships without loading a noon report.</p>
       </div>
 
-      <div class="login-token">
+      <div id="loginVesselClaim" hidden>
+        <label class="login-field"><span>Which ship did you join?</span>
+          <select id="login_claimSelect"></select></label>
+        <div class="login-actions">
+          <button class="primary" id="btnLoginClaimVessel" type="button">Join this vessel</button>
+          <button class="ghost" id="btnLoginClaimLater" type="button">Ship not listed — enter it in Setup</button>
+        </div>
+        <p class="login-note">The office already registered the fleet. Pick an empty ship. Occupied ships name who is aboard and cannot be claimed — the office must reassign. If yours is not listed, continue and Register Vessel from Setup.</p>
+      </div>
+
+      <div class="login-token" id="loginTokenPath">
         <label class="login-field"><span>Vessel token</span>
           <input id="login_vesselToken" placeholder="paste the token issued for your ship" autocomplete="off"></label>
         <div class="login-actions">
@@ -1440,11 +1490,13 @@
         <div class="field"><label>Voyage No.</label><input id="s_voyageNumber"></div>
         <div class="field"><label>Ships Condition</label><select id="s_shipCondition"><option value="B">B — Ballast</option><option value="L">L — Laden</option></select></div>
         <div class="field"><label>Date &amp; Time (initial)</label><input type="datetime-local" id="s_initDateTime"></div>
+        <div class="field"><label>Time zone</label><select id="s_initTzOffset"></select></div>
         <div class="field"><label>Departure</label><input id="s_departPort"></div>
         <div class="field"><label>Arrival</label><input id="s_arrivePort"></div>
         <div class="field"><label>Voyage Distance (nm)</label><input type="number" step="0.1" id="s_voyageDistance"></div>
         <div class="field span2"><label>Chief Engineer</label><input id="s_chEngVoyage" placeholder="Update at crew change"></div>
       </div>
+      <div class="hint">Date &amp; Time (initial) and Time zone are the voyage-start reference for the first log entry — period hours are measured from this ship's-clock stamp. The time-zone list only labels the clock; use Change clocks on the log entry when the watch actually advances or retards time.</div>
       <div class="hint">Chief Engineer is the same record as on Vessel Data — update it here at a crew change and it carries forward to the following voyages. Entries already saved keep the officer who was aboard when they were made, so their reports still print the correct signature.</div>
 
       <h3 class="sub">Chief Engineer Signature</h3>
@@ -1478,7 +1530,7 @@
         <button class="primary" id="btnSaveVoyageDetails">Update Voyage Details</button>
         <button class="danger" id="btnResetVoyage">Create New Voyage…</button>
       </div>
-      <div class="hint" style="margin-top:12px; text-align:center;">Create New Voyage clears the voyage log and receipts to start fresh, but keeps everything continuous: your last entry's meter readings carry over as the opening reference for the next entry, current ROB becomes the new opening ROB, and Departure Port is set to this voyage's Arrival Port. Before it runs, Voyage No., Ships Condition, and Date &amp; Time above must be updated to reflect the new voyage.</div>
+      <div class="hint" style="margin-top:12px; text-align:center;">Create New Voyage clears the voyage log and receipts to start fresh, but keeps everything continuous: your last entry's meter readings carry over as the opening reference for the next entry, current ROB becomes the new opening ROB, and Departure Port is set to this voyage's Arrival Port. Before it runs, Voyage No., Ships Condition, Date &amp; Time, and Time zone above must be updated to reflect the new voyage.</div>
     </div>
   </div>
 
@@ -1491,7 +1543,62 @@
         <button class="primary small" id="btnOpenLogin">Sign in / change vessel…</button>
         <button class="ghost small" id="btnSignOut">Sign out</button>
       </div>
-      <div class="hint">Your login decides which vessel this program loads. A vessel account is fixed to one ship; an administrator picks one ship at a time. Without a vessel the program runs blank until you add one.</div>
+      <div class="hint">Your login decides which vessel this program loads. A chief engineer is fixed to one ship; a fleet manager picks one ship at a time, or stays in Fleet Office with none loaded.</div>
+    </div>
+
+    <div class="panel" id="fleetOfficePanel" hidden>
+      <h2>Fleet Office</h2>
+      <p class="hint">One live chief engineer per ship. Create an account, then Assign on that row — do not reuse the create form. Posting someone onto an occupied ship signs the incumbent off. Generated passwords are shown once — copy them onto the handover sheet.</p>
+      <div class="login-status" id="foStatus" role="status"></div>
+
+      <h3 class="sub">Pending review</h3>
+      <div id="foPendingList" class="fo-empty">None waiting.</div>
+
+      <h3 class="sub">Register a vessel</h3>
+      <div class="form-grid cols3">
+        <div class="field"><label>Vessel name</label><input id="fo_vesselName" placeholder="M/V Harbour Key"></div>
+        <div class="field"><label>IMO</label><input id="fo_vesselImo" placeholder="IMO 9722101"></div>
+        <div class="field"><label>Company</label><input id="fo_vesselCompany" placeholder="Pacific Ocean Shipping"></div>
+        <div class="field"><label>Chief engineer (optional)</label><input id="fo_vesselUsername" placeholder="created and posted to this ship" autocomplete="off"></div>
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="primary small" type="button" id="btnFoCreateVessel">Register vessel</button>
+      </div>
+      <div class="table-scroll" style="margin-top:12px;">
+        <table class="fo-table" id="foVesselTable"><thead>
+          <tr><th>Vessel</th><th>IMO</th><th>Chief engineer</th><th></th></tr>
+        </thead><tbody></tbody></table>
+      </div>
+
+      <h3 class="sub">Create a chief engineer</h3>
+      <div class="form-grid cols3">
+        <div class="field"><label>Username</label><input id="fo_username" placeholder="hberg" autocomplete="off"></div>
+        <div class="field"><label>Post to vessel</label><select id="fo_accountVessel"><option value="">— none yet, he will pick —</option></select></div>
+        <div class="field" style="display:flex;align-items:flex-end;">
+          <button class="primary" type="button" id="btnFoCreateAccount" style="width:100%;">Create account</button>
+        </div>
+      </div>
+      <div class="fo-password" id="foPasswordBox" hidden>
+        <div class="hint" style="margin:0 0 6px;">Hand this to the engineer. It is shown once and stored nowhere else.</div>
+        <code id="foPasswordValue"></code>
+        <div class="hint" id="foPasswordWho" style="margin:6px 0 0;"></div>
+        <div class="btn-row">
+          <button class="primary small" type="button" id="btnFoCopyPassword">Copy password</button>
+        </div>
+      </div>
+      <div class="table-scroll" style="margin-top:12px;">
+        <table class="fo-table" id="foAccountTable"><thead>
+          <tr><th>Username</th><th>Current ship</th><th>Assign to</th><th></th></tr>
+        </thead><tbody></tbody></table>
+      </div>
+
+      <h3 class="sub">Devices</h3>
+      <p class="hint">A stolen or handed-over laptop is revoked here. The engineer signs in with his password on the replacement machine to enroll it.</p>
+      <div class="table-scroll">
+        <table class="fo-table" id="foDeviceTable"><thead>
+          <tr><th>Device</th><th>Engineer</th><th>Last seen</th><th></th></tr>
+        </thead><tbody></tbody></table>
+      </div>
     </div>
 
     <div class="panel">
@@ -1529,6 +1636,7 @@
         <div class="field"><label>Chief Engineer</label><input id="s_chEng"></div>
         <div class="field"><label>DWT (tonnes) — for CII</label><input type="number" step="1" id="s_dwt" placeholder="e.g. 60000"></div>
         <div class="field"><label>IMO No.</label><input id="s_imoNo" placeholder="IMO 1234567"></div>
+        <div class="field"><label>Flag registry</label><select id="s_flag"></select></div>
       </div>
       <div class="btn-row" style="margin-top:12px;">
         <button class="primary small" id="btnSaveVesselIdentity">Save Vessel Details</button>
@@ -1538,7 +1646,7 @@
       <div class="btn-row" id="registerVesselRow" hidden style="margin-top:8px;">
         <button class="ghost small" id="btnRegisterVessel" type="button">Register Vessel</button>
       </div>
-      <div class="hint">Vessel name, company, Chief Engineer, DWT and IMO number are stored per vessel and used on printouts, CII and the e-ORB prefill.</div>
+      <div class="hint">Vessel name, company, Chief Engineer, DWT, IMO number and flag registry are stored per vessel and used on printouts, CII and the e-ORB prefill. Flag here is the same register as on the e-ORB tab.</div>
 
       <h3 class="sub">Vessel Stamp</h3>
       <div class="stamp-row">
@@ -1682,6 +1790,7 @@
             </select>
           </div>
         </div>
+        <div class="hint" id="flowArrHint" style="margin-top:8px;"></div>
         <div class="table-scroll" style="margin-top:10px;">
           <table>
             <thead><tr><th></th><th>Reading (initial)</th><th>Max Digits</th></tr></thead>
@@ -1693,7 +1802,7 @@
             </tbody>
           </table>
         </div>
-        <div class="hint">Max Digits sets each meter's rollover point (rollover = 10^digits) — used for rollover-safe consumption calc if a flowmeter counter resets. Setup Type is the same Flowmeter Arrangement used on the Log Entry form.</div>
+        <div class="hint">Max Digits sets each meter's rollover point (rollover = 10^digits) — used for rollover-safe consumption calc if a flowmeter counter resets. Setup Type is the same Flowmeter Arrangement used on the Log Entry form. Changing meters on a saved log entry and saving again recalculates that watch and every later watch.</div>
       </div>
 
       <div class="grid">
@@ -1754,7 +1863,8 @@
       <input type="hidden" id="in_rpm" value="">
 
       <div class="form-grid">
-        <div class="field span2"><label>Date &amp; Time</label><input type="datetime-local" id="in_datetime"></div>
+        <div class="field span2"><label>Date &amp; Time (ship's clock)</label><input type="datetime-local" id="in_datetime"></div>
+        <div class="field span2"><label>Time zone</label><select id="in_tzOffset"></select></div>
         <div class="field span2"><label>Operation</label>
           <select id="in_operation">
             <optgroup label="Departure">
@@ -1791,6 +1901,16 @@
         </div>
         <div class="field"><label>Condition</label><select id="in_condition"><option value="B">B — Ballast</option><option value="L">L — Laden</option></select></div>
       </div>
+      <input type="hidden" id="in_clockChangeMin" value="0">
+      <div class="tz-clock-row">
+        <span class="tz-clock-label">Change clocks</span>
+        <button type="button" class="ghost small" data-tz-step="-60">−1 hour</button>
+        <button type="button" class="ghost small" data-tz-step="-30">−30 min</button>
+        <button type="button" class="ghost small" data-tz-step="30">+30 min</button>
+        <button type="button" class="ghost small" data-tz-step="60">+1 hour</button>
+      </div>
+      <div class="orb-date-note" id="in_clockChangeNote">No clock change this period.</div>
+      <div class="hint">The time-zone list only labels ship's clock. Use Change clocks when the watch actually advances or retards time — picking UTC+8 does not take 8 hours off the period.</div>
       <div class="hint">Distance run, M/E avg RPM, slip, engine distance/speed, and consumption review are on the Voyage Summary after you save or open an entry.</div>
 
       <h3 class="sub">Main Engine — Runtime &amp; Revolutions</h3>
@@ -1800,7 +1920,7 @@
           <div class="field"><label>Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="me_runtime"></div>
           <div class="field"><label>Period Runtime (hrs, calc)</label><input type="text" id="me_runtime_period" readonly tabindex="-1"></div>
           <div class="field"><label>Rev. Counter (cumulative)</label><input type="number" step="1" id="in_revCounter"></div>
-          <div class="hint" id="meRuntimeHint" style="margin:0;">Period runtime = hours between the previous entry's date/time and the date/time selected above. On a new entry the cumulative counter tracks that period automatically until you type your own reading.</div>
+          <div class="hint" id="meRuntimeHint" style="margin:0;">Period runtime = hours between the previous entry's date/time and the date/time selected above, after any clocks advanced/retarded this period. On a new entry the cumulative counter tracks that period automatically until you type your own reading.</div>
         </div>
         <div class="unit-box">
           <h3>Linked from Voyage Summary</h3>
@@ -1836,6 +1956,33 @@
         </div>
       </div>
       <div class="hint">Fuel consumption overrides and ROB review are on the Voyage Summary after you add or open an entry. M/E and G/E system oil meters are no longer entered here — those grades follow opening ROB / receipts unless adjusted on the summary ROB table.</div>
+
+      <h3 class="sub">Fresh Water</h3>
+      <div class="unit-group cols2" id="logFwCard">
+        <div class="unit-box">
+          <h3>Production &amp; tanks</h3>
+          <div class="form-grid cols2" id="inFwTankPickRow" style="display:none;">
+            <div class="field"><label>Tank for production</label><select id="in_fwProdTank"></select>
+              <div class="hint">Produced water is added to this tank.</div></div>
+            <div class="field"><label>Tank for consumption</label><select id="in_fwConsTank"></select>
+              <div class="hint">Consumed water is taken from this tank.</div></div>
+          </div>
+          <div class="field"><label>Production Flowmeter (cumulative, L)</label><input type="number" id="in_fwProd"></div>
+          <div class="field" id="inFwSingleRobWrap"><label>FW ROB (L)</label><input type="number" id="in_fwRob"></div>
+        </div>
+        <div class="unit-box">
+          <h3>ROB &amp; period</h3>
+          <div id="inFwMultiRobWrap" style="display:none;">
+            <div class="hint" style="margin-bottom:8px;">Enter present ROB for each tank. Total water is the sum of all tanks.</div>
+            <div class="form-grid cols2" id="inFwTankRobFields"></div>
+          </div>
+          <div class="form-grid cols3" style="margin-top:8px;">
+            <div class="field calc"><label>Total FW ROB (L)</label><input type="text" id="in_fwTotalRob" readonly tabindex="-1"></div>
+            <div class="field calc"><label>Produced (L)</label><input type="text" id="in_fwProdD" readonly tabindex="-1"></div>
+            <div class="field calc"><label>Consumed (L)</label><input type="text" id="in_fwConsD" readonly tabindex="-1"></div>
+          </div>
+        </div>
+      </div>
 
       <div class="btn-row">
         <button class="primary" id="btnAdd">Add Entry</button>
@@ -2027,8 +2174,17 @@
           </div>
           <div class="unit-box">
             <h3>Fresh Water</h3>
+            <div class="form-grid cols2" id="vsFwTankPickRow" style="display:none;">
+              <div class="field"><label>Tank for production</label><select id="vs_fwProdTank"></select></div>
+              <div class="field"><label>Tank for consumption</label><select id="vs_fwConsTank"></select></div>
+            </div>
             <div class="field"><label>Flowmeter (cumulative)</label><input type="number" id="vs_fwProdMeter"></div>
-            <div class="field"><label>R.O.B. (tank sounding, present)</label><input type="number" id="vs_fwRob"></div>
+            <div class="field" id="vsFwSingleRobWrap"><label>R.O.B. (tank sounding, present)</label><input type="number" id="vs_fwRob"></div>
+            <div id="vsFwMultiRobWrap" style="display:none;">
+              <div class="hint" style="margin-bottom:8px;">Enter present ROB for each tank. Total water is the sum of all tanks.</div>
+              <div id="vsFwTankRobFields"></div>
+              <div class="field calc"><label>Total FW ROB (L)</label><input type="text" id="vs_fwTotalRob" readonly tabindex="-1"></div>
+            </div>
             <div class="field"><label>Produced (calc, L)</label><input type="text" id="vs_fwProduced" readonly></div>
             <div class="field"><label>Consumed (calc, L)</label><input type="text" id="vs_fwConsumed" readonly></div>
           </div>
@@ -2550,8 +2706,8 @@
           <div class="field"><label>Capacity warning tolerance (%)</label><input type="number" step="1" id="orb_capTol" value="15"></div>
         </div>
         <div class="hint">Rated capacities drive auto-ROB checks: incinerator quantity vs burn hours, and pump quantity vs start/stop time. Mismatches above the tolerance show a warning before save.</div>
-        <label class="hint" style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;">
-          <input type="checkbox" id="orb_disclaimer" style="margin-top:3px;">
+        <label class="orb-disclaimer">
+          <input type="checkbox" id="orb_disclaimer">
           <span>I understand this guided e-ORB is for operational logging/training/printouts. Using it as the official ORB requires flag-approved software and a ship-specific Declaration.</span>
         </label>
         <div class="btn-row">
@@ -2593,7 +2749,9 @@
           <div class="field"><label>Ship position / place (optional default)</label><input id="orb_defaultPos" placeholder="Lat/Long or port"></div>
         </div>
         <div class="orb-date-note" id="orbDateNote"></div>
-        <div class="hint" id="orbNewHint">Start with <strong>Weekly Inventory</strong> for sludge (C.11) and oily bilge / bilge tanks (Code I), or pick an operation below.</div>
+        <div class="orb-flag-box orb-weekly-due" id="orbWeeklyDueNote" hidden></div>
+        <div class="orb-flag-box orb-weekly-due" id="orbOwsDueNote" hidden></div>
+        <div class="hint" id="orbNewHint">Start with <strong>Weekly inventory — sludge and bilge tanks</strong> (within 7 days of the last sounding) and the <strong>weekly 15 ppm / OWS test</strong>, or pick another operation below.</div>
 
         <h3 class="sub">What operation did you carry out?</h3>
         <div class="hint">Pick the operation in plain language — the correct MARPOL code and item numbers are selected for you.</div>
@@ -2609,11 +2767,12 @@
       </div>
       <div class="panel" id="orbWeeklyWizard" style="display:none;">
         <h2>Weekly Tank Inventory</h2>
-        <div class="hint">MARPOL / MEPC.1/Circ.736: sludge / oil residue tanks (IOPP 3.1) → Code <strong>C 11.1 / 11.2 / 11.3</strong> for each tank. Oily bilge water holding (IOPP 3.3) and other bilge tanks/wells → Code <strong>I</strong> (voluntary). Enter retained m³ for every tank to include.</div>
+        <div class="hint">MARPOL / MEPC.1/Circ.736: sludge / oil residue tanks (IOPP 3.1) → Code <strong>C 11.1 / 11.2 / 11.3</strong> for each tank. Oily bilge water holding (IOPP 3.3) and other bilge tanks/wells → Code <strong>I</strong>. The next inventory may be sooner than 7 days after the last one, never later.</div>
+        <div class="orb-flag-box orb-weekly-due" id="orbWeeklyWizardDueNote" hidden></div>
         <div id="orbWeeklyTankFields" style="margin-top:10px;"></div>
         <label class="hint" style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;">
           <input type="checkbox" id="orb_weeklyIncludeBilge" checked style="margin-top:3px;">
-          <span>Also save voluntary Code I weekly inventory for oily bilge holding + bilge tanks/wells (recommended for SMS / PSC clarity).</span>
+          <span>Also save Code I weekly inventory for oily bilge holding + bilge tanks/wells (part of the weekly sludge-and-bilge sounding).</span>
         </label>
         <div class="form-grid cols2" style="margin-top:10px;">
           <div class="field"><label>Date of operation</label><input type="date" id="orb_weeklyEntryDate"></div>
@@ -2643,6 +2802,7 @@
           <div class="field"><label>Officer in charge</label><select id="orb_officerSelect"></select></div>
         </div>
         <div class="orb-date-note" id="orbWizardDateNote"></div>
+        <div class="orb-flag-box orb-weekly-due" id="orbOwsWizardDueNote" hidden></div>
         <div class="form-grid cols3" style="margin-top:10px;">
           <div class="field"><label>Officer in charge — name</label><input id="orb_officerName"></div>
           <div class="field"><label>Rank</label><input id="orb_officerRank" placeholder="e.g. 2/E, 3/E, C/E"></div>
@@ -2672,6 +2832,7 @@
         <div class="btn-row">
           <button class="primary small" type="button" id="btnOrbFilter">Fetch Records</button>
           <button class="ghost small" type="button" id="btnOrbPrint">Print Selected Period</button>
+          <button class="ghost small" type="button" id="btnOrbVoid">Void / correct selected</button>
           <button class="ghost small" type="button" id="btnOrbExportJson">Export JSON</button>
         </div>
         <div class="table-scroll" style="margin-top:12px;">
@@ -3791,10 +3952,10 @@ const state = {
   setup: {
     vesselName:'M/V FANGCHENG', chEng:'', voyageNumber:'11', shipCondition:'B',
     departPort:'CHINA', arrivePort:'BRAZIL', place:'', flowArr:'SINGLE',
-    initDateTime:'', initRuntime:null,
+    initDateTime:'', tzOffsetMin:null, initRuntime:null,
     pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
     sfoc100:null, sfoc85:null, lcvRef:42700, lcvActual:null, alternatorMaxKw:null,
-    dwt:null, imoNo:'', company:'',
+    dwt:null, imoNo:'', company:'', flag:'',
     geArrangement:'SINGLE',
     generatorCount:1,
     meCylinderCount:6,
@@ -3850,7 +4011,7 @@ function defaultSetupTemplate(overrides){
   const base = {
     vesselName:'New Vessel', chEng:'', voyageNumber:'', shipCondition:'B',
     departPort:'', arrivePort:'', place:'', flowArr:'SINGLE',
-    initDateTime:'', initRuntime:null,
+    initDateTime:'', tzOffsetMin:null, initRuntime:null,
     pitch:5.85, mcrRpm:91, mcrKw:18630, csrRpm:null, csrKw:null,
     sfoc100:null, sfoc85:null, alternatorMaxKw:660,
     geArrangement:'SINGLE', generatorCount:1, meCylinderCount:6, turboCount:2,
@@ -3989,6 +4150,8 @@ function entryFromSnap(id, datetime, operation, condition, snap, extra){
     consOverride: e.consOverride || null,
     unitOverride: e.unitOverride || { ME:null, GE:null, BLR:null },
     weather: e.weather || weather(),
+    tzOffsetMin: e.tzOffsetMin != null ? e.tzOffsetMin : 0,
+    clockChangeMin: sanitizeClockChangeMin(e.clockChangeMin),
     report
   };
 }
@@ -5182,7 +5345,8 @@ async function activateVoyageLeg(vesselId, voyageNumber, condition){
     vesselName: state.setup?.vesselName,
     chEng: state.setup?.chEng,
     dwt: state.setup?.dwt,
-    imoNo: state.setup?.imoNo
+    imoNo: state.setup?.imoNo,
+    flag: state.setup?.flag
   };
   const setup = migrateSetup(leg.setup || state.setup);
   setup.voyageNumber = vn;
@@ -5651,19 +5815,52 @@ async function pushVesselToServer(vesselId){
   }
 }
 
+/** Voyage-start stamp from Voyage Specifics — the reference for the first log entry. */
+function voyageInitReference(setup){
+  const s = setup || {};
+  if (!s.initDateTime) return null;
+  const raw = s.tzOffsetMin;
+  const tz = (raw != null && isFinite(Number(raw)))
+    ? (typeof ShipTime !== 'undefined' && ShipTime ? ShipTime.clampTzOffsetMin(raw) : Number(raw))
+    : null;
+  return { datetime: s.initDateTime, tzOffsetMin: tz };
+}
+
+function formVoyageTzOffsetMin(){
+  const n = parseInt(document.getElementById('s_initTzOffset')?.value, 10);
+  if (isFinite(n)) return window.ShipTime ? ShipTime.clampTzOffsetMin(n) : n;
+  const init = voyageInitReference(state.setup);
+  if (init && init.tzOffsetMin != null) return init.tzOffsetMin;
+  return defaultShipTzOffsetMin();
+}
+
+function fillVoyageTzOffsetSelect(){
+  const fromSetup = state.setup && state.setup.tzOffsetMin != null && Number.isFinite(Number(state.setup.tzOffsetMin))
+    ? state.setup.tzOffsetMin
+    : defaultShipTzOffsetMin();
+  fillTzOffsetSelect('s_initTzOffset', fromSetup);
+}
+
 /* Synthetic starting baseline built from Setup's initial readings, used only when no explicit
    carryover (from Create New Voyage) and no log entries exist yet. */
 function effectiveCarryover(){
-  if (state.setup.carryover) return state.setup.carryover;
+  if (state.setup.carryover){
+    const c = state.setup.carryover;
+    if ((c.tzOffsetMin == null || !Number.isFinite(Number(c.tzOffsetMin))) && state.setup.tzOffsetMin != null)
+      c.tzOffsetMin = state.setup.tzOffsetMin;
+    return c;
+  }
+  const init = voyageInitReference(state.setup);
+  if (!init) return null;
   const fm = state.setup.flowmeters || {};
   const arr = state.setup.flowArr || 'SINGLE';
   const meDual = arr==='DUAL_ME' || arr==='DUAL_BOTH';
   const geDual = arr==='DUAL_GE' || arr==='DUAL_BOTH';
-  const hasAny = fm.main?.reading!=null || fm.aux?.reading!=null || fm.boiler?.reading!=null || fm.cyl?.reading!=null || fm.rc?.reading!=null;
-  if (!state.setup.initDateTime || !hasAny) return null;
   const d = state.setup.defaults || {};
   return {
-    datetime: state.setup.initDateTime,
+    datetime: init.datetime,
+    tzOffsetMin: init.tzOffsetMin,
+    clockChangeMin: 0,
     me: {
       meter: fm.main?.reading ?? null,
       meterIn: fm.main?.reading ?? null,
@@ -5679,7 +5876,11 @@ function effectiveCarryover(){
     blr:{ meter: fm.boiler?.reading ?? null, type: d.blrType, sg: d.blrSg },
     cylMeter: fm.cyl?.reading ?? null,
     revCounter: fm.rc?.reading ?? null,
-    meLo: null, geLo: null, fwProd: null, fwRob: state.setup.robLube ? tankRobValue(state.setup.robLube, fwTankList()[0]) : null,
+    meLo: null, geLo: null, fwProd: null,
+    fwRob: state.setup.robLube ? fwTankList().reduce((s,t)=>s+(tankRobValue(state.setup.robLube, t)||0),0) : null,
+    fwRobByTank: Object.fromEntries(fwTankList().map(t=>[t.id, tankRobValue(state.setup.robLube, t)])),
+    fwProdTankId: fwTankList()[0]?.id || null,
+    fwConsTankId: fwTankList()[0]?.id || null,
     meRuntime: state.setup.initRuntime, tbn: d.cylTbn
   };
 }
@@ -5712,7 +5913,7 @@ function pushEntryUndo(record){
 }
 
 /** Refresh stored report period/fuel stamps on entries after a mutation so later watches follow the new previous values. */
-async function cascadeSucceedingEntries(startIdx, { clearOverrides = true, persist = true } = {}){
+async function cascadeSucceedingEntries(startIdx, { clearOverrides = true, persist = true, skipClearFirst = false } = {}){
   const sorted = sortedEntries();
   if (startIdx < 0 || startIdx >= sorted.length) return;
   // Ensure derived rows reflect current meters before we stamp fuel shares
@@ -5721,7 +5922,7 @@ async function cascadeSucceedingEntries(startIdx, { clearOverrides = true, persi
     const e = sorted[i];
     const prev = i > 0 ? sorted[i-1] : effectiveCarryover();
     let changed = false;
-    if (clearOverrides){
+    if (clearOverrides && !(skipClearFirst && i === startIdx)){
       if (e.consOverride && Object.keys(e.consOverride).length){ e.consOverride = {}; changed = true; }
       if (e.unitOverride && (e.unitOverride.ME!=null || e.unitOverride.GE!=null || e.unitOverride.BLR!=null)){
         e.unitOverride = { ME:null, GE:null, BLR:null };
@@ -5774,8 +5975,137 @@ async function cascadeSucceedingEntries(startIdx, { clearOverrides = true, persi
   }
 }
 
+/** Drop a timezone-sized figure (e.g. UTC+8 = 480 min) stored as a clock change.
+ *  Works even when a stale cached ship_time.js has ShipTime but not this helper. */
+function sanitizeClockChangeMin(min){
+  try{
+    if (window.ShipTime && typeof ShipTime.sanitizeClockChangeMin === 'function')
+      return ShipTime.sanitizeClockChangeMin(min);
+  }catch(_e){}
+  const n = Number(min) || 0;
+  return Math.abs(n) > 180 ? 0 : n;
+}
+
+function shouldRecordShipClockChange(fromOffsetMin, toOffsetMin, prevHadZone, entryHadZone){
+  try{
+    if (window.ShipTime && typeof ShipTime.shouldRecordClockChange === 'function')
+      return ShipTime.shouldRecordClockChange(fromOffsetMin, toOffsetMin, prevHadZone, entryHadZone);
+  }catch(_e){}
+  const from = Number(fromOffsetMin) || 0;
+  const to = Number(toOffsetMin) || 0;
+  const delta = to - from;
+  if (!delta) return false;
+  if (!prevHadZone && !entryHadZone) return false;
+  if (Math.abs(delta) > 180) return false;
+  return true;
+}
+
+/** Actual hours between two ship's-clock stamps (clocks advanced are subtracted). */
+function elapsedShipHours(prevDt, curDt, clockChangeMin){
+  const clk = sanitizeClockChangeMin(clockChangeMin);
+  if (window.ShipTime && typeof ShipTime.elapsedShipHours === 'function')
+    return ShipTime.elapsedShipHours(prevDt, curDt, clk);
+  if (!prevDt || !curDt) return null;
+  const naive = (new Date(curDt) - new Date(prevDt)) / 3600000;
+  if (!isFinite(naive)) return null;
+  const adj = naive - clk / 60;
+  return adj > 0 ? adj : null;
+}
+
+let _shipTzCurrent = 0;
+let _shipTzFill = false;
+
+function defaultShipTzOffsetMin(){
+  const last = sortedEntries().slice(-1)[0];
+  if (last && last.tzOffsetMin != null && Number.isFinite(Number(last.tzOffsetMin)))
+    return ShipTime ? ShipTime.clampTzOffsetMin(last.tzOffsetMin) : Number(last.tzOffsetMin) || 0;
+  if (state.setup && state.setup.tzOffsetMin != null && Number.isFinite(Number(state.setup.tzOffsetMin)))
+    return ShipTime ? ShipTime.clampTzOffsetMin(state.setup.tzOffsetMin) : Number(state.setup.tzOffsetMin) || 0;
+  try{
+    return ShipTime ? ShipTime.clampTzOffsetMin(-new Date().getTimezoneOffset()) : (-new Date().getTimezoneOffset() || 0);
+  }catch(_e){
+    return 0;
+  }
+}
+function formTzOffsetMin(){
+  const n = parseInt(document.getElementById('in_tzOffset')?.value, 10);
+  return isFinite(n) ? (ShipTime ? ShipTime.clampTzOffsetMin(n) : n) : defaultShipTzOffsetMin();
+}
+function formClockChangeMin(){
+  const n = parseFloat(document.getElementById('in_clockChangeMin')?.value);
+  return sanitizeClockChangeMin(isFinite(n) ? n : 0);
+}
+function fillTzOffsetSelect(selId, selectedMin){
+  const sel = document.getElementById(selId || 'in_tzOffset');
+  if (!sel || !window.ShipTime) return;
+  const chosen = selectedMin != null && isFinite(Number(selectedMin))
+    ? String(ShipTime.clampTzOffsetMin(selectedMin))
+    : sel.value;
+  sel.innerHTML = ShipTime.tzOffsetOptions().map(m =>
+    `<option value="${m}">${ShipTime.formatTzOffset(m)}</option>`).join('');
+  if (chosen !== '' && [...sel.options].some(o => o.value === chosen)) sel.value = chosen;
+  else sel.value = String(defaultShipTzOffsetMin());
+}
+function updateClockChangeNote(){
+  const el = document.getElementById('in_clockChangeNote');
+  if (!el || !window.ShipTime) return;
+  const min = formClockChangeMin();
+  el.textContent = ShipTime.formatClockChange(min);
+  el.classList.toggle('warn', !!min);
+}
+function setShipTzUi(offsetMin, clockChangeMin){
+  _shipTzFill = true;
+  _shipTzCurrent = window.ShipTime ? ShipTime.clampTzOffsetMin(offsetMin) : (Number(offsetMin) || 0);
+  const sel = document.getElementById('in_tzOffset');
+  if (sel) sel.value = String(_shipTzCurrent);
+  const hid = document.getElementById('in_clockChangeMin');
+  const clk = sanitizeClockChangeMin(clockChangeMin);
+  if (hid) hid.value = String(clk);
+  _shipTzFill = false;
+  updateClockChangeNote();
+}
+function applyShipTzChange(toOffsetMin){
+  if (!window.ShipTime) return;
+  const to = ShipTime.clampTzOffsetMin(toOffsetMin);
+  const from = _shipTzCurrent;
+  if (to === from) return;
+  const dt = document.getElementById('in_datetime');
+  const prev = getPrevReferenceFor(dt?.value || '', editingId);
+  const prevHadZone = !!(prev && prev.tzOffsetMin != null && Number.isFinite(Number(prev.tzOffsetMin)));
+  const editing = editingId ? state.entries.find(x => x.id === editingId) : null;
+  const entryHadZone = !!(editing && editing.tzOffsetMin != null && Number.isFinite(Number(editing.tzOffsetMin)));
+  if (!shouldRecordShipClockChange(from, to, prevHadZone, entryHadZone)){
+    setShipTzUi(to, formClockChangeMin());
+    if (state.setup) state.setup.tzOffsetMin = to;
+    syncMeRuntimeFromPeriod();
+    if (document.getElementById('vs_rpm')?.value || document.getElementById('in_rpm')?.value)
+      syncRpmRevCounter(document.getElementById('vs_rpm')?.value ? 'vs_rpm' : 'in_rpm');
+    else if (document.getElementById('in_revCounter')?.value)
+      syncRpmRevCounter('in_revCounter');
+    updateVsRunCalcDisplays();
+    updateLivePreview();
+    return;
+  }
+  const result = ShipTime.applyTimezoneChange(
+    dt?.value || '',
+    from,
+    to,
+    formClockChangeMin()
+  );
+  if (dt && result.datetime) dt.value = result.datetime;
+  setShipTzUi(result.tzOffsetMin, result.clockChangeMin);
+  if (state.setup) state.setup.tzOffsetMin = result.tzOffsetMin;
+  syncMeRuntimeFromPeriod();
+  if (document.getElementById('vs_rpm')?.value || document.getElementById('in_rpm')?.value)
+    syncRpmRevCounter(document.getElementById('vs_rpm')?.value ? 'vs_rpm' : 'in_rpm');
+  else if (document.getElementById('in_revCounter')?.value)
+    syncRpmRevCounter('in_revCounter');
+  updateVsRunCalcDisplays();
+  updateLivePreview();
+}
+
 /** Formula/data rebuild stamp — bump when stored RPM / perf must be rewritten for existing voyages. */
-const DATA_RECALC_VERSION = 56;
+const DATA_RECALC_VERSION = 57;
 
 /** Re-derive stored RPM from rev-counter Δrevs and rebuild period performance fields for current state.entries. */
 async function recalculateCurrentEntries({ persist = true, clearOverrides = false } = {}){
@@ -5785,8 +6115,13 @@ async function recalculateCurrentEntries({ persist = true, clearOverrides = fals
   let rpmFixed = 0;
   for (const e of sorted){
     let changed = false;
+    const sanitizedClk = sanitizeClockChangeMin(e.clockChangeMin);
+    if (sanitizedClk !== (Number(e.clockChangeMin) || 0)){
+      e.clockChangeMin = sanitizedClk;
+      changed = true;
+    }
     if (prev && e.revCounter!=null && prev.revCounter!=null && e.datetime && prev.datetime){
-      const hrs = (new Date(e.datetime) - new Date(prev.datetime)) / 3600000;
+      const hrs = elapsedShipHours(prev.datetime, e.datetime, e.clockChangeMin);
       const dailyRevs = meterDelta(e.revCounter, prev.revCounter, rolls.rc);
       if (dailyRevs != null && hrs > 0){
         const rpm = rpmFromRevs(dailyRevs, hrs);
@@ -6089,9 +6424,23 @@ function dualDelta(currIn, prevIn, currOut, prevOut, rollIn, rollOut){
   return inD - outD;
 }
 
-/* Compute ME & GE raw consumption (litres) for one period, based on the flowmeter arrangement. */
-function meGeRawLitres(e, prev, rolls){
-  const arr = state.setup.flowArr || 'SINGLE';
+/* Store a typed unit-cons override only when it differs from the meter-derived figure.
+   Prefilling the Voyage Summary boxes with the calculated values used to freeze ME/GE/BLR
+   on the first save, so later meter edits on the log entry never recalculated. */
+function unitOverrideIfDifferent(entered, calculated){
+  if (entered==null || isNaN(entered)) return null;
+  if (calculated==null || isNaN(calculated)) return entered;
+  if (Math.abs(entered - calculated) < 0.0005) return null;
+  return entered;
+}
+
+/* Compute ME & GE raw consumption (litres) for one period, based on the flowmeter arrangement.
+   SINGLE: each unit is present − previous.
+   DUAL GE: D/G = inlet Δ − outlet Δ; M/E = M/E meter Δ − D/G cons.
+   DUAL ME: M/E = inlet Δ − outlet Δ; D/G = D/G meter Δ − M/E cons.
+   DUAL BOTH: each unit is its own inlet Δ − outlet Δ. */
+function meGeRawLitres(e, prev, rolls, arrOpt){
+  const arr = arrOpt || (typeof state !== 'undefined' && state.setup && state.setup.flowArr) || 'SINGLE';
   let meRaw=null, geRaw=null;
   if (arr === 'SINGLE'){
     meRaw = meterDelta(e.me.meter, prev.me.meter, rolls.main);
@@ -6109,6 +6458,86 @@ function meGeRawLitres(e, prev, rolls){
     geRaw = dualDelta(e.ge.meterIn, prev.ge.meterIn, e.ge.meterOut, prev.ge.meterOut, rolls.aux, rolls.auxOut);
   }
   return {meRaw, geRaw};
+}
+
+/* Fresh-water period: production is the flowmeter quantity added; consumption is
+   previous total + production − present total. Production is booked on the
+   production tank; consumption is taken from the consumption tank. When any
+   per-tank sounding is present those soundings are the tank ROBs. */
+function fwPeriodBalance(opts){
+  const {
+    tankIds, prevByTank, prevTotal, prodDelta, presentByTank, presentTotal, prodTankId, consTankId
+  } = opts || {};
+  const ids = (tankIds && tankIds.length) ? tankIds.slice() : ['freshwater'];
+  const prev = {};
+  ids.forEach(id => {
+    const v = Number(prevByTank && prevByTank[id]);
+    prev[id] = Number.isFinite(v) ? v : 0;
+  });
+  let pTot = ids.reduce((s, id) => s + prev[id], 0);
+  if (prevTotal != null && prevTotal !== '' && Number.isFinite(Number(prevTotal))){
+    pTot = Number(prevTotal);
+  }
+  const prod = Number(prodDelta) || 0;
+  const pTank = (prodTankId && ids.includes(prodTankId)) ? prodTankId : ids[0];
+  const cTank = (consTankId && ids.includes(consTankId)) ? consTankId : ids[0];
+
+  const present = presentByTank || {};
+  const sounded = {};
+  let anySounding = false;
+  ids.forEach(id => {
+    if (present[id] != null && present[id] !== '' && Number.isFinite(Number(present[id]))){
+      sounded[id] = Number(present[id]);
+      anySounding = true;
+    }
+  });
+
+  const byTank = {};
+  let tot;
+  if (anySounding){
+    ids.forEach(id => { byTank[id] = sounded[id] != null ? sounded[id] : prev[id]; });
+    tot = ids.reduce((s, id) => s + byTank[id], 0);
+  } else if (presentTotal != null && presentTotal !== '' && Number.isFinite(Number(presentTotal))){
+    tot = Number(presentTotal);
+    ids.forEach(id => { byTank[id] = prev[id]; });
+    byTank[pTank] = (byTank[pTank] || 0) + prod;
+    const consBook = pTot + prod - tot;
+    byTank[cTank] = (byTank[cTank] || 0) - consBook;
+  } else {
+    tot = pTot + prod;
+    ids.forEach(id => { byTank[id] = prev[id]; });
+    byTank[pTank] = (byTank[pTank] || 0) + prod;
+  }
+  const cons = pTot + prod - tot;
+  const consByTank = {};
+  const prodByTank = {};
+  ids.forEach(id => { consByTank[id] = 0; prodByTank[id] = 0; });
+  prodByTank[pTank] = prod;
+  consByTank[cTank] = cons;
+  return { prod, cons, total: tot, byTank, consByTank, prodByTank, prodTankId: pTank, consTankId: cTank };
+}
+
+function fwPrevByTank(prev){
+  const tanks = fwTankList();
+  const o = {};
+  tanks.forEach(t => { o[t.id] = tankRobValue(state.setup.robLube, t); });
+  if (prev && prev.fwRobByTank){
+    Object.keys(prev.fwRobByTank).forEach(id => {
+      if (prev.fwRobByTank[id] != null) o[id] = Number(prev.fwRobByTank[id]);
+    });
+  } else if (prev && prev.fwRob != null && tanks[0]){
+    /* Legacy entries store one ship total. Do not keep other tanks' opening
+       figures beside it — that would double-count the water. */
+    tanks.forEach(t => { o[t.id] = 0; });
+    o[tanks[0].id] = Number(prev.fwRob);
+  }
+  return o;
+}
+
+function fwPrevTotal(prev){
+  if (prev && prev.fwRob != null && !isNaN(Number(prev.fwRob))) return Number(prev.fwRob);
+  const by = fwPrevByTank(prev);
+  return Object.values(by).reduce((s, v) => s + (Number(v) || 0), 0);
 }
 
 function meterRollovers(){
@@ -6281,6 +6710,7 @@ function computeDerived(){
   const rows = list.map(e=>{
     let hrs=null, meCons=null, geCons=null, blrCons=null, total=null;
     let cylCons=null, meLoCons=null, geLoCons=null, dailyRevs=null, fwProdD=null, fwConsD=null;
+    let fwByTank=null, fwConsByTank=null, fwProdByTank=null;
     let meStopped=false;
     let distEngine=null, speedEngine=null, speedShip=null, slip=null, mcrPct=null, kwEst=null;
     let sfocRef=null, sfocActual=null, sfocDelta=null, meFuelMtDay=null, meFuelExpected=null;
@@ -6293,7 +6723,7 @@ function computeDerived(){
     let rpmEff = (e.rpm!==null && e.rpm!==undefined && !isNaN(e.rpm)) ? e.rpm : null;
 
     if (prev){
-      hrs = (new Date(e.datetime) - new Date(prev.datetime)) / 3600000;
+      hrs = elapsedShipHours(prev.datetime, e.datetime, e.clockChangeMin);
 
       /* Rev counter unchanged over the period means the main engine never turned —
          the ship was alongside, at anchor or drifting on auxiliaries. Every M/E figure
@@ -6350,16 +6780,34 @@ function computeDerived(){
         consByLube[t] += lubeByType[t];
       });
 
-      // Fresh water: produced = flowmeter delta; consumed = previous ROB + produced - present ROB (direct tank sounding)
+      // Fresh water: produced = flowmeter delta; consumed = previous total + produced − present total.
+      // Production is added to the production tank; consumption is taken from the consumption tank.
       fwProdD = meterDelta(e.fwProd, prev.fwProd, rolls.generic) || 0;
-      const prevFwRob = prev.fwRob;
-      let rawFwCons = null;
-      if (prevFwRob!=null && e.fwRob!=null){
-        rawFwCons = prevFwRob + fwProdD - e.fwRob;
+      const fwIds = fwTankList().map(t=>t.id);
+      const fwBal = fwPeriodBalance({
+        tankIds: fwIds.length ? fwIds : ['freshwater'],
+        prevByTank: fwPrevByTank(prev),
+        prevTotal: fwPrevTotal(prev),
+        prodDelta: fwProdD,
+        presentByTank: e.fwRobByTank || {},
+        presentTotal: e.fwRob,
+        prodTankId: e.fwProdTankId,
+        consTankId: e.fwConsTankId
+      });
+      let rawFwCons = fwBal.cons;
+      if (e.fwRob==null && !(e.fwRobByTank && Object.keys(e.fwRobByTank).length)){
+        rawFwCons = null;
       }
-      fwConsD = (override['FRESH WATER']!=null || override[fwTankList()[0]?.id]!=null)
-        ? (override['FRESH WATER'] ?? override[fwTankList()[0]?.id])
+      fwConsD = (override['FRESH WATER']!=null || override[fwIds[0]]!=null)
+        ? (override['FRESH WATER'] ?? override[fwIds[0]])
         : rawFwCons;
+      fwByTank = fwBal.byTank;
+      fwConsByTank = Object.assign({}, fwBal.consByTank);
+      fwProdByTank = fwBal.prodByTank;
+      if (fwConsD !== rawFwCons && fwBal.consTankId){
+        Object.keys(fwConsByTank).forEach(id => { fwConsByTank[id] = 0; });
+        fwConsByTank[fwBal.consTankId] = fwConsD;
+      }
       lubeByType['FRESH WATER'] = fwConsD;
       if (fwConsD!=null) consByLube["FRESH WATER"] += fwConsD;
 
@@ -6446,19 +6894,23 @@ function computeDerived(){
       totalDistShip += (e.distanceShip||0);
       totalDistEngine += (distEngine||0);
       totalHrs += hrs;
-    } else if (rpmEff!=null){
-      speedEngine = rpmEff * propConstant;
-      mcrPct = Math.pow(rpmEff/mcrRpm, 3) * 100;
-      kwEst = Math.pow(rpmEff/mcrRpm, 3) * mcrKw;
-      const shaftKw2 = e.shaftKw != null ? e.shaftKw : e.report?.shaftKw;
-      if (shaftKw2 != null && !isNaN(shaftKw2) && shaftKw2 > 0) kwEst = shaftKw2;
-      sumRpm += rpmEff; cntRpm++;
-      sumMcr += mcrPct; cntMcr++;
-      sumKw += kwEst; cntKw++;
+    } else {
+      fwByTank = e.fwRobByTank || null;
+      if (rpmEff!=null){
+        speedEngine = rpmEff * propConstant;
+        mcrPct = Math.pow(rpmEff/mcrRpm, 3) * 100;
+        kwEst = Math.pow(rpmEff/mcrRpm, 3) * mcrKw;
+        const shaftKw2 = e.shaftKw != null ? e.shaftKw : e.report?.shaftKw;
+        if (shaftKw2 != null && !isNaN(shaftKw2) && shaftKw2 > 0) kwEst = shaftKw2;
+        sumRpm += rpmEff; cntRpm++;
+        sumMcr += mcrPct; cntMcr++;
+        sumKw += kwEst; cntKw++;
+      }
     }
 
     prev = e;
     return {...e, hrs, meCons, geCons, blrCons, total, cylCons, meLoCons, geLoCons, fwProdD, fwConsD,
+             fwByTank, fwConsByTank, fwProdByTank,
              consByType, lubeByType, miscCons: misc, meStopped,
              /* Δrevs of exactly zero is reported blank alongside the other M/E figures;
                 the printout carries an explicit "M/E stopped" note so the empty M/E
@@ -6494,6 +6946,25 @@ function computeDerived(){
   };
 
   return { rows, consByFuel, consByLube, perf };
+}
+
+function latestFwRobByTank(cutoffDate){
+  const o = {};
+  fwTankList().forEach(t => { o[t.id] = tankRobValue(state.setup.robLube, t); });
+  const apply = (src) => {
+    if (!src) return;
+    if (src.fwRobByTank){
+      Object.keys(src.fwRobByTank).forEach(id => {
+        if (src.fwRobByTank[id] != null) o[id] = src.fwRobByTank[id];
+      });
+    } else if (src.fwRob != null && fwTankList()[0]){
+      fwTankList().forEach(t => { o[t.id] = 0; });
+      o[fwTankList()[0].id] = src.fwRob;
+    }
+  };
+  apply(effectiveCarryover());
+  sortedEntries().filter(e => !cutoffDate || new Date(e.datetime) <= cutoffDate).forEach(apply);
+  return o;
 }
 
 function latestFwRob(cutoffDate){
@@ -6555,12 +7026,9 @@ function currentROB(consByFuel, consByLube){
   deductLubeConsumption(robLube, 'meSys', consByLube['ME SYS OIL']||0);
   deductLubeConsumption(robLube, 'geSys', consByLube['GE SYS OIL']||0);
 
-  const fwTanks = fwTankList();
-  const primaryFw = fwTanks[0];
-  if (primaryFw) robLube[primaryFw.id] = latestFwRob(null);
-  fwTanks.slice(1).forEach(t=>{
-    const received = state.receipts.filter(r=>receiptMatchesTank(r, t, ['fw','lube'])).reduce((s,r)=>s+r.qty,0);
-    robLube[t.id] = tankRobValue(state.setup.robLube, t) + received;
+  const latestFw = latestFwRobByTank(null);
+  fwTankList().forEach(t=>{
+    robLube[t.id] = latestFw[t.id] != null ? latestFw[t.id] : tankRobValue(state.setup.robLube, t);
   });
   return {rob, robLube};
 }
@@ -6783,8 +7251,15 @@ function robAsOfComputedRow(row, rowsHint){
   deductLubeConsumption(robLube, 'cylLow', Math.max(0, (row.cumLube?.['CYL LOW']||0) - (survey ? (sRow?.cumLube?.['CYL LOW']||0) : 0)));
   deductLubeConsumption(robLube, 'meSys', Math.max(0, (row.cumLube?.['ME SYS OIL']||0) - (survey ? (sRow?.cumLube?.['ME SYS OIL']||0) : 0)));
   deductLubeConsumption(robLube, 'geSys', Math.max(0, (row.cumLube?.['GE SYS OIL']||0) - (survey ? (sRow?.cumLube?.['GE SYS OIL']||0) : 0)));
-  const primaryFw = fwTankList()[0];
-  if (primaryFw) robLube[primaryFw.id] = row.fwRob!=null ? row.fwRob : latestFwRob(cutoff);
+  const fwTanks = fwTankList();
+  if (row.fwByTank){
+    fwTanks.forEach(t=>{
+      if (row.fwByTank[t.id] != null) robLube[t.id] = row.fwByTank[t.id];
+    });
+  } else {
+    const primaryFw = fwTanks[0];
+    if (primaryFw) robLube[primaryFw.id] = row.fwRob!=null ? row.fwRob : latestFwRob(cutoff);
+  }
   return {rob, robLube};
 }
 
@@ -6912,6 +7387,19 @@ function renderLastEntryRef(){
   const title = document.getElementById('lastEntryPanelTitle');
   const source = list.length ? list[list.length-1] : state.setup.carryover;
   if (!source){
+    const init = voyageInitReference(state.setup);
+    if (init){
+      title.textContent = 'Voyage Start — Reference';
+      const item = (label, val) => `<div class="ref-item"><div class="rv">${val===null||val===undefined||val===''?'—':val}</div><div class="rl">${label}</div></div>`;
+      const dtStr = String(init.datetime).replace('T', ' ');
+      const zone = window.ShipTime ? ShipTime.formatTzOffset(init.tzOffsetMin) : (init.tzOffsetMin != null ? init.tzOffsetMin : '—');
+      box.innerHTML = `<div class="hint">No log entries yet. The first entry is measured from this voyage-start date, time and zone (Voyage Setup → Voyage Specifics).</div>
+        <div class="ref-grid">
+          ${item('Date/Time', dtStr)}
+          ${item('Time zone', zone)}
+        </div>`;
+      return;
+    }
     title.textContent = 'Last Saved Entry — Reference';
     box.innerHTML = `<div class="hint">No entries saved yet — this panel will show your most recent entry's readings here once you add one, so you can check new meter values against it.</div>`;
     return;
@@ -6926,6 +7414,8 @@ function renderLastEntryRef(){
   const geDual = arr==='DUAL_GE' || arr==='DUAL_BOTH';
   box.innerHTML = `<div class="ref-grid">
     ${item('Date/Time', dtStr)}
+    ${item('Time zone', window.ShipTime ? ShipTime.formatTzOffset(e.tzOffsetMin || 0) : (e.tzOffsetMin || 'UTC'))}
+    ${item('Clock change', window.ShipTime ? (ShipTime.formatClockChangeShort(e.clockChangeMin) || 'none') : (e.clockChangeMin ? (e.clockChangeMin + ' min') : 'none'))}
     ${item('Operation', e.operation)}
     ${item('Condition', e.condition)}
     ${item('Dist Ship (nm)', e.distanceShip)}
@@ -6946,7 +7436,234 @@ function renderLastEntryRef(){
     ${item('Cylinder Oil Meter', e.cylMeter)}
     ${item('FW Produced Meter', e.fwProd)}
     ${item('FW ROB Reading (L)', e.fwRob)}
+    ${fwTankList().length>1 && e.fwRobByTank ? fwTankList().map(t=>item(t.name+' ROB (L)', e.fwRobByTank[t.id])).join('') : ''}
   </div>`;
+}
+
+function flowArrHintText(arr){
+  switch (arr){
+    case 'DUAL_GE':
+      return 'DUAL GE: D/G consumption = (inlet now − inlet previous) − (outlet now − outlet previous). M/E consumption = M/E flowmeter delta − D/G consumption.';
+    case 'DUAL_ME':
+      return 'DUAL ME: M/E consumption = (inlet now − inlet previous) − (outlet now − outlet previous). D/G consumption = D/G flowmeter delta − M/E consumption.';
+    case 'DUAL_BOTH':
+      return 'DUAL BOTH: M/E and D/G each use inlet delta − outlet delta independently.';
+    default:
+      return 'SINGLE: every machinery consumption = present reading − previous reading (rollover-safe).';
+  }
+}
+
+function updateFlowArrHint(){
+  const el = document.getElementById('flowArrHint');
+  if (el) el.textContent = flowArrHintText(state.setup.flowArr || 'SINGLE');
+}
+
+function fwTankRobId(prefix, tankId){
+  return prefix + '_fwRob_' + String(tankId).replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function syncFwTotalFromTanks(prefix){
+  const tanks = fwTankList();
+  if (tanks.length < 2) return;
+  let sum = 0, any = false;
+  tanks.forEach(t => {
+    const el = document.getElementById(fwTankRobId(prefix, t.id));
+    if (el && el.value !== ''){
+      const v = parseFloat(el.value);
+      if (!isNaN(v)){ sum += v; any = true; }
+    }
+  });
+  const totalEl = document.getElementById(prefix === 'vs' ? 'vs_fwTotalRob' : 'in_fwTotalRob');
+  if (totalEl) totalEl.value = any ? String(sum) : '';
+  const hiddenTotal = document.getElementById(prefix === 'vs' ? 'vs_fwRob' : 'in_fwRob');
+  if (hiddenTotal && any) hiddenTotal.value = String(sum);
+}
+
+function updateFwPreview(prefix){
+  const entryId = prefix === 'vs' ? currentVsEntryId : editingId;
+  const prev = (entryId ? previousEntryFor(entryId) : null) || getPrevReferenceFor(document.getElementById('in_datetime')?.value, editingId) || effectiveCarryover();
+  const fw = readFwForm(prefix);
+  const rolls = meterRollovers();
+  const prodDelta = (prev && fw.fwProd != null) ? (meterDelta(fw.fwProd, prev.fwProd, rolls.generic) || 0) : null;
+  const tanks = fwTankList();
+  const bal = fwPeriodBalance({
+    tankIds: tanks.map(t=>t.id),
+    prevByTank: fwPrevByTank(prev),
+    prevTotal: fwPrevTotal(prev),
+    prodDelta: prodDelta || 0,
+    presentByTank: fw.fwRobByTank || {},
+    presentTotal: fw.fwRob,
+    prodTankId: fw.fwProdTankId,
+    consTankId: fw.fwConsTankId
+  });
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = val==null ? '—' : (typeof fmtRob === 'function' ? fmtRob(val, 'fw') : String(val));
+  };
+  if (prefix === 'vs'){
+    set('vs_fwProduced', prodDelta);
+    set('vs_fwConsumed', (fw.fwRob==null && !fw.fwRobByTank) ? null : bal.cons);
+    const tot = document.getElementById('vs_fwTotalRob');
+    if (tot && tanks.length > 1) tot.value = bal.total==null ? '' : String(bal.total);
+  } else {
+    set('in_fwProdD', prodDelta);
+    set('in_fwConsD', (fw.fwRob==null && !fw.fwRobByTank) ? null : bal.cons);
+    const tot = document.getElementById('in_fwTotalRob');
+    if (tot) tot.value = bal.total==null ? '' : String(bal.total);
+  }
+}
+
+function syncFwMirror(fromPrefix){
+  const other = fromPrefix === 'vs' ? 'in' : 'vs';
+  const src = readFwForm(fromPrefix);
+  const prodId = other === 'vs' ? 'vs_fwProdMeter' : 'in_fwProd';
+  const robId = other === 'vs' ? 'vs_fwRob' : 'in_fwRob';
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val!=null) el.value = val; };
+  set(prodId, src.fwProd);
+  set(robId, src.fwRob);
+  const prodSel = document.getElementById(other + '_fwProdTank');
+  const consSel = document.getElementById(other + '_fwConsTank');
+  if (prodSel && src.fwProdTankId) prodSel.value = src.fwProdTankId;
+  if (consSel && src.fwConsTankId) consSel.value = src.fwConsTankId;
+  if (src.fwRobByTank){
+    Object.keys(src.fwRobByTank).forEach(id => {
+      const el = document.getElementById(fwTankRobId(other, id));
+      if (el) el.value = src.fwRobByTank[id];
+    });
+    syncFwTotalFromTanks(other);
+  }
+}
+
+function syncFwTankUi(prefix){
+  const tanks = fwTankList();
+  const multi = tanks.length > 1;
+  const pickRow = document.getElementById(prefix + 'FwTankPickRow');
+  const multiWrap = document.getElementById(prefix + 'FwMultiRobWrap');
+  const singleWrap = document.getElementById(prefix + 'FwSingleRobWrap');
+  if (pickRow) pickRow.style.display = multi ? '' : 'none';
+  if (multiWrap) multiWrap.style.display = multi ? '' : 'none';
+  if (singleWrap) singleWrap.style.display = multi ? 'none' : '';
+
+  const keepProd = document.getElementById(prefix + '_fwProdTank')?.value;
+  const keepCons = document.getElementById(prefix + '_fwConsTank')?.value;
+  ['fwProdTank','fwConsTank'].forEach(suffix => {
+    const sel = document.getElementById(prefix + '_' + suffix);
+    if (!sel) return;
+    sel.innerHTML = tanks.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+    const keep = suffix === 'fwProdTank' ? keepProd : keepCons;
+    if (keep && tanks.some(t=>t.id===keep)) sel.value = keep;
+    else if (tanks[0]) sel.value = tanks[0].id;
+  });
+
+  const fields = document.getElementById(prefix + 'FwTankRobFields');
+  if (fields){
+    const prevVals = {};
+    tanks.forEach(t => {
+      const el = document.getElementById(fwTankRobId(prefix, t.id));
+      if (el) prevVals[t.id] = el.value;
+    });
+    fields.innerHTML = tanks.map(t=>
+      `<div class="field"><label>${t.name} ROB (L)</label><input type="number" step="0.01" id="${fwTankRobId(prefix, t.id)}" data-fw-prefix="${prefix}" data-fw-tank="${t.id}"></div>`
+    ).join('');
+    tanks.forEach(t => {
+      const el = document.getElementById(fwTankRobId(prefix, t.id));
+      if (el && prevVals[t.id] != null) el.value = prevVals[t.id];
+    });
+    fields.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('input', ()=>{
+        syncFwTotalFromTanks(prefix);
+        updateFwPreview(prefix);
+        syncFwMirror(prefix);
+        if (prefix === 'vs') updateVsRobLiveFromCons();
+      });
+    });
+  }
+  updateFwPreview(prefix);
+}
+
+function readFwForm(prefix){
+  const tanks = fwTankList();
+  const num = id => {
+    const el = document.getElementById(id);
+    if (!el || el.value==='') return null;
+    const v = parseFloat(el.value);
+    return isNaN(v) ? null : v;
+  };
+  const fwProd = num(prefix === 'vs' ? 'vs_fwProdMeter' : 'in_fwProd');
+  const prodTankId = document.getElementById(prefix + '_fwProdTank')?.value || tanks[0]?.id || null;
+  const consTankId = document.getElementById(prefix + '_fwConsTank')?.value || tanks[0]?.id || null;
+  const presentByTank = {};
+  let anyTank = false;
+  tanks.forEach(t => {
+    const v = num(fwTankRobId(prefix, t.id));
+    if (v != null){ presentByTank[t.id] = v; anyTank = true; }
+  });
+  let presentTotal = num(prefix === 'vs' ? 'vs_fwRob' : 'in_fwRob');
+  if (anyTank){
+    presentTotal = tanks.reduce((s,t)=> s + (presentByTank[t.id] != null ? presentByTank[t.id] : 0), 0);
+  }
+  return {
+    fwProd,
+    fwProdTankId: prodTankId,
+    fwConsTankId: consTankId,
+    fwRobByTank: anyTank ? presentByTank : null,
+    fwRob: presentTotal
+  };
+}
+
+function fillFwForm(prefix, entry, prev){
+  syncFwTankUi(prefix);
+  const tanks = fwTankList();
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = (val==null || val==='') ? '' : val; };
+  set(prefix === 'vs' ? 'vs_fwProdMeter' : 'in_fwProd', entry?.fwProd);
+  const prodSel = document.getElementById(prefix + '_fwProdTank');
+  const consSel = document.getElementById(prefix + '_fwConsTank');
+  const defProd = entry?.fwProdTankId || tanks[0]?.id;
+  const defCons = entry?.fwConsTankId || tanks[0]?.id;
+  if (prodSel && defProd) prodSel.value = defProd;
+  if (consSel && defCons) consSel.value = defCons;
+  const byTank = entry?.fwRobByTank || (tanks.length === 1 && entry?.fwRob != null
+    ? { [tanks[0].id]: entry.fwRob }
+    : null);
+  if (byTank){
+    tanks.forEach(t => {
+      if (byTank[t.id] != null) set(fwTankRobId(prefix, t.id), byTank[t.id]);
+    });
+    syncFwTotalFromTanks(prefix);
+  }
+  set(prefix === 'vs' ? 'vs_fwRob' : 'in_fwRob', entry?.fwRob);
+  if (tanks.length === 1 && entry?.fwRob != null) set(prefix === 'vs' ? 'vs_fwRob' : 'in_fwRob', entry.fwRob);
+  updateFwPreview(prefix);
+}
+
+function stampFwOnEntry(entry, fw, prev){
+  if (!entry) return;
+  const tanks = fwTankList();
+  const ids = tanks.map(t=>t.id);
+  const prodMeter = fw.fwProd != null ? fw.fwProd : entry.fwProd;
+  const prodDelta = prev ? (meterDelta(prodMeter, prev.fwProd, meterRollovers().generic) || 0) : 0;
+  const hasPresent = fw.fwRob != null || (fw.fwRobByTank && Object.keys(fw.fwRobByTank).length);
+  const bal = fwPeriodBalance({
+    tankIds: ids.length ? ids : ['freshwater'],
+    prevByTank: fwPrevByTank(prev),
+    prevTotal: fwPrevTotal(prev),
+    prodDelta,
+    presentByTank: fw.fwRobByTank || {},
+    presentTotal: fw.fwRob,
+    prodTankId: fw.fwProdTankId || entry.fwProdTankId,
+    consTankId: fw.fwConsTankId || entry.fwConsTankId
+  });
+  entry.fwProd = prodMeter;
+  entry.fwProdTankId = bal.prodTankId;
+  entry.fwConsTankId = bal.consTankId;
+  if (hasPresent){
+    entry.fwRob = bal.total;
+    entry.fwRobByTank = bal.byTank;
+  } else if (fw.fwRobByTank){
+    entry.fwRobByTank = fw.fwRobByTank;
+    entry.fwRob = fw.fwRob;
+  }
 }
 
 function renderFuelMeterFields(){
@@ -7118,6 +7835,8 @@ function addFwType(){
   state.setup.robLube[id] = 0;
   state.setup.capacityLube[id] = 150000;
   renderFuelTypeManagement();
+  syncFwTankUi('in');
+  if (typeof isVoyageSummaryOpen === 'function' && isVoyageSummaryOpen()) syncFwTankUi('vs');
 }
 
 function removeFuelType(id){
@@ -7148,6 +7867,8 @@ function removeFwType(id){
   delete state.setup.robLube[id];
   delete state.setup.capacityLube[id];
   renderFuelTypeManagement();
+  syncFwTankUi('in');
+  if (typeof isVoyageSummaryOpen === 'function' && isVoyageSummaryOpen()) syncFwTankUi('vs');
 }
 
 async function saveFuelTypeManagement(){
@@ -7574,6 +8295,7 @@ function render(){
   if (imoEl) imoEl.value = state.setup.imoNo || '';
   const companyEl = document.getElementById('s_company');
   if (companyEl) companyEl.value = state.setup.company || '';
+  fillFlagRegistrySelect('s_flag', vesselFlagCode());
   renderVesselStampPreview();
   renderChEngSignaturePreview();
 
@@ -7590,8 +8312,10 @@ function render(){
   document.getElementById('s_departPort').value = state.setup.departPort;
   document.getElementById('s_arrivePort').value = state.setup.arrivePort;
   document.getElementById('s_initDateTime').value = state.setup.initDateTime || '';
+  fillVoyageTzOffsetSelect();
   document.getElementById('s_voyageDistance').value = state.setup.voyageDistance ?? '';
   document.getElementById('s_flowArr').value = state.setup.flowArr;
+  updateFlowArrHint();
   document.getElementById('s_pitch').value = state.setup.pitch;
   document.getElementById('s_mcrRpm').value = state.setup.mcrRpm;
   document.getElementById('s_mcrKw').value = state.setup.mcrKw;
@@ -7641,6 +8365,8 @@ function render(){
 
   renderFuelMeterFields();
   renderGeRuntimeFields();
+  syncFwTankUi('in');
+  if (isVoyageSummaryOpen()) syncFwTankUi('vs');
 
   document.getElementById('fuelGauges').innerHTML = fuelTankList().map(t=>{
     const cap = tankCapValue(state.setup.capacity, t)||1;
@@ -7770,7 +8496,8 @@ function render(){
     if (endIdx > startIdx){
       let sumDist = 0;
       for (let i = startIdx+1; i <= endIdx; i++) sumDist += (rows[i].distanceShip || 0);
-      const hoursElapsed = (new Date(rows[endIdx].datetime) - new Date(rows[startIdx].datetime)) / 3600000;
+      let hoursElapsed = 0;
+      for (let i = startIdx + 1; i <= endIdx; i++) hoursElapsed += (rows[i].hrs || 0);
       const daysElapsed = hoursElapsed / 24;
       if (daysElapsed > 0) seaAvgDistStr = fmt(sumDist/daysElapsed, 2);
     }
@@ -8502,6 +9229,46 @@ function canShowMeDetailOp(op){
 function isNoonReportOp(op){
   const u = (op || '').toUpperCase();
   return u.includes('NOON') || u === 'HEAVY WEATHER';
+}
+
+/** Print title is the operation (IN PORT - NOON, AT SEA - NOON, …); the old
+ *  generic "Noon Report — Voyage Summary" becomes the subtitle. */
+function noonSheetTitles(operation){
+  const op = (operation || '').trim();
+  const noon = isNoonReportOp(op);
+  const kind = noon ? 'Noon Report — Voyage Summary' : 'Voyage Summary';
+  return { title: op || kind, subtitle: op ? kind : '' };
+}
+
+function flagRegistryName(code){
+  if (code==null || code==='') return '';
+  const api = (typeof EORB !== 'undefined' && EORB) ? EORB
+    : (typeof window !== 'undefined' ? window.EORB : null);
+  if (api && typeof api.getFlag === 'function'){
+    const f = api.getFlag(code);
+    if (f && f.name && f.code === code) return f.name;
+  }
+  return String(code);
+}
+
+function vesselFlagCode(){
+  return state.setup.flag || state.setup.orb?.flag || '';
+}
+
+function fillFlagRegistrySelect(selId, selected){
+  const sel = document.getElementById(selId);
+  if (!sel) return;
+  const flags = (typeof EORB !== 'undefined' && EORB && EORB.FLAGS) ? EORB.FLAGS
+    : (typeof window !== 'undefined' && window.EORB ? window.EORB.FLAGS : []);
+  const cur = selected || sel.value || '';
+  sel.innerHTML = '<option value="">—</option>' + (flags || []).map(f=>`<option value="${f.code}">${f.name}</option>`).join('');
+  if (cur && ![...sel.options].some(o => o.value === cur)){
+    const opt = document.createElement('option');
+    opt.value = cur;
+    opt.textContent = cur;
+    sel.appendChild(opt);
+  }
+  if (cur) sel.value = cur;
 }
 
 /** Main engine was turning / burning this period — prefer measured Δrevs / cons over stale typed RPM. */
@@ -9943,6 +10710,7 @@ function loadEntryIntoForm(id){
   const sel = document.getElementById('in_selectEntry');
   if (sel) sel.value = id;
   document.getElementById('in_datetime').value = e.datetime;
+  setShipTzUi(e.tzOffsetMin != null ? e.tzOffsetMin : defaultShipTzOffsetMin(), e.clockChangeMin);
   document.getElementById('in_operation').value = e.operation;
   document.getElementById('in_condition').value = normalizeCondition(e.condition);
   document.getElementById('in_distanceShip').value = e.distanceShip ?? 0;
@@ -9969,6 +10737,7 @@ function loadEntryIntoForm(id){
   document.getElementById('blr_type').value = e.blr.type;
   document.getElementById('blr_sg').value = e.blr.sg;
   document.getElementById('cyl_meter').value = e.cylMeter;
+  fillFwForm('in', e, previousEntryFor(e.id) || effectiveCarryover());
 
   document.getElementById('btnAdd').textContent = 'Update Entry';
   document.getElementById('logEntryTitle').textContent = 'EDIT LOG ENTRY';
@@ -9987,6 +10756,7 @@ function loadEntryIntoForm(id){
 document.getElementById('s_flowArr').addEventListener('change', (e)=>{
   state.setup.flowArr = e.target.value;
   renderFlowmeterCounterRows();
+  updateFlowArrHint();
 });
 document.getElementById('s_geArrangement')?.addEventListener('change', ()=>{
   state.setup.geArrangement = document.getElementById('s_geArrangement').value;
@@ -10010,11 +10780,14 @@ async function saveVoyageDetails(){
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value)||null;
   state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
   state.setup.company = document.getElementById('s_company')?.value || '';
+  state.setup.flag = document.getElementById('s_flag')?.value || state.setup.flag || '';
+  if (state.setup.orb) state.setup.orb.flag = state.setup.flag || state.setup.orb.flag;
   state.setup.voyageNumber = document.getElementById('s_voyageNumber').value;
   state.setup.shipCondition = normalizeCondition(document.getElementById('s_shipCondition').value);
   state.setup.departPort = document.getElementById('s_departPort').value;
   state.setup.arrivePort = document.getElementById('s_arrivePort').value;
   state.setup.initDateTime = document.getElementById('s_initDateTime').value;
+  state.setup.tzOffsetMin = formVoyageTzOffsetMin();
   state.setup.voyageDistance = parseFloat(document.getElementById('s_voyageDistance').value)||null;
 
   const v = activeVessel();
@@ -10031,6 +10804,11 @@ async function saveVoyageDetails(){
   alert('Voyage Details saved.');
 }
 document.getElementById('btnSaveVoyageDetails').addEventListener('click', saveVoyageDetails);
+document.getElementById('s_initTzOffset')?.addEventListener('change', ()=>{
+  const n = parseInt(document.getElementById('s_initTzOffset').value, 10);
+  if (!isFinite(n)) return;
+  state.setup.tzOffsetMin = window.ShipTime ? ShipTime.clampTzOffsetMin(n) : n;
+});
 
 /* Chief Engineer appears on Vessel Data and on Voyage Setup. Both are views of the
    same vessel-level record — a crew change is edited wherever the engineer happens to
@@ -10068,6 +10846,8 @@ async function saveVesselIdentity(){
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value) || null;
   state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
   state.setup.company = document.getElementById('s_company')?.value || '';
+  state.setup.flag = document.getElementById('s_flag')?.value || '';
+  if (state.setup.orb) state.setup.orb.flag = state.setup.flag || state.setup.orb.flag;
   const v = activeVessel();
   if (v) v.name = document.getElementById('s_vesselName').value.trim() || v.name;
   const status = document.getElementById('vesselSaveStatus');
@@ -10205,11 +10985,15 @@ function normalizeEntry(e){
   if (e.geLo===undefined) e.geLo = null;
   if (e.fwProd===undefined) e.fwProd = null;
   if (e.fwRob===undefined) e.fwRob = null;
+  if (e.fwRobByTank===undefined) e.fwRobByTank = null;
+  if (e.fwProdTankId===undefined) e.fwProdTankId = fwTankList()[0]?.id || null;
+  if (e.fwConsTankId===undefined) e.fwConsTankId = fwTankList()[0]?.id || null;
   if (e.revCounter===undefined) e.revCounter = null;
   if (e.rpm===undefined) e.rpm = null;
   if (!e.id) e.id = uid();
   if (!e.vesselId) e.vesselId = state.activeVesselId || LEGACY_VESSEL_ID;
   e.condition = normalizeCondition(e.condition || state.setup?.shipCondition);
+  e.clockChangeMin = sanitizeClockChangeMin(e.clockChangeMin);
   return e;
 }
 
@@ -10220,6 +11004,8 @@ async function saveSetupFromForm(){
   state.setup.dwt = parseFloat(document.getElementById('s_dwt')?.value)||null;
   state.setup.imoNo = document.getElementById('s_imoNo')?.value || '';
   state.setup.company = document.getElementById('s_company')?.value || '';
+  state.setup.flag = document.getElementById('s_flag')?.value || state.setup.flag || '';
+  if (state.setup.orb) state.setup.orb.flag = state.setup.flag || state.setup.orb.flag;
   const v = activeVessel();
   if (v) v.name = document.getElementById('s_vesselName').value.trim() || v.name;
 
@@ -10307,6 +11093,7 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
     alert('Cannot create a new voyage: Voyage No., Ships Condition, and Date & Time must all be filled in first.');
     return;
   }
+  const newTzOffsetMin = formVoyageTzOffsetMin();
   if (newDateTime === oldDateTime){
     alert('Cannot create a new voyage: Date & Time must be updated to reflect the new voyage before proceeding.');
     return;
@@ -10373,6 +11160,7 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
   state.setup.voyageNumber = newVoyageNo;
   state.setup.shipCondition = newCondition;
   state.setup.initDateTime = newDateTime;
+  state.setup.tzOffsetMin = newTzOffsetMin;
 
   state.setup.carryover = JSON.parse(JSON.stringify(last));
   state.setup.rob = rob;
@@ -10400,7 +11188,12 @@ function getRobRows(){
 }
 function robRowCons(row, r){
   if (r.cat==='fuel') return row.consByType?.[r.grade] ?? row.consByType?.[r.key];
-  if (r.cat==='fw') return row.lubeByType?.['FRESH WATER'];
+  if (r.cat==='fw'){
+    if (row.fwConsByTank && row.fwConsByTank[r.key]!=null) return row.fwConsByTank[r.key];
+    const first = fwTankList()[0];
+    if (first && r.key === first.id) return row.lubeByType?.['FRESH WATER'];
+    return 0;
+  }
   return row.lubeByType?.[lubeKindToLabel(r.kind)] ?? row.lubeByType?.[r.key];
 }
 function overrideForGrade(override, grade, tanks){
@@ -11256,8 +12049,7 @@ function openVoyageSummary(entryId){
   };
   window.__syncVsGeTotal();
 
-  document.getElementById('vs_fwProdMeter').value = entry.fwProd ?? '';
-  document.getElementById('vs_fwRob').value = entry.fwRob ?? '';
+  fillFwForm('vs', entry, previousEntryFor(entry.id) || effectiveCarryover());
   document.getElementById('vs_fwProduced').value = row.fwProdD==null?'—':fmtRob(row.fwProdD, 'fw');
   document.getElementById('vs_fwConsumed').value = row.fwConsD==null?'—':fmtRob(row.fwConsD, 'fw');
   updateVsFwDisplays();
@@ -11334,12 +12126,24 @@ function computeVsLiveConsByType(entry){
     if (cylD) lubeByType[tbn==='LOW' ? 'CYL LOW' : 'CYL HIGH'] += cylD;
     if (meLoD) lubeByType['ME SYS OIL'] += meLoD;
     if (geLoD) lubeByType['GE SYS OIL'] += geLoD;
-    const fwProd = num('vs_fwProdMeter') ?? entry.fwProd;
-    const fwRob = num('vs_fwRob') ?? entry.fwRob;
+    const fw = readFwForm('vs');
+    const fwProd = fw.fwProd ?? entry.fwProd;
+    const fwRob = fw.fwRob ?? entry.fwRob;
     const fwProdD = meterDelta(fwProd, prev.fwProd, rolls.generic) || 0;
-    if (prev.fwRob!=null && fwRob!=null){
-      lubeByType['FRESH WATER'] = prev.fwRob + fwProdD - fwRob;
+    const fwBal = fwPeriodBalance({
+      tankIds: fwTankList().map(t=>t.id),
+      prevByTank: fwPrevByTank(prev),
+      prevTotal: fwPrevTotal(prev),
+      prodDelta: fwProdD,
+      presentByTank: fw.fwRobByTank || entry.fwRobByTank || {},
+      presentTotal: fwRob,
+      prodTankId: fw.fwProdTankId || entry.fwProdTankId,
+      consTankId: fw.fwConsTankId || entry.fwConsTankId
+    });
+    if (fwRob!=null || fw.fwRobByTank){
+      lubeByType['FRESH WATER'] = fwBal.cons;
     }
+    return {consByType, lubeByType, fwConsByTank: fwBal.consByTank, fwByTank: fwBal.byTank};
   }
   return {consByType, lubeByType};
 }
@@ -11356,14 +12160,21 @@ function updateVsRobLiveFromCons(){
     if (!consEl) return;
     // Fuel grades + FW are calculated (not editable); leave lube oil cons as the user set it.
     if (r.cat!=='lube'){
-      const liveCons = robRowCons({consByType: live.consByType, lubeByType: live.lubeByType}, r);
+      const liveCons = robRowCons({
+        consByType: live.consByType,
+        lubeByType: live.lubeByType,
+        fwConsByTank: live.fwConsByTank
+      }, r);
       consEl.value = fmtRobInput(liveCons, r.cat);
     }
     const prevVal = parseFloat(consEl.dataset.prev)||0;
     const consVal = parseFloat(consEl.value)||0;
     if (!robEl) return;
     if (r.cat==='fw'){
-      const fwRob = parseFloat(document.getElementById('vs_fwRob')?.value);
+      const tankEl = document.getElementById(fwTankRobId('vs', r.key));
+      const tankVal = tankEl && tankEl.value !== '' ? parseFloat(tankEl.value) : NaN;
+      const mapped = live.fwByTank && live.fwByTank[r.key];
+      const fwRob = !isNaN(tankVal) ? tankVal : (mapped != null ? mapped : parseFloat(document.getElementById('vs_fwRob')?.value));
       robEl.textContent = isNaN(fwRob) ? '—' : fmtRob(fwRob, 'fw');
     } else {
       robEl.textContent = fmtRob(prevVal - consVal, r.cat);
@@ -11628,14 +12439,25 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
     airTemp: num('vs_airTemp'),
     seaTemp: num('vs_seaTemp')
   };
-  entry.fwProd = num0('vs_fwProdMeter');
-  entry.fwRob = num('vs_fwRob');
+  const fwDraft = readFwForm('vs');
+  stampFwOnEntry(entry, {
+    fwProd: fwDraft.fwProd ?? num0('vs_fwProdMeter'),
+    fwRob: fwDraft.fwRob ?? num('vs_fwRob'),
+    fwRobByTank: fwDraft.fwRobByTank,
+    fwProdTankId: fwDraft.fwProdTankId,
+    fwConsTankId: fwDraft.fwConsTankId
+  }, previousEntryFor(entry.id) || effectiveCarryover());
   entry.miscCons = { 'MDO/MGO': num0('vs_misc_mdomgo'), 'LSMGO': num0('vs_misc_lsmgo') };
+  /* Only freeze a typed unit-cons figure when it differs from the meter-derived
+     value. Prefilling the boxes used to lock ME/GE/BLR on the first summary save. */
+  const savedOv = { ME:null, GE:null, BLR:null };
+  entry.unitOverride = savedOv;
+  const computedUnits = getComputedRow(entry.id);
   entry.unitOverride = {
-    ME: num('vs_unit_me'),
+    ME: unitOverrideIfDifferent(num('vs_unit_me'), computedUnits?.meCons),
     /* G/E total is typed under Generators, Boiler & Incinerator; D/G below mirrors it. */
-    GE: num('vs_geTotalCons') ?? num('vs_unit_ge'),
-    BLR: num('vs_unit_blr')
+    GE: unitOverrideIfDifferent(num('vs_geTotalCons') ?? num('vs_unit_ge'), computedUnits?.geCons),
+    BLR: unitOverrideIfDifferent(num('vs_unit_blr'), computedUnits?.blrCons)
   };
   // Persist only lube oil cons overrides — fuel grades and FW are derived, not edited here.
   entry.consOverride = {};
@@ -11775,9 +12597,9 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   await dbPut('entries', entry);
   const sortedAfter = sortedEntries();
   const savedIdx = sortedAfter.findIndex(e=>e.id===entry.id);
-  if (savedIdx >= 0 && savedIdx < sortedAfter.length - 1){
-    // Clear later cons/unit overrides so ROB chain follows this entry's revised consumption
-    await cascadeSucceedingEntries(savedIdx + 1, { clearOverrides: true });
+  if (savedIdx >= 0){
+    // Refresh this watch's report stamps; clear later overrides so ROB follows the new cons.
+    await cascadeSucceedingEntries(savedIdx, { clearOverrides: true, skipClearFirst: true });
   }
   markPendingSync();
   render();
@@ -11881,23 +12703,27 @@ function buildVoyageNoonSheetHTML(entry){
 
   /* With the engine stopped a stored RPM is stale — do not fall back to it. */
   const printRpm = row.meStopped ? null : (row.rpmEff!=null ? row.rpmEff : entry.rpm);
-  const kpiItems = [
+  const meRunningEarly = mainEngineInUse(entry, row);
+  const kpiItems = meRunningEarly ? [
     {label:'Run Hrs', value:fmt(row.hrs, 2)},
     {label:'Ship Dist (nm)', value:fmt(entry.distanceShip, 2)},
     {label:'RPM', value:fmt(printRpm, 2)},
     {label:'Speed (kn)', value:fmt(row.speedShip,2)},
     {label:'% MCR', value:fmt(row.mcrPct, 2)},
     {label:'Est. kW', value:fmt(row.kwEst, 2)}
+  ] : [
+    {label:'Run Hrs', value:fmt(row.hrs, 2)},
+    {label:'Ship Dist (nm)', value:fmt(entry.distanceShip, 2)}
   ];
 
-  const voyageSection = printSection('Voyage Progress', [
+  const voyageSection = meRunningEarly ? printSection('Voyage Progress', [
     printRow('Engine Distance', `${fmt(row.distEngine,2)} nm`),
     printRow('Distance To Go', distanceToGo!=null?`${fmt(distanceToGo, 2)} nm`:'—'),
     printRow('Days To Go', daysToGoVal!=null?fmt(daysToGoVal,2):'—'),
     printRow('ETA', etaStr),
     printRow('Slip %', fmt(row.slip,2)),
     printRow('Daily Revs.', fmt(row.dailyRevs, 2))
-  ].join(''));
+  ].join('')) : '';
 
   const fuelSection = printSection('Fuel Consumption (MT)', [
     printRow('Main Engine', fmtFuel(row.meCons)),
@@ -11930,9 +12756,11 @@ function buildVoyageNoonSheetHTML(entry){
   const geN = geUnitCount();
   const geRows = Array.from({length:geN}, (_,i)=>{
     const p = row.gePeriod?.[i] || {};
+    const cum = geCumulativeRunHours(entry, i+1);
     return `<tr>
       <td class="row-lbl">A/E #${i+1}</td>
       <td>${p.hrs==null?'—':fmt(p.hrs, 2)}</td>
+      <td>${cum==null?'—':fmt(cum, 2)}</td>
       <td>${p.kw==null?'—':fmt(p.kw, 2)}</td>
       <td>${p.loadPct==null?'—':fmt(p.loadPct, 2)}</td>
       <td>${fmt(geLoadBandMin(p.loadPct), 2)}</td>
@@ -11940,10 +12768,9 @@ function buildVoyageNoonSheetHTML(entry){
       <td>${p.fuelCons==null?'—':fmtFuel(p.fuelCons)}</td>
     </tr>`;
   }).join('');
-  /* Compact period-only generator table fits a 3-column portrait sheet. */
   const geSection = geN>0 ? printSection(`Generators — ${geArrangementLabelFor(entryActiveGeCount(entry))}`, `
     <table class="pr-table">
-      <tr><th>Unit</th><th>Hrs</th><th>kW</th><th>Load%</th><th>Min%</th><th>Max%</th><th>Fuel</th></tr>
+      <tr><th>Unit</th><th>Hrs</th><th>Accum.</th><th>kW</th><th>Load%</th><th>Min%</th><th>Max%</th><th>Fuel</th></tr>
       ${geRows}
     </table>
     ${printRow('Voy Avg Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct, 2)}%`)}
@@ -11966,13 +12793,18 @@ function buildVoyageNoonSheetHTML(entry){
     printRow('Incinerator Load %', incLoadPrint==null?'—':`${fmt(incLoadPrint, 2)}%`)
   ].join(''));
 
-  const voyageAvgSection = printSection('Voyage Time Averages', [
+  const voyageAvgRows = [
     printRow('Total Voyage Hours', fmt(perf.totalHrs,2)),
-    printRow('Total Generator Hours', fmt(perf.totalGeHrs,2)),
-    printRow('Avg %MCR (hrs-wtd)', perf.avgMcrTimeWeighted==null?'—':fmt(perf.avgMcrTimeWeighted,2)),
-    printRow('Avg Ship Speed', perf.avgSpeedShip==null?'—':`${fmt(perf.avgSpeedShip,2)} kn`),
-    printRow('Avg Voyage kW', perf.avgKw==null?'—':fmt(perf.avgKw,2))
-  ].join(''));
+    printRow('Total Generator Hours', fmt(perf.totalGeHrs,2))
+  ];
+  if (meRunningEarly){
+    voyageAvgRows.push(
+      printRow('Avg %MCR (hrs-wtd)', perf.avgMcrTimeWeighted==null?'—':fmt(perf.avgMcrTimeWeighted,2)),
+      printRow('Avg Ship Speed', perf.avgSpeedShip==null?'—':`${fmt(perf.avgSpeedShip,2)} kn`),
+      printRow('Avg Voyage kW', perf.avgKw==null?'—':fmt(perf.avgKw,2))
+    );
+  }
+  const voyageAvgSection = printSection('Voyage Time Averages', voyageAvgRows.join(''));
 
   const robTable = printSection('Remaining On Board', `
     <table class="pr-table">
@@ -11997,13 +12829,9 @@ function buildVoyageNoonSheetHTML(entry){
   const weatherSection = (noonOp || isSea || weatherHtml) ? weatherHtml : '';
   const cylSection = showMeDetail ? printMeCylinderSection(report) : '';
   const turboOthersSection = printTurboOthersSection(report, { includeMeAux: showMeDetail });
-  /* Engine stopped: replace the M/E block with a one-line statement of fact, so an
-     inspector reads "not running" rather than wondering about a missing section. */
-  const meSectionPrint = meRunning
-    ? meSection
-    : (row.meStopped
-        ? printSection('M/E Performance', printRow('Main Engine', 'STOPPED — no revolutions this period'))
-        : '');
+  /* Engine stopped: omit M/E performance entirely — voyage progress and M/E KPIs
+     are already dropped, so a blank "STOPPED" block is not needed. */
+  const meSectionPrint = meRunning ? meSection : '';
 
   const ecaSection = printEcaSection(report);
   const soundingsSection = printSoundingsSection(report);
@@ -12030,14 +12858,18 @@ function buildVoyageNoonSheetHTML(entry){
       <div class="pr-remarks-body">${escPrint(report.remarks||'') || '—'}</div>
     </div>`;
 
+  const titles = noonSheetTitles(entry.operation);
+  const flagName = flagRegistryName(vesselFlagCode());
   return `<div class="pr-sheet pr-sheet-noon">
-    ${printDocHeader({ title: noonOp ? 'Noon Report — Voyage Summary' : 'Voyage Summary', subtitle: entry.operation, badge: entry.condition })}
+    ${printDocHeader({ title: titles.title, subtitle: titles.subtitle, badge: entry.condition })}
     ${printMetaGrid([
       {label:'Date & Time', value:dtStr},
       {label:'Voyage No.', value:state.setup.voyageNumber||'—'},
       {label:'Condition', value:entry.condition},
-      {label:'Route', value:`${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}`}
-    ], 4)}
+      {label:'Route', value:`${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}`},
+      {label:'IMO No.', value:state.setup.imoNo||'—'},
+      {label:'Flag', value:flagName||'—'}
+    ], 6)}
     ${printKpiRow(kpiItems)}
     <div class="pr-noon-body">
       <div class="pr-noon-cols">
@@ -12139,7 +12971,11 @@ function renderVsEntryContext(entry){
   const dt = new Date(entry.datetime);
   const dtStr = isNaN(dt) ? (entry.datetime || '—')
     : dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-  ctx.textContent = `Summary for: ${dtStr} — ${entry.operation || '—'}`;
+  const clk = (window.ShipTime && entry.clockChangeMin)
+    ? ` · ${ShipTime.formatClockChangeShort(entry.clockChangeMin)}`
+    : '';
+  const zone = window.ShipTime ? ` ${ShipTime.formatTzOffset(entry.tzOffsetMin || 0)}` : '';
+  ctx.textContent = `Summary for: ${dtStr}${zone}${clk} — ${entry.operation || '—'}`;
 }
 /** When Voyage Summary is open, period math must use that entry — not the next-entry form. */
 function getActivePeriodContext(){
@@ -12148,21 +12984,22 @@ function getActivePeriodContext(){
     if (entry){
       const formRt = parseFloat(document.getElementById('me_runtime')?.value);
       const meRuntime = (editingId === currentVsEntryId && !isNaN(formRt)) ? formRt : (entry.meRuntime ?? (isNaN(formRt)?null:formRt));
-      return { datetime: entry.datetime, excludeId: currentVsEntryId, meRuntime, entry };
+      return { datetime: entry.datetime, clockChangeMin: sanitizeClockChangeMin(entry.clockChangeMin), excludeId: currentVsEntryId, meRuntime, entry };
     }
   }
   const formRt = parseFloat(document.getElementById('me_runtime')?.value);
   return {
     datetime: document.getElementById('in_datetime')?.value || null,
+    clockChangeMin: formClockChangeMin(),
     excludeId: editingId,
     meRuntime: isNaN(formRt) ? null : formRt,
     entry: null
   };
 }
-function periodRunHours(prevRef, curDt, curMeRuntime){
-  /* Prefer wall-clock period (same as voyage hrs / engine distance), then M/E runtime delta. */
+function periodRunHours(prevRef, curDt, curMeRuntime, clockChangeMin){
+  /* Prefer ship's-clock period after clock-change adjustment, then M/E runtime delta. */
   if (prevRef && curDt){
-    const wall = (new Date(curDt) - new Date(prevRef.datetime)) / 3600000;
+    const wall = elapsedShipHours(prevRef.datetime, curDt, clockChangeMin);
     if (wall>0) return wall;
   }
   if (prevRef?.meRuntime!=null && curMeRuntime!=null && !isNaN(curMeRuntime)){
@@ -12173,10 +13010,9 @@ function periodRunHours(prevRef, curDt, curMeRuntime){
 }
 
 /** Wall-clock hours between the previous reference entry and the selected date/time. */
-function elapsedHoursFromPrev(prevRef, curDt){
+function elapsedHoursFromPrev(prevRef, curDt, clockChangeMin){
   if (!prevRef || !prevRef.datetime || !curDt) return null;
-  const h = (new Date(curDt) - new Date(prevRef.datetime)) / 3600000;
-  return (isFinite(h) && h > 0) ? h : null;
+  return elapsedShipHours(prevRef.datetime, curDt, clockChangeMin);
 }
 
 /** True once the engineer types their own counter reading — stops auto-tracking. */
@@ -12200,7 +13036,7 @@ function syncMeRuntimeFromPeriod(){
   if (!rtEl && !periodEl) return;
   const dt = document.getElementById('in_datetime')?.value || null;
   const prevRef = getPrevReferenceFor(dt, editingId);
-  const elapsed = elapsedHoursFromPrev(prevRef, dt);
+  const elapsed = elapsedHoursFromPrev(prevRef, dt, formClockChangeMin());
   const prevRt = (prevRef && prevRef.meRuntime != null && !isNaN(prevRef.meRuntime))
     ? Number(prevRef.meRuntime) : null;
 
@@ -12246,7 +13082,7 @@ function syncRpmRevCounter(sourceId){
   if (!ctx.datetime) return;
   const prevRef = getPrevReferenceFor(ctx.datetime, ctx.excludeId);
   if (!prevRef || prevRef.revCounter==null) return;
-  const runHours = periodRunHours(prevRef, ctx.datetime, ctx.meRuntime);
+  const runHours = periodRunHours(prevRef, ctx.datetime, ctx.meRuntime, ctx.clockChangeMin);
   if (!(runHours>0)) return;
   rpmSyncGuard = true;
   const src = (sourceId === 'vs_rpm' || sourceId === 'in_rpm') ? 'rpm' : 'rev';
@@ -12289,7 +13125,7 @@ function updateVsRunCalcDisplays(){
   const prevRef = getPrevReferenceFor(ctx.datetime || curEntry.datetime, ctx.excludeId);
   const pitch = state.setup.pitch||0, propConstant = pitch*60/NM_METERS;
   let distEngine=null, speedEngine=null, shipSpeed=null, slip=null;
-  const hrs = periodRunHours(prevRef, ctx.datetime || curEntry.datetime, ctx.meRuntime);
+  const hrs = periodRunHours(prevRef, ctx.datetime || curEntry.datetime, ctx.meRuntime, ctx.clockChangeMin);
   let dailyRevs = null;
   if (prevRef && curEntry.revCounter!=null && prevRef.revCounter!=null){
     const rolls = meterRollovers();
@@ -12318,21 +13154,7 @@ function updateVsRunCalcDisplays(){
 }
 function updateVsFwDisplays(){
   if (!currentVsEntryId) return;
-  const entry = state.entries.find(e=>e.id===currentVsEntryId);
-  if (!entry) return;
-  const prev = previousEntryFor(currentVsEntryId) || effectiveCarryover();
-  const num = id => { const el = document.getElementById(id); if (!el || el.value==='') return null; const v = parseFloat(el.value); return isNaN(v) ? null : v; };
-  const fwProd = num('vs_fwProdMeter');
-  const fwRob = num('vs_fwRob');
-  const rolls = meterRollovers();
-  const fwProdD = (prev && fwProd!=null) ? meterDelta(fwProd, prev.fwProd, rolls.generic) : null;
-  let fwCons = null;
-  if (prev && prev.fwRob!=null && fwRob!=null && fwProdD!=null){
-    fwCons = prev.fwRob + fwProdD - fwRob;
-  }
-  const set = (id, val)=>{ const el=document.getElementById(id); if (el) el.value = val==null?'—':fmtRob(val, 'fw'); };
-  set('vs_fwProduced', fwProdD);
-  set('vs_fwConsumed', fwCons);
+  updateFwPreview('vs');
 }
 ['vs_rpm','vs_revCounter','in_revCounter'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input', ()=>{
@@ -12372,6 +13194,19 @@ document.getElementById('vs_distanceShip')?.addEventListener('input', ()=>{
     updateLivePreview();
   });
 });
+document.getElementById('in_tzOffset')?.addEventListener('change', ()=>{
+  if (_shipTzFill) return;
+  const next = parseInt(document.getElementById('in_tzOffset').value, 10);
+  if (!isFinite(next)) return;
+  applyShipTzChange(next);
+});
+document.querySelectorAll('[data-tz-step]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const step = parseInt(btn.getAttribute('data-tz-step'), 10);
+    if (!isFinite(step) || !window.ShipTime) return;
+    applyShipTzChange(_shipTzCurrent + step);
+  });
+});
 
 /* ---------------- live calculation preview ---------------- */
 function readCurrentFormAsEntry(){
@@ -12389,11 +13224,14 @@ function readCurrentFormAsEntry(){
   const last = (editingId && state.entries.find(e=>e.id===editingId))
     || sortedEntries().slice(-1)[0]
     || state.setup.carryover;
-  const vsFwProd = num('vs_fwProdMeter');
-  const vsFwRob = num('vs_fwRob');
   const vsOpen = isVoyageSummaryOpen();
+  const fw = readFwForm(vsOpen ? 'vs' : 'in');
+  const vsFwProd = fw.fwProd ?? num('vs_fwProdMeter') ?? num('in_fwProd');
+  const vsFwRob = fw.fwRob ?? num('vs_fwRob') ?? num('in_fwRob');
   return {
     datetime: txt('in_datetime'),
+    tzOffsetMin: formTzOffsetMin(),
+    clockChangeMin: formClockChangeMin(),
     distanceShip: vsOpen ? (num('vs_distanceShip') ?? num('in_distanceShip')) : num('in_distanceShip'),
     rpm: vsOpen ? (num('vs_rpm') ?? num('in_rpm')) : num('in_rpm'),
     revCounter: vsOpen ? (num('vs_revCounter') ?? num('in_revCounter')) : num('in_revCounter'),
@@ -12404,7 +13242,10 @@ function readCurrentFormAsEntry(){
     meLo: last?.meLo ?? 0,
     geLo: last?.geLo ?? 0,
     fwProd: vsFwProd ?? last?.fwProd ?? 0,
-    fwRob: vsFwRob ?? last?.fwRob ?? null
+    fwRob: vsFwRob ?? last?.fwRob ?? null,
+    fwRobByTank: fw.fwRobByTank || last?.fwRobByTank || null,
+    fwProdTankId: fw.fwProdTankId || last?.fwProdTankId || null,
+    fwConsTankId: fw.fwConsTankId || last?.fwConsTankId || null
   };
 }
 
@@ -12423,7 +13264,7 @@ function updateLivePreview(){
 
   if (prevRef && curEntry.datetime){
     const formRt = parseFloat(document.getElementById('me_runtime')?.value);
-    hrs = periodRunHours(prevRef, curEntry.datetime, isNaN(formRt) ? curEntry.meRuntime : formRt);
+    hrs = periodRunHours(prevRef, curEntry.datetime, isNaN(formRt) ? curEntry.meRuntime : formRt, curEntry.clockChangeMin);
     if (curEntry.revCounter!=null && prevRef.revCounter!=null){
       dailyRevs = meterDelta(curEntry.revCounter, prevRef.revCounter, rolls.rc);
     }
@@ -12473,6 +13314,7 @@ function updateLivePreview(){
   const stat = (label,val) => `<div class="stat"><div class="num">${val}</div><div class="lbl">${label}</div></div>`;
   box.className = 'stat-strip cols4';
   box.innerHTML =
+    stat('Period Hrs', hrs==null?'—':fmt(hrs, 2)) +
     stat('Daily Revs', dailyRevs==null?'—':fmt(dailyRevs, 2)) +
     stat('Engine Speed', speedEngine==null?'—':fmt(speedEngine,2)) +
     stat('Actual SFOC', sfocAct==null?'—':fmt(sfocAct, 2)) +
@@ -12505,7 +13347,7 @@ function renderEntryUnitFields(){
   const ctx = getActivePeriodContext();
   const prevRef = getPrevReferenceFor(ctx.datetime || curEntry.datetime, ctx.excludeId);
   if (!prevRef || !(ctx.datetime || curEntry.datetime)) return;
-  const hrs = periodRunHours(prevRef, ctx.datetime || curEntry.datetime, ctx.meRuntime);
+  const hrs = periodRunHours(prevRef, ctx.datetime || curEntry.datetime, ctx.meRuntime, ctx.clockChangeMin);
   if (!(hrs>0)) return;
   const rolls = meterRollovers();
   const {meCons, geCons, blrCons} = computeRawUnitCons(curEntry, prevRef, rolls);
@@ -12882,7 +13724,7 @@ function computeLiveConsByType(){
   const curEntry = readCurrentFormAsEntry();
   const prevRef = getPrevReferenceFor(curEntry.datetime, editingId);
   if (!prevRef || !curEntry.datetime) return {consByType, lubeByType};
-  const hrs = (new Date(curEntry.datetime) - new Date(prevRef.datetime)) / 3600000;
+  const hrs = elapsedShipHours(prevRef.datetime, curEntry.datetime, curEntry.clockChangeMin);
   if (!(hrs>0)) return {consByType, lubeByType};
   const rolls = meterRollovers();
 
@@ -12913,13 +13755,20 @@ function computeLiveConsByType(){
   ['CYL HIGH','CYL LOW','ME SYS OIL','GE SYS OIL'].forEach(t=> lubeByType[t] = rawLube[t]);
 
   const fwProdD = meterDelta(curEntry.fwProd, prevRef.fwProd, rolls.generic) || 0;
-  let fwCons = null;
-  if (prevRef.fwRob!=null && curEntry.fwRob!=null){
-    fwCons = prevRef.fwRob + fwProdD - curEntry.fwRob;
-  }
+  const fwBal = fwPeriodBalance({
+    tankIds: fwTankList().map(t=>t.id),
+    prevByTank: fwPrevByTank(prevRef),
+    prevTotal: fwPrevTotal(prevRef),
+    prodDelta: fwProdD,
+    presentByTank: curEntry.fwRobByTank || {},
+    presentTotal: curEntry.fwRob,
+    prodTankId: curEntry.fwProdTankId,
+    consTankId: curEntry.fwConsTankId
+  });
+  const fwCons = (curEntry.fwRob!=null || curEntry.fwRobByTank) ? fwBal.cons : null;
   lubeByType['FRESH WATER'] = fwCons;
 
-  return {consByType, lubeByType};
+  return {consByType, lubeByType, fwConsByTank: fwBal.consByTank};
 }
 
 function renderEntryConsTable(){
@@ -12967,8 +13816,19 @@ document.getElementById('btnVsResetConsOverride')?.addEventListener('click', ()=
 ['vs_misc_mdomgo','vs_misc_lsmgo'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input', updateVsRobLiveFromCons);
 });
-['vs_fwProdMeter','vs_fwRob'].forEach(id=>{
-  document.getElementById(id)?.addEventListener('input', ()=>{
+['vs_fwProdMeter','vs_fwRob','in_fwProd','in_fwRob','vs_fwProdTank','vs_fwConsTank','in_fwProdTank','in_fwConsTank'].forEach(id=>{
+  const ev = id.endsWith('Tank') ? 'change' : 'input';
+  document.getElementById(id)?.addEventListener(ev, ()=>{
+    const prefix = id.startsWith('vs') ? 'vs' : 'in';
+    if (prefix === 'in' && id === 'in_fwRob'){
+      const tanks = fwTankList();
+      if (tanks.length === 1){
+        const el = document.getElementById(fwTankRobId('in', tanks[0].id));
+        if (el) el.value = document.getElementById('in_fwRob').value;
+      }
+    }
+    updateFwPreview(prefix);
+    syncFwMirror(prefix);
     updateVsFwDisplays();
     updateVsRobLiveFromCons();
   });
@@ -13025,6 +13885,8 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     id: editingId || uid(),
     vesselId: state.activeVesselId,
     datetime: dtVal,
+    tzOffsetMin: formTzOffsetMin(),
+    clockChangeMin: formClockChangeMin(),
     operation: document.getElementById('in_operation').value,
     condition: normalizeCondition(document.getElementById('in_condition').value),
     distanceShip: parseFloat(document.getElementById('in_distanceShip').value)||0,
@@ -13048,9 +13910,14 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     geLo: existing?.geLo ?? lastRef?.geLo ?? 0,
     fwProd: existing?.fwProd ?? lastRef?.fwProd ?? 0,
     fwRob: existing?.fwRob ?? lastRef?.fwRob ?? null,
+    fwRobByTank: existing?.fwRobByTank ?? lastRef?.fwRobByTank ?? null,
+    fwProdTankId: existing?.fwProdTankId ?? lastRef?.fwProdTankId ?? fwTankList()[0]?.id ?? null,
+    fwConsTankId: existing?.fwConsTankId ?? lastRef?.fwConsTankId ?? fwTankList()[0]?.id ?? null,
     consOverride: existing?.consOverride || {},
     miscCons: existing?.miscCons || { 'MDO/MGO':0, 'LSMGO':0 },
-    unitOverride: existing?.unitOverride || { ME:null, GE:null, BLR:null },
+    /* Meter edits on this form must recalculate; a leftover Voyage Summary override
+       would otherwise freeze ME/GE/BLR consumption. */
+    unitOverride: { ME:null, GE:null, BLR:null },
     /* Chief Engineer aboard when this entry was made. Stamped once at creation and
        preserved on later edits, so a crew change cannot rewrite the signatory on
        reports that were already made — and a mid-voyage relief lands on exactly the
@@ -13059,6 +13926,16 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     chEng: existing?.chEng ?? (state.setup.chEng || null),
     updatedAt: new Date().toISOString()
   };
+  const fwDraft = readFwForm(isVoyageSummaryOpen() ? 'vs' : 'in');
+  const inFw = readFwForm('in');
+  stampFwOnEntry(entry, {
+    fwProd: inFw.fwProd ?? fwDraft.fwProd ?? entry.fwProd,
+    fwRob: inFw.fwRob ?? fwDraft.fwRob ?? entry.fwRob,
+    fwRobByTank: inFw.fwRobByTank || fwDraft.fwRobByTank || entry.fwRobByTank,
+    fwProdTankId: inFw.fwProdTankId || fwDraft.fwProdTankId || entry.fwProdTankId,
+    fwConsTankId: inFw.fwConsTankId || fwDraft.fwConsTankId || entry.fwConsTankId
+  }, existing ? (previousEntryFor(existing.id) || effectiveCarryover()) : (sortedEntries().filter(e=>e.datetime < dtVal).slice(-1)[0] || effectiveCarryover()));
+  state.setup.tzOffsetMin = entry.tzOffsetMin;
 
   if (editingId){
     const laterSnapshots = snapshotLaterEntries(existing.datetime, existing.id);
@@ -13075,11 +13952,11 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
   }
   await dbPut('entries', entry);
 
-  // Recalculate succeeding entries so period hrs / ROB chain follow this save
+  // Recalculate this watch and succeeding entries so period hrs / ROB follow the new meters
   const sortedAfter = sortedEntries();
   const savedIdx = sortedAfter.findIndex(e=>e.id===entry.id);
-  if (savedIdx >= 0 && savedIdx < sortedAfter.length - 1){
-    await cascadeSucceedingEntries(savedIdx + 1, { clearOverrides: true });
+  if (savedIdx >= 0){
+    await cascadeSucceedingEntries(savedIdx, { clearOverrides: true, skipClearFirst: true });
   }
 
   markPendingSync();
@@ -13117,7 +13994,8 @@ function renderEntrySelector(){
   sel.innerHTML = `<option value="">— New Entry —</option>` + list.map(e=>{
     const dt = new Date(e.datetime);
     const dtStr = dt.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-    return `<option value="${e.id}">${dtStr} — ${e.operation}</option>`;
+    const clk = (window.ShipTime && e.clockChangeMin) ? ` (${ShipTime.formatClockChangeShort(e.clockChangeMin)})` : '';
+    return `<option value="${e.id}">${dtStr} — ${e.operation}${clk}</option>`;
   }).join('');
   if (list.some(e=>e.id===currentVal)) sel.value = currentVal;
 }
@@ -13149,7 +14027,15 @@ function prefillFromLastEntry(){
   /* Fresh form → the runtime counter goes back to tracking the selected date/time. */
   clearMeRuntimeUserEdit();
   applyEntryDefaults();
-  if (!last){ syncMeRuntimeFromPeriod(); return; }
+  const voyageTz = state.setup && state.setup.tzOffsetMin != null && Number.isFinite(Number(state.setup.tzOffsetMin))
+    ? state.setup.tzOffsetMin
+    : null;
+  const useVoyageTz = !sortedEntries().length && voyageTz != null;
+  if (!last){
+    setShipTzUi(useVoyageTz ? voyageTz : defaultShipTzOffsetMin(), 0);
+    syncMeRuntimeFromPeriod();
+    return;
+  }
 
   const set = (id, val) => { const el = document.getElementById(id); if (el && val!=null && val!==undefined) el.value = val; };
   set('in_condition', last.condition || state.setup.shipCondition);
@@ -13170,12 +14056,20 @@ function prefillFromLastEntry(){
 
   set('blr_meter', last.blr?.meter); set('blr_type', last.blr?.type); set('blr_sg', last.blr?.sg);
   set('cyl_meter', last.cylMeter);
+  fillFwForm('in', {
+    fwProd: last.fwProd,
+    fwRob: last.fwRob,
+    fwRobByTank: last.fwRobByTank,
+    fwProdTankId: last.fwProdTankId,
+    fwConsTankId: last.fwConsTankId
+  }, last);
 
-  // Distance / RPM / FW / misc / cons overrides are entered on Voyage Summary for the new watch
+  // Distance / RPM / misc / cons overrides are entered on Voyage Summary for the new watch
   document.getElementById('in_distanceShip').value = '0';
   document.getElementById('in_rpm').value = '';
   const rpmDisp = document.getElementById('in_rpm_display');
   if (rpmDisp) rpmDisp.value = '—';
+  setShipTzUi(useVoyageTz ? voyageTz : (last.tzOffsetMin != null ? last.tzOffsetMin : defaultShipTzOffsetMin()), 0);
   /* Runs after me_runtime was seeded from `last`, so the counter re-tracks the clock. */
   syncMeRuntimeFromPeriod();
   updateLivePreview();
@@ -13190,7 +14084,7 @@ document.getElementById('btnClearForm').addEventListener('click', ()=>{
   document.getElementById('in_datetime').value = now.toISOString().slice(0,16);
   document.getElementById('in_distanceShip').value = '0';
   ['in_rpm','in_revCounter','me_meter','ge_meter','me_meter_in','me_meter_out','ge_meter_in','ge_meter_out',
-   'blr_meter','me_runtime','cyl_meter','in_rpm_display'].forEach(id=>{
+   'blr_meter','me_runtime','cyl_meter','in_rpm_display','in_fwProd','in_fwRob','in_fwProdD','in_fwConsD','in_fwTotalRob'].forEach(id=>{
     const el = document.getElementById(id); if (el) el.value='';
   });
   prefillFromLastEntry();
@@ -14215,6 +15109,7 @@ function buildSyncPayload(){
       documents: state.documents,
       abstracts: state.abstracts,
       printHistory: state.printHistory,
+      orbEntries: state.orbEntries,
       deletedIds: sync.deletedIds || { entries:[], receipts:[], documents:[], abstracts:[], printHistory:[] }
     }
   };
@@ -14246,6 +15141,7 @@ function applyRemoteSnapshot(remote, policy){
     state.documents = (remoteData.documents || []).map(d=> tagVesselId({...d}));
     state.abstracts = (remoteData.abstracts || []).map(a=> tagVesselId({...a}));
     state.printHistory = (remoteData.printHistory || []).map(p=> tagVesselId({...p}));
+    state.orbEntries = (remoteData.orbEntries || []).map(o=> tagVesselId({...o}));
     const live = ensureSyncConfig();
     live.deletedIds = remoteData.deletedIds || localSync.deletedIds || live.deletedIds || {};
     return;
@@ -14265,6 +15161,7 @@ function applyRemoteSnapshot(remote, policy){
   state.documents = filterDeleted(mergeListsById(remoteData.documents, state.documents), remoteData.deletedIds?.documents);
   state.abstracts = filterDeleted(mergeListsById(remoteData.abstracts, state.abstracts), remoteData.deletedIds?.abstracts);
   state.printHistory = filterDeleted(mergeListsById(remoteData.printHistory, state.printHistory), remoteData.deletedIds?.printHistory);
+  state.orbEntries = mergeListsById(remoteData.orbEntries, state.orbEntries).map(o => tagVesselId({...o}));
   const live = ensureSyncConfig();
   live.deletedIds = mergeDeletedIds(localSync.deletedIds, remoteData.deletedIds);
   live.pendingChanges = true;
@@ -14300,6 +15197,7 @@ async function persistAllToDb(){
   for (const d of state.documents) await dbPut('documents', tagVesselId(d));
   for (const a of state.abstracts) await dbPut('abstracts', tagVesselId(a));
   for (const p of state.printHistory) await dbPut('printHistory', tagVesselId(p));
+  for (const o of state.orbEntries) await dbPut('orbEntries', tagVesselId(o));
 }
 
 let syncInFlight = null;
@@ -14635,10 +15533,11 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v115';
+let androidInstallCacheName = 'noon-report-v125';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
+  './ship_time.js',
   './sw.js',
   './manifest.webmanifest',
   './icons/logoBG.png',
@@ -15525,6 +16424,7 @@ function migrateSetup(setup){
   if (setup.voyageDistance===undefined) setup.voyageDistance = null;
   if (setup.dwt===undefined) setup.dwt = null;
   if (setup.imoNo===undefined) setup.imoNo = '';
+  if (setup.flag===undefined || setup.flag==='') setup.flag = setup.orb?.flag || setup.flag || '';
   if (setup.lcvRef==null) setup.lcvRef = DEFAULT_LCV_REF;
   if (setup.lcvActual===undefined) setup.lcvActual = null;
   if (setup.ciiShipType===undefined) setup.ciiShipType = '';
@@ -15551,6 +16451,8 @@ function migrateSetup(setup){
     setup.bunkerPlan = defaultBunkerPlan();
   }
   setup.orb = ensureOrbSetup(setup.orb);
+  if (setup.tzOffsetMin == null || !isFinite(Number(setup.tzOffsetMin))) setup.tzOffsetMin = null;
+  else setup.tzOffsetMin = (window.ShipTime ? ShipTime.clampTzOffsetMin(setup.tzOffsetMin) : Number(setup.tzOffsetMin));
   return setup;
 }
 
@@ -15562,6 +16464,7 @@ function ensureOrbSetup(raw){
   const seed = raw && typeof raw === 'object' ? raw : {};
   if (!seed.shipName && state.setup?.vesselName) seed.shipName = state.setup.vesselName;
   if (!seed.imo && state.setup?.imoNo) seed.imo = state.setup.imoNo;
+  if (!seed.flag && state.setup?.flag) seed.flag = state.setup.flag;
   if (!seed.chiefEng && state.setup?.chEng) seed.chiefEng = state.setup.chEng;
   return EORB.defaultOrbSetup(seed);
 }
@@ -15569,6 +16472,30 @@ function ensureOrbSetup(raw){
 function orbSetup(){
   state.setup.orb = ensureOrbSetup(state.setup.orb);
   return state.setup.orb;
+}
+
+/** Disclaimer is sticky once acknowledged. Live checkbox, stored flag, or a confirm
+ *  on first wizard open all count — the old alert-only gate left chiefs stuck when
+ *  render() wiped an unsaved tick. */
+function ensureOrbDisclaimerAck(){
+  const setup = orbSetup();
+  const el = document.getElementById('orb_disclaimer');
+  if (el && el.checked) setup.disclaimerAck = true;
+  if (setup.disclaimerAck){
+    if (el) el.checked = true;
+    state.setup.orb = setup;
+    saveSetup().catch(()=>{});
+    return true;
+  }
+  const ok = confirm(
+    'This guided e-ORB is for operational logging, training and printouts. Using it as the official Oil Record Book requires flag-approved software and a ship-specific Declaration.\n\nAcknowledge and continue?'
+  );
+  if (!ok) return false;
+  setup.disclaimerAck = true;
+  if (el) el.checked = true;
+  state.setup.orb = setup;
+  saveSetup().catch(()=>{});
+  return true;
 }
 
 /* ---- ORB entry dating -------------------------------------------------
@@ -15582,16 +16509,75 @@ function orbTodayIso(){
   return d.toISOString().slice(0,10);
 }
 
-/** Date of the most recent non-voided ORB entry for the active vessel, or null. */
+/** Date of the most recent ORB entry for the active vessel, or null.
+ *  Voided lines stay in the book, so they still bound chronology. */
 function orbLastEntryDate(){
   let last = null;
   (state.orbEntries || []).forEach(e=>{
-    if (!e || e.voided) return;
+    if (!e) return;
     if (e.vesselId && e.vesselId !== state.activeVesselId) return;
     if (!e.date) return;
     if (!last || String(e.date) > last) last = String(e.date);
   });
   return last;
+}
+
+function orbLastWeeklyInventoryDate(){
+  if (!window.EORB) return null;
+  const rows = (state.orbEntries || []).filter(e => !e.vesselId || e.vesselId === state.activeVesselId);
+  return EORB.lastMatchingEntryDate(rows, EORB.isWeeklySludgeInventory);
+}
+
+function orbLastWeeklyOwsDate(){
+  if (!window.EORB) return null;
+  const rows = (state.orbEntries || []).filter(e => !e.vesselId || e.vesselId === state.activeVesselId);
+  return EORB.lastMatchingEntryDate(rows, EORB.isWeeklyOwsTest);
+}
+
+function fillOrbWeeklyDueBox(el, status, label){
+  if (!el) return;
+  if (!status || status.first){
+    el.hidden = false;
+    el.className = 'orb-flag-box orb-weekly-due';
+    el.textContent = 'No ' + label + ' recorded yet. Record one now, then again within 7 days (sooner is allowed, later is not).';
+    return;
+  }
+  const last = EORB.formatOrbDate(status.lastDate);
+  const due = EORB.formatOrbDate(status.dueBy);
+  el.hidden = false;
+  if (status.overdue){
+    el.className = 'orb-flag-box orb-weekly-due err';
+    el.textContent = 'Warning: ' + label + ' is past 7 days. Last: ' + last + '. Was due by: ' + due +
+      '. The next one must be sooner than 7 days, never later. Record it now.';
+    return;
+  }
+  if (status.dueSoon){
+    el.className = 'orb-flag-box orb-weekly-due warn';
+    el.textContent = 'Warning: ' + label + ' is due. Last: ' + last + '. Next by: ' + due +
+      ' (7 days). It may be sooner than 7 days, never later.';
+    return;
+  }
+  el.className = 'orb-flag-box orb-weekly-due';
+  el.textContent = 'Last ' + label.toLowerCase() + ': ' + last + '. Next due by ' + due +
+    ' (' + status.daysLeft + ' day' + (status.daysLeft === 1 ? '' : 's') + ' left). Sooner is allowed, later than 7 days is not.';
+}
+
+function renderOrbWeeklyDueNotes(){
+  if (!window.EORB) return;
+  const today = orbTodayIso();
+  const inv = EORB.weeklyDueStatus(orbLastWeeklyInventoryDate(), today);
+  const ows = EORB.weeklyDueStatus(orbLastWeeklyOwsDate(), today);
+  fillOrbWeeklyDueBox(document.getElementById('orbWeeklyDueNote'), inv, 'Weekly sludge and bilge inventory');
+  fillOrbWeeklyDueBox(document.getElementById('orbOwsDueNote'), ows, 'Weekly 15 ppm / OWS test');
+  fillOrbWeeklyDueBox(document.getElementById('orbWeeklyWizardDueNote'), inv, 'Weekly sludge and bilge inventory');
+  const owsWiz = document.getElementById('orbOwsWizardDueNote');
+  if (owsWiz){
+    if (_orbWizard && _orbWizard.scenarioId === 'ows-weekly-test'){
+      fillOrbWeeklyDueBox(owsWiz, ows, 'Weekly 15 ppm / OWS test');
+    } else {
+      owsWiz.hidden = true;
+    }
+  }
 }
 
 /** Apply min/max to every ORB date input so the picker itself blocks bad dates. */
@@ -15604,7 +16590,27 @@ function applyOrbDateBounds(){
     if (min) el.min = min; else el.removeAttribute('min');
     el.max = max;
   });
+  /* Weekly inventory: never later than last weekly + 7 days, when that date is still
+     a valid book date. Sooner than 7 days is allowed. */
+  const wk = document.getElementById('orb_weeklyEntryDate');
+  if (wk && window.EORB){
+    const lastWeekly = orbLastWeeklyInventoryDate();
+    const dueBy = lastWeekly ? EORB.addDaysIso(lastWeekly, EORB.WEEKLY_INTERVAL_DAYS) : null;
+    if (dueBy && dueBy >= (min || dueBy) && dueBy < max){
+      wk.max = dueBy;
+    }
+  }
+  /* Weekly 15 ppm / OWS test: same 7-day window when that wizard is open. */
+  const wizDate = document.getElementById('orb_wizardEntryDate');
+  if (wizDate && window.EORB && _orbWizard && _orbWizard.scenarioId === 'ows-weekly-test'){
+    const lastOws = orbLastWeeklyOwsDate();
+    const dueBy = lastOws ? EORB.addDaysIso(lastOws, EORB.WEEKLY_INTERVAL_DAYS) : null;
+    if (dueBy && dueBy >= (min || dueBy) && dueBy < max){
+      wizDate.max = dueBy;
+    }
+  }
   renderOrbDateNotes();
+  renderOrbWeeklyDueNotes();
 }
 
 function renderOrbDateNotes(){
@@ -15658,14 +16664,16 @@ function syncOrbEntryDate(sourceId){
 
 function fillOrbFlagSelects(){
   if (!window.EORB) return;
+  const prefer = vesselFlagCode() || orbSetup().flag || 'LR';
   ['orb_flag','orb_codesFlag'].forEach(id=>{
     const sel = document.getElementById(id);
     if (!sel) return;
     const cur = sel.value;
     sel.innerHTML = EORB.FLAGS.map(f => `<option value="${f.code}">${f.name}</option>`).join('');
-    const prefer = cur || orbSetup().flag || 'LR';
-    if ([...sel.options].some(o => o.value === prefer)) sel.value = prefer;
+    const pick = cur || prefer;
+    if ([...sel.options].some(o => o.value === pick)) sel.value = pick;
   });
+  fillFlagRegistrySelect('s_flag', prefer);
 }
 
 function renderOrbFlagInfo(targetId, flagCode){
@@ -15751,6 +16759,7 @@ function escHtml(s){
 function readOrbSetupFromForm(){
   const setup = orbSetup();
   setup.flag = document.getElementById('orb_flag')?.value || setup.flag;
+  if (setup.flag) state.setup.flag = setup.flag;
   setup.shipType = document.getElementById('orb_shipType')?.value || setup.shipType;
   setup.ioppForm = document.getElementById('orb_ioppForm')?.value || setup.ioppForm;
   setup.shipName = document.getElementById('orb_shipName')?.value || '';
@@ -15771,7 +16780,7 @@ function readOrbSetupFromForm(){
   setup.equipment.transferPumpM3PerH = nOr('orb_xferPump');
   const tol = nOr('orb_capTol');
   setup.equipment.capacityWarnTolerancePct = tol != null ? tol : 15;
-  setup.disclaimerAck = !!document.getElementById('orb_disclaimer')?.checked;
+  setup.disclaimerAck = !!setup.disclaimerAck || !!document.getElementById('orb_disclaimer')?.checked;
   /* tanks from editors */
   const tanks = { sludge:[], bilge:[], bilgeWells:[], fuel:[], lube:[], cargo:[], slop:[], cbt:[], dirtyBallast: setup.tanks.dirtyBallast || [] };
   document.querySelectorAll('#orbTankEditors [data-orb-tank-row]').forEach(row=>{
@@ -15827,7 +16836,13 @@ function fillOrbSetupForm(){
   set('orb_xferPump', setup.equipment?.transferPumpM3PerH);
   set('orb_capTol', setup.equipment?.capacityWarnTolerancePct != null ? setup.equipment.capacityWarnTolerancePct : 15);
   const ack = document.getElementById('orb_disclaimer');
-  if (ack) ack.checked = !!setup.disclaimerAck;
+  if (ack){
+    /* Keep a live tick if the user checked the box since the last persist — render()
+       used to overwrite it from a stale false and Save then stored false. */
+    if (setup.disclaimerAck) ack.checked = true;
+    else if (ack.checked) setup.disclaimerAck = true;
+    else ack.checked = false;
+  }
   renderOrbFlagInfo('orbFlagInfo', setup.flag);
   renderOrbTankEditors();
   renderOrbOfficerEditors();
@@ -15838,43 +16853,35 @@ function renderOrbOpGrid(){
   const part = Number(document.getElementById('orb_part')?.value || 1);
   const grid = document.getElementById('orbOpGrid');
   if (!grid) return;
-  const weeklyCard = part === 1 ? `
-    <button type="button" class="orb-op-card" id="btnOrbWeeklyInventory" data-orb-weekly="1" style="border-color:var(--brass);">
-      <div class="code">C.11 + I</div>
-      <div class="title"><strong>Weekly Inventory</strong> — sludge (IOPP 3.1), oily bilge holding (3.3), bilge tanks/wells</div>
-    </button>` : '';
   const ops = EORB.getPartOps(part).slice().sort((a,b)=> (b.common?1:0)-(a.common?1:0) || a.code.localeCompare(b.code));
   grid.innerHTML = ops.map(op => `
     <button type="button" class="orb-op-card" data-orb-code="${op.code}">
       <div class="code">${op.code}</div>
       <div class="title">${op.title}</div>
     </button>`).join('');
-  renderOrbScenarioGroups(weeklyCard);
+  renderOrbScenarioGroups();
 }
 
 /** Plain-language operation picker; each card opens the wizard on the right code + items. */
-function renderOrbScenarioGroups(weeklyCard){
+function renderOrbScenarioGroups(){
   const host = document.getElementById('orbScenarioGroups');
   if (!host || !window.EORB) return;
   const part = Number(document.getElementById('orb_part')?.value || 1);
   const setup = orbSetup();
   const groups = EORB.getScenarioGroups(setup, part);
-  const weekly = weeklyCard
-    ? `<div class="orb-scenario-group"><h4>Routine</h4><div class="orb-op-grid">${weeklyCard}</div></div>`
-    : '';
   if (!groups.length){
-    host.innerHTML = weekly + `<div class="hint">No scenarios for this part with the equipment configured in Vessel Setup.</div>`;
+    host.innerHTML = `<div class="hint">No scenarios for this part with the equipment configured in Vessel Setup.</div>`;
     return;
   }
-  host.innerHTML = weekly + groups.map(g=>`
+  host.innerHTML = groups.map(g=>`
     <div class="orb-scenario-group">
       <h4>${escHtml(g.group)}</h4>
       <div class="orb-scenario-grid">
         ${g.scenarios.map(s=>`
-          <button type="button" class="orb-scenario-card" data-orb-scenario="${escAttr(s.id)}">
+          <button type="button" class="orb-scenario-card${s.group === 'Routine' ? ' routine' : ''}" data-orb-scenario="${escAttr(s.id)}">
             <div class="title">${escHtml(s.title)}</div>
             <div class="blurb">${escHtml(s.blurb || '')}</div>
-            <span class="codetag">Code ${escHtml(s.code)} · ${escHtml((s.items||[]).join(', '))}</span>
+            <span class="codetag">Code ${escHtml(s.code)} · ${escHtml((s.items||[]).join(', '))}${s.wizard === 'weekly' ? ' + I' : ''}</span>
           </button>`).join('')}
       </div>
     </div>`).join('');
@@ -15930,11 +16937,8 @@ function renderWeeklyPreview(){
 
 function openWeeklyInventoryWizard(){
   if (!window.EORB) return;
+  if (!ensureOrbDisclaimerAck()) return;
   const setup = orbSetup();
-  if (!setup.disclaimerAck){
-    alert('Acknowledge the e-ORB disclaimer in Vessel Setup before logging entries.');
-    return;
-  }
   document.getElementById('orbEntryWizard').style.display = 'none';
   const wiz = document.getElementById('orbWeeklyWizard');
   if (wiz) wiz.style.display = '';
@@ -15968,11 +16972,15 @@ function openWeeklyInventoryWizard(){
   }).join('');
   const iso = orbTodayIso();
   const lastDate = orbLastEntryDate();
-  const suggested = (lastDate && lastDate > iso) ? lastDate : iso;
+  const lastWeekly = orbLastWeeklyInventoryDate();
+  const dueBy = lastWeekly && window.EORB ? EORB.addDaysIso(lastWeekly, EORB.WEEKLY_INTERVAL_DAYS) : null;
+  let suggested = iso;
+  if (dueBy && dueBy < iso && (!lastDate || dueBy >= lastDate)) suggested = dueBy;
+  if (lastDate && suggested < lastDate) suggested = lastDate;
   const topDate = document.getElementById('orb_entryDate');
   if (topDate && !topDate.value) topDate.value = suggested;
   const wkDate = document.getElementById('orb_weeklyEntryDate');
-  if (wkDate) wkDate.value = topDate?.value || suggested;
+  if (wkDate) wkDate.value = suggested;
   applyOrbDateBounds();
   const sign = document.getElementById('orb_weeklyOfficerSignDate');
   if (sign && !sign.value) sign.value = iso;
@@ -16054,11 +17062,8 @@ function renderOrbPreview(){
 function openOrbWizard(code, opts){
   if (!window.EORB) return;
   opts = opts || {};
+  if (!ensureOrbDisclaimerAck()) return;
   const setup = orbSetup();
-  if (!setup.disclaimerAck){
-    alert('Acknowledge the e-ORB disclaimer in Vessel Setup before logging entries.');
-    return;
-  }
   const part = Number(document.getElementById('orb_part')?.value || 1);
   const op = EORB.getOperation(part, code);
   if (!op) return;
@@ -16095,9 +17100,11 @@ function openOrbWizard(code, opts){
       if (f.type === 'select'){
         control = `<select data-orb-field="${f.name}">${(f.options||[]).map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`;
       } else if (f.type === 'textarea'){
-        control = `<textarea data-orb-field="${f.name}" rows="3"></textarea>`;
+        const preset = opts.presets && opts.presets[f.name] != null ? String(opts.presets[f.name]) : '';
+        control = `<textarea data-orb-field="${f.name}" rows="3">${escHtml(preset)}</textarea>`;
       } else if (f.type === 'tank' || f.type === 'tankMulti'){
-        const tanks = EORB.tanksForGroup(setup, f.tankGroup || 'any');
+        const group = (opts.fieldTankGroups && opts.fieldTankGroups[f.name]) || f.tankGroup || 'any';
+        const tanks = EORB.tanksForGroup(setup, group);
         /* Frame position in the option text — matches the IOPP Supplement tank list. */
         const opts = tanks.map(t => `<option value="${escAttr(t.id)}">${escHtml(EORB.tankLabel(setup, t.id))}</option>`).join('');
         const empty = tanks.length ? '' : `<option value="" disabled>No tanks configured — add them in Vessel Setup</option>`;
@@ -16117,7 +17124,13 @@ function openOrbWizard(code, opts){
   const iso = orbTodayIso();
   const lastDate = orbLastEntryDate();
   /* Default to today, but never earlier than the last entry already in the book. */
-  const suggested = (lastDate && lastDate > iso) ? lastDate : iso;
+  let suggested = (lastDate && lastDate > iso) ? lastDate : iso;
+  if (opts.scenarioId === 'ows-weekly-test' && window.EORB){
+    const lastOws = orbLastWeeklyOwsDate();
+    const dueBy = lastOws ? EORB.addDaysIso(lastOws, EORB.WEEKLY_INTERVAL_DAYS) : null;
+    if (dueBy && dueBy < iso && (!lastDate || dueBy >= lastDate)) suggested = dueBy;
+    if (lastDate && suggested < lastDate) suggested = lastDate;
+  }
   const topDate = document.getElementById('orb_entryDate');
   if (topDate && !topDate.value) topDate.value = suggested;
   const wizDate = document.getElementById('orb_wizardEntryDate');
@@ -16152,7 +17165,6 @@ function filteredOrbEntries(){
   const part = document.getElementById('orb_browsePart')?.value || 'all';
   const officer = document.getElementById('orb_browseOfficer')?.value || 'all';
   return (state.orbEntries || []).filter(e => {
-    if (e.voided) return false;
     if (part !== 'all' && String(e.part) !== part) return false;
     if (from && e.date < from) return false;
     if (to && e.date > to) return false;
@@ -16190,13 +17202,13 @@ function renderOrbBrowse(){
   body.innerHTML = rows.map(e => {
     const items = (e.lines||[]).map(l=>l.itemNo).join(', ');
     const text = (e.lines||[]).map(l=>`${l.itemNo}: ${l.text}`).join(' · ');
-    return `<tr>
+    return `<tr${e.voided ? ' class="orb-voided"' : ''}>
       <td><input type="checkbox" class="orb-browse-check" value="${e.id}" checked></td>
       <td>${EORB ? EORB.formatOrbDate(e.date) : e.date}</td>
       <td>Part ${e.part}</td>
       <td><strong>${e.code}</strong></td>
       <td>${items}</td>
-      <td>${text}<div class="hint">${e.officerName||''}${e.officerRank?(', '+e.officerRank):''}</div></td>
+      <td>${text}<div class="hint">${e.officerName||''}${e.officerRank?(', '+e.officerRank):''}${e.voided ? ' — VOID' + (e.voidReason ? (': ' + escHtml(e.voidReason)) : '') : ''}</div></td>
     </tr>`;
   }).join('');
 }
@@ -16214,7 +17226,7 @@ function renderOrbUi(){
   applyOrbDateBounds();
   const hint = document.getElementById('orbNewHint');
   const flag = EORB.getFlag(orbSetup().flag);
-  if (hint) hint.textContent = `Flag: ${flag.name}. Pick the operation you carried out — the MARPOL code and item numbers are chosen for you.`;
+  if (hint) hint.textContent = `Flag: ${flag.name}. Weekly sludge and bilge inventory must be within 7 days of the last sounding (sooner is allowed). Pick the operation you carried out — the MARPOL code and item numbers are chosen for you.`;
 }
 
 function switchOrbPanel(name){
@@ -16223,7 +17235,7 @@ function switchOrbPanel(name){
   document.querySelectorAll('.orb-panel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById(map[name] || 'orbPanelSetup');
   if (panel) panel.classList.add('active');
-  if (name === 'new') renderOrbOpGrid();
+  if (name === 'new'){ renderOrbOpGrid(); applyOrbDateBounds(); }
   if (name === 'browse') renderOrbBrowse();
   if (name === 'codes') renderOrbCodesList();
   if (name === 'setup') fillOrbSetupForm();
@@ -16237,11 +17249,20 @@ document.getElementById('orbSubtabs')?.addEventListener('click', (e)=>{
 document.getElementById('orb_flag')?.addEventListener('change', ()=>{
   readOrbSetupFromForm();
   renderOrbFlagInfo('orbFlagInfo', document.getElementById('orb_flag').value);
+  fillFlagRegistrySelect('s_flag', vesselFlagCode());
+});
+document.getElementById('s_flag')?.addEventListener('change', ()=>{
+  state.setup.flag = document.getElementById('s_flag').value || '';
+  if (state.setup.orb) state.setup.orb.flag = state.setup.flag || state.setup.orb.flag;
+  const orbSel = document.getElementById('orb_flag');
+  if (orbSel && state.setup.flag) orbSel.value = state.setup.flag;
+  renderOrbFlagInfo('orbFlagInfo', state.setup.flag);
 });
 document.getElementById('btnOrbPrefillFromVessel')?.addEventListener('click', ()=>{
   const setup = orbSetup();
   setup.shipName = state.setup.vesselName || setup.shipName;
   setup.imo = state.setup.imoNo || setup.imo;
+  setup.flag = state.setup.flag || setup.flag;
   setup.chiefEng = state.setup.chEng || setup.chiefEng;
   setup.gt = state.setup.dwt != null ? setup.gt : setup.gt;
   if (state.setup.fuelTanks?.length && !(setup.tanks.fuel||[]).length){
@@ -16255,6 +17276,18 @@ document.getElementById('btnOrbSaveSetup')?.addEventListener('click', async ()=>
   readOrbSetupFromForm();
   await saveSetup();
   alert('ORB vessel setup saved for ' + (orbSetup().shipName || 'this vessel') + '.\nFlag: ' + EORB.getFlag(orbSetup().flag).name);
+});
+document.getElementById('orb_disclaimer')?.addEventListener('change', ()=>{
+  const setup = orbSetup();
+  const el = document.getElementById('orb_disclaimer');
+  if (el && el.checked){
+    setup.disclaimerAck = true;
+    state.setup.orb = setup;
+    saveSetup().catch(()=>{});
+  } else if (setup.disclaimerAck && el){
+    /* Sticky — once acknowledged it stays, so render() cannot un-ack it. */
+    el.checked = true;
+  }
 });
 document.querySelectorAll('[data-orb-tank-add]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -16316,12 +17349,24 @@ document.getElementById('orbScenarioGroups')?.addEventListener('click', (e)=>{
   if (!card || !window.EORB) return;
   const sc = EORB.getScenario(card.getAttribute('data-orb-scenario'));
   if (!sc) return;
+  if (sc.wizard === 'weekly'){
+    openWeeklyInventoryWizard();
+    document.getElementById('orbWeeklyWizard')?.scrollIntoView({ behavior:'smooth', block:'start' });
+    return;
+  }
   const partSel = document.getElementById('orb_part');
   if (partSel && Number(partSel.value) !== Number(sc.part)){
     partSel.value = String(sc.part);
     renderOrbOpGrid();
   }
-  openOrbWizard(sc.code, { items: sc.items, presets: sc.presets, scenarioId: sc.id, title: sc.title, blurb: sc.blurb });
+  openOrbWizard(sc.code, {
+    items: sc.items,
+    presets: sc.presets,
+    scenarioId: sc.id,
+    title: sc.title,
+    blurb: sc.blurb,
+    fieldTankGroups: sc.fieldTankGroups
+  });
   document.getElementById('orbEntryWizard')?.scrollIntoView({ behavior:'smooth', block:'start' });
 });
 document.getElementById('btnOrbToggleCodes')?.addEventListener('click', ()=>{
@@ -16380,15 +17425,29 @@ document.getElementById('btnOrbSaveWeekly')?.addEventListener('click', async ()=
     alert('Cannot save weekly inventory:\n\n• ' + (built.errors.join('\n• ') || 'Enter retained m³ for at least one sludge tank (IOPP 3.1).'));
     return;
   }
-  if (includeBilge && !entriesToSave.some(e => e.code === 'I')){
-    if (!confirm('No oily bilge / bilge tank retained quantities entered.\n\nSave sludge weekly inventory (Code C) only?')) return;
-  }
   const officerName = document.getElementById('orb_weeklyOfficerName')?.value?.trim();
   if (!officerName){ alert('Officer in charge name is required.'); return; }
   const date = document.getElementById('orb_weeklyEntryDate')?.value
     || document.getElementById('orb_entryDate')?.value;
   const dateErr = orbDateError(date);
   if (dateErr){ alert('Cannot save weekly inventory:\n\n' + dateErr); return; }
+  const lastWeekly = orbLastWeeklyInventoryDate();
+  const windowErr = window.EORB ? EORB.weeklyInventoryDateError(date, lastWeekly) : null;
+  if (windowErr){
+    const dueBy = lastWeekly ? EORB.addDaysIso(lastWeekly, EORB.WEEKLY_INTERVAL_DAYS) : null;
+    const lastBook = orbLastEntryDate();
+    const missedWindow = dueBy && date > dueBy && date === orbTodayIso() && lastBook && lastBook > dueBy;
+    if (!missedWindow){
+      alert('Cannot save weekly inventory:\n\n' + windowErr);
+      return;
+    }
+    if (!confirm(windowErr + '\n\nLater ORB entries already sit after the 7-day due date, so this sounding can only be dated today. Save as overdue?')) return;
+  }
+  if (includeBilge && !entriesToSave.some(e => e.code === 'I')){
+    if (!confirm('No oily bilge / bilge tank retained quantities entered.\n\nWeekly inventory should include sludge and bilge tanks. Save sludge (Code C) only?')) return;
+  } else if (!includeBilge){
+    if (!confirm('Bilge tanks will be omitted. Weekly inventory should cover sludge and bilge. Continue with sludge only?')) return;
+  }
   const officerId = document.getElementById('orb_weeklyOfficerSelect')?.value || '';
   const officerRank = document.getElementById('orb_weeklyOfficerRank')?.value?.trim() || '';
   const signDate = document.getElementById('orb_weeklyOfficerSignDate')?.value || date;
@@ -16411,7 +17470,8 @@ document.getElementById('btnOrbSaveWeekly')?.addEventListener('click', async ()=
       createdAt: now,
       updatedAt: now,
       voided: false,
-      weeklyInventory: true
+      weeklyInventory: true,
+      scenarioId: 'weekly-sludge-bilge'
     };
     state.orbEntries.push(entry);
     await dbPut('orbEntries', entry);
@@ -16424,7 +17484,7 @@ document.getElementById('btnOrbSaveWeekly')?.addEventListener('click', async ()=
   fillOrbSetupForm();
   applyOrbDateBounds();
   alert('Weekly inventory saved: ' + saved + ' ORB operation(s).\n\n• Code C — sludge tanks (IOPP 3.1)\n' +
-    (includeBilge && entriesToSave.some(e => e.code === 'I') ? '• Code I — oily bilge / bilge tanks (voluntary)\n' : '') +
+    (includeBilge && entriesToSave.some(e => e.code === 'I') ? '• Code I — oily bilge / bilge tanks\n' : '') +
     '\nOpen Browse / Print to review.');
 });
 document.getElementById('orbItemChips')?.addEventListener('change', renderOrbPreview);
@@ -16475,6 +17535,18 @@ document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>
     || document.getElementById('orb_entryDate')?.value;
   const dateErr = orbDateError(date);
   if (dateErr){ alert('Cannot save this ORB entry:\n\n' + dateErr); return; }
+  if (_orbWizard.scenarioId === 'ows-weekly-test'){
+    values.weeklyOwsTest = true;
+    const owsErr = EORB.weeklyInventoryDateError(date, orbLastWeeklyOwsDate(), 'Weekly 15 ppm / OWS test');
+    if (owsErr){
+      const dueBy = orbLastWeeklyOwsDate() ? EORB.addDaysIso(orbLastWeeklyOwsDate(), EORB.WEEKLY_INTERVAL_DAYS) : null;
+      if (!(dueBy && date > dueBy && date === orbTodayIso())){
+        alert('Cannot save this ORB entry:\n\n' + owsErr);
+        return;
+      }
+      if (!confirm(owsErr + '\n\nSave as overdue today?')) return;
+    }
+  }
   const lines = EORB.buildItemLines(part, code, selected, values, setup);
   const robNotes = EORB.applyOperationRob(setup, part, code, selected, values);
   state.setup.orb = setup;
@@ -16488,6 +17560,7 @@ document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>
     robNotes,
     capacityWarnings: warnings,
     scenarioId: _orbWizard.scenarioId || null,
+    weeklyKind: _orbWizard.scenarioId === 'ows-weekly-test' ? 'ows-test' : null,
     officerId: document.getElementById('orb_officerSelect')?.value || '',
     officerName,
     officerRank: document.getElementById('orb_officerRank')?.value?.trim() || '',
@@ -16509,6 +17582,30 @@ document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>
     (robNotes.length ? ('\n\nTank ROB updated:\n• ' + robNotes.join('\n• ')) : ''));
 });
 document.getElementById('btnOrbFilter')?.addEventListener('click', renderOrbBrowse);
+document.getElementById('btnOrbVoid')?.addEventListener('click', async ()=>{
+  const ids = [...document.querySelectorAll('.orb-browse-check:checked')].map(c=>c.value);
+  if (!ids.length){ alert('Select the entry to void.'); return; }
+  const reason = prompt('Void / correct: reason for striking through the selected ORB line(s).\n\nThe line stays in the book (MARPOL does not allow deleting). Record a new correct entry afterwards.');
+  if (reason == null) return;
+  const note = String(reason).trim();
+  if (!note){ alert('A reason is required to void an ORB entry.'); return; }
+  const now = new Date().toISOString();
+  let n = 0;
+  for (const id of ids){
+    const entry = (state.orbEntries || []).find(e => e.id === id);
+    if (!entry || entry.voided) continue;
+    entry.voided = true;
+    entry.voidReason = note;
+    entry.voidedAt = now;
+    entry.updatedAt = now;
+    await dbPut('orbEntries', entry);
+    n += 1;
+  }
+  if (!n){ alert('Those lines are already voided.'); return; }
+  renderOrbBrowse();
+  applyOrbDateBounds();
+  alert(n + ' ORB line(s) struck through. Record the correct operation as a new entry.');
+});
 document.getElementById('btnOrbPrint')?.addEventListener('click', ()=>{
   if (!window.EORB) return;
   const checked = new Set([...document.querySelectorAll('.orb-browse-check:checked')].map(c=>c.value));
@@ -16842,117 +17939,119 @@ function renderVesselLock(){
       ? `This copy is assigned to ${vessel.vesselName || vessel.vesselId} by your login. Only this vessel can be loaded.`
       : '';
   }
+  const office = document.getElementById('fleetOfficePanel');
+  if (office) office.hidden = !isAdmin;
+  if (isAdmin) renderFleetOffice();
 }
 
 
-/* ---------------- offline credentials ----------------
-   A ship joining with a fresh laptop and no connectivity cannot reach the server
-   to sign in even once. A bundle exported by the fleet manager carries the vessel
-   and the password VERIFIERS for whoever is posted to it, so the login is checked
-   on the device. The verifier is the same PBKDF2-HMAC-SHA256 the server stores —
-   the device recomputes it and compares, it never sees a password.
+/* ---------------- device enrollment ----------------
+   A laptop earns offline access by signing in online once. The device then
+   holds a random secret the server hashed — never a password. Offline unlock
+   proves this laptop, so the generated password is only typed at first
+   enrollment (and on a replacement machine). A stolen laptop is revoked from
+   Fleet Office; pulling the network cable cannot resurrect a revocation the
+   server has already answered. */
 
-   The trade is deliberate and its cost is real: a stolen laptop carries crackable
-   password material, and a transferred engineer keeps working on the old device
-   until it reconnects. The bundle therefore expires, and carries only the
-   engineers currently posted to that one ship. */
+const DEVICE_ENROLL_KEY = 'nr_device_enrollment';
 
-const OFFLINE_BUNDLE_KEY = 'nr_offline_bundle';
-
-function readOfflineBundle(){
+function readDeviceEnrollment(){
   try{
-    const raw = localStorage.getItem(OFFLINE_BUNDLE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const raw = localStorage.getItem(DEVICE_ENROLL_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!parsed || !parsed.deviceId || !parsed.secret || !parsed.username) return null;
+    return parsed;
   }catch(_){ return null; }
 }
 
-function writeOfflineBundle(bundle){
-  if (!bundle || bundle.version !== 1 || !bundle.vessel || !Array.isArray(bundle.logins)){
-    throw new Error('That file is not a vessel credentials bundle.');
+function writeDeviceEnrollment(enroll){
+  if (!enroll){
+    localStorage.removeItem(DEVICE_ENROLL_KEY);
+    return null;
   }
-  localStorage.setItem(OFFLINE_BUNDLE_KEY, JSON.stringify(bundle));
-  return bundle;
+  localStorage.setItem(DEVICE_ENROLL_KEY, JSON.stringify(enroll));
+  return enroll;
 }
 
-function hexToBytes(hex){
-  const clean = String(hex || '').trim();
-  if (clean.length % 2) throw new Error('Bad salt in credentials bundle.');
-  const out = new Uint8Array(clean.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.substr(i * 2, 2), 16);
-  return out;
+function newDeviceSecret(){
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function bytesToHex(buf){
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+function newDeviceId(){
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  const raw = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  return 'dev_' + raw;
 }
 
-/** Recompute the server's PBKDF2 verifier for a password, in the browser. */
-async function derivePasswordVerifier(password, saltHex, rounds){
-  if (!crypto?.subtle) throw new Error('This browser cannot verify credentials offline (no WebCrypto).');
-  const key = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']
-  );
-  const bits = await crypto.subtle.deriveBits(
-    { name:'PBKDF2', salt: hexToBytes(saltHex), iterations: rounds, hash:'SHA-256' },
-    key, 256
-  );
-  return bytesToHex(bits);
+function deviceLabel(){
+  const ua = (navigator.userAgent || '').slice(0, 80);
+  return (ua.match(/Windows|Mac OS|Android|Linux|iPhone|iPad/i) || ['PC'])[0] + ' laptop';
 }
 
-/** Constant-time-ish compare, so a wrong password does not leak how wrong it was. */
-function verifiersMatch(a, b){
-  const x = String(a || ''), y = String(b || '');
-  if (x.length !== y.length) return false;
-  let diff = 0;
-  for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
-  return diff === 0;
-}
-
-/** Sign in against the bundle on this device. Returns a session, or throws. */
-async function offlineLogin(username, password){
-  const bundle = readOfflineBundle();
-  if (!bundle) throw new Error('This device has never signed in. The first sign-in needs the server — connect, sign in once, and it will work offline after that.');
-  if (bundle.expiresAt && new Date(bundle.expiresAt) < new Date()){
-    throw new Error(`Offline access for this device expired on ${String(bundle.expiresAt).slice(0,10)}. Connect to the server and sign in again.`);
+async function enrollThisDevice(session){
+  if (!session?.sessionToken || session.role === 'fleet_manager' || session.role === 'admin'){
+    return null;
   }
-  const login = (bundle.logins || []).find(l => l.username === username.trim().toLowerCase());
-  /* Do the derivation even when the username is unknown, so the failure takes the
-     same time either way and does not reveal who is posted to this ship. */
-  const target = login || { salt: '00'.repeat(16), rounds: 240000, verifier: '' };
-  if (target.algorithm && target.algorithm !== 'pbkdf2-hmac-sha256'){
-    throw new Error('These credentials use a scheme this version cannot verify.');
+  let enroll = readDeviceEnrollment();
+  if (!enroll || enroll.username !== session.username){
+    enroll = {
+      deviceId: newDeviceId(),
+      secret: newDeviceSecret(),
+      username: session.username,
+      role: session.role,
+      serverUrl: session.serverUrl,
+      vessel: session.vessel || null
+    };
   }
-  const got = await derivePasswordVerifier(password, target.salt, target.rounds || 240000);
-  if (!login || !verifiersMatch(got, target.verifier)){
-    throw new Error('Username or password is incorrect.');
-  }
-  return writeStoredSession({
-    serverUrl: state.session?.serverUrl || document.getElementById('login_serverUrl')?.value || '',
-    sessionToken: null,           /* no server session exists — this is a local sign-in */
-    offline: true,
-    expiresAt: bundle.expiresAt,
-    username: login.username,
-    role: login.role,
-    vessel: bundle.vessel,
-    history: [bundle.vessel]
+  const out = await loginApiCall(session.serverUrl, '/api/auth/devices', {
+    method: 'POST',
+    session: { sessionToken: session.sessionToken },
+    body: { deviceId: enroll.deviceId, secret: enroll.secret, label: deviceLabel() }
   });
+  enroll.username = session.username;
+  enroll.role = session.role;
+  enroll.serverUrl = session.serverUrl;
+  enroll.vessel = session.vessel || enroll.vessel || null;
+  enroll.enrolledAt = new Date().toISOString();
+  if (out?.device?.deviceId) enroll.deviceId = out.device.deviceId;
+  return writeDeviceEnrollment(enroll);
 }
 
+function sessionFromEnrollment(enroll, extra){
+  return writeStoredSession(Object.assign({
+    serverUrl: enroll.serverUrl || '',
+    sessionToken: null,
+    offline: true,
+    deviceId: enroll.deviceId,
+    username: enroll.username,
+    role: enroll.role,
+    vessel: enroll.vessel || null,
+    history: enroll.vessel ? [enroll.vessel] : []
+  }, extra || {}));
+}
+
+/** Unlock this laptop from its enrollment, without a password. */
+async function unlockEnrolledDevice(){
+  const enroll = readDeviceEnrollment();
+  if (!enroll) throw new Error('This device has never signed in. The first sign-in needs the server — connect, sign in once, and it will work offline after that.');
+  return sessionFromEnrollment(enroll);
+}
 
 function bindOfflineCredsUi(){
-  /* There is no way to install credentials by hand. A device earns its offline
-     access by signing in online once, which is when the bundle is fetched. */
   const status = document.getElementById('offlineCredsStatus');
-  if (!status) return;
-  const b = readOfflineBundle();
-  if (!b){
-    status.textContent = 'This device has not signed in yet. The first sign-in needs the server; after that it works at sea.';
-    return;
+  const unlock = document.getElementById('btnUnlockDevice');
+  const enroll = readDeviceEnrollment();
+  if (status){
+    status.textContent = enroll
+      ? ('This device is enrolled as ' + enroll.username
+        + (enroll.vessel?.vesselName ? ' on ' + enroll.vessel.vesselName : '')
+        + ' — it unlocks with no connectivity.')
+      : 'This device has not signed in yet. The first sign-in needs the server; after that it unlocks at sea.';
   }
-  const expired = b.expiresAt && new Date(b.expiresAt) < new Date();
-  status.textContent = `Offline sign-in available for ${b.vessel?.vesselName || 'this vessel'}`
-    + (expired ? ` — EXPIRED ${String(b.expiresAt).slice(0,10)}, sign in online again.`
-               : ` — valid to ${String(b.expiresAt || '').slice(0,10)}.`);
+  if (unlock) unlock.hidden = !enroll;
 }
 
 
@@ -17009,39 +18108,38 @@ async function handleLoginSubmit(){
     });
     state.session = session;
     setLoginStatus('loginStatus', '', null);
-    /* Refresh the offline bundle while we have the connection. A device that can
-       sign in today should still sign in after it sails. */
-    if (out.vessel?.vesselId){
-      try{
-        /* sessionRequestHeaders reads .sessionToken off the object — handing it a
-           bare string sends no header at all. */
-        const b = await loginApiCall(base, '/api/vessel/offline-bundle', {
-          session: { sessionToken: out.sessionToken }
-        });
-        if (b?.bundle) writeOfflineBundle(b.bundle);
-      }catch(err){
-        /* Never block a good login on this, but do not swallow it silently either —
-           a device that quietly fails to earn offline access looks fine until the
-           ship sails. */
-        console.warn('Could not refresh offline credentials:', err.message);
-      }
+    /* Enroll this laptop while we have the connection. A device that can sign
+       in today should still unlock after it sails — by proving the laptop, not
+       by storing a password hash. */
+    try{
+      await enrollThisDevice(session);
+      bindOfflineCredsUi();
+    }catch(err){
+      console.warn('Could not enroll this device for offline unlock:', err.message);
     }
     await enterAssignStep(session);
   }catch(err){
-    /* Only a transport failure means "offline". If the server answered at all —
-       including 401 — its answer stands, or a revoked login could be resurrected
-       by pulling the network cable. */
+    /* Only a transport failure means "offline". If the server answers — including
+       401 — its answer stands, or a revoked login could be resurrected by pulling
+       the network cable. */
     const unreachable = err instanceof TypeError || /Failed to fetch|NetworkError|load failed/i.test(err.message || '');
-    if (unreachable && readOfflineBundle()){
-      try{
-        setLoginStatus('loginStatus', 'Server unreachable — checking credentials on this device…', 'busy');
-        const session = await offlineLogin(username, password);
-        state.session = session;
-        setLoginStatus('loginStatus', '', null);
-        await enterAssignStep(session);
-        return;
-      }catch(offErr){
-        setLoginStatus('loginStatus', offErr.message, 'err');
+    if (unreachable){
+      const enroll = readDeviceEnrollment();
+      if (enroll && enroll.username === username.trim().toLowerCase()){
+        try{
+          setLoginStatus('loginStatus', 'Server unreachable — unlocking this device…', 'busy');
+          const session = await unlockEnrolledDevice();
+          state.session = session;
+          setLoginStatus('loginStatus', '', null);
+          await enterAssignStep(session);
+          return;
+        }catch(offErr){
+          setLoginStatus('loginStatus', offErr.message, 'err');
+          return;
+        }
+      }
+      if (enroll){
+        setLoginStatus('loginStatus', 'Server unreachable. This device is enrolled as ' + enroll.username + ' — use Continue on this device, or wait for a connection.', 'err');
         return;
       }
     }
@@ -17053,12 +18151,19 @@ async function handleLoginSubmit(){
 async function enterAssignStep(session){
   showLoginStep('assign');
   const signedAs = document.getElementById('loginSignedAs');
+  const manager = session.role === 'fleet_manager' || session.role === 'admin';
   if (signedAs){
-    signedAs.textContent = session.role === 'admin'
-      ? `Signed in as ${session.username} (fleet manager) — choose the vessel to load.`
+    signedAs.textContent = manager
+      ? `Signed in as ${session.username} (fleet manager) — choose a vessel to load, or continue into Fleet Office.`
       : `Signed in as ${session.username}.`;
   }
   setLoginStatus('loginAssignStatus', '', null);
+  renderFleetOffice();
+
+  const tokenPath = document.getElementById('loginTokenPath');
+  if (tokenPath) tokenPath.hidden = !!session.username;
+  const claimBox = document.getElementById('loginVesselClaim');
+  if (claimBox) claimBox.hidden = true;
 
   if (session.vessel){
     setLoginStatus('loginAssignStatus', `Loading ${session.vessel.vesselName || session.vessel.vesselId}…`, 'busy');
@@ -17073,7 +18178,6 @@ async function enterAssignStep(session){
   }
 
   const pick = document.getElementById('loginVesselPick');
-  const manager = session.role === 'fleet_manager' || session.role === 'admin';
   if (manager){
     try{
       const out = await loginApiCall(session.serverUrl, '/api/admin/vessels', { session });
@@ -17082,12 +18186,9 @@ async function enterAssignStep(session){
       state.session.fleet = vessels;
       if (sel){
         sel.innerHTML = vessels.length
-          ? vessels.map(v => `<option value="${v.vesselId}">${v.vesselName} — IMO ${v.imo}${v.company ? ' — ' + v.company : ''}${v.pendingReview ? ` — PENDING REVIEW${v.createdBy ? ' (from ' + v.createdBy + ')' : ''}` : ''}</option>`).join('')
+          ? vessels.map(v => `<option value="${escAttr(v.vesselId)}">${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}${v.company ? ' — ' + escHtml(v.company) : ''}${v.pendingReview ? ` — PENDING REVIEW${v.createdBy ? ' (from ' + escHtml(v.createdBy) + ')' : ''}` : ''}</option>`).join('')
           : '<option value="">No vessels registered yet</option>';
       }
-      /* A ship registered from a device rather than the office is held for review.
-         The flag was being recorded and never shown, which is the same as not
-         recording it. */
       const waiting = vessels.filter(v => v.pendingReview);
       const notice = document.getElementById('loginPendingNotice');
       if (notice){
@@ -17098,38 +18199,92 @@ async function enterAssignStep(session){
         notice.hidden = !waiting.length;
       }
       if (pick) pick.hidden = false;
+      const foBtn = document.getElementById('btnLoginFleetOffice');
+      if (foBtn) foBtn.hidden = false;
       if (!vessels.length){
-        setLoginStatus('loginAssignStatus', 'No vessels are registered yet. Continue with no vessel and add one from Setup.', null);
+        setLoginStatus('loginAssignStatus', 'No vessels are registered yet. Continue with no vessel and add one from Fleet Office.', null);
       }
     }catch(err){
       setLoginStatus('loginAssignStatus', 'Could not list vessels: ' + err.message, 'err');
     }
   } else if (pick){
-    /* An engineer with a service history may load a previous ship to review it.
-       The server refuses writes to anything but his current posting, so this is
-       read-only in practice — the note says so. */
     const history = session.history || [];
     if (history.length > 1){
       const sel = document.getElementById('login_vesselSelect');
       state.session.fleet = history;
       if (sel){
         sel.innerHTML = history.map(v =>
-          `<option value="${v.vesselId}"${v.vesselId === (session.vessel && session.vessel.vesselId) ? ' selected' : ''}>${v.vesselName} — IMO ${v.imo}${v.vesselId === (session.vessel && session.vessel.vesselId) ? ' (current)' : ' (past — read only)'}</option>`
+          `<option value="${escAttr(v.vesselId)}">${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}${v.vesselId === (session.vessel && session.vessel.vesselId) ? ' (current)' : ' (past — read only)'}</option>`
         ).join('');
       }
       pick.hidden = false;
+      if (claimBox) claimBox.hidden = true;
+      const foBtn = document.getElementById('btnLoginFleetOffice');
+      if (foBtn) foBtn.hidden = true;
     } else {
       pick.hidden = true;
-      /* An engineer the office created without a ship — he joins and enters the
-         vessel himself. Leaving him on the gate would strand him: there is nothing
-         here for him to choose. Let him into the program, where Setup is open for
-         him to enter the ship and register it. */
-      await applyVesselAssignment(null);
-      writeStoredSession(state.session);
-      showLoginGate(false);
-      switchTab('setup');
+      /* Unassigned engineer: pick from the register rather than minting a ship. */
+      try{
+        const out = await loginApiCall(session.serverUrl, '/api/vessels', { session });
+        const vessels = out.vessels || [];
+        state.session.fleet = vessels;
+        const sel = document.getElementById('login_claimSelect');
+        if (sel){
+          sel.innerHTML = vessels.length
+            ? '<option value="">— pick an empty ship —</option>' + vessels.map(v => {
+              const occupied = v.chiefEngineer
+                ? ` — ${escHtml(v.chiefEngineer)} aboard`
+                : '';
+              const disabled = v.chiefEngineer ? ' disabled' : '';
+              return `<option value="${escAttr(v.vesselId)}"${disabled}>${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}${v.company ? ' — ' + escHtml(v.company) : ''}${occupied}</option>`;
+            }).join('')
+            : '<option value="">No vessels registered yet</option>';
+        }
+        if (claimBox) claimBox.hidden = false;
+      }catch(err){
+        setLoginStatus('loginAssignStatus', 'Could not list the fleet: ' + err.message, 'err');
+        await applyVesselAssignment(null);
+        writeStoredSession(state.session);
+        showLoginGate(false);
+        switchTab('setup');
+      }
     }
   }
+}
+
+async function handleClaimVessel(){
+  const session = state.session || readStoredSession();
+  const sel = document.getElementById('login_claimSelect');
+  const vesselId = sel && sel.value;
+  if (!session?.sessionToken){ setLoginStatus('loginAssignStatus', 'Sign in first.', 'err'); return; }
+  if (!vesselId){ setLoginStatus('loginAssignStatus', 'No vessel selected.', 'err'); return; }
+  setLoginStatus('loginAssignStatus', 'Joining vessel…', 'busy');
+  try{
+    const out = await loginApiCall(session.serverUrl, '/api/vessels/claim', {
+      method: 'POST', session, body: { vesselId }
+    });
+    const vessel = out.vessel;
+    state.session = writeStoredSession(Object.assign({}, session, {
+      vessel, history: [vessel]
+    }));
+    const enroll = readDeviceEnrollment();
+    if (enroll && enroll.username === session.username){
+      enroll.vessel = vessel;
+      writeDeviceEnrollment(enroll);
+    }
+    await applyVesselAssignment(vessel, session.serverUrl);
+    showLoginGate(false);
+  }catch(err){
+    setLoginStatus('loginAssignStatus', err.message, 'err');
+  }
+}
+
+async function handleClaimLater(){
+  const session = state.session || readStoredSession() || {};
+  await applyVesselAssignment(null);
+  writeStoredSession(session);
+  showLoginGate(false);
+  switchTab('setup');
 }
 
 async function handleAdminLoadVessel(){
@@ -17187,9 +18342,26 @@ async function handleContinueWithoutVessel(){
   const session = state.session || readStoredSession() || {};
   session.vessel = null;
   state.session = session;
-  writeStoredSession(session.sessionToken ? session : null);
+  writeStoredSession(session.sessionToken || session.username ? session : null);
   await applyVesselAssignment(null, session.serverUrl);
   showLoginGate(false);
+  const manager = session.role === 'fleet_manager' || session.role === 'admin';
+  if (manager || (session.username && !session.vessel)){
+    switchTab('setup');
+    renderFleetOffice();
+  }
+}
+
+async function handleUnlockDevice(){
+  try{
+    setLoginStatus('loginStatus', 'Unlocking this device…', 'busy');
+    const session = await unlockEnrolledDevice();
+    state.session = session;
+    setLoginStatus('loginStatus', '', null);
+    await enterAssignStep(session);
+  }catch(err){
+    setLoginStatus('loginStatus', err.message, 'err');
+  }
 }
 
 async function handleSignOut(){
@@ -17200,10 +18372,322 @@ async function handleSignOut(){
   writeStoredSession(null);
   state.session = null;
   renderVesselLock();
+  renderFleetOffice();
+  bindOfflineCredsUi();
   showLoginStep('signin');
   showLoginGate(true);
   setLoginStatus('loginStatus', 'Signed out.', null);
 }
+
+function foSession(){
+  const session = state.session || readStoredSession();
+  const manager = session && (session.role === 'fleet_manager' || session.role === 'admin');
+  return manager ? session : null;
+}
+
+function setFoStatus(message, kind){
+  setLoginStatus('foStatus', message, kind);
+}
+
+function foVesselName(vesselId, fleet){
+  const v = (fleet || []).find(x => x.vesselId === vesselId);
+  return v ? v.vesselName : (vesselId || '—');
+}
+
+function foShipSelect(username){
+  const selects = document.querySelectorAll('#foAccountTable tbody select[data-fo-ship]');
+  for (const el of selects){
+    if (el.getAttribute('data-fo-ship') === username) return el;
+  }
+  return null;
+}
+
+async function renderFleetOffice(){
+  const panel = document.getElementById('fleetOfficePanel');
+  const session = foSession();
+  if (panel) panel.hidden = !session;
+  if (!session || !session.sessionToken){
+    if (panel && !session) panel.hidden = true;
+    return;
+  }
+  try{
+    const [vesselsOut, accountsOut, devicesOut, pendingOut] = await Promise.all([
+      loginApiCall(session.serverUrl, '/api/admin/vessels', { session }),
+      loginApiCall(session.serverUrl, '/api/admin/accounts', { session }),
+      loginApiCall(session.serverUrl, '/api/admin/devices', { session }),
+      loginApiCall(session.serverUrl, '/api/admin/vessels/pending', { session })
+    ]);
+    const vessels = vesselsOut.vessels || [];
+    const accounts = accountsOut.accounts || [];
+    const devices = devicesOut.devices || [];
+    const pending = pendingOut.vessels || [];
+    state.session.fleet = vessels;
+
+    const pendingEl = document.getElementById('foPendingList');
+    if (pendingEl){
+      if (!pending.length){
+        pendingEl.className = 'fo-empty';
+        pendingEl.textContent = 'None waiting.';
+      } else {
+        pendingEl.className = '';
+        pendingEl.innerHTML = pending.map(v =>
+          `<div class="btn-row" style="margin-top:6px;align-items:center;">
+            <span>${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}${v.createdBy ? ' (from ' + escHtml(v.createdBy) + ')' : ''}</span>
+            <button class="primary small" type="button" data-fo-approve="${escAttr(v.vesselId)}">Approve</button>
+          </div>`
+        ).join('');
+      }
+    }
+
+    const vSel = document.getElementById('fo_accountVessel');
+    if (vSel){
+      const prev = vSel.value;
+      vSel.innerHTML = '<option value="">— none yet, he will pick —</option>'
+        + vessels.map(v => {
+          const aboard = v.chiefEngineer ? ` (${escHtml(v.chiefEngineer)} aboard)` : '';
+          return `<option value="${escAttr(v.vesselId)}">${escHtml(v.vesselName)} — IMO ${escHtml(v.imo)}${aboard}</option>`;
+        }).join('');
+      if (prev && vessels.some(v => v.vesselId === prev)) vSel.value = prev;
+    }
+
+    const vBody = document.querySelector('#foVesselTable tbody');
+    if (vBody){
+      vBody.innerHTML = vessels.length
+        ? vessels.map(v => `<tr>
+            <td>${escHtml(v.vesselName)}${v.pendingReview ? ' <span class="badge">pending</span>' : ''}</td>
+            <td class="mono">${escHtml(v.imo)}</td>
+            <td class="mono">${escHtml(v.chiefEngineer || '—')}</td>
+            <td><button class="ghost small" type="button" data-fo-load="${escAttr(v.vesselId)}">Load</button></td>
+          </tr>`).join('')
+        : '<tr><td colspan="4" class="fo-empty">No vessels registered yet.</td></tr>';
+    }
+
+    const aBody = document.querySelector('#foAccountTable tbody');
+    if (aBody){
+      const engineers = accounts.filter(a => a.role === 'chief_engineer' || a.role === 'vessel');
+      const shipOptions = (selected) =>
+        '<option value="">— not assigned —</option>'
+        + vessels.map(v => {
+          const aboard = v.chiefEngineer && v.chiefEngineer !== selected ? ` (${escHtml(v.chiefEngineer)} aboard)` : '';
+          return `<option value="${escAttr(v.vesselId)}"${v.vesselId === selected ? ' selected' : ''}>${escHtml(v.vesselName)}${aboard}</option>`;
+        }).join('');
+      aBody.innerHTML = engineers.length
+        ? engineers.map(a => `<tr>
+            <td class="mono">${escHtml(a.username)}</td>
+            <td>${escHtml(foVesselName(a.vesselId, vessels))}</td>
+            <td><select data-fo-ship="${escAttr(a.username)}">${shipOptions(a.vesselId)}</select></td>
+            <td>
+              <button class="primary small" type="button" data-fo-assign="${escAttr(a.username)}">Assign</button>
+              <button class="ghost small" type="button" data-fo-release="${escAttr(a.username)}">Sign off</button>
+              <button class="ghost small" type="button" data-fo-reset="${escAttr(a.username)}">Reset password</button>
+            </td>
+          </tr>`).join('')
+        : '<tr><td colspan="4" class="fo-empty">No chief engineers yet. Create one above.</td></tr>';
+    }
+
+    const dBody = document.querySelector('#foDeviceTable tbody');
+    if (dBody){
+      dBody.innerHTML = devices.length
+        ? devices.map(d => `<tr>
+            <td>${escHtml(d.label || d.deviceId)}</td>
+            <td class="mono">${escHtml(d.username)}</td>
+            <td class="mono">${escHtml(String(d.lastSeenAt || '').slice(0, 16).replace('T', ' '))}</td>
+            <td>${d.revoked
+              ? '<span class="badge">revoked</span>'
+              : `<button class="danger small" type="button" data-fo-revoke="${escAttr(d.deviceId)}">Revoke</button>`}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="4" class="fo-empty">No devices enrolled yet. An engineer\'s first online sign-in enrolls that laptop.</td></tr>';
+    }
+  }catch(err){
+    setFoStatus(err.message, 'err');
+  }
+}
+
+function showGeneratedPassword(username, password, vesselLabel){
+  const box = document.getElementById('foPasswordBox');
+  const val = document.getElementById('foPasswordValue');
+  const who = document.getElementById('foPasswordWho');
+  if (val) val.textContent = password || '';
+  if (who) who.textContent = username
+    + (vesselLabel ? ' — posted to ' + vesselLabel : ' — no vessel yet; assign a ship below, or he will pick one at sign-in');
+  if (box){
+    box.hidden = !password;
+    if (password) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+async function copyFoPassword(){
+  const val = document.getElementById('foPasswordValue')?.textContent?.trim();
+  if (!val){ setFoStatus('No password to copy.', 'err'); return; }
+  try{
+    await navigator.clipboard.writeText(val);
+    setFoStatus('Password copied.', 'ok');
+  }catch(_){
+    setFoStatus('Select the password and copy it by hand.', 'err');
+  }
+}
+
+async function handleFoCreateVessel(){
+  const session = foSession();
+  if (!session) return;
+  const vesselName = document.getElementById('fo_vesselName')?.value.trim();
+  const imo = document.getElementById('fo_vesselImo')?.value.trim();
+  const company = document.getElementById('fo_vesselCompany')?.value.trim() || '';
+  const username = document.getElementById('fo_vesselUsername')?.value.trim() || '';
+  if (!vesselName || !imo){ setFoStatus('Enter the vessel name and IMO.', 'err'); return; }
+  setFoStatus('Registering…', 'busy');
+  try{
+    const body = { vesselName, imo, company };
+    if (username) body.username = username;
+    const out = await loginApiCall(session.serverUrl, '/api/admin/vessels', {
+      method: 'POST', session, body
+    });
+    document.getElementById('fo_vesselName').value = '';
+    document.getElementById('fo_vesselImo').value = '';
+    document.getElementById('fo_vesselCompany').value = '';
+    document.getElementById('fo_vesselUsername').value = '';
+    const password = out.account && out.account.password;
+    if (password){
+      showGeneratedPassword(out.account.username || username, password, out.vessel?.vesselName);
+      setFoStatus('Vessel registered and engineer posted. Copy the password now.', 'ok');
+    } else {
+      setFoStatus('Vessel registered.', 'ok');
+    }
+    await renderFleetOffice();
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoCreateAccount(){
+  const session = foSession();
+  if (!session) return;
+  const username = document.getElementById('fo_username')?.value.trim();
+  const vesselId = document.getElementById('fo_accountVessel')?.value || '';
+  if (!username){ setFoStatus('Enter a username.', 'err'); return; }
+  const fleet = session.fleet || [];
+  const vessel = fleet.find(v => v.vesselId === vesselId);
+  if (vessel && vessel.chiefEngineer && vessel.chiefEngineer !== username){
+    const ok = confirm(
+      vessel.chiefEngineer + ' is the chief engineer on ' + (vessel.vesselName || vesselId)
+      + ' and will be signed off. Create ' + username + ' on that ship instead?'
+    );
+    if (!ok) return;
+  }
+  setFoStatus('Creating account…', 'busy');
+  try{
+    const out = await loginApiCall(session.serverUrl, '/api/admin/accounts', {
+      method: 'POST', session,
+      body: { username, role: 'chief_engineer', vesselId: vesselId || undefined }
+    });
+    const password = out.account && out.account.password;
+    document.getElementById('fo_username').value = '';
+    showGeneratedPassword(out.account?.username || username, password,
+      (out.vessel && out.vessel.vesselName) || foVesselName(vesselId, state.session.fleet || []));
+    setFoStatus('Account created. Copy the password now — it is not stored.', 'ok');
+    await renderFleetOffice();
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoApprove(vesselId){
+  const session = foSession();
+  if (!session) return;
+  try{
+    await loginApiCall(session.serverUrl, '/api/admin/vessels/approve', {
+      method: 'POST', session, body: { vesselId }
+    });
+    setFoStatus('Vessel approved.', 'ok');
+    await renderFleetOffice();
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoAssign(username){
+  const session = foSession();
+  if (!session) return;
+  const sel = foShipSelect(username);
+  const vesselId = sel && sel.value;
+  if (!vesselId){ setFoStatus('Choose a vessel on that engineer’s row, then Assign.', 'err'); return; }
+  const fleet = session.fleet || [];
+  const vessel = fleet.find(v => v.vesselId === vesselId);
+  const occupant = vessel && vessel.chiefEngineer;
+  if (occupant && occupant !== username){
+    const ok = confirm(
+      occupant + ' is the chief engineer on ' + (vessel.vesselName || vesselId)
+      + ' and will be signed off. Assign ' + username + ' instead?'
+    );
+    if (!ok) return;
+  }
+  try{
+    const out = await loginApiCall(session.serverUrl, '/api/admin/assign', {
+      method: 'POST', session, body: { username, vesselId }
+    });
+    const name = (out.assignment && out.assignment.vesselName) || (vessel && vessel.vesselName) || vesselId;
+    const displaced = out.assignment && out.assignment.displaced;
+    setFoStatus(
+      username + ' assigned to ' + name
+      + (displaced ? ' — ' + displaced + ' signed off.' : '.'),
+      'ok'
+    );
+    await renderFleetOffice();
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoRelease(username){
+  const session = foSession();
+  if (!session) return;
+  try{
+    await loginApiCall(session.serverUrl, '/api/admin/release', {
+      method: 'POST', session, body: { username }
+    });
+    setFoStatus(username + ' signed off — no vessel assigned.', 'ok');
+    await renderFleetOffice();
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoReset(username){
+  const session = foSession();
+  if (!session) return;
+  try{
+    const out = await loginApiCall(session.serverUrl, '/api/auth/password', {
+      method: 'POST', session, body: { username }
+    });
+    showGeneratedPassword(username, out.password, '');
+    setFoStatus('Password reset. Copy the new one now.', 'ok');
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoRevoke(deviceId){
+  const session = foSession();
+  if (!session) return;
+  try{
+    await loginApiCall(session.serverUrl, '/api/admin/devices/revoke', {
+      method: 'POST', session, body: { deviceId }
+    });
+    setFoStatus('Device revoked. It will not unlock once it next reaches the server.', 'ok');
+    await renderFleetOffice();
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+async function handleFoLoadVessel(vesselId){
+  const session = foSession() || state.session;
+  const vessel = (session.fleet || []).find(v => v.vesselId === vesselId);
+  if (!vessel){ setFoStatus('That vessel is no longer listed.', 'err'); return; }
+  try{
+    await applyVesselAssignment(vessel, session.serverUrl);
+    session.vessel = vessel;
+    state.session = writeStoredSession(session);
+    setFoStatus('Loaded ' + vessel.vesselName + '.', 'ok');
+  }catch(err){ setFoStatus(err.message, 'err'); }
+}
+
+document.getElementById('fleetOfficePanel')?.addEventListener('click', (e)=>{
+  const t = e.target.closest('[data-fo-approve],[data-fo-assign],[data-fo-release],[data-fo-reset],[data-fo-revoke],[data-fo-load]');
+  if (!t) return;
+  if (t.dataset.foApprove) handleFoApprove(t.dataset.foApprove);
+  else if (t.dataset.foAssign) handleFoAssign(t.dataset.foAssign);
+  else if (t.dataset.foRelease) handleFoRelease(t.dataset.foRelease);
+  else if (t.dataset.foReset) handleFoReset(t.dataset.foReset);
+  else if (t.dataset.foRevoke) handleFoRevoke(t.dataset.foRevoke);
+  else if (t.dataset.foLoad) handleFoLoadVessel(t.dataset.foLoad);
+});
 
 /**
  * Decide on boot whether to show the gate.
@@ -17213,11 +18697,13 @@ async function handleSignOut(){
 async function initLoginGate(){
   const stored = readStoredSession();
   const sync = ensureSyncConfig();
+  const enroll = readDeviceEnrollment();
 
   const serverField = document.getElementById('login_serverUrl');
-  if (serverField) serverField.value = (stored && stored.serverUrl) || sync.serverUrl || '';
+  if (serverField) serverField.value = (stored && stored.serverUrl) || (enroll && enroll.serverUrl) || sync.serverUrl || '';
+  bindOfflineCredsUi();
 
-  if (stored && stored.sessionToken){
+  if (stored && (stored.sessionToken || stored.offline || stored.deviceId)){
     state.session = stored;
     if (stored.vessel){
       try{ await applyVesselAssignment(stored.vessel, stored.serverUrl); }
@@ -17226,25 +18712,50 @@ async function initLoginGate(){
       renderVesselLock();
     }
     showLoginGate(false);
+    renderFleetOffice();
     /* Refresh in the background: a revoked login should not last forever, but a
-       server we cannot reach must not strand the ship either. */
-    loginApiCall(stored.serverUrl, '/api/auth/me', { session: stored })
-      .then(out => {
-        const merged = Object.assign({}, stored, {
-          role: out.role,
-          vessel: out.vessel || stored.vessel,
-          history: out.history || stored.history || []
-        });
-        state.session = writeStoredSession(merged);
-        renderVesselLock();
-      })
-      .catch(err => {
-        if (err.status === 401){
-          writeStoredSession(null);
-          state.session = null;
+       server we cannot reach must not strand the ship either. Prefer device-login
+       when enrolled, so a revocation the server has already recorded stands. */
+    const refresh = enroll && enroll.secret
+      ? loginApiCall(enroll.serverUrl || stored.serverUrl, '/api/auth/device-login', {
+          method: 'POST', body: { deviceId: enroll.deviceId, secret: enroll.secret }
+        })
+      : (stored.sessionToken
+          ? loginApiCall(stored.serverUrl, '/api/auth/me', { session: stored })
+          : null);
+    if (refresh){
+      refresh
+        .then(out => {
+          const merged = Object.assign({}, stored, {
+            sessionToken: out.sessionToken || stored.sessionToken,
+            role: out.role,
+            vessel: out.vessel || stored.vessel,
+            history: out.history || stored.history || [],
+            offline: false
+          });
+          state.session = writeStoredSession(merged);
+          if (enroll){
+            enroll.vessel = out.vessel || enroll.vessel;
+            enroll.role = out.role || enroll.role;
+            writeDeviceEnrollment(enroll);
+          }
           renderVesselLock();
-        }
-      });
+          renderFleetOffice();
+        })
+        .catch(err => {
+          if (err.status === 401){
+            writeStoredSession(null);
+            state.session = null;
+            if (enroll) writeDeviceEnrollment(null);
+            renderVesselLock();
+            renderFleetOffice();
+            bindOfflineCredsUi();
+            showLoginStep('signin');
+            showLoginGate(true);
+            setLoginStatus('loginStatus', 'This device is no longer enrolled. Sign in with your password.', 'err');
+          }
+        });
+    }
     return;
   }
 
@@ -17254,23 +18765,31 @@ async function initLoginGate(){
 
 document.getElementById('btnLoginSubmit')?.addEventListener('click', handleLoginSubmit);
 document.getElementById('login_password')?.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') handleLoginSubmit(); });
+document.getElementById('btnUnlockDevice')?.addEventListener('click', handleUnlockDevice);
 document.getElementById('btnLoginOffline')?.addEventListener('click', async ()=>{
   state.session = null;
   await applyVesselAssignment(null, '');
   showLoginGate(false);
 });
 document.getElementById('btnLoginLoadVessel')?.addEventListener('click', handleAdminLoadVessel);
+document.getElementById('btnLoginFleetOffice')?.addEventListener('click', handleContinueWithoutVessel);
+document.getElementById('btnLoginClaimVessel')?.addEventListener('click', handleClaimVessel);
+document.getElementById('btnLoginClaimLater')?.addEventListener('click', handleClaimLater);
 document.getElementById('btnLoginUseToken')?.addEventListener('click', handleVesselTokenVerify);
 document.getElementById('btnLoginNoToken')?.addEventListener('click', handleContinueWithoutVessel);
 document.getElementById('btnLoginBack')?.addEventListener('click', ()=>{
   showLoginStep('signin');
   setLoginStatus('loginStatus', '', null);
+  bindOfflineCredsUi();
 });
 document.getElementById('btnSignOut')?.addEventListener('click', handleSignOut);
 document.getElementById('btnOpenLogin')?.addEventListener('click', ()=>{
-  showLoginStep(state.session && state.session.sessionToken ? 'assign' : 'signin');
+  showLoginStep(state.session && (state.session.sessionToken || state.session.username) ? 'assign' : 'signin');
   showLoginGate(true);
 });
+document.getElementById('btnFoCreateVessel')?.addEventListener('click', handleFoCreateVessel);
+document.getElementById('btnFoCreateAccount')?.addEventListener('click', handleFoCreateAccount);
+document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPassword);
 
 (async function init(){
   try {
@@ -17290,6 +18809,11 @@ document.getElementById('btnOpenLogin')?.addEventListener('click', ()=>{
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
     document.getElementById('in_datetime').value = now.toISOString().slice(0,16);
+    try{
+      fillTzOffsetSelect();
+      fillVoyageTzOffsetSelect();
+      setShipTzUi(defaultShipTzOffsetMin(), 0);
+    }catch(_){}
     document.getElementById('rcpt_date').value = now.toISOString().slice(0,10);
     document.getElementById('rcpt_category').dispatchEvent(new Event('change'));
     renderReportCategoryButtons();

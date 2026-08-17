@@ -6,43 +6,52 @@ Works on **Android phones** and **PC browsers** as a Progressive Web App (PWA), 
 
 ## Signing in at sea
 
-**The fleet manager creates the account, and the engineer must sign in online once
-before that device works offline.** That first sign-in is what fetches his vessel and
-his data; from then on the same laptop signs in with no connectivity at all.
+**The fleet manager creates the account in Fleet Office, and the engineer must
+sign in online once before that device unlocks offline.** That first sign-in is
+what fetches his vessel and enrolls the laptop; from then on the same machine
+unlocks with no connectivity at all — no password retyped, no hash sitting on
+the disk.
 
-There is deliberately **no way to provision a device that has never authenticated** —
-no credential file to export, carry on a stick, or leak. A laptop earns offline access
-by proving itself against the live server, once.
+There is deliberately **no way to provision a device that has never authenticated**
+— no credential file to export, carry on a stick, or leak. A laptop earns offline
+access by proving itself against the live server, once.
 
-On that first sign-in the app fetches an offline bundle for the ship
-(`GET /api/vessel/offline-bundle`) and keeps it. The bundle holds the vessel, its sync
-token, and a PBKDF2-HMAC-SHA256 **verifier** for each engineer posted to that ship —
-never a password. Offline, the app recomputes the verifier with WebCrypto and compares.
-`tests/test_offline_verifier.js` checks the browser's digest against one Python
-produced, because if those two disagree by a byte then offline sign-in fails for
-everyone and a test of either side alone would not notice.
+On that first sign-in the app enrolls the device (`POST /api/auth/devices`) with a
+random secret generated in the browser. The server stores only a hash of that
+secret. Offline, the app unlocks as the enrolled engineer. The generated password
+is typed at first enrollment and on a replacement machine, never at sea.
 
-The bundle is refreshed on every successful online sign-in, so a device that works
-today still works after it sails, and a transfer reaches it the next time it connects.
+The enrollment is refreshed on every successful online sign-in, so a device that
+works today still works after it sails, and a transfer reaches it the next time
+it connects.
 
 Three rules keep the exposure bounded:
 
-- **A bare vessel token cannot mint credentials.** The token already grants sync;
-  issuing offline credentials requires a signed-in session, or the token alone would
-  unlock a laptop.
-- **Only engineers currently posted to that ship are included**, and fleet manager
-  accounts never are — office credentials have no business on a ship's laptop.
-- **The bundle expires.** Past that, the device must reach the server again.
+- **A bare vessel token cannot enroll a laptop.** The token already grants sync;
+  letting it also mint a device would make the token a master key.
+- **Fleet manager accounts are never enrolled** — office credentials have no
+  business on a ship's laptop.
+- **The office can revoke a device.** A reachable server's 401 stands, so a
+  stolen laptop that next sees the network is locked out. Pulling the cable
+  cannot resurrect a revocation the server has already answered.
 
-The offline path is narrow by design: it is used **only when the server cannot be
-reached at all**. If the server answers — including a 401 — its answer stands, so a
-revoked login cannot be resurrected by pulling the network cable.
+What remains true of any offline scheme: a stolen laptop still holds the voyage
+data already in IndexedDB, and a transferred engineer keeps working on the old
+device until it reconnects. He cannot *sync* the old ship — assignment is checked
+server-side — but he can read what is on that machine. Revoke the device from
+Fleet Office when a laptop is lost or handed over.
 
-What remains true of any offline scheme: a stolen laptop carries crackable password
-material for whoever signed in on it, and a transferred engineer keeps working on the
-old device until it reconnects. He cannot *sync* the old ship — assignment is checked
-server-side — but he can read what is on that machine. Prefer generated passwords for
-chief engineer accounts.
+**Two ways an unassigned engineer gets a ship.** The office creates the account
+with a vessel, or with none. If none, he signs in and **picks an empty ship from
+the fleet register** (`POST /api/vessels/claim`) — he does not mint a ship that
+is already someone else's, and he cannot take a ship that already has a live
+chief engineer. Register Vessel remains only for a ship that is not listed yet,
+and those arrivals are flagged for review.
+
+**Assigning in Fleet Office.** Each engineer row has its own ship picker, plus
+Assign / Sign off / Reset password. The create form's "Post to vessel" is only
+for the moment the account is created. Occupied ships name who is aboard; posting
+someone onto one asks before signing the incumbent off.
 
 ## Bunkering and R.O.B. corrections
 
@@ -83,6 +92,7 @@ not touch R.O.B.; the survey panel is the one that corrects it.
 - **Offline-first**: all voyage data stored in IndexedDB — works without internet on Android and PC
 - **PWA install**: add to home screen (requires HTTPS or localhost); optional persistent storage
 - **Fuel & performance**: flowmeter-based consumption, cubic power law (%MCR/kW), engine vs ship distance, slip
+- **Ship's clocks**: log-entry date/time has a zone picker and ±30 min / ±1 h buttons. Changing zone adjusts the time and records clocks advanced/retarded so period hours stay on actual elapsed time.
 - **SFOC monitoring**: actual vs reference (g/kWh) with 85%/100% curve calibration and optional LCV ISO correction
 - **CII / CO₂ estimate**: voyage-level attained CII from IMO Cf factors × fuel × DWT × distance
 - **Weather & sea state**: Beaufort wind, Douglas sea state, swell, air/sea temp on Voyage Summary
@@ -321,7 +331,15 @@ assignments(username, vessel_id, assigned_at, released_at, assigned_by, note)
 
 A posting is a row with `released_at` empty. Re-posting an engineer closes the old
 row and opens a new one in the same transaction, so an engineer is never on two
-ships or none. One partial unique index enforces a single live posting each.
+ships at once. Two partial unique indexes keep the roster unambiguous:
+
+- one live posting **per engineer**
+- one live chief engineer **per ship**
+
+The office may post someone onto an occupied ship: `POST /api/admin/assign` signs
+the incumbent off in the same transaction (`displaced` in the response). An
+engineer claiming a ship cannot: `POST /api/vessels/claim` returns `409
+ship_occupied` if someone is already aboard.
 
 That single shape gives three things at once:
 
@@ -335,13 +353,17 @@ That single shape gives three things at once:
 
 ### Two ways an engineer gets a ship
 
-The fleet manager creates the account, and either:
+The fleet manager creates the account from **Fleet Office** in the app (Vessel
+Data, when signed in as manager), and either:
 
-- **names a vessel** — `POST /api/admin/accounts` with a `vesselId` posts him to it,
-  and he is on that ship the moment he signs in; or
-- **leaves it empty** — the account is created with no vessel. He signs in, lands in
-  Setup with the vessel fields open, enters the ship he actually joined and presses
-  **Register Vessel**.
+- **names a vessel** — `POST /api/admin/accounts` with a `vesselId` posts him to it
+  (and signs off whoever was already there), and he is on that ship the moment he
+  signs in; or
+- **leaves it empty** — the account is created with no vessel. He signs in and
+  **picks an empty ship he joined** from the fleet register (`POST /api/vessels/claim`).
+  Occupied ships are listed with who is aboard and cannot be claimed. If the ship
+  is not listed yet, he continues into Setup and presses **Register Vessel**, which
+  flags it for the office.
 
 **The password is generated, not chosen.** `POST /api/admin/accounts` and
 `POST /api/admin/vessels` ignore any password in the request and generate one for a
@@ -353,15 +375,15 @@ else. Four groups of four from a 31-character alphabet with no `i`, `l`, `o`, `0
 dktn-us5x-4x87-bjjb
 ```
 
-That is roughly 79 bits. It matters because these credentials end up on a device that
-signs in offline, where an attacker who steals the laptop can grind at leisure — the
-one thing that must not happen is a weak password picked for convenience.
+That is roughly 79 bits. It is typed once, at first enrollment (and on a
+replacement laptop). After that the machine unlocks by device secret, so a weak
+password picked for convenience is still the one thing that must not happen on
+that first sign-in.
 
 **Only the fleet manager changes a password**, and a chief engineer's replacement is
-generated too. A chief engineer cannot change his own at all: his password is
-generated precisely so it survives being on a laptop that signs in offline, and
-letting him replace it with one he can remember is the single move that undoes that.
-Resets go through the office — which is where a crew change is handled anyway.
+generated too. A chief engineer cannot change his own: the generated password exists
+so the first enrollment cannot be a password he can remember. Resets go through
+Fleet Office — which is where a crew change is handled anyway.
 
 ```
 POST /api/auth/password  {"username": "hberg"}      -> new generated password, once
@@ -467,18 +489,24 @@ its vessel assignment instead of locking the crew out of their own records.
 | `POST /api/auth/login` | anyone | Returns a session token, role, and the vessel (with its sync token) |
 | `POST /api/auth/logout` | session | Ends the session |
 | `GET /api/auth/me` | session or vessel token | Who am I, and which vessel |
-| `POST /api/auth/password` | session | Change own password |
+| `POST /api/auth/password` | manager | Reset a password (engineers generated; managers chosen) |
+| `POST /api/auth/devices` | signed-in engineer | Enroll this laptop for offline unlock |
+| `POST /api/auth/device-login` | anyone | Sign in with an enrolled device secret |
+| `GET /api/auth/devices` | session | List this user's enrolled devices |
+| `GET /api/admin/devices` | manager | List enrolled laptops |
+| `POST /api/admin/devices/revoke` | manager | Revoke a stolen or handed-over laptop |
 | `GET/POST /api/admin/vessels` | admin | List / register vessels |
 | `DELETE /api/admin/vessels/<id>` | admin | Remove a vessel and its accounts |
 | `POST /api/admin/token-preview` | manager | Token for a name + IMO, without creating anything |
 | `GET/POST /api/admin/accounts` | manager | List / create logins |
-| `POST /api/admin/assign` | manager | Post an engineer to a ship (this is also the transfer) |
+| `POST /api/admin/assign` | manager | Post an engineer to a ship (this is also the transfer; displaces the incumbent) |
 | `POST /api/admin/release` | manager | Sign an engineer off without re-posting |
 | `GET /api/admin/crew/<vesselId>` | manager | Who is on a ship now, and who has been |
 | `GET /api/assignments/<username>` | own record, or manager | Service history |
+| `GET /api/vessels` | session | Fleet register without tokens — used to claim a ship; includes `chiefEngineer` |
+| `POST /api/vessels/claim` | unassigned engineer | Join an empty registered ship (`409 ship_occupied` if someone is aboard) |
 | `POST /api/vessels/import` | any login | Register a vessel absent from the database |
 | `GET /api/admin/vessels/pending` | manager | Ships registered from a device, awaiting review |
-| `GET /api/vessel/offline-bundle` | signed-in user | Earn/refresh this device's offline credentials |
 | `POST /api/admin/vessels/approve` | manager | Clear a ship's pending flag |
 
 Data routes are scoped: a vessel login reaching another ship gets `403 wrong_vessel`.
@@ -490,6 +518,7 @@ existing single-token installs keep working untouched.
 | File | Purpose |
 |------|---------|
 | `voyage_manager.html` | Main application (single-file SPA) |
+| `ship_time.js` | Ship's zone / clock-change math for log-entry hours |
 | `manifest.webmanifest` | PWA manifest |
 | `sw.js` | Service worker for offline caching |
 | `icons/` | App icons |
@@ -512,10 +541,14 @@ Node and Python 3 — nothing to install.
 | `tests/check_assets.js` | `sw.js`'s cache name and precache list still match `androidInstallCacheName` / `androidInstallAssets` in the app, and every precached file exists. A stale cache name leaves phones on the previous build. |
 | `tests/test_sync_auth.py` | Starts `sync-server/server.py` with and without `SYNC_API_TOKEN` and asserts who gets in, including the 401 `reason` codes and a non-ASCII token. |
 | `tests/browser_*_e2e.js` | Not in CI (no browser there). Run against a live seeded server with `NODE_PATH` pointing at a `playwright-core` install: `APP_BASE=http://127.0.0.1:8860 NODE_PATH=/path/to/node_modules node tests/browser_empty_vessel_e2e.js`. |
-| `tests/test_offline_verifier.js` | The offline password verifier across both languages — that the browser's WebCrypto PBKDF2 reproduces Python's digest exactly, including Unicode passwords, and that the comparison rejects near misses. |
 | `tests/test_ge_load_band.js` | The generator load band on the printed sheet — that Min%/Max% are 90% and 110% of the recorded load, that a load never recorded prints a dash rather than 0.00, and that zero stays a real reading. |
 | `tests/test_rob_survey.js` | The R.O.B. chain across a bunker survey — that a survey re-bases it, that earlier reports are untouched, that a bunker taken before the survey is not counted twice, and that the later of two surveys wins. |
-| `tests/test_accounts.py` | Logins, derived vessel tokens, crew rotation, and the read-history/write-current rule — including that a transferred engineer still reads his old ship but can no longer write to it, and that the legacy shared token still works. |
+| `tests/test_device_enrollment.js` | Device enrollment helpers — that a generated id matches the server pattern, that a device that has never signed in is refused, and that unlock after enrollment needs no password. |
+| `tests/test_eorb.js` | e-ORB scenario item numbers match Appendix III, weekly inventory cannot be dated more than 7 days after the last one, bunkering print uses tank total not the split string, and voided lines stay struck through on the printout. |
+| `tests/test_clock_change.js` | Changing ship's zone advances or retards the log time (30 min or 1 h steps) and period hours subtract clocks advanced so noon-to-noon stays on actual time. |
+| `tests/test_flow_cons.js` | SINGLE / DUAL GE / DUAL ME / DUAL BOTH consumption, and multi-tank fresh-water production (meter quantity added) / consumption (previous total + production − present total) booked on the chosen tanks. |
+| `tests/test_noon_print.js` | Noon print title is the operation (IN PORT - NOON, AT SEA - NOON) and flag registry names resolve from the e-ORB list. |
+| `tests/test_accounts.py` | Logins, derived vessel tokens, crew rotation, device enrollment/revocation, claiming an empty registered ship, refusing an occupied claim, office assign displacing the incumbent, and the read-history/write-current rule — including that a transferred engineer still reads his old ship but can no longer write to it, and that the legacy shared token still works. |
 | `tests/browser_login_e2e.js` | Not in CI (no browser there). Drives the real login UI in Chromium against a live seeded server. Run it after touching the gate. |
 | `tests/test_install_quoting.sh` | The installer's token quoting, checked against systemd's own parser via `systemd-analyze`. Unquoted, systemd splits an `Environment=` value on whitespace and reads `%` as a specifier, so a token with a space or a `%` reached the server truncated — leaving it on its default token, rejecting the very token the installer printed. |
 
@@ -531,7 +564,11 @@ into `bash` as root.
 
 ## Vessel Data Tab
 
+- **Fleet Office** (fleet manager) — register vessels, create engineers, post/transfer/release, reset passwords, revoke devices, approve pending ships
 - Fleet vessel selection, machinery, tanks, capacities, and related vessel configuration
+- **Flag registry** — set on Vessel Details (same list as the e-ORB). Printed on the noon sheet with IMO number.
+- **Flowmeter setup type** — SINGLE is present − previous on every unit. DUAL GE gives the D/G inlet and outlet (D/G cons = inlet Δ − outlet Δ; M/E cons = M/E meter Δ − D/G cons). DUAL ME is the same idea with the M/E inlet/outlet (M/E cons = inlet Δ − outlet Δ; D/G cons = D/G meter Δ − M/E cons). Editing a saved log entry and saving again recalculates that watch and every later watch.
+- **Fresh water tanks** — with more than one FW tank the log entry picks a tank for production (produced water is added) and a tank for consumption. Production is the flowmeter quantity added; consumption is previous total + production − present total. Total water across all tanks is shown, and each tank's ROB follows the booking or the sounding entered for it.
 
 ## Notes
 

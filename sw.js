@@ -1,7 +1,8 @@
-const CACHE = 'noon-report-v115';
+const CACHE = 'noon-report-v125';
 const PRECACHE = [
   './voyage_manager.html',
   './eorb.js',
+  './ship_time.js',
   './sw.js',
   './manifest.webmanifest',
   './icons/logoBG.png',
@@ -56,8 +57,35 @@ self.addEventListener('fetch', (event) => {
   /* Never cache sync API — always hit the network (or fail offline). */
   if (url.pathname.includes('/api/')) return;
 
+  const dest = request.destination;
+  const isAppCode = request.mode === 'navigate' || dest === 'document' || dest === 'script'
+    || /\/(voyage_manager\.html|ship_time\.js|eorb\.js|sw\.js)$/.test(url.pathname);
+  const matchCached = () => caches.match(request).then((hit) => {
+    if (hit) return hit;
+    /* Versioned script URLs (?v=) still hit the precache path. */
+    if (url.search) return caches.match(url.origin + url.pathname);
+    return undefined;
+  });
+
+  /* HTML/JS network-first when online so a new page never pairs with a stale ship_time.js.
+     Cache-first for the rest (icons, manifest) and for offline. */
+  if (isAppCode) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => matchCached())
+    );
+    return;
+  }
+
   event.respondWith(
-    caches.match(request).then((cached) => {
+    matchCached().then((cached) => {
       const network = fetch(request)
         .then((response) => {
           if (response && response.ok && request.url.startsWith(self.location.origin)) {
@@ -67,7 +95,6 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => cached);
-      /* Cache-first for app shell so Android/PC stay usable offline. */
       return cached || network;
     })
   );

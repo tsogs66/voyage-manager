@@ -60,6 +60,13 @@ const signIn = async (pg, user, pass) => {
   const pass = made.account.password;
   check('and handed back a generated password', typeof pass === 'string' && pass.length >= 16, true);
   await signIn(pg, user, pass);
+  const onGate = await pg.evaluate(() => ({
+    claimShown: !document.getElementById('loginVesselClaim')?.hidden,
+    gate: !document.getElementById('loginGate')?.hidden
+  }));
+  check('he is held on the gate to pick a registered ship', onGate.claimShown, true);
+  await pg.evaluate(() => handleClaimLater());
+  await pg.waitForTimeout(800);
   const empty = await pg.evaluate(() => {
     switchTab('setup');
     return {
@@ -99,7 +106,11 @@ const signIn = async (pg, user, pass) => {
   check('and sync points at it', after.sync, 'm-v-joined-at-port-' + imo);
 
   console.log('\nan engineer on an established ship cannot rename it');
-  await pg.evaluate(() => { state.session = null; localStorage.removeItem(SESSION_LS_KEY); });
+  await pg.evaluate(() => {
+    state.session = null;
+    localStorage.removeItem(SESSION_LS_KEY);
+    localStorage.removeItem(DEVICE_ENROLL_KEY);
+  });
   await pg.reload({ waitUntil: 'domcontentloaded' });
   await pg.waitForTimeout(1500);
   await signIn(pg, 'hberg', 'demo-secret');

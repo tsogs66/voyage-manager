@@ -30,8 +30,26 @@ jobs:
       - name: Check JavaScript parses
         run: node tests/check_js_syntax.js
 
-      - name: Check cache name and precache list agree
-        run: node tests/check_assets.js
+      - name: Check e-ORB scenarios and weekly inventory window
+        run: node tests/test_eorb.js
+
+      - name: Check ship's clock / timezone change hours
+        run: node tests/test_clock_change.js
+
+      - name: Check voyage-start time zone reference
+        run: node tests/test_voyage_init_tz.js
+
+      - name: Check stale ship_time.js does not crash startup
+        run: node tests/test_shiptime_compat.js
+
+      - name: Check flowmeter and fresh-water consumption formulas
+        run: node tests/test_flow_cons.js
+
+      - name: Check noon print title and flag registry
+        run: node tests/test_noon_print.js
+
+      - name: Check device enrollment helpers
+        run: node tests/test_device_enrollment.js
 
   sync-server:
     name: Sync server (auth matrix)
