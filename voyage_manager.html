@@ -3625,6 +3625,21 @@ function entryGeKw(e, n){
   const v = e[`ge${n}Kw`];
   return (v!=null && !isNaN(v)) ? v : null;
 }
+/* Walk backward for the last typed A/E kW so a new watch and the summary
+   report show the previous load without the engineer re-entering it. */
+function lastKnownGeKw(entries, idx, n){
+  if (!Array.isArray(entries) || idx==null || idx<0) return null;
+  for (let i = idx; i >= 0; i--){
+    const kw = entryGeKw(entries[i], n);
+    if (kw!=null) return kw;
+  }
+  return null;
+}
+function entryGeKwCarried(entry, n, prevEntry){
+  const own = entryGeKw(entry, n);
+  if (own!=null) return own;
+  return entryGeKw(prevEntry, n);
+}
 function entryBlrRuntime(e){
   if (!e) return null;
   if (e.report?.blrRuntime!=null && !isNaN(e.report.blrRuntime)) return e.report.blrRuntime;
@@ -6421,6 +6436,63 @@ function unitOverrideIfDifferent(entered, calculated){
   return entered;
 }
 
+function sameMeterReading(a, b){
+  const na = (a==='' || a==null) ? null : Number(a);
+  const nb = (b==='' || b==null) ? null : Number(b);
+  if (na==null && nb==null) return true;
+  if (na==null || nb==null || !Number.isFinite(na) || !Number.isFinite(nb)) return false;
+  return Math.abs(na - nb) < 1e-6;
+}
+
+/* True when ME/GE/BLR flowmeter readings on the log form match the stored entry.
+   Viewing or updating an old watch without touching meters must not wipe a typed
+   consumption override — that used to fall back to the flowmeter and deduct ROB
+   again every time the log was opened and saved. */
+function logFuelMetersUnchanged(existing, nextMe, nextGe, nextBlrMeter){
+  if (!existing) return false;
+  const me0 = existing.me || {};
+  const ge0 = existing.ge || {};
+  const blr0 = existing.blr || {};
+  const nextBlr = (nextBlrMeter && typeof nextBlrMeter === 'object') ? nextBlrMeter.meter : nextBlrMeter;
+  return sameMeterReading(me0.meter, nextMe?.meter)
+    && sameMeterReading(me0.meterIn, nextMe?.meterIn)
+    && sameMeterReading(me0.meterOut, nextMe?.meterOut)
+    && sameMeterReading(ge0.meter, nextGe?.meter)
+    && sameMeterReading(ge0.meterIn, nextGe?.meterIn)
+    && sameMeterReading(ge0.meterOut, nextGe?.meterOut)
+    && sameMeterReading(blr0.meter, nextBlr);
+}
+
+function preserveUnitOverrideOnLogSave(existing, nextMe, nextGe, nextBlrMeter){
+  if (logFuelMetersUnchanged(existing, nextMe, nextGe, nextBlrMeter) && existing.unitOverride){
+    return {
+      ME: existing.unitOverride.ME ?? null,
+      GE: existing.unitOverride.GE ?? null,
+      BLR: existing.unitOverride.BLR ?? null
+    };
+  }
+  return { ME:null, GE:null, BLR:null };
+}
+
+function unitOverrideChanged(a, b){
+  const A = a || {};
+  const B = b || {};
+  const same = (x, y) => {
+    if (x==null && y==null) return true;
+    if (x==null || y==null) return false;
+    return Math.abs(Number(x) - Number(y)) < 0.0005;
+  };
+  return !same(A.ME, B.ME) || !same(A.GE, B.GE) || !same(A.BLR, B.BLR);
+}
+
+/* Fuel-grade cons overrides must survive a Voyage Summary save. Only lube rows
+   are edited there; wiping the whole map used to drop HFO/MDO figures. */
+function mergeLubeConsOverride(existingOverride, lubePairs){
+  const next = Object.assign({}, existingOverride || {});
+  Object.keys(lubePairs || {}).forEach(k => { next[k] = lubePairs[k]; });
+  return next;
+}
+
 /* Compute ME & GE raw consumption (litres) for one period, based on the flowmeter arrangement.
    SINGLE: each unit is present − previous.
    DUAL GE: D/G = inlet Δ − outlet Δ; M/E = M/E meter Δ − D/G cons.
@@ -6694,6 +6766,7 @@ function computeDerived(){
   const sumGeHrs=[0,0,0], sumGeKwHrs=[0,0,0], sumGeMaxKwHrs=[0,0,0];
 
   let prev = effectiveCarryover();
+  const lastGeKw = [entryGeKw(prev, 1), entryGeKw(prev, 2), entryGeKw(prev, 3)];
   const rows = list.map(e=>{
     let hrs=null, meCons=null, geCons=null, blrCons=null, total=null;
     let cylCons=null, meLoCons=null, geLoCons=null, dailyRevs=null, fwProdD=null, fwConsD=null;
@@ -6856,7 +6929,9 @@ function computeDerived(){
         const n = i+1;
         const running = entryGeInService(e, n);
         const gh = running ? entryGeRunHours(e, n, prev) : null;
-        const kw = entryGeKw(e, n);
+        const ownKw = entryGeKw(e, n);
+        if (ownKw != null) lastGeKw[i] = ownKw;
+        const kw = running ? (ownKw != null ? ownKw : lastGeKw[i]) : null;
         gePeriod[i].inService = running;
         gePeriod[i].hrs = gh;
         gePeriod[i].kw = running ? kw : null;
@@ -9830,7 +9905,7 @@ function renderReportGeRuntimeFields(entryId, report){
     const n = i+1;
     const saved = gens[i] || {};
     const inService = (typeof saved.inService === 'boolean') ? saved.inService : entryGeInService(entry, n);
-    const avgKw = saved.avgKw ?? entryGeKw(entry, n) ?? '';
+    const avgKw = saved.avgKw ?? entryGeKwCarried(entry, n, prev) ?? '';
     const runHours = saved.runHours ?? entryGeRunHours(entry, n, prev) ?? '';
     const cum = geCumulativeRunHours(entry, n);
     return `<div class="unit-box${inService?'':' ge-offline'}">
@@ -10281,11 +10356,14 @@ function openReportEditor(entryId){
     const blrCumEl = document.getElementById('rep_blrCumHours');
     const blrCumShown = blrCumEl && blrCumEl.value !== '' ? parseFloat(blrCumEl.value) : null;
     e.blrRuntime = (blrCumShown != null && !isNaN(blrCumShown)) ? blrCumShown : null;
-    /* Total G/E fuel typed here is the same override the Voyage Summary writes. */
+    /* Total G/E fuel typed here is the same override the Voyage Summary writes.
+       Compare against the flowmeter figure, not getComputedRow (that already
+       includes the override and would drop it on every save). */
     const geTotEl = document.getElementById('rep_geTotalCons');
     const geTot = geTotEl && geTotEl.value !== '' ? parseFloat(geTotEl.value) : null;
+    const meterUnits = meterDerivedUnitCons(e);
     e.unitOverride = Object.assign({ ME:null, GE:null, BLR:null }, e.unitOverride || {}, {
-      GE: (geTot != null && !isNaN(geTot)) ? geTot : null
+      GE: unitOverrideIfDifferent(geTot, meterUnits.geCons)
     });
     for (let i=1; i<=3; i++){
       const g = e.report.generators?.[i-1];
@@ -12312,7 +12390,7 @@ function renderVsGeRuntimeFields(entryId, report){
     const inService = (typeof saved.inService === 'boolean')
       ? saved.inService
       : entryGeInService(entry, n);
-    const avgKw = saved.avgKw ?? entryGeKw(entry, n) ?? '';
+    const avgKw = saved.avgKw ?? entryGeKwCarried(entry, n, prev) ?? '';
     const runHours = saved.runHours ?? entryGeRunHours(entry, n, prev) ?? '';
     const cum = geCumulativeRunHours(entry, n);
     return `<div class="unit-box${inService?'':' ge-offline'}">
@@ -12435,24 +12513,25 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
     fwConsTankId: fwDraft.fwConsTankId
   }, previousEntryFor(entry.id) || effectiveCarryover());
   entry.miscCons = { 'MDO/MGO': num0('vs_misc_mdomgo'), 'LSMGO': num0('vs_misc_lsmgo') };
-  /* Only freeze a typed unit-cons figure when it differs from the meter-derived
-     value. Prefilling the boxes used to lock ME/GE/BLR on the first summary save. */
-  const savedOv = { ME:null, GE:null, BLR:null };
-  entry.unitOverride = savedOv;
-  const computedUnits = getComputedRow(entry.id);
+  /* Compare typed unit cons to the flowmeter figure — not getComputedRow, which
+     already applies unitOverride. Comparing to the applied figure dropped a real
+     override every time an old log's summary was saved, and ROB then deducted
+     the meter burn again. */
+  const priorUnitOverride = Object.assign({ ME:null, GE:null, BLR:null }, entry.unitOverride || {});
+  const meterUnits = meterDerivedUnitCons(entry);
   entry.unitOverride = {
-    ME: unitOverrideIfDifferent(num('vs_unit_me'), computedUnits?.meCons),
+    ME: unitOverrideIfDifferent(num('vs_unit_me'), meterUnits.meCons),
     /* G/E total is typed under Generators, Boiler & Incinerator; D/G below mirrors it. */
-    GE: unitOverrideIfDifferent(num('vs_geTotalCons') ?? num('vs_unit_ge'), computedUnits?.geCons),
-    BLR: unitOverrideIfDifferent(num('vs_unit_blr'), computedUnits?.blrCons)
+    GE: unitOverrideIfDifferent(num('vs_geTotalCons') ?? num('vs_unit_ge'), meterUnits.geCons),
+    BLR: unitOverrideIfDifferent(num('vs_unit_blr'), meterUnits.blrCons)
   };
-  // Persist only lube oil cons overrides — fuel grades and FW are derived, not edited here.
-  entry.consOverride = {};
+  const lubePairs = {};
   getRobRows().forEach(r=>{
     if (r.cat!=='lube') return;
     const el = document.getElementById('vs_cons_'+slugKey(r.key));
-    if (el) entry.consOverride[r.key] = parseFloat(el.value)||0;
+    if (el) lubePairs[r.key] = parseFloat(el.value)||0;
   });
+  entry.consOverride = mergeLubeConsOverride(entry.consOverride, lubePairs);
 
   // Keep log-entry bridges in sync
   document.getElementById('in_distanceShip').value = entry.distanceShip ?? 0;
@@ -12585,8 +12664,12 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   const sortedAfter = sortedEntries();
   const savedIdx = sortedAfter.findIndex(e=>e.id===entry.id);
   if (savedIdx >= 0){
-    // Refresh this watch's report stamps; clear later overrides so ROB follows the new cons.
-    await cascadeSucceedingEntries(savedIdx, { clearOverrides: true, skipClearFirst: true });
+    /* Only wipe later overrides when this watch's unit cons actually changed.
+       Re-saving an old log used to clear the rest of the voyage every time. */
+    await cascadeSucceedingEntries(savedIdx, {
+      clearOverrides: unitOverrideChanged(priorUnitOverride, entry.unitOverride),
+      skipClearFirst: true
+    });
   }
   markPendingSync();
   render();
@@ -13323,9 +13406,25 @@ function computeRawUnitCons(curEntry, prevRef, rolls){
   return {meCons, geCons, blrCons};
 }
 
+/* Flowmeter-only ME/GE/BLR cons — ignores unitOverride. Voyage Summary save
+   must compare typed figures to this, not to getComputedRow (which already
+   applied the override and would drop it). */
+function meterDerivedUnitCons(entry){
+  if (!entry) return { meCons:null, geCons:null, blrCons:null };
+  const prev = (entry.id && typeof previousEntryFor === 'function')
+    ? (previousEntryFor(entry.id) || effectiveCarryover())
+    : (typeof effectiveCarryover === 'function' ? effectiveCarryover() : null);
+  if (!prev) return { meCons:null, geCons:null, blrCons:null };
+  return computeRawUnitCons(entry, prev, meterRollovers());
+}
+
 function renderEntryUnitFields(){
-  /* Unit fuel cons fields live on Voyage Summary (vs_unit_*). */
+  /* Unit fuel cons fields live on Voyage Summary (vs_unit_*). Never overwrite
+     a box that already holds a typed override — that used to replace the
+     override with the flowmeter figure whenever the old log was viewed. */
   if (!isVoyageSummaryOpen()) return;
+  const stored = currentVsEntryId ? state.entries.find(e=>e.id===currentVsEntryId) : null;
+  const unitOv = stored?.unitOverride || {};
   const curEntry = readCurrentFormAsEntry();
   const ctx = getActivePeriodContext();
   const prevRef = getPrevReferenceFor(ctx.datetime || curEntry.datetime, ctx.excludeId);
@@ -13334,15 +13433,21 @@ function renderEntryUnitFields(){
   if (!(hrs>0)) return;
   const rolls = meterRollovers();
   const {meCons, geCons, blrCons} = computeRawUnitCons(curEntry, prevRef, rolls);
-  const set = (id, val) => {
+  const set = (id, val, keep) => {
+    if (keep) return;
     const el = document.getElementById(id);
     if (el && document.activeElement!==el) el.value = (val===null||val===undefined) ? '' : val;
   };
-  set('vs_unit_me', meCons);
-  set('vs_unit_ge', geCons);
-  set('vs_unit_blr', blrCons);
+  set('vs_unit_me', meCons, unitOv.ME!=null);
+  set('vs_unit_ge', geCons, unitOv.GE!=null);
+  set('vs_unit_blr', blrCons, unitOv.BLR!=null);
   const tot = document.getElementById('vs_unit_total');
-  if (tot && document.activeElement!==tot) tot.value = fmtFuel((meCons||0)+(geCons||0)+(blrCons||0));
+  if (tot && document.activeElement!==tot){
+    const me = unitOv.ME!=null ? unitOv.ME : meCons;
+    const ge = unitOv.GE!=null ? unitOv.GE : geCons;
+    const blr = unitOv.BLR!=null ? unitOv.BLR : blrCons;
+    tot.value = fmtFuel((me||0)+(ge||0)+(blr||0));
+  }
 }
 
 function voyageWindAngleDeg(dir){
@@ -13861,6 +13966,9 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
 
   const existing = editingId ? state.entries.find(x=>x.id===editingId) : null;
   const lastRef = existing || sortedEntries().filter(e=>e.datetime < dtVal).slice(-1)[0] || state.setup.carryover;
+  const prevWatch = existing
+    ? (previousEntryFor(existing.id) || effectiveCarryover())
+    : (sortedEntries().filter(e=>e.datetime < dtVal).slice(-1)[0] || state.setup.carryover);
   // Distance/RPM/FW/misc/boiler/inc/consumption overrides are set on Voyage Summary
   const report = Object.assign({}, existing?.report || {});
 
@@ -13881,9 +13989,9 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     ge1Runtime: existing?.ge1Runtime ?? null,
     ge2Runtime: existing?.ge2Runtime ?? null,
     ge3Runtime: existing?.ge3Runtime ?? null,
-    ge1Kw: existing?.ge1Kw ?? null,
-    ge2Kw: existing?.ge2Kw ?? null,
-    ge3Kw: existing?.ge3Kw ?? null,
+    ge1Kw: existing?.ge1Kw ?? entryGeKw(prevWatch, 1),
+    ge2Kw: existing?.ge2Kw ?? entryGeKw(prevWatch, 2),
+    ge3Kw: existing?.ge3Kw ?? entryGeKw(prevWatch, 3),
     report,
     me: meField,
     ge: geField,
@@ -13898,9 +14006,10 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     fwConsTankId: existing?.fwConsTankId ?? lastRef?.fwConsTankId ?? fwTankList()[0]?.id ?? null,
     consOverride: existing?.consOverride || {},
     miscCons: existing?.miscCons || { 'MDO/MGO':0, 'LSMGO':0 },
-    /* Meter edits on this form must recalculate; a leftover Voyage Summary override
-       would otherwise freeze ME/GE/BLR consumption. */
-    unitOverride: { ME:null, GE:null, BLR:null },
+    /* Keep a typed override when the engineer only opened/updated the old log.
+       Clearing it on every Update Entry made ROB fall back to the flowmeter and
+       deduct again. Meter edits still drop the override so the new readings win. */
+    unitOverride: preserveUnitOverrideOnLogSave(existing, meField, geField, blrMeter),
     /* Chief Engineer aboard when this entry was made. Stamped once at creation and
        preserved on later edits, so a crew change cannot rewrite the signatory on
        reports that were already made — and a mid-voyage relief lands on exactly the
@@ -13939,7 +14048,8 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
   const sortedAfter = sortedEntries();
   const savedIdx = sortedAfter.findIndex(e=>e.id===entry.id);
   if (savedIdx >= 0){
-    await cascadeSucceedingEntries(savedIdx, { clearOverrides: true, skipClearFirst: true });
+    const metersChanged = !logFuelMetersUnchanged(existing, meField, geField, blrMeter);
+    await cascadeSucceedingEntries(savedIdx, { clearOverrides: metersChanged, skipClearFirst: true });
   }
 
   markPendingSync();
@@ -15516,7 +15626,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v124';
+let androidInstallCacheName = 'noon-report-v125';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
