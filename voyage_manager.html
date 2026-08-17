@@ -31,6 +31,9 @@
     if (native || touch || Math.min(window.innerWidth || 0, window.innerHeight || 0) <= 900){
       document.documentElement.classList.add('use-bottom-nav');
     }
+    /* Apply before first paint so the login card is not white with dark-theme
+       ghost labels for a frame while bindBrightMode runs later in the file. */
+    if (localStorage.getItem('vm_bright') === '1') document.documentElement.classList.add('bright');
   }catch(_e){}
 })();
 </script>
@@ -1341,7 +1344,8 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
   border:1px solid var(--line-strong);background:var(--ink);color:var(--paper);font-size:15px;}
 .login-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
 .login-actions-end{margin-top:14px;justify-content:flex-end;}
-.login-actions button{flex:1 1 auto;padding:10px 14px;font-size:14px;border-radius:8px;cursor:pointer;}
+.login-actions button{flex:1 1 auto;padding:10px 14px;font-size:14px;border-radius:8px;cursor:pointer;
+  transition:background .15s ease, border-color .15s ease;}
 .login-actions button.small{flex:0 0 auto;}
 /* Primary stays brass-on-navy in both themes: token --brass/--ink flips in
    bright mode and used to paint gold-on-gold (an invisible label). Ghost
