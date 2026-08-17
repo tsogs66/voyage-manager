@@ -75,6 +75,21 @@ check('its closing figure is the total', HTML.includes('totalLubeRob(asOf.robLub
 check('it is built only from lube rows', HTML.includes("getRobRows().filter(r=>r.cat==='lube')"), true);
 check('the printed sheet marks it as a total', HTML.includes('rob-total'), true);
 
+console.log('\nboth R.O.B. sheets carry the total, not just one of them');
+/* There are two: the snapshot, and the Dep/Arr comparison. The first version of
+   this change reached only the snapshot, and the sheet the report is actually
+   printed from went without — so both are pinned here by name. */
+check('the snapshot builds it', HTML.includes("label: 'TOTAL LUBES'"), true);
+check('the dep/arr sheet builds it', HTML.includes("label:'TOTAL LUBES'"), true);
+check('dep/arr totals every column', HTML.includes("const sum = key => lubeRows.reduce"), true);
+check('and sums only the lube rows', HTML.includes('lubeRows.push(row)'), true);
+/* Scoped to the function that builds the rows: fwTankList().forEach also appears
+   earlier in the file, and comparing against that occurrence proved nothing. */
+const depArr = extract('depArrRobRows');
+check('the total is built inside depArrRobRows', depArr.includes("id:'__lubetotal'"), true);
+check('after the lube tanks', depArr.indexOf('lubeTankList().forEach') < depArr.indexOf("id:'__lubetotal'"), true);
+check('and before fresh water', depArr.indexOf("id:'__lubetotal'") < depArr.indexOf('fwTankList().forEach'), true);
+
 console.log('\nconsumption with nothing drawn stays blank');
 /* A total of 0.00 against tanks that recorded nothing would read as "measured, and
    none used" rather than "not recorded". The row filters nulls and only totals

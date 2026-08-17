@@ -9656,13 +9656,30 @@ function depArrRobRows(consByFuel, consByLube){
     const consumed = open + received - present;
     rows.push({ id:t.id, label:t.name, unit:'MT', open, received, consumed, present, cat:'fuel' });
   });
+  const lubeRows = [];
   lubeTankList().forEach(t=>{
     const open = tankRobValue(state.setup.robLube, t) || 0;
     const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'lube')).reduce((s,r)=>s+(r.qty||0),0);
     const present = robLube[t.id] ?? 0;
     const consumed = open + received - present;
-    rows.push({ id:t.id, label:t.name, unit:'L', open, received, consumed, present, cat:'lube' });
+    const row = { id:t.id, label:t.name, unit:'L', open, received, consumed, present, cat:'lube' };
+    rows.push(row);
+    lubeRows.push(row);
   });
+  /* Total of the oils — cylinder high and low, ME and GE system — placed after them
+     and before fresh water, which is metered in the same litres but is not a lube.
+     Every column is totalled, not just the closing figure, so the row reconciles
+     across the sheet the same way each tank above it does:
+     opening + received - consumed = present. */
+  if (lubeRows.length){
+    const sum = key => lubeRows.reduce((a,r)=> a + (r[key] || 0), 0);
+    rows.push({
+      id:'__lubetotal', label:'TOTAL LUBES', unit:'L',
+      open: sum('open'), received: sum('received'),
+      consumed: sum('consumed'), present: sum('present'),
+      cat:'lube', total:true
+    });
+  }
   fwTankList().forEach(t=>{
     const open = tankRobValue(state.setup.robLube, t) || 0;
     const received = state.receipts.filter(r=>receiptMatchesTank(r, t, ['fw','lube'])).reduce((s,r)=>s+(r.qty||0),0);
@@ -9684,8 +9701,8 @@ function renderDepArrRobTable(consByFuel, consByLube){
   const fmtU = (v, unit) => unit==='MT' ? fmtFuel(v) : fmtLube(v);
   el.innerHTML = `<table>
     <thead><tr><th>Tank</th><th>Opening</th><th>Received</th><th>Consumed</th><th>Present</th><th>Unit</th></tr></thead>
-    <tbody>${rows.map(r=>`<tr>
-      <td>${r.label}</td>
+    <tbody>${rows.map(r=>`<tr${r.total?' class="rob-total"':''}>
+      <td>${r.total?`<strong>${r.label}</strong>`:r.label}</td>
       <td>${fmtU(r.open,r.unit)}</td>
       <td>${fmtU(r.received,r.unit)}</td>
       <td>${fmtU(r.consumed,r.unit)}</td>
@@ -9702,8 +9719,8 @@ function printDepArrRobSheet(){
   const table = printSection('Departure / Arrival ROB', `
     <table class="pr-table">
       <tr><th>Tank</th><th>Opening</th><th>Received</th><th>Consumed</th><th>Present</th><th>Unit</th></tr>
-      ${rows.map(r=>`<tr>
-        <td class="row-lbl">${escPrint(r.label)}</td>
+      ${rows.map(r=>`<tr${r.total?' class="rob-total"':''}>
+        <td class="row-lbl">${r.total?`<strong>${escPrint(r.label)}</strong>`:escPrint(r.label)}</td>
         <td>${fmtU(r.open,r.unit)}</td>
         <td>${fmtU(r.received,r.unit)}</td>
         <td>${fmtU(r.consumed,r.unit)}</td>
@@ -15719,7 +15736,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v130';
+let androidInstallCacheName = 'noon-report-v131';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
