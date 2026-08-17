@@ -1,4 +1,4 @@
-const CACHE = 'noon-report-v125';
+const CACHE = 'noon-report-v128';
 const PRECACHE = [
   './voyage_manager.html',
   './eorb.js',
