@@ -74,11 +74,16 @@ check('a stopped generator still bands at zero', min(0), 0);
 check('at the top too', max(0), 0);
 check('and prints as a number', fmt(min(0), 2), '0.00');
 
-console.log('\nthe printed table carries the two columns');
-check('the header has Min%', HTML.includes('<th>Min%</th>'), true);
-check('and Max%', HTML.includes('<th>Max%</th>'), true);
-check('the per-unit row calls the minimum', HTML.includes('geLoadBandMin(p.loadPct)'), true);
-check('and the maximum', HTML.includes('geLoadBandMax(p.loadPct)'), true);
+console.log('\nthe printed table is transposed, and still carries the band');
+/* Generators run across the head, readings down the side, so the table's width
+   follows the number of sets rather than the number of readings. */
+check('the head is the units, not the readings', HTML.includes("<th>A/E #${i+1}</th>"), true);
+check('the corner names the rows', HTML.includes('<th>Reading</th>'), true);
+check('Min% is a row label', HTML.includes("['Min%'"), true);
+check('and Max%', HTML.includes("['Max%'"), true);
+check('the minimum is computed per unit', HTML.includes('geLoadBandMin(u.p.loadPct)'), true);
+check('and the maximum', HTML.includes('geLoadBandMax(u.p.loadPct)'), true);
+check('the old per-reading header is gone', HTML.includes('<th>Min%</th>'), false);
 check('the voyage average carries it too', HTML.includes('Voy Min / Max Load %'), true);
 
 console.log(failures ? `\nFAILED — ${failures} of ${checks} checks` : `\nPASSED — ${checks} checks`);

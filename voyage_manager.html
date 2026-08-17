@@ -12883,23 +12883,31 @@ function buildVoyageNoonSheetHTML(entry){
   ].join(''));
 
   const geN = geUnitCount();
-  const geRows = Array.from({length:geN}, (_,i)=>{
-    const p = row.gePeriod?.[i] || {};
-    const cum = geCumulativeRunHours(entry, i+1);
-    return `<tr>
-      <td class="row-lbl">A/E #${i+1}</td>
-      <td>${p.hrs==null?'—':fmt(p.hrs, 2)}</td>
-      <td>${cum==null?'—':fmt(cum, 2)}</td>
-      <td>${p.kw==null?'—':fmt(p.kw, 2)}</td>
-      <td>${p.loadPct==null?'—':fmt(p.loadPct, 2)}</td>
-      <td>${fmt(geLoadBandMin(p.loadPct), 2)}</td>
-      <td>${fmt(geLoadBandMax(p.loadPct), 2)}</td>
-      <td>${p.fuelCons==null?'—':fmtFuel(p.fuelCons)}</td>
-    </tr>`;
-  }).join('');
+  /* Transposed: generators across, readings down. Laid out the other way this was
+     eight columns wide regardless of how many sets ran, because every reading
+     needed its own column. This way the width follows the number of generators —
+     four or five columns for a typical three- or four-set ship — which is what
+     leaves room for the text beside it on the sheet. */
+  const geUnits = Array.from({length:geN}, (_,i)=>({
+    p: row.gePeriod?.[i] || {},
+    cum: geCumulativeRunHours(entry, i+1)
+  }));
+  const geMetrics = [
+    ['Hrs',    u => u.p.hrs==null?'—':fmt(u.p.hrs, 2)],
+    ['Accum.', u => u.cum==null?'—':fmt(u.cum, 2)],
+    ['kW',     u => u.p.kw==null?'—':fmt(u.p.kw, 2)],
+    ['Load%',  u => u.p.loadPct==null?'—':fmt(u.p.loadPct, 2)],
+    ['Min%',   u => fmt(geLoadBandMin(u.p.loadPct), 2)],
+    ['Max%',   u => fmt(geLoadBandMax(u.p.loadPct), 2)],
+    ['Fuel',   u => u.p.fuelCons==null?'—':fmtFuel(u.p.fuelCons)]
+  ];
+  const geHeadRow = `<tr><th>Reading</th>${geUnits.map((_,i)=>`<th>A/E #${i+1}</th>`).join('')}</tr>`;
+  const geRows = geMetrics.map(([label, cell])=>
+    `<tr><td class="row-lbl">${label}</td>${geUnits.map(u=>`<td>${cell(u)}</td>`).join('')}</tr>`
+  ).join('');
   const geSection = geN>0 ? printSection(`Generators — ${geArrangementLabelFor(entryActiveGeCount(entry))}`, `
     <table class="pr-table">
-      <tr><th>Unit</th><th>Hrs</th><th>Accum.</th><th>kW</th><th>Load%</th><th>Min%</th><th>Max%</th><th>Fuel</th></tr>
+      ${geHeadRow}
       ${geRows}
     </table>
     ${printRow('Voy Avg Load %', perf.avgGeLoadPct==null?'—':`${fmt(perf.avgGeLoadPct, 2)}%`)}
@@ -15689,7 +15697,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v128';
+let androidInstallCacheName = 'noon-report-v129';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
