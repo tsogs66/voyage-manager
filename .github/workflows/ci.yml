@@ -51,6 +51,9 @@ jobs:
       - name: Check device enrollment helpers
         run: node tests/test_device_enrollment.js
 
+      - name: Check login-gate theme contrast tokens
+        run: node tests/test_login_theme.js
+
   sync-server:
     name: Sync server (auth matrix)
     runs-on: ubuntu-latest

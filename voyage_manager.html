@@ -1328,35 +1328,38 @@
 /* ---- Login gate ---- */
 .login-gate{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
   background:rgba(8,14,24,.94);backdrop-filter:blur(3px);padding:16px;overflow:auto;}
+html.bright .login-gate{background:rgba(18,34,56,.55);}
 .login-gate[hidden]{display:none;}
-.login-card{width:min(460px,100%);background:var(--panel,#131c2b);border:1px solid rgba(255,255,255,.12);
+.login-card{width:min(460px,100%);background:var(--panel);color:var(--paper);border:1px solid var(--line-strong);
   border-radius:14px;padding:22px;box-shadow:0 18px 60px rgba(0,0,0,.55);}
 .login-head{display:flex;gap:12px;align-items:center;margin-bottom:18px;}
-.login-head h2{margin:0;font-size:20px;}
-.login-sub{margin:2px 0 0;font-size:13px;opacity:.75;}
+.login-head h2{margin:0;font-size:20px;color:var(--paper);}
+.login-sub{margin:2px 0 0;font-size:13px;color:var(--paper-dim);}
 .login-field{display:block;margin-bottom:12px;}
-.login-field span{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;opacity:.7;margin-bottom:5px;}
+.login-field span{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--paper-dim);margin-bottom:5px;}
 .login-field input,.login-field select{width:100%;padding:10px 12px;border-radius:8px;
-  border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:inherit;font-size:15px;}
+  border:1px solid var(--line-strong);background:var(--ink);color:var(--paper);font-size:15px;}
 .login-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
 .login-actions-end{margin-top:14px;justify-content:flex-end;}
 .login-actions button{flex:1 1 auto;padding:10px 14px;font-size:14px;border-radius:8px;cursor:pointer;}
 .login-actions button.small{flex:0 0 auto;}
-/* Explicit colours: the app's .primary/.ghost resolve differently inside this
-   overlay and rendered gold-on-gold, i.e. an invisible button label. */
+/* Primary stays brass-on-navy in both themes: token --brass/--ink flips in
+   bright mode and used to paint gold-on-gold (an invisible label). Ghost
+   labels follow --paper so they stay readable on the dark panel and on the
+   white bright-mode card. */
 .login-gate .login-actions button.primary{background:#c99a53;border:1px solid #c99a53;color:#0a1420;font-weight:600;}
 .login-gate .login-actions button.primary:hover{background:#d8ac68;border-color:#d8ac68;color:#0a1420;}
-.login-gate .login-actions button.ghost{background:transparent;border:1px solid rgba(255,255,255,.28);color:#e8eef7;}
-.login-gate .login-actions button.ghost:hover{background:rgba(255,255,255,.08);color:#fff;}
+.login-gate .login-actions button.ghost{background:transparent;border:1px solid var(--line-strong);color:var(--paper);}
+.login-gate .login-actions button.ghost:hover{background:var(--nav-item-bg);color:var(--paper);}
 .login-gate .login-actions button:disabled{opacity:.5;cursor:not-allowed;}
-.login-note{font-size:12px;opacity:.65;margin:10px 0 0;line-height:1.45;}
+.login-note{font-size:12px;color:var(--paper-dim);margin:10px 0 0;line-height:1.45;}
 .login-status{min-height:18px;font-size:13px;margin:10px 0 2px;}
-.login-status.err{color:#ff9c9c;}
-.login-status.ok{color:#8fe3a8;}
+.login-status.err{color:var(--alert);}
+.login-status.ok{color:var(--good);}
 .login-status.busy{opacity:.75;}
 .login-signed{font-size:14px;margin:0 0 14px;padding:10px 12px;border-radius:8px;
-  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);}
-.login-token{margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.1);}
+  background:var(--nav-item-bg);border:1px solid var(--line);color:var(--paper);}
+.login-token{margin-top:16px;padding-top:16px;border-top:1px solid var(--line);}
 .vessel-locked-note{margin:8px 0 0;font-size:12px;opacity:.75;}
 .fo-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;}
 .fo-table th,.fo-table td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
@@ -15719,7 +15722,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v130';
+let androidInstallCacheName = 'noon-report-v131';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
