@@ -2,9 +2,9 @@
  * Total lubes and total water on the R.O.B. snapshot, summary, and printout.
  *
  * The lube total covers cylinder oil high and low plus ME and GE system oil. Fresh
- * water is not a lube and must stay out of it — it is measured in litres of water,
- * and folding it into an oil total would produce a figure that looks plausible and
- * means nothing. Water has its own total, the same way, from the fresh-water tanks.
+ * water is not a lube and must stay out of it — it is stored in litres and shown
+ * in m³. Folding it into an oil total would produce a figure that looks plausible
+ * and means nothing. Water has its own total when more than one tank is fitted.
  *
  * Run: node tests/test_lube_total.js
  */
@@ -48,11 +48,15 @@ const LUBE = [
 
 const sandbox = {
   console, Number, isNaN,
+  L_PER_M3: 1000,
   lubeTankList: () => LUBE,
   fwTankList: () => [{ id: 'freshwater', name: 'FRESH WATER' }],
 };
 vm.createContext(sandbox);
-vm.runInContext(extract('totalLubeRob') + '\n' + extract('totalFwRob'), sandbox);
+vm.runInContext(
+  extract('totalLubeRob') + '\n' + extract('totalFwRob') + '\n' + extract('litresToM3') + '\n' + extract('m3ToLitres') + '\n' + extract('fmtFw'),
+  sandbox
+);
 const total = sandbox.totalLubeRob;
 const totalFw = sandbox.totalFwRob;
 
@@ -89,13 +93,23 @@ check('two tanks add up', (() => {
 sandbox.fwTankList = () => [{ id: 'freshwater', name: 'FRESH WATER' }];
 check('lube oil in the same store does not change the water total', totalFw({ freshwater: 60000, cylhigh: 8000 }), 60000);
 check('the snapshot carries the water row', HTML.includes("label: 'TOTAL WATER'"), true);
+check('water total is only when more than one tank', HTML.includes('if (fw.length > 1)'), true);
 check('its opening figure is the water total', HTML.includes('totalFwRob(prevRobData.robLube'), true);
 check('its closing figure is the water total', HTML.includes('totalFwRob(asOf.robLube'), true);
 check('the ROB page has a water total strip', HTML.includes('id="fwTotalStrip"'), true);
 check('the summary page has a water total strip', HTML.includes('id="fwTotalSummaryStrip"'), true);
 check('summary consumption vs ROB splits water from lube', HTML.includes('id="fwDualGauges"'), true);
+check('fresh water has its own panel below lube', HTML.includes('<h2>Fresh Water</h2>'), true);
 check('summary per-day splits water from lube', HTML.includes('id="fwPerDayStrip"'), true);
 check('lube per-day no longer lists fresh water', /lubePerDayStrip[\s\S]*FRESH WATER/.test(HTML.slice(HTML.indexOf('lubePerDayStrip'), HTML.indexOf('lubePerDayStrip')+400)), false);
+check('setup opening ROB for water is m³', HTML.includes('Opening ROB (m³)'), true);
+check('gauge total is labelled m³', HTML.includes('Total Fresh Water (m³)'), true);
+
+console.log('\nwater is shown in cubic metres');
+check('50000 L is 50 m³', sandbox.litresToM3(50000), 50);
+check('8.2 m³ stores as 8200 L', sandbox.m3ToLitres(8.2), 8200);
+check('fmtFw uses two decimals', sandbox.fmtFw(50000), '50.00');
+check('a missing value is a dash', sandbox.fmtFw(null), '—');
 
 console.log('\nconsumption with nothing drawn stays blank');
 /* A total of 0.00 against tanks that recorded nothing would read as "measured, and

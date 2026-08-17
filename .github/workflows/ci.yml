@@ -45,6 +45,9 @@ jobs:
       - name: Check flowmeter and fresh-water consumption formulas
         run: node tests/test_flow_cons.js
 
+      - name: Check lube and water totals
+        run: node tests/test_lube_total.js
+
       - name: Check noon print title and flag registry
         run: node tests/test_noon_print.js
 

@@ -1524,7 +1524,7 @@
       <div class="unit-group cols5" id="setupFuelRob"></div>
       <h3 class="sub">Lube Oil (litres)</h3>
       <div class="unit-group cols5" id="setupLubeRob"></div>
-      <h3 class="sub">Fresh Water (litres)</h3>
+      <h3 class="sub">Fresh Water (m³)</h3>
       <div class="unit-group cols5" id="setupFwRob"></div>
     </div>
 
@@ -1721,7 +1721,7 @@
       </div>
       <div class="table-scroll" style="margin-bottom:12px;">
         <table>
-          <thead><tr><th>Name</th><th>Opening ROB (L)</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Opening ROB (m³)</th><th></th></tr></thead>
           <tbody id="mgmtFwBody"></tbody>
         </table>
       </div>
@@ -1971,18 +1971,18 @@
               <div class="hint">Consumed water is taken from this tank.</div></div>
           </div>
           <div class="field"><label>Production Flowmeter (cumulative, L)</label><input type="number" id="in_fwProd"></div>
-          <div class="field" id="inFwSingleRobWrap"><label>FW ROB (L)</label><input type="number" id="in_fwRob"></div>
+          <div class="field" id="inFwSingleRobWrap"><label>FW ROB (m³)</label><input type="number" step="0.01" id="in_fwRob"></div>
         </div>
         <div class="unit-box">
           <h3>ROB &amp; period</h3>
           <div id="inFwMultiRobWrap" style="display:none;">
-            <div class="hint" style="margin-bottom:8px;">Enter present ROB for each tank. Total water is the sum of all tanks.</div>
+            <div class="hint" style="margin-bottom:8px;">Enter present ROB for each tank in m³. Total water is the sum of all tanks.</div>
             <div class="form-grid cols2" id="inFwTankRobFields"></div>
           </div>
           <div class="form-grid cols3" style="margin-top:8px;">
-            <div class="field calc"><label>Total FW ROB (L)</label><input type="text" id="in_fwTotalRob" readonly tabindex="-1"></div>
-            <div class="field calc"><label>Produced (L)</label><input type="text" id="in_fwProdD" readonly tabindex="-1"></div>
-            <div class="field calc"><label>Consumed (L)</label><input type="text" id="in_fwConsD" readonly tabindex="-1"></div>
+            <div class="field calc" id="inFwTotalRobWrap"><label>Total FW ROB (m³)</label><input type="text" id="in_fwTotalRob" readonly tabindex="-1"></div>
+            <div class="field calc"><label>Produced (m³)</label><input type="text" id="in_fwProdD" readonly tabindex="-1"></div>
+            <div class="field calc"><label>Consumed (m³)</label><input type="text" id="in_fwConsD" readonly tabindex="-1"></div>
           </div>
         </div>
       </div>
@@ -2183,14 +2183,14 @@
               <div class="field"><label>Tank for consumption</label><select id="vs_fwConsTank"></select></div>
             </div>
             <div class="field"><label>Flowmeter (cumulative)</label><input type="number" id="vs_fwProdMeter"></div>
-            <div class="field" id="vsFwSingleRobWrap"><label>R.O.B. (tank sounding, present)</label><input type="number" id="vs_fwRob"></div>
+            <div class="field" id="vsFwSingleRobWrap"><label>R.O.B. (tank sounding, present, m³)</label><input type="number" step="0.01" id="vs_fwRob"></div>
             <div id="vsFwMultiRobWrap" style="display:none;">
-              <div class="hint" style="margin-bottom:8px;">Enter present ROB for each tank. Total water is the sum of all tanks.</div>
+              <div class="hint" style="margin-bottom:8px;">Enter present ROB for each tank in m³. Total water is the sum of all tanks.</div>
               <div id="vsFwTankRobFields"></div>
-              <div class="field calc"><label>Total FW ROB (L)</label><input type="text" id="vs_fwTotalRob" readonly tabindex="-1"></div>
+              <div class="field calc"><label>Total FW ROB (m³)</label><input type="text" id="vs_fwTotalRob" readonly tabindex="-1"></div>
             </div>
-            <div class="field"><label>Produced (calc, L)</label><input type="text" id="vs_fwProduced" readonly></div>
-            <div class="field"><label>Consumed (calc, L)</label><input type="text" id="vs_fwConsumed" readonly></div>
+            <div class="field"><label>Produced (calc, m³)</label><input type="text" id="vs_fwProduced" readonly></div>
+            <div class="field"><label>Consumed (calc, m³)</label><input type="text" id="vs_fwConsumed" readonly></div>
           </div>
         </div>
         <h3 class="sub">Fuel, Lube &amp; Water ROB — Previous / Consumption / R.O.B.</h3>
@@ -2204,7 +2204,7 @@
         <h3 class="sub">Tank Soundings (optional)</h3>
         <div class="table-scroll">
           <table>
-            <thead><tr><th>Tank</th><th>Sounding (cm)</th><th>Temp (°C)</th><th>Volume (MT/L)</th></tr></thead>
+            <thead><tr><th>Tank</th><th>Sounding (cm)</th><th>Temp (°C)</th><th>Volume (MT / L / m³)</th></tr></thead>
             <tbody id="vsSoundingsBody"></tbody>
           </table>
         </div>
@@ -2547,8 +2547,6 @@
       <div class="stat-strip" id="fuelPerDayStrip"></div>
       <h3 class="sub">Lube Oil (L/day)</h3>
       <div class="stat-strip cols4" id="lubePerDayStrip"></div>
-      <h3 class="sub">Fresh Water (L/day)</h3>
-      <div class="stat-strip cols3" id="fwPerDayStrip"></div>
     </div>
     <div class="panel">
       <h2>CONSUMPTION VS ROB</h2>
@@ -2557,10 +2555,16 @@
       <h3 class="sub">Lube Oil</h3>
       <div class="gauge-grid cols4" id="lubeDualGauges"></div>
       <div class="stat-strip cols3" id="lubeTotalSummaryStrip" style="margin-top:14px;"></div>
-      <h3 class="sub">Fresh Water</h3>
+      <div class="hint">The brass arc shows the current R.O.B. level; the white tick mark shows where R.O.B. started this voyage. The gap between them is what's been consumed.</div>
+    </div>
+    <div class="panel">
+      <h2>Fresh Water</h2>
+      <h3 class="sub">Average consumption (m³/day)</h3>
+      <div class="stat-strip cols3" id="fwPerDayStrip"></div>
+      <h3 class="sub">Consumption vs R.O.B.</h3>
       <div class="gauge-grid cols4" id="fwDualGauges"></div>
       <div class="stat-strip cols3" id="fwTotalSummaryStrip" style="margin-top:14px;"></div>
-      <div class="hint">The brass arc shows the current R.O.B. level; the white tick mark shows where R.O.B. started this voyage. The gap between them is what's been consumed.</div>
+      <div class="hint">The blue arc shows the current R.O.B. in m³; the white tick mark shows where R.O.B. started this voyage. When more than one tank is fitted, the total is the sum of those tanks.</div>
     </div>
   </div>
 
@@ -3595,7 +3599,7 @@ function robBalanceRows(row, prevRobData, asOf){
   }
   const fw = getRobRows().filter(r=>r.cat==='fw');
   fw.forEach(addTank);
-  if (fw.length){
+  if (fw.length > 1){
     out.push({
       key: 'totalwater', label: 'TOTAL WATER', cat: 'fw', total: true, strong: true,
       prevVal: totalFwRob(prevRobData.robLube || {}),
@@ -6491,13 +6495,43 @@ function robDec(cat){
   if (cat==='fw') return 2;
   return 0;
 }
-function fmtRob(n, cat){ return fmt(n, robDec(cat)); }
+/* Fresh water is stored in litres (existing logs and receipts) and shown in m³. */
+const L_PER_M3 = 1000;
+function litresToM3(n){
+  if (n===null||n===undefined||n==='') return n;
+  const x = Number(n);
+  return isNaN(x) ? n : x / L_PER_M3;
+}
+function m3ToLitres(n){
+  if (n===null||n===undefined||n==='') return n;
+  const x = Number(n);
+  return isNaN(x) ? n : x * L_PER_M3;
+}
+function fmtFw(n){
+  if (n===null||n===undefined||isNaN(n)) return '—';
+  return litresToM3(n).toFixed(2);
+}
+function fwInputValue(n){
+  if (n===null||n===undefined||n===''||isNaN(Number(n))) return '';
+  return litresToM3(n).toFixed(2);
+}
+function parseFwM3Field(val){
+  if (val===null||val===undefined||val==='') return null;
+  const x = parseFloat(val);
+  return isNaN(x) ? null : m3ToLitres(x);
+}
+function showFwTotal(){ return fwTankList().length > 1; }
+function fmtRob(n, cat){
+  if (cat==='fw') return fmtFw(n);
+  return fmt(n, robDec(cat));
+}
 function robConsStep(cat){
   if (cat==='fuel') return '0.001';
   if (cat==='fw') return '0.01';
   return '1';
 }
 function fmtRobInput(n, cat){
+  if (cat==='fw') return (n===null||n===undefined||isNaN(n)) ? '0.00' : litresToM3(n).toFixed(2);
   const d = robDec(cat);
   if (n===null||n===undefined||isNaN(n)) return (0).toFixed(d);
   return Number(n).toFixed(d);
@@ -7313,7 +7347,7 @@ function renderVsSurvey(){
     return `<tr><td class="row-lbl">${t.name}</td>`
       + `<td>${recv ? fmtRob(recv, cat) : '—'}</td>`
       + `<td>${fmtRob(book, cat)}</td>`
-      + `<td><input type="number" step="any" data-survey-tank="${t.id}" data-survey-store="${store}" value="${meas!=null?meas:''}" placeholder="${book!=null?fmtRob(book,cat):''}"></td>`
+      + `<td><input type="number" step="any" data-survey-tank="${t.id}" data-survey-store="${store}" data-survey-cat="${cat}" value="${meas!=null?(cat==='fw'?fwInputValue(meas):meas):''}" placeholder="${book!=null?fmtRob(book,cat):''}"></td>`
       + `<td${cls}>${diff==null?'—':(diff>0?'+':'')+fmtRob(diff, cat)}</td></tr>`;
   }).join('');
 
@@ -7339,7 +7373,13 @@ function bindRobSurveyUi(){
     const measured = {}, measuredLube = {};
     document.querySelectorAll('[data-survey-tank]').forEach(el=>{
       if (el.value === '') return;
-      (el.dataset.surveyStore === 'rob' ? measured : measuredLube)[el.dataset.surveyTank] = el.value;
+      let v = el.value;
+      if (el.dataset.surveyCat === 'fw'){
+        const litres = parseFwM3Field(v);
+        if (litres==null) return;
+        v = String(litres);
+      }
+      (el.dataset.surveyStore === 'rob' ? measured : measuredLube)[el.dataset.surveyTank] = v;
     });
     if (!Object.keys(measured).length && !Object.keys(measuredLube).length){
       alert('Enter at least one measured figure.'); return;
@@ -7605,8 +7645,8 @@ function renderLastEntryRef(){
     ${item('Blr Type / SG', e.blr.type+' / '+e.blr.sg)}
     ${item('Cylinder Oil Meter', e.cylMeter)}
     ${item('FW Produced Meter', e.fwProd)}
-    ${item('FW ROB Reading (L)', e.fwRob)}
-    ${fwTankList().length>1 && e.fwRobByTank ? fwTankList().map(t=>item(t.name+' ROB (L)', e.fwRobByTank[t.id])).join('') : ''}
+    ${item('FW ROB Reading (m³)', e.fwRob==null?'':fmtFw(e.fwRob))}
+    ${fwTankList().length>1 && e.fwRobByTank ? fwTankList().map(t=>item(t.name+' ROB (m³)', e.fwRobByTank[t.id]==null?'':fmtFw(e.fwRobByTank[t.id]))).join('') : ''}
   </div>`;
 }
 
@@ -7644,9 +7684,9 @@ function syncFwTotalFromTanks(prefix){
     }
   });
   const totalEl = document.getElementById(prefix === 'vs' ? 'vs_fwTotalRob' : 'in_fwTotalRob');
-  if (totalEl) totalEl.value = any ? String(sum) : '';
+  if (totalEl) totalEl.value = any ? sum.toFixed(2) : '';
   const hiddenTotal = document.getElementById(prefix === 'vs' ? 'vs_fwRob' : 'in_fwRob');
-  if (hiddenTotal && any) hiddenTotal.value = String(sum);
+  if (hiddenTotal && any) hiddenTotal.value = sum.toFixed(2);
 }
 
 function updateFwPreview(prefix){
@@ -7675,12 +7715,12 @@ function updateFwPreview(prefix){
     set('vs_fwProduced', prodDelta);
     set('vs_fwConsumed', (fw.fwRob==null && !fw.fwRobByTank) ? null : bal.cons);
     const tot = document.getElementById('vs_fwTotalRob');
-    if (tot && tanks.length > 1) tot.value = bal.total==null ? '' : String(bal.total);
+    if (tot && tanks.length > 1) tot.value = bal.total==null ? '' : fmtFw(bal.total);
   } else {
     set('in_fwProdD', prodDelta);
     set('in_fwConsD', (fw.fwRob==null && !fw.fwRobByTank) ? null : bal.cons);
     const tot = document.getElementById('in_fwTotalRob');
-    if (tot) tot.value = bal.total==null ? '' : String(bal.total);
+    if (tot) tot.value = bal.total==null ? '' : fmtFw(bal.total);
   }
 }
 
@@ -7691,7 +7731,7 @@ function syncFwMirror(fromPrefix){
   const robId = other === 'vs' ? 'vs_fwRob' : 'in_fwRob';
   const set = (id, val) => { const el = document.getElementById(id); if (el && val!=null) el.value = val; };
   set(prodId, src.fwProd);
-  set(robId, src.fwRob);
+  set(robId, src.fwRob==null ? null : fwInputValue(src.fwRob));
   const prodSel = document.getElementById(other + '_fwProdTank');
   const consSel = document.getElementById(other + '_fwConsTank');
   if (prodSel && src.fwProdTankId) prodSel.value = src.fwProdTankId;
@@ -7699,7 +7739,7 @@ function syncFwMirror(fromPrefix){
   if (src.fwRobByTank){
     Object.keys(src.fwRobByTank).forEach(id => {
       const el = document.getElementById(fwTankRobId(other, id));
-      if (el) el.value = src.fwRobByTank[id];
+      if (el) el.value = fwInputValue(src.fwRobByTank[id]);
     });
     syncFwTotalFromTanks(other);
   }
@@ -7714,6 +7754,8 @@ function syncFwTankUi(prefix){
   if (pickRow) pickRow.style.display = multi ? '' : 'none';
   if (multiWrap) multiWrap.style.display = multi ? '' : 'none';
   if (singleWrap) singleWrap.style.display = multi ? 'none' : '';
+  const inTotalWrap = document.getElementById('inFwTotalRobWrap');
+  if (inTotalWrap) inTotalWrap.style.display = multi ? '' : 'none';
 
   const keepProd = document.getElementById(prefix + '_fwProdTank')?.value;
   const keepCons = document.getElementById(prefix + '_fwConsTank')?.value;
@@ -7734,7 +7776,7 @@ function syncFwTankUi(prefix){
       if (el) prevVals[t.id] = el.value;
     });
     fields.innerHTML = tanks.map(t=>
-      `<div class="field"><label>${t.name} ROB (L)</label><input type="number" step="0.01" id="${fwTankRobId(prefix, t.id)}" data-fw-prefix="${prefix}" data-fw-tank="${t.id}"></div>`
+      `<div class="field"><label>${t.name} ROB (m³)</label><input type="number" step="0.01" id="${fwTankRobId(prefix, t.id)}" data-fw-prefix="${prefix}" data-fw-tank="${t.id}"></div>`
     ).join('');
     tanks.forEach(t => {
       const el = document.getElementById(fwTankRobId(prefix, t.id));
@@ -7766,10 +7808,10 @@ function readFwForm(prefix){
   const presentByTank = {};
   let anyTank = false;
   tanks.forEach(t => {
-    const v = num(fwTankRobId(prefix, t.id));
+    const v = parseFwM3Field(document.getElementById(fwTankRobId(prefix, t.id))?.value);
     if (v != null){ presentByTank[t.id] = v; anyTank = true; }
   });
-  let presentTotal = num(prefix === 'vs' ? 'vs_fwRob' : 'in_fwRob');
+  let presentTotal = parseFwM3Field(document.getElementById(prefix === 'vs' ? 'vs_fwRob' : 'in_fwRob')?.value);
   if (anyTank){
     presentTotal = tanks.reduce((s,t)=> s + (presentByTank[t.id] != null ? presentByTank[t.id] : 0), 0);
   }
@@ -7798,12 +7840,12 @@ function fillFwForm(prefix, entry, prev){
     : null);
   if (byTank){
     tanks.forEach(t => {
-      if (byTank[t.id] != null) set(fwTankRobId(prefix, t.id), byTank[t.id]);
+      if (byTank[t.id] != null) set(fwTankRobId(prefix, t.id), fwInputValue(byTank[t.id]));
     });
     syncFwTotalFromTanks(prefix);
   }
-  set(prefix === 'vs' ? 'vs_fwRob' : 'in_fwRob', entry?.fwRob);
-  if (tanks.length === 1 && entry?.fwRob != null) set(prefix === 'vs' ? 'vs_fwRob' : 'in_fwRob', entry.fwRob);
+  set(prefix === 'vs' ? 'vs_fwRob' : 'in_fwRob', entry?.fwRob==null ? '' : fwInputValue(entry.fwRob));
+  if (tanks.length === 1 && entry?.fwRob != null) set(prefix === 'vs' ? 'vs_fwRob' : 'in_fwRob', fwInputValue(entry.fwRob));
   updateFwPreview(prefix);
 }
 
@@ -7886,7 +7928,7 @@ function readFuelTypeManagementFromDom(){
     const nameEl = document.querySelector(`[data-fw-tank-name="${t.id}"]`);
     const robEl = document.querySelector(`[data-mgmt-fw-rob="${t.id}"]`);
     if (nameEl) t.name = nameEl.value.trim() || t.name;
-    if (robEl && robEl.value!=='') state.setup.robLube[t.id] = parseFloat(robEl.value) || 0;
+    if (robEl && robEl.value!=='') state.setup.robLube[t.id] = parseFwM3Field(robEl.value) || 0;
   });
   state.setup.fuelTanks = fuelTankList();
   state.setup.lubeTanks = lubeTankList();
@@ -7957,7 +7999,7 @@ function renderFuelTypeManagement(){
       const rob = tankRobValue(state.setup.robLube, t);
       return `<tr data-fw-row="${t.id}">
         <td><input data-fw-tank-name="${t.id}" value="${escAttr(t.name)}" style="min-width:110px;"></td>
-        <td><input type="number" step="0.01" data-mgmt-fw-rob="${t.id}" value="${Number(rob).toFixed(2)}" style="width:110px;"></td>
+        <td><input type="number" step="0.01" data-mgmt-fw-rob="${t.id}" value="${fwInputValue(rob)}" style="width:110px;"></td>
         <td><button type="button" class="small danger" data-remove-fw="${t.id}">✕</button></td>
       </tr>`;
     }).join('');
@@ -8327,7 +8369,7 @@ function abstractRowToCsv(r, robMap){
   return [r.datetime, r.operation, fmtNum(r.hrs,2), fmtNum(r.rpm,2), fmtNum(r.distEngine,2), fmtNum(r.speedEngine,2), fmtNum(r.distanceShip,2), fmtNum(r.speedShip,2),
     fmtNum(r.slip,2), fmtNum(r.mcrPct,2), fmtNum(r.kwEst,2), r.condition, fmtNum(r.hrs,2), fmtNum(r.distanceShip,2), fmtNum(r.rpm,2), fmtNum(r.revCounter,2), fmtNum(r.dailyRevs,2),
     meterCellText(r.me), meterCellText(r.ge), fmtNum(r.blr.meter,2), fmtNum(r.meCons,3), fmtNum(r.geCons,3), fmtNum(r.blrCons,3), fmtNum(r.total,3),
-    fmtNum(r.cylCons,0), r.tbn, fmtNum(r.meLoCons,0), fmtNum(r.geLoCons,0), fmtNum(r.fwProd,0), fmtNum(r.fwProdD,0), fmtNum(r.fwRob,0), fmtNum(r.fwConsD,0)]
+    fmtNum(r.cylCons,0), r.tbn, fmtNum(r.meLoCons,0), fmtNum(r.geLoCons,0), fmtNum(r.fwProd,0), fmtNum(litresToM3(r.fwProdD),2), fmtNum(litresToM3(r.fwRob),2), fmtNum(litresToM3(r.fwConsD),2)]
     .concat(robCells);
 }
 function csvEscape(v){
@@ -8345,6 +8387,7 @@ function renderVoyageSetupRobFields(rob, robLube){
   const hasLog = state.entries.length > 0;
   const fuelLabel = hasLog ? 'Current ROB (MT)' : 'Opening ROB (MT)';
   const lubeLabel = hasLog ? 'Current ROB (L)' : 'Opening ROB (L)';
+  const fwLabel = hasLog ? 'Current ROB (m³)' : 'Opening ROB (m³)';
   const ro = hasLog ? ' readonly' : '';
   fuelBox.innerHTML = fuelTankList().map(t=>{
     const val = hasLog ? (rob[t.id] ?? 0) : tankRobValue(state.setup.rob, t);
@@ -8357,7 +8400,7 @@ function renderVoyageSetupRobFields(rob, robLube){
   if (fwBox){
     fwBox.innerHTML = fwTankList().map(t=>{
       const val = hasLog ? (robLube[t.id] ?? 0) : tankRobValue(state.setup.robLube, t);
-      return `<div class="unit-box"><h3>${t.name}</h3><div class="field"><label>${lubeLabel}</label><input type="number" step="0.01" data-setup-lube-rob="${t.id}" value="${Number(val).toFixed(2)}"${ro}></div></div>`;
+      return `<div class="unit-box"><h3>${t.name}</h3><div class="field"><label>${fwLabel}</label><input type="number" step="0.01" data-setup-fw-rob="${t.id}" value="${fwInputValue(val)}"${ro}></div></div>`;
     }).join('');
   }
   if (hint){
@@ -8533,9 +8576,10 @@ function render(){
   document.getElementById('capacitySettings').innerHTML =
     fuelTankList().map(t=>`<div class="unit-box"><h3>${t.name} (MT)</h3><div class="field"><input type="number" data-cap-fuel="${t.id}" value="${tankCapValue(state.setup.capacity, t)}"></div></div>`).join('') +
     lubeTankList().map(t=>`<div class="unit-box"><h3>${t.name} (L)</h3><div class="field"><input type="number" data-cap-lube="${t.id}" value="${tankCapValue(state.setup.capacityLube, t)}"></div></div>`).join('') +
-    fwTankList().map(t=>`<div class="unit-box"><h3>${t.name} (L)</h3><div class="field"><input type="number" data-cap-lube="${t.id}" value="${tankCapValue(state.setup.capacityLube, t)}"></div></div>`).join('');
+    fwTankList().map(t=>`<div class="unit-box"><h3>${t.name} (m³)</h3><div class="field"><input type="number" step="0.01" data-cap-fw="${t.id}" value="${fwInputValue(tankCapValue(state.setup.capacityLube, t))}"></div></div>`).join('');
   document.querySelectorAll('[data-cap-fuel]').forEach(inp=> inp.addEventListener('change', ()=>{ state.setup.capacity[inp.dataset.capFuel]=parseFloat(inp.value)||1; saveSetup(); render(); }));
   document.querySelectorAll('[data-cap-lube]').forEach(inp=> inp.addEventListener('change', ()=>{ state.setup.capacityLube[inp.dataset.capLube]=parseFloat(inp.value)||1; saveSetup(); render(); }));
+  document.querySelectorAll('[data-cap-fw]').forEach(inp=> inp.addEventListener('change', ()=>{ state.setup.capacityLube[inp.dataset.capFw]=parseFwM3Field(inp.value)||1; saveSetup(); render(); }));
 
   renderFuelMeterFields();
   renderGeRuntimeFields();
@@ -8561,12 +8605,18 @@ function render(){
     const cap = tankCapValue(state.setup.capacityLube, t)||1;
     const val = robLube[t.id] ?? 0;
     const pct = val/cap;
-    return `<div class="gauge-box">${gaugeSVG(pct, GAUGE_COLORS['FRESH WATER'])}<div class="gauge-value">${fmtLube(val)}</div><div class="gauge-cap">of ${fmtLube(cap)} L</div><div class="gauge-label">${t.name}</div></div>`;
+    return `<div class="gauge-box">${gaugeSVG(pct, GAUGE_COLORS['FRESH WATER'])}<div class="gauge-value">${fmtFw(val)}</div><div class="gauge-cap">of ${fmtFw(cap)} m³</div><div class="gauge-label">${t.name}</div></div>`;
   }).join('');
   const fwTotalEl = document.getElementById('fwTotalStrip');
   if (fwTotalEl){
-    fwTotalEl.innerHTML = `
-    <div class="stat"><div class="num">${fmtRob(totalFwRob(robLube), 'fw')}</div><div class="lbl">Total Fresh Water (L)</div></div>`;
+    if (showFwTotal()){
+      fwTotalEl.style.display = '';
+      fwTotalEl.innerHTML = `
+    <div class="stat"><div class="num">${fmtFw(totalFwRob(robLube))}</div><div class="lbl">Total Fresh Water (m³)</div></div>`;
+    } else {
+      fwTotalEl.style.display = 'none';
+      fwTotalEl.innerHTML = '';
+    }
   }
 
   // receipts
@@ -8579,10 +8629,11 @@ function render(){
       const lcv = r.lcv!=null ? `LCV ${fmt(r.lcv,0)}` : '';
       const visc = r.viscosity!=null ? `${fmt(r.viscosity,1)} cSt` : '';
       const extra = [r.bdnNo?`BDN ${r.bdnNo}`:'', r.company||'', r.location||'', dens, lcv, visc].filter(Boolean).join(' · ');
-      const qtyStr = r.category==='fuel' ? fmtFuel(r.qty) : fmtLube(r.qty);
+      const qtyStr = r.category==='fuel' ? fmtFuel(r.qty) : (r.category==='fw' ? fmtFw(r.qty) : fmtLube(r.qty));
+      const unit = r.category==='fuel' ? 'MT' : (r.category==='fw' ? 'm³' : 'L');
       return `<div class="receipt-row">
         <span class="desc">${r.date} — ${r.category.toUpperCase()} — ${r.type}${extra?' — '+extra:''}</span>
-        <span class="qty">+${qtyStr} ${r.category==='fuel'?'MT':'L'}</span>
+        <span class="qty">+${qtyStr} ${unit}</span>
         <button class="small danger" data-del-receipt="${r.id}">✕</button>
       </div>`;
     }).join('');
@@ -8620,7 +8671,7 @@ function render(){
     <div class="stat"><div class="num">${daysAtSea>0 ? fmtLube(consByLube[t]/daysAtSea) : '—'}</div><div class="lbl">${t} /day</div></div>`).join('');
   const fwPerDay = document.getElementById('fwPerDayStrip');
   if (fwPerDay){
-    fwPerDay.innerHTML = `<div class="stat"><div class="num">${daysAtSea>0 ? fmtRob(consByLube['FRESH WATER']/daysAtSea, 'fw') : '—'}</div><div class="lbl">Fresh Water /day</div></div>`;
+    fwPerDay.innerHTML = `<div class="stat"><div class="num">${daysAtSea>0 ? fmtFw(consByLube['FRESH WATER']/daysAtSea) : '—'}</div><div class="lbl">Fresh Water m³/day</div></div>`;
   }
 
   // Voyage Progress strip: merges former Voyage Summary + ETA stats
@@ -8674,17 +8725,23 @@ function render(){
       const cap = tankCapValue(state.setup.capacityLube, t) || 1;
       const startVal = tankRobValue(state.setup.robLube, t) || 0;
       const curVal = robLube[t.id] ?? 0;
-      const usedBit = fwTanks.length===1 ? ` · used ${fmtRob(fwUsed, 'fw')}` : '';
+      const usedBit = fwTanks.length===1 ? ` · used ${fmtFw(fwUsed)}` : '';
       return `<div class="gauge-box">${dualGaugeSVG(startVal/cap, curVal/cap, GAUGE_COLORS['FRESH WATER'])}
-        <div class="gauge-value">${fmtRob(curVal, 'fw')}</div>
-        <div class="gauge-cap">start ${fmtRob(startVal, 'fw')}${usedBit} L</div>
+        <div class="gauge-value">${fmtFw(curVal)}</div>
+        <div class="gauge-cap">start ${fmtFw(startVal)}${usedBit} m³</div>
         <div class="gauge-label">${t.name}</div></div>`;
     }).join('');
   }
   const fwTotalSummary = document.getElementById('fwTotalSummaryStrip');
   if (fwTotalSummary){
-    fwTotalSummary.innerHTML = `
-    <div class="stat"><div class="num">${fmtRob(totalFwRob(robLube), 'fw')}</div><div class="lbl">Total Fresh Water (L)</div></div>`;
+    if (showFwTotal()){
+      fwTotalSummary.style.display = '';
+      fwTotalSummary.innerHTML = `
+    <div class="stat"><div class="num">${fmtFw(totalFwRob(robLube))}</div><div class="lbl">Total Fresh Water (m³)</div></div>`;
+    } else {
+      fwTotalSummary.style.display = 'none';
+      fwTotalSummary.innerHTML = '';
+    }
   }
 
   // Average distance during sea passage: from START - PASSAGE to END - PASSAGE (or latest entry if no end yet)
@@ -9749,7 +9806,7 @@ function depArrRobRows(consByFuel, consByLube){
     const received = state.receipts.filter(r=>receiptMatchesTank(r, t, ['fw','lube'])).reduce((s,r)=>s+(r.qty||0),0);
     const present = robLube[t.id] ?? 0;
     const consumed = open + received - present;
-    rows.push({ id:t.id, label:t.name, unit:'L', open, received, consumed, present, cat:'fw' });
+    rows.push({ id:t.id, label:t.name, unit:'m³', open, received, consumed, present, cat:'fw' });
   });
   /* Insert totals after each group: lube total after the last lube, water after the last fw. */
   const lastLube = rows.map((r,i)=>r.cat==='lube'?i:-1).filter(i=>i>=0).pop();
@@ -9764,9 +9821,9 @@ function depArrRobRows(consByFuel, consByLube){
     });
   }
   const fwPart = rows.filter(r=>r.cat==='fw' && !r.total);
-  if (fwPart.length){
+  if (fwPart.length > 1){
     rows.push({
-      id:'fwTotal', label:'TOTAL WATER', unit:'L', cat:'fw', total:true,
+      id:'fwTotal', label:'TOTAL WATER', unit:'m³', cat:'fw', total:true,
       open: fwPart.reduce((s,r)=>s+r.open,0),
       received: fwPart.reduce((s,r)=>s+r.received,0),
       consumed: fwPart.reduce((s,r)=>s+r.consumed,0),
@@ -11024,6 +11081,7 @@ async function saveVoyageDetails(){
   if (state.entries.length === 0){
     document.querySelectorAll('[data-setup-fuel-rob]').forEach(inp=> state.setup.rob[inp.dataset.setupFuelRob] = parseFloat(inp.value)||0);
     document.querySelectorAll('[data-setup-lube-rob]').forEach(inp=> state.setup.robLube[inp.dataset.setupLubeRob] = parseFloat(inp.value)||0);
+    document.querySelectorAll('[data-setup-fw-rob]').forEach(inp=> state.setup.robLube[inp.dataset.setupFwRob] = parseFwM3Field(inp.value)||0);
   }
   await saveSetup();
   await saveVesselRegistry();
@@ -11927,7 +11985,7 @@ function printRobSnapshot(entry, dt, rowsForPrint){
   const dateStr = dt.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'2-digit'});
   const timeStr = dt.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
   const tableRows = rowsForPrint.map(r=>`
-    <tr${r.strong?' class="rob-total"':''}><td class="row-lbl">${r.strong?`<strong>${r.label}</strong>`:r.label}</td><td>${fmt(r.prevVal,r.dec)}</td><td>${r.consVal===null||r.consVal===undefined?'—':fmt(r.consVal,r.consDec)}</td><td>${fmt(r.nowVal,r.dec)}</td></tr>`).join('');
+    <tr${r.strong?' class="rob-total"':''}><td class="row-lbl">${r.strong?`<strong>${r.label}</strong>`:r.label}</td><td>${fmtRob(r.prevVal,r.cat)}</td><td>${r.consVal===null||r.consVal===undefined?'—':fmtRob(r.consVal,r.cat)}</td><td>${fmtRob(r.nowVal,r.cat)}</td></tr>`).join('');
   const sheetHtml = `<div class="pr-sheet">
     ${printDocHeader({ title: 'Remaining On Board', subtitle: 'Fuel, Lube & Fresh Water Inventory Snapshot', badge: entry.operation })}
     ${printMetaGrid([
@@ -12401,10 +12459,10 @@ function updateVsRobLiveFromCons(){
     if (!robEl) return;
     if (r.cat==='fw'){
       const tankEl = document.getElementById(fwTankRobId('vs', r.key));
-      const tankVal = tankEl && tankEl.value !== '' ? parseFloat(tankEl.value) : NaN;
+      const tankVal = tankEl && tankEl.value !== '' ? parseFwM3Field(tankEl.value) : null;
       const mapped = live.fwByTank && live.fwByTank[r.key];
-      const fwRob = !isNaN(tankVal) ? tankVal : (mapped != null ? mapped : parseFloat(document.getElementById('vs_fwRob')?.value));
-      robEl.textContent = isNaN(fwRob) ? '—' : fmtRob(fwRob, 'fw');
+      const fwRob = tankVal != null ? tankVal : (mapped != null ? mapped : parseFwM3Field(document.getElementById('vs_fwRob')?.value));
+      robEl.textContent = fwRob==null ? '—' : fmtRob(fwRob, 'fw');
     } else {
       robEl.textContent = fmtRob(prevVal - consVal, r.cat);
     }
@@ -12709,7 +12767,7 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   const fwDraft = readFwForm('vs');
   stampFwOnEntry(entry, {
     fwProd: fwDraft.fwProd ?? num0('vs_fwProdMeter'),
-    fwRob: fwDraft.fwRob ?? num('vs_fwRob'),
+    fwRob: fwDraft.fwRob ?? parseFwM3Field(document.getElementById('vs_fwRob')?.value),
     fwRobByTank: fwDraft.fwRobByTank,
     fwProdTankId: fwDraft.fwProdTankId,
     fwConsTankId: fwDraft.fwConsTankId
@@ -13004,9 +13062,9 @@ function buildVoyageNoonSheetHTML(entry){
   ].join(''));
 
   const fwSection = printSection('Fresh Water', [
-    printRow('Produced', row.fwProdD==null?'—':`${fmtRob(row.fwProdD, 'fw')} L`),
-    printRow('Consumed', row.fwConsD==null?'—':`${fmtRob(row.fwConsD, 'fw')} L`),
-    printRow('Total Water R.O.B.', `${fmtRob(totalFwRob(asOf.robLube), 'fw')} L`)
+    printRow('Produced', row.fwProdD==null?'—':`${fmtFw(row.fwProdD)} m³`),
+    printRow('Consumed', row.fwConsD==null?'—':`${fmtFw(row.fwConsD)} m³`),
+    printRow(showFwTotal() ? 'Total Water R.O.B.' : 'Fresh Water R.O.B.', `${fmtFw(totalFwRob(asOf.robLube))} m³`)
   ].join(''));
 
   const deltaCls = sfocDeltaClass(row.sfocDelta);
@@ -13089,8 +13147,7 @@ function buildVoyageNoonSheetHTML(entry){
     <table class="pr-table">
       <tr><th>Item</th><th>Previous</th><th>Consumption</th><th>Present R.O.B.</th></tr>
       ${robBalanceRows(row, prevRobData, asOf).map(r=>{
-        const dec = r.dec;
-        return `<tr${r.strong?' class="rob-total"':''}><td class="row-lbl">${r.strong?`<strong>${r.label}</strong>`:r.label}</td><td>${fmt(r.prevVal,dec)}</td><td>${r.consVal===null||r.consVal===undefined?'—':fmt(r.consVal,r.consDec)}</td><td>${fmt(r.nowVal,dec)}</td></tr>`;
+        return `<tr${r.strong?' class="rob-total"':''}><td class="row-lbl">${r.strong?`<strong>${r.label}</strong>`:r.label}</td><td>${fmtRob(r.prevVal,r.cat)}</td><td>${r.consVal===null||r.consVal===undefined?'—':fmtRob(r.consVal,r.cat)}</td><td>${fmtRob(r.nowVal,r.cat)}</td></tr>`;
       }).join('')}
     </table>`);
 
@@ -13503,7 +13560,7 @@ function readCurrentFormAsEntry(){
   const vsOpen = isVoyageSummaryOpen();
   const fw = readFwForm(vsOpen ? 'vs' : 'in');
   const vsFwProd = fw.fwProd ?? num('vs_fwProdMeter') ?? num('in_fwProd');
-  const vsFwRob = fw.fwRob ?? num('vs_fwRob') ?? num('in_fwRob');
+  const vsFwRob = fw.fwRob ?? parseFwM3Field(document.getElementById('vs_fwRob')?.value) ?? parseFwM3Field(document.getElementById('in_fwRob')?.value);
   return {
     datetime: txt('in_datetime'),
     tzOffsetMin: formTzOffsetMin(),
@@ -14545,19 +14602,21 @@ document.getElementById('rcpt_category').addEventListener('change', (e)=>{
     unit.value = 'L';
   } else {
     sel.innerHTML = fwTankList().map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
-    unit.value = 'L';
+    unit.value = 'm³';
   }
 });
 
 document.getElementById('btnAddReceipt').addEventListener('click', async ()=>{
   const date = document.getElementById('rcpt_date').value;
-  const qty = parseFloat(document.getElementById('rcpt_qty').value);
+  const category = document.getElementById('rcpt_category').value;
+  let qty = parseFloat(document.getElementById('rcpt_qty').value);
   if (!date || isNaN(qty) || qty<=0){ alert('Enter a date and a positive quantity.'); return; }
+  if (category === 'fw') qty = m3ToLitres(qty);
   const dens = parseFloat(document.getElementById('rcpt_density').value);
   const lcv = parseFloat(document.getElementById('rcpt_lcv').value);
   const visc = parseFloat(document.getElementById('rcpt_viscosity').value);
   const receipt = {
-    id: uid(), date, category: document.getElementById('rcpt_category').value,
+    id: uid(), date, category,
     type: document.getElementById('rcpt_type').selectedOptions[0]?.textContent || document.getElementById('rcpt_type').value,
     tankId: document.getElementById('rcpt_type').value,
     qty,
@@ -15836,7 +15895,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v131';
+let androidInstallCacheName = 'noon-report-v132';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -16630,13 +16689,13 @@ function downloadCSV(filename, header, lines){
 document.getElementById('btnExportCSVLog').addEventListener('click', ()=>{
   const {rows} = computeDerived();
   const header = ["DateTime","Operation","Condition","Hours","DistShip","RPM","RevCounter","DailyRevs","MECons","GECons","BlrCons","Total","CylCons","CylGrade","MELo","GELo","FWMeter","FWProduced","FWRob","FWCons"];
-  const lines = rows.map(r=>[r.datetime,r.operation,r.condition,fmtNum(r.hrs,2),fmtNum(r.distanceShip,2),fmtNum(r.rpm,2),fmtNum(r.revCounter,2),fmtNum(r.dailyRevs,2),fmtNum(r.meCons,3),fmtNum(r.geCons,3),fmtNum(r.blrCons,3),fmtNum(r.total,3),fmtNum(r.cylCons,0),r.tbn,fmtNum(r.meLoCons,0),fmtNum(r.geLoCons,0),fmtNum(r.fwProd,0),fmtNum(r.fwProdD,0),fmtNum(r.fwRob,0),fmtNum(r.fwConsD,0)]);
+  const lines = rows.map(r=>[r.datetime,r.operation,r.condition,fmtNum(r.hrs,2),fmtNum(r.distanceShip,2),fmtNum(r.rpm,2),fmtNum(r.revCounter,2),fmtNum(r.dailyRevs,2),fmtNum(r.meCons,3),fmtNum(r.geCons,3),fmtNum(r.blrCons,3),fmtNum(r.total,3),fmtNum(r.cylCons,0),r.tbn,fmtNum(r.meLoCons,0),fmtNum(r.geLoCons,0),fmtNum(r.fwProd,0),fmtNum(litresToM3(r.fwProdD),2),fmtNum(litresToM3(r.fwRob),2),fmtNum(litresToM3(r.fwConsD),2)]);
   downloadCSV('voyage-log.csv', header, lines);
 });
 document.getElementById('btnExportCSVCons').addEventListener('click', ()=>{
   const {rows} = computeDerived();
   const header = ["DateTime","Operation","METype","MECons","GEType","GECons","BlrType","BlrCons","Total","FWCons"];
-  const lines = rows.map(r=>[r.datetime,r.operation,r.me.type,fmtNum(r.meCons,3),r.ge.type,fmtNum(r.geCons,3),r.blr.type,fmtNum(r.blrCons,3),fmtNum(r.total,3),fmtNum(r.fwConsD,0)]);
+  const lines = rows.map(r=>[r.datetime,r.operation,r.me.type,fmtNum(r.meCons,3),r.ge.type,fmtNum(r.geCons,3),r.blr.type,fmtNum(r.blrCons,3),fmtNum(r.total,3),fmtNum(litresToM3(r.fwConsD),2)]);
   downloadCSV('consumption.csv', header, lines);
 });
 document.getElementById('btnRecalculateAllData')?.addEventListener('click', async ()=>{

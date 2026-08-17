@@ -50,9 +50,7 @@ const check = (l, a, e) => { c++; const ok = a === e || (typeof a === 'number' &
   check('and marked as a total, not another tank', totalRow && totalRow.bold, true);
 
   const waterRow = out.rows.find(r => r.cells[0] === 'TOTAL WATER');
-  check('a total water row is present', !!waterRow, true);
-  check('water is marked as a total', waterRow && waterRow.isTotal && waterRow.bold, true);
-  check('water is the last row', out.rows[out.rows.length - 1].cells[0], 'TOTAL WATER');
+  check('one water tank does not grow a total row', !!waterRow, false);
 
   console.log('\nthe figure is the sum of the four lube tanks');
   const num = s => Number(String(s).replace(/,/g, ''));
@@ -62,13 +60,37 @@ const check = (l, a, e) => { c++; const ok = a === e || (typeof a === 'number' &
   check('the listed tanks add to the total', num(totalRow.cells[3]), summed);
   check('and that matches totalLubeRob', num(totalRow.cells[3]), Math.round(out.expectedTotal));
 
-  console.log('\nfresh water has its own total, not folded into lube');
-  check('a fresh water tank row is listed', out.rows.some(r => /FRESH WATER/i.test(r.cells[0]) && !r.isTotal), true);
+  console.log('\nfresh water is listed in m³, not folded into lube');
+  const fwRow = out.rows.find(r => /FRESH WATER/i.test(r.cells[0]) && !r.isTotal);
+  check('a fresh water tank row is listed', !!fwRow, true);
   check('the vessel does hold fresh water', out.fw > 0, true);
-  check('the lube total is well below the water stock', num(totalRow.cells[3]) < out.fw, true);
-  check('the water total matches totalFwRob', num(waterRow.cells[3]), out.expectedFw);
+  check('the lube total is well below the water stock in litres', num(totalRow.cells[3]) < out.fw, true);
+  check('the water row shows cubic metres', num(fwRow && fwRow.cells[3]), Number((out.fw / 1000).toFixed(2)));
 
-  console.log('\nthe printed sheet carries it too');
+  console.log('\ntwo water tanks grow a total');
+  const two = await pg.evaluate(() => {
+    state.setup.fwTanks = [
+      { id: 'freshwater', name: 'FRESH WATER' },
+      { id: 'fw2', name: 'FW SETTLING' }
+    ];
+    state.setup.fwTankCount = 2;
+    state.setup.robLube.fw2 = 20000;
+    const e = state.entries[state.entries.length - 1];
+    openRobSnapshot(e.id);
+    const rows = [...document.querySelectorAll('#robSnapshotBody tr')].map(tr => ({
+      cells: [...tr.querySelectorAll('td')].map(td => td.textContent.trim()),
+      isTotal: tr.classList.contains('rob-total')
+    }));
+    return {
+      labels: rows.map(r => r.cells[0]),
+      waterTotal: rows.find(r => r.cells[0] === 'TOTAL WATER'),
+      expected: totalFwRob(robAsOfEntry(e.id).robLube)
+    };
+  });
+  check('the snapshot then lists TOTAL WATER', !!(two.waterTotal), true);
+  check('that total is the two tanks in m³', num(two.waterTotal && two.waterTotal.cells[3]), Number((two.expected / 1000).toFixed(2)));
+
+  console.log('\nthe printed sheet carries the lube total');
   const printed = await pg.evaluate(() => {
     const e = state.entries[state.entries.length - 1];
     const sorted = sortedEntries();
@@ -80,9 +102,9 @@ const check = (l, a, e) => { c++; const ok = a === e || (typeof a === 'number' &
     const rows = robBalanceRows(row, prevRobData, asOf);
     return rows.map(r => `<tr${r.strong ? ' class="rob-total"' : ''}><td class="row-lbl">${r.strong ? `<strong>${r.label}</strong>` : r.label}</td></tr>`).join('');
   });
-  check('the print rows include the totals', (printed.match(/rob-total/g) || []).length >= 2, true);
+  check('the print rows include the lube total', (printed.match(/rob-total/g) || []).length >= 1, true);
   check('lube bolded on paper', /<strong>TOTAL LUBES<\/strong>/.test(printed), true);
-  check('water bolded on paper', /<strong>TOTAL WATER<\/strong>/.test(printed), true);
+  check('a single water tank is not totalled on paper', /<strong>TOTAL WATER<\/strong>/.test(printed), false);
 
   console.log('\npage errors');
   check('no uncaught page errors', errs.length, 0);
