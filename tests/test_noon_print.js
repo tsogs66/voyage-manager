@@ -44,7 +44,8 @@ function extract(name) {
 const sandbox = { EORB, console };
 vm.createContext(sandbox);
 vm.runInContext(
-  [extract('isNoonReportOp'), extract('noonSheetTitles'), extract('flagRegistryName')].join('\n'),
+  [extract('isNoonReportOp'), extract('noonSheetTitles'), extract('flagRegistryName'),
+   extract('parseSeaTempValue'), extract('entrySeaTemp')].join('\n'),
   sandbox
 );
 
@@ -68,6 +69,17 @@ check('Liberia', sandbox.flagRegistryName('LR'), 'Liberia');
 check('Marshall Islands', sandbox.flagRegistryName('MH'), 'Marshall Islands');
 check('blank is empty', sandbox.flagRegistryName(''), '');
 check('unknown code is returned as-is', sandbox.flagRegistryName('XX'), 'XX');
+
+console.log('\nstern tube label and sea temp on the report');
+check('voyage summary S/T is stern tube', HTML.includes('S/T Temp — Stern Tube (°C)'), true);
+check('supplementary report S/T is stern tube', HTML.includes('id="rep_stTemp"') && HTML.includes('S/T Temp — Stern Tube (°C)'), true);
+check('settling tank label is gone', HTML.includes('Settling Tank'), false);
+check('sea temp field on report ER section', HTML.includes('id="rep_swTemp"'), true);
+check('sea temp field on voyage summary ER section', HTML.includes('id="vs_erSeaTemp"'), true);
+check('print names the stern tube', HTML.includes('S/T Temperature (Stern Tube)'), true);
+check('weather sea temp wins over report copy', sandbox.entrySeaTemp({ weather:{seaTemp:18}, report:{swTemp:20} }), 18);
+check('report swTemp is the fallback', sandbox.entrySeaTemp({ report:{swTemp:21} }), 21);
+check('blank stays blank', sandbox.entrySeaTemp({}), null);
 
 console.log();
 if (failures.length) {
