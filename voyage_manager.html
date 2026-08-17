@@ -1522,8 +1522,10 @@
       <div class="hint" id="voyageSetupRobHint" style="margin-bottom:8px;">Shows the current ROB of this vessel’s active report (same stock as the ROB tab). With an empty log you can edit the voyage Opening ROB baseline; with log entries the values are live current ROB.</div>
       <h3 class="sub">Fuel (metric tons)</h3>
       <div class="unit-group cols5" id="setupFuelRob"></div>
-      <h3 class="sub">Lube Oil &amp; Fresh Water (litres)</h3>
+      <h3 class="sub">Lube Oil (litres)</h3>
       <div class="unit-group cols5" id="setupLubeRob"></div>
+      <h3 class="sub">Fresh Water (litres)</h3>
+      <div class="unit-group cols5" id="setupFwRob"></div>
     </div>
 
     <div class="panel">
@@ -2191,7 +2193,7 @@
             <div class="field"><label>Consumed (calc, L)</label><input type="text" id="vs_fwConsumed" readonly></div>
           </div>
         </div>
-        <h3 class="sub">Fuel &amp; Lube ROB — Previous / Consumption / R.O.B.</h3>
+        <h3 class="sub">Fuel, Lube &amp; Water ROB — Previous / Consumption / R.O.B.</h3>
         <div class="table-scroll">
           <table>
             <thead><tr><th></th><th>Previous</th><th>Consumption</th><th>R.O.B.</th></tr></thead>
@@ -2418,6 +2420,7 @@
     <div class="panel">
       <h2>Fresh Water — Remaining On Board</h2>
       <div class="gauge-grid cols4 large" id="fwGauge"></div>
+      <div class="stat-strip cols3" id="fwTotalStrip" style="margin-top:14px;"></div>
     </div>
   </div>
 
@@ -2542,16 +2545,21 @@
       <h2>Average Consumption Per Day</h2>
       <h3 class="sub">Fuel (MT/day)</h3>
       <div class="stat-strip" id="fuelPerDayStrip"></div>
-      <h3 class="sub">Lube Oil &amp; Fresh Water (L/day)</h3>
-      <div class="stat-strip cols5" id="lubePerDayStrip"></div>
+      <h3 class="sub">Lube Oil (L/day)</h3>
+      <div class="stat-strip cols4" id="lubePerDayStrip"></div>
+      <h3 class="sub">Fresh Water (L/day)</h3>
+      <div class="stat-strip cols3" id="fwPerDayStrip"></div>
     </div>
     <div class="panel">
       <h2>CONSUMPTION VS ROB</h2>
       <h3 class="sub">Fuel</h3>
       <div class="gauge-grid cols4" id="fuelDualGauges"></div>
-      <h3 class="sub">Lube Oil &amp; Fresh Water</h3>
-      <div class="gauge-grid cols5" id="lubeDualGauges"></div>
+      <h3 class="sub">Lube Oil</h3>
+      <div class="gauge-grid cols4" id="lubeDualGauges"></div>
       <div class="stat-strip cols3" id="lubeTotalSummaryStrip" style="margin-top:14px;"></div>
+      <h3 class="sub">Fresh Water</h3>
+      <div class="gauge-grid cols4" id="fwDualGauges"></div>
+      <div class="stat-strip cols3" id="fwTotalSummaryStrip" style="margin-top:14px;"></div>
       <div class="hint">The brass arc shows the current R.O.B. level; the white tick mark shows where R.O.B. started this voyage. The gap between them is what's been consumed.</div>
     </div>
   </div>
@@ -3554,6 +3562,49 @@ function tankGaugeColor(tank, fallback){
 function lubeKindToLabel(kind){ return LUBE_KIND_LABELS[kind] || kind; }
 function totalLubeRob(robLube){
   return lubeTankList().reduce((s,t)=> s + (robLube[t.id] ?? robLube[t.name] ?? 0), 0);
+}
+function totalFwRob(robLube){
+  return fwTankList().reduce((s,t)=> s + (robLube?.[t.id] ?? robLube?.[t.name] ?? 0), 0);
+}
+function sumRobCons(row, cat){
+  const vals = getRobRows().filter(r=>r.cat===cat).map(r=>robRowCons(row, r)).filter(v=>v!=null && !isNaN(v));
+  return vals.length ? vals.reduce((a,b)=>a+b, 0) : null;
+}
+function robBalanceRows(row, prevRobData, asOf){
+  const out = [];
+  const addTank = (r) => {
+    const prevVal = r.cat==='fuel' ? prevRobData.rob?.[r.key] : prevRobData.robLube?.[r.key];
+    const nowVal = r.cat==='fuel' ? asOf.rob?.[r.key] : asOf.robLube?.[r.key];
+    out.push({
+      key: r.key, label: r.label, cat: r.cat, kind: r.kind, grade: r.grade,
+      prevVal, consVal: robRowCons(row, r), nowVal,
+      dec: robDec(r.cat), consDec: robDec(r.cat), total: false, strong: false
+    });
+  };
+  getRobRows().filter(r=>r.cat==='fuel').forEach(addTank);
+  const lube = getRobRows().filter(r=>r.cat==='lube');
+  lube.forEach(addTank);
+  if (lube.length){
+    out.push({
+      key: 'totallubes', label: 'TOTAL LUBES', cat: 'lube', total: true, strong: true,
+      prevVal: totalLubeRob(prevRobData.robLube || {}),
+      consVal: sumRobCons(row, 'lube'),
+      nowVal: totalLubeRob(asOf.robLube || {}),
+      dec: robDec('lube'), consDec: robDec('lube')
+    });
+  }
+  const fw = getRobRows().filter(r=>r.cat==='fw');
+  fw.forEach(addTank);
+  if (fw.length){
+    out.push({
+      key: 'totalwater', label: 'TOTAL WATER', cat: 'fw', total: true, strong: true,
+      prevVal: totalFwRob(prevRobData.robLube || {}),
+      consVal: sumRobCons(row, 'fw'),
+      nowVal: totalFwRob(asOf.robLube || {}),
+      dec: robDec('fw'), consDec: robDec('fw')
+    });
+  }
+  return out;
 }
 function geUnitCount(){
   if (state.setup.generatorCount!=null) return Math.max(1, Math.min(3, state.setup.generatorCount));
@@ -8288,6 +8339,7 @@ function csvEscape(v){
 function renderVoyageSetupRobFields(rob, robLube){
   const fuelBox = document.getElementById('setupFuelRob');
   const lubeBox = document.getElementById('setupLubeRob');
+  const fwBox = document.getElementById('setupFwRob');
   const hint = document.getElementById('voyageSetupRobHint');
   if (!fuelBox || !lubeBox) return;
   const hasLog = state.entries.length > 0;
@@ -8301,10 +8353,13 @@ function renderVoyageSetupRobFields(rob, robLube){
   lubeBox.innerHTML = lubeTankList().map(t=>{
     const val = hasLog ? (robLube[t.id] ?? 0) : tankRobValue(state.setup.robLube, t);
     return `<div class="unit-box"><h3>${t.name}</h3><div class="field"><label>${lubeLabel}</label><input type="number" step="1" data-setup-lube-rob="${t.id}" value="${Number(val).toFixed(0)}"${ro}></div></div>`;
-  }).join('') + fwTankList().map(t=>{
-    const val = hasLog ? (robLube[t.id] ?? 0) : tankRobValue(state.setup.robLube, t);
-    return `<div class="unit-box"><h3>${t.name}</h3><div class="field"><label>${lubeLabel}</label><input type="number" step="0.01" data-setup-lube-rob="${t.id}" value="${Number(val).toFixed(2)}"${ro}></div></div>`;
   }).join('');
+  if (fwBox){
+    fwBox.innerHTML = fwTankList().map(t=>{
+      const val = hasLog ? (robLube[t.id] ?? 0) : tankRobValue(state.setup.robLube, t);
+      return `<div class="unit-box"><h3>${t.name}</h3><div class="field"><label>${lubeLabel}</label><input type="number" step="0.01" data-setup-lube-rob="${t.id}" value="${Number(val).toFixed(2)}"${ro}></div></div>`;
+    }).join('');
+  }
   if (hint){
     const vName = state.setup.vesselName || activeVessel()?.name || 'this vessel';
     hint.textContent = hasLog
@@ -8508,6 +8563,11 @@ function render(){
     const pct = val/cap;
     return `<div class="gauge-box">${gaugeSVG(pct, GAUGE_COLORS['FRESH WATER'])}<div class="gauge-value">${fmtLube(val)}</div><div class="gauge-cap">of ${fmtLube(cap)} L</div><div class="gauge-label">${t.name}</div></div>`;
   }).join('');
+  const fwTotalEl = document.getElementById('fwTotalStrip');
+  if (fwTotalEl){
+    fwTotalEl.innerHTML = `
+    <div class="stat"><div class="num">${fmtRob(totalFwRob(robLube), 'fw')}</div><div class="lbl">Total Fresh Water (L)</div></div>`;
+  }
 
   // receipts
   const rl = document.getElementById('receiptsList');
@@ -8556,8 +8616,12 @@ function render(){
   // Average consumption per day
   document.getElementById('fuelPerDayStrip').innerHTML = FUEL_TYPES.map(t=>`
     <div class="stat"><div class="num">${daysAtSea>0 ? fmtFuel(consByFuel[t]/daysAtSea) : '—'}</div><div class="lbl">${t} /day</div></div>`).join('');
-  document.getElementById('lubePerDayStrip').innerHTML = ["CYL HIGH","CYL LOW","ME SYS OIL","GE SYS OIL","FRESH WATER"].map(t=>`
+  document.getElementById('lubePerDayStrip').innerHTML = ["CYL HIGH","CYL LOW","ME SYS OIL","GE SYS OIL"].map(t=>`
     <div class="stat"><div class="num">${daysAtSea>0 ? fmtLube(consByLube[t]/daysAtSea) : '—'}</div><div class="lbl">${t} /day</div></div>`).join('');
+  const fwPerDay = document.getElementById('fwPerDayStrip');
+  if (fwPerDay){
+    fwPerDay.innerHTML = `<div class="stat"><div class="num">${daysAtSea>0 ? fmtRob(consByLube['FRESH WATER']/daysAtSea, 'fw') : '—'}</div><div class="lbl">Fresh Water /day</div></div>`;
+  }
 
   // Voyage Progress strip: merges former Voyage Summary + ETA stats
   const lastRow = rows.length ? rows[rows.length-1] : null;
@@ -8590,14 +8654,11 @@ function render(){
       <div class="gauge-cap">start ${fmtFuel(startVal)} · used ${fmtFuel(consByFuel[grade]||0)} MT</div>
       <div class="gauge-label">${t.name}</div></div>`;
   }).join('');
-  document.getElementById('lubeDualGauges').innerHTML = [
-    ...lubeTankList().map(t=>({...t, isFw:false})),
-    ...fwTankList().map(t=>({...t, isFw:true}))
-  ].map(t=>{
+  document.getElementById('lubeDualGauges').innerHTML = lubeTankList().map(t=>{
     const cap = tankCapValue(state.setup.capacityLube, t) || 1;
     const startVal = tankRobValue(state.setup.robLube, t) || 0;
     const curVal = robLube[t.id] ?? 0;
-    const kindLabel = t.isFw ? 'FRESH WATER' : lubeKindToLabel(t.kind);
+    const kindLabel = lubeKindToLabel(t.kind);
     return `<div class="gauge-box">${dualGaugeSVG(startVal/cap, curVal/cap, tankGaugeColor(t))}
       <div class="gauge-value">${fmtLube(curVal)}</div>
       <div class="gauge-cap">start ${fmtLube(startVal)} · used ${fmtLube(consByLube[kindLabel]||0)} L</div>
@@ -8605,6 +8666,26 @@ function render(){
   }).join('');
   document.getElementById('lubeTotalSummaryStrip').innerHTML = `
     <div class="stat"><div class="num">${fmtLube(totalLubeRob(robLube))}</div><div class="lbl">Total Lube Oil (L)</div></div>`;
+  const fwDual = document.getElementById('fwDualGauges');
+  if (fwDual){
+    const fwTanks = fwTankList();
+    const fwUsed = consByLube['FRESH WATER']||0;
+    fwDual.innerHTML = fwTanks.map(t=>{
+      const cap = tankCapValue(state.setup.capacityLube, t) || 1;
+      const startVal = tankRobValue(state.setup.robLube, t) || 0;
+      const curVal = robLube[t.id] ?? 0;
+      const usedBit = fwTanks.length===1 ? ` · used ${fmtRob(fwUsed, 'fw')}` : '';
+      return `<div class="gauge-box">${dualGaugeSVG(startVal/cap, curVal/cap, GAUGE_COLORS['FRESH WATER'])}
+        <div class="gauge-value">${fmtRob(curVal, 'fw')}</div>
+        <div class="gauge-cap">start ${fmtRob(startVal, 'fw')}${usedBit} L</div>
+        <div class="gauge-label">${t.name}</div></div>`;
+    }).join('');
+  }
+  const fwTotalSummary = document.getElementById('fwTotalSummaryStrip');
+  if (fwTotalSummary){
+    fwTotalSummary.innerHTML = `
+    <div class="stat"><div class="num">${fmtRob(totalFwRob(robLube), 'fw')}</div><div class="lbl">Total Fresh Water (L)</div></div>`;
+  }
 
   // Average distance during sea passage: from START - PASSAGE to END - PASSAGE (or latest entry if no end yet)
   let seaAvgDistStr = '—';
@@ -9670,6 +9751,28 @@ function depArrRobRows(consByFuel, consByLube){
     const consumed = open + received - present;
     rows.push({ id:t.id, label:t.name, unit:'L', open, received, consumed, present, cat:'fw' });
   });
+  /* Insert totals after each group: lube total after the last lube, water after the last fw. */
+  const lastLube = rows.map((r,i)=>r.cat==='lube'?i:-1).filter(i=>i>=0).pop();
+  if (lastLube!=null){
+    const lube = rows.filter(r=>r.cat==='lube');
+    rows.splice(lastLube+1, 0, {
+      id:'lubeTotal', label:'TOTAL LUBES', unit:'L', cat:'lube', total:true,
+      open: lube.reduce((s,r)=>s+r.open,0),
+      received: lube.reduce((s,r)=>s+r.received,0),
+      consumed: lube.reduce((s,r)=>s+r.consumed,0),
+      present: lube.reduce((s,r)=>s+r.present,0)
+    });
+  }
+  const fwPart = rows.filter(r=>r.cat==='fw' && !r.total);
+  if (fwPart.length){
+    rows.push({
+      id:'fwTotal', label:'TOTAL WATER', unit:'L', cat:'fw', total:true,
+      open: fwPart.reduce((s,r)=>s+r.open,0),
+      received: fwPart.reduce((s,r)=>s+r.received,0),
+      consumed: fwPart.reduce((s,r)=>s+r.consumed,0),
+      present: fwPart.reduce((s,r)=>s+r.present,0)
+    });
+  }
   return rows;
 }
 
@@ -9681,15 +9784,15 @@ function renderDepArrRobTable(consByFuel, consByLube){
     el.innerHTML = '<div class="hint">No tanks configured.</div>';
     return;
   }
-  const fmtU = (v, unit) => unit==='MT' ? fmtFuel(v) : fmtLube(v);
+  const fmtU = (v, r) => r.unit==='MT' ? fmtFuel(v) : (r.cat==='fw' ? fmtRob(v, 'fw') : fmtLube(v));
   el.innerHTML = `<table>
     <thead><tr><th>Tank</th><th>Opening</th><th>Received</th><th>Consumed</th><th>Present</th><th>Unit</th></tr></thead>
-    <tbody>${rows.map(r=>`<tr>
-      <td>${r.label}</td>
-      <td>${fmtU(r.open,r.unit)}</td>
-      <td>${fmtU(r.received,r.unit)}</td>
-      <td>${fmtU(r.consumed,r.unit)}</td>
-      <td>${fmtU(r.present,r.unit)}</td>
+    <tbody>${rows.map(r=>`<tr${r.total?' class="rob-total"':''}>
+      <td>${r.total?`<strong>${r.label}</strong>`:r.label}</td>
+      <td>${fmtU(r.open,r)}</td>
+      <td>${fmtU(r.received,r)}</td>
+      <td>${fmtU(r.consumed,r)}</td>
+      <td>${fmtU(r.present,r)}</td>
       <td>${r.unit}</td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -9698,16 +9801,16 @@ function renderDepArrRobTable(consByFuel, consByLube){
 function printDepArrRobSheet(){
   const {consByFuel, consByLube} = computeDerived();
   const rows = depArrRobRows(consByFuel, consByLube);
-  const fmtU = (v, unit) => unit==='MT' ? fmtFuel(v) : fmtLube(v);
+  const fmtU = (v, r) => r.unit==='MT' ? fmtFuel(v) : (r.cat==='fw' ? fmtRob(v, 'fw') : fmtLube(v));
   const table = printSection('Departure / Arrival ROB', `
     <table class="pr-table">
       <tr><th>Tank</th><th>Opening</th><th>Received</th><th>Consumed</th><th>Present</th><th>Unit</th></tr>
-      ${rows.map(r=>`<tr>
-        <td class="row-lbl">${escPrint(r.label)}</td>
-        <td>${fmtU(r.open,r.unit)}</td>
-        <td>${fmtU(r.received,r.unit)}</td>
-        <td>${fmtU(r.consumed,r.unit)}</td>
-        <td>${fmtU(r.present,r.unit)}</td>
+      ${rows.map(r=>`<tr${r.total?' class="rob-total"':''}>
+        <td class="row-lbl">${r.total?`<strong>${escPrint(r.label)}</strong>`:escPrint(r.label)}</td>
+        <td>${fmtU(r.open,r)}</td>
+        <td>${fmtU(r.received,r)}</td>
+        <td>${fmtU(r.consumed,r)}</td>
+        <td>${fmtU(r.present,r)}</td>
         <td>${r.unit}</td>
       </tr>`).join('')}
     </table>`);
@@ -11801,34 +11904,7 @@ function openRobSnapshot(entryId){
   document.getElementById('robSnapshotTime').value = dt.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
   document.getElementById('robSnapshotOperation').value = entry.operation;
 
-  const rowsForPrint = getRobRows().filter(r=>r.cat!=='fw').map(r=>{
-    const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
-    const consVal = robRowCons(row, r);
-    const nowVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
-    const dec = robDec(r.cat);
-    return { label:r.label, prevVal, consVal, nowVal, dec, consDec: dec };
-  });
-
-  /* Total lubes: cylinder oil high and low, plus ME and GE system oil. Fresh water
-     is not a lube and is deliberately outside it — totalLubeRob sums lubeTankList,
-     which is those four, and the fw rows are already filtered out above. Summing
-     consumption skips the tanks that recorded none rather than reading them as
-     zero, so a total only appears when something was actually drawn. */
-  const lubeRowsForTotal = getRobRows().filter(r=>r.cat==='lube');
-  if (lubeRowsForTotal.length){
-    const lubeCons = lubeRowsForTotal
-      .map(r=>robRowCons(row, r))
-      .filter(v=>v!=null && !isNaN(v));
-    rowsForPrint.push({
-      label: 'TOTAL LUBES',
-      prevVal: totalLubeRob(prevRobData.robLube),
-      consVal: lubeCons.length ? lubeCons.reduce((a,b)=>a+b, 0) : null,
-      nowVal: totalLubeRob(asOf.robLube),
-      dec: robDec('lube'),
-      consDec: robDec('lube'),
-      strong: true
-    });
-  }
+  const rowsForPrint = robBalanceRows(row, prevRobData, asOf);
 
   document.getElementById('robSnapshotBody').innerHTML = rowsForPrint.map(r=>`<tr${r.strong?' class="rob-total"':''}>
       <td>${r.strong?`<strong>${r.label}</strong>`:r.label}</td>
@@ -11853,7 +11929,7 @@ function printRobSnapshot(entry, dt, rowsForPrint){
   const tableRows = rowsForPrint.map(r=>`
     <tr${r.strong?' class="rob-total"':''}><td class="row-lbl">${r.strong?`<strong>${r.label}</strong>`:r.label}</td><td>${fmt(r.prevVal,r.dec)}</td><td>${r.consVal===null||r.consVal===undefined?'—':fmt(r.consVal,r.consDec)}</td><td>${fmt(r.nowVal,r.dec)}</td></tr>`).join('');
   const sheetHtml = `<div class="pr-sheet">
-    ${printDocHeader({ title: 'Remaining On Board', subtitle: 'Fuel & Lube Inventory Snapshot', badge: entry.operation })}
+    ${printDocHeader({ title: 'Remaining On Board', subtitle: 'Fuel, Lube & Fresh Water Inventory Snapshot', badge: entry.operation })}
     ${printMetaGrid([
       {label:'Date', value:dateStr},
       {label:'Time', value:timeStr},
@@ -12206,16 +12282,21 @@ function openVoyageSummary(entryId){
   document.getElementById('vs_misc_lsmgo').value = misc['LSMGO'] ?? 0;
 
   const robBody = document.getElementById('vsRobBody');
-  robBody.innerHTML = getRobRows().map(r=>{
-    const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
-    const consVal = robRowCons(row, r);
-    const robVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
+  robBody.innerHTML = robBalanceRows(row, prevRobData, asOf).map(r=>{
+    if (r.total){
+      return `<tr class="rob-total">
+      <td><strong>${r.label}</strong></td>
+      <td>${fmtRob(r.prevVal, r.cat)}</td>
+      <td>${r.consVal==null?'—':fmtRob(r.consVal, r.cat)}</td>
+      <td id="vs_rob_${slugKey(r.key)}">${fmtRob(r.nowVal, r.cat)}</td>
+    </tr>`;
+    }
     const lubeEditable = r.cat==='lube';
     return `<tr>
       <td>${r.label}</td>
-      <td>${fmtRob(prevVal, r.cat)}</td>
-      <td><input class="pf-input" style="width:80px;" type="number" step="${robConsStep(r.cat)}" id="vs_cons_${slugKey(r.key)}" value="${fmtRobInput(consVal, r.cat)}" data-prev="${prevVal||0}" data-cat="${r.cat}" data-key="${r.key}"${lubeEditable?'':' readonly'}></td>
-      <td id="vs_rob_${slugKey(r.key)}">${fmtRob(robVal, r.cat)}</td>
+      <td>${fmtRob(r.prevVal, r.cat)}</td>
+      <td><input class="pf-input" style="width:80px;" type="number" step="${robConsStep(r.cat)}" id="vs_cons_${slugKey(r.key)}" value="${fmtRobInput(r.consVal, r.cat)}" data-prev="${r.prevVal||0}" data-cat="${r.cat}" data-key="${r.key}"${lubeEditable?'':' readonly'}></td>
+      <td id="vs_rob_${slugKey(r.key)}">${fmtRob(r.nowVal, r.cat)}</td>
     </tr>`;
   }).join('');
 
@@ -12226,6 +12307,7 @@ function openVoyageSummary(entryId){
       const consVal = parseFloat(inp.value)||0;
       const robEl = document.getElementById(`vs_rob_${slugKey(inp.dataset.key)}`);
       if (robEl) robEl.textContent = fmtRob(prevVal - consVal, inp.dataset.cat || 'lube');
+      refreshVsRobTotalRows();
     });
   });
 
@@ -12327,6 +12409,44 @@ function updateVsRobLiveFromCons(){
       robEl.textContent = fmtRob(prevVal - consVal, r.cat);
     }
   });
+  refreshVsRobTotalRows();
+}
+
+function refreshVsRobTotalRows(){
+  const setTotal = (id, cat, nowVal, consVal) => {
+    const robEl = document.getElementById('vs_rob_' + id);
+    if (robEl) robEl.textContent = fmtRob(nowVal, cat);
+    const row = robEl?.closest('tr');
+    if (!row) return;
+    const consCell = row.children[2];
+    if (consCell) consCell.textContent = consVal==null ? '—' : fmtRob(consVal, cat);
+  };
+  let lubePrev = 0, lubeCons = 0, lubeAny = false;
+  getRobRows().filter(r=>r.cat==='lube').forEach(r=>{
+    const consEl = document.getElementById('vs_cons_' + slugKey(r.key));
+    if (!consEl) return;
+    lubePrev += parseFloat(consEl.dataset.prev)||0;
+    if (consEl.value!==''){
+      lubeCons += parseFloat(consEl.value)||0;
+      lubeAny = true;
+    }
+  });
+  setTotal('totallubes', 'lube', lubePrev - (lubeAny ? lubeCons : 0), lubeAny ? lubeCons : null);
+  let fwNow = 0, fwCons = 0, fwAny = false, fwRobAny = false;
+  getRobRows().filter(r=>r.cat==='fw').forEach(r=>{
+    const consEl = document.getElementById('vs_cons_' + slugKey(r.key));
+    const robEl = document.getElementById('vs_rob_' + slugKey(r.key));
+    if (consEl && consEl.value!==''){
+      fwCons += parseFloat(consEl.value)||0;
+      fwAny = true;
+    }
+    const n = parseFloat(robEl?.textContent);
+    if (robEl && robEl.textContent!=='—' && !isNaN(n)){
+      fwNow += n;
+      fwRobAny = true;
+    }
+  });
+  setTotal('totalwater', 'fw', fwRobAny ? fwNow : null, fwAny ? fwCons : null);
 }
 
 function readVsGeGeneratorsDraft(){
@@ -12886,7 +13006,7 @@ function buildVoyageNoonSheetHTML(entry){
   const fwSection = printSection('Fresh Water', [
     printRow('Produced', row.fwProdD==null?'—':`${fmtRob(row.fwProdD, 'fw')} L`),
     printRow('Consumed', row.fwConsD==null?'—':`${fmtRob(row.fwConsD, 'fw')} L`),
-    printRow('R.O.B.', entry.fwRob==null?'—':`${fmtRob(entry.fwRob, 'fw')} L`)
+    printRow('Total Water R.O.B.', `${fmtRob(totalFwRob(asOf.robLube), 'fw')} L`)
   ].join(''));
 
   const deltaCls = sfocDeltaClass(row.sfocDelta);
@@ -12968,12 +13088,9 @@ function buildVoyageNoonSheetHTML(entry){
   const robTable = printSection('Remaining On Board', `
     <table class="pr-table">
       <tr><th>Item</th><th>Previous</th><th>Consumption</th><th>Present R.O.B.</th></tr>
-      ${getRobRows().map(r=>{
-        const prevVal = r.cat==='fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key];
-        const consVal = robRowCons(row, r);
-        const nowVal = r.cat==='fuel' ? asOf.rob[r.key] : asOf.robLube[r.key];
-        const dec = robDec(r.cat);
-        return `<tr><td class="row-lbl">${r.label}</td><td>${fmt(prevVal,dec)}</td><td>${consVal===null||consVal===undefined?'—':fmt(consVal,dec)}</td><td>${fmt(nowVal,dec)}</td></tr>`;
+      ${robBalanceRows(row, prevRobData, asOf).map(r=>{
+        const dec = r.dec;
+        return `<tr${r.strong?' class="rob-total"':''}><td class="row-lbl">${r.strong?`<strong>${r.label}</strong>`:r.label}</td><td>${fmt(r.prevVal,dec)}</td><td>${r.consVal===null||r.consVal===undefined?'—':fmt(r.consVal,r.consDec)}</td><td>${fmt(r.nowVal,dec)}</td></tr>`;
       }).join('')}
     </table>`);
 
@@ -15719,7 +15836,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v130';
+let androidInstallCacheName = 'noon-report-v131';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',

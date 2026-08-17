@@ -38,6 +38,7 @@ const check = (l, a, e) => { c++; const ok = a === e || (typeof a === 'number' &
       rows,
       lubeLabels,
       expectedTotal: totalLubeRob(asOf.robLube),
+      expectedFw: totalFwRob(asOf.robLube),
       fw: asOf.robLube[fwTankList()[0].id]
     };
   });
@@ -47,7 +48,11 @@ const check = (l, a, e) => { c++; const ok = a === e || (typeof a === 'number' &
   check('a total row is present', !!totalRow, true);
   check('it is labelled TOTAL LUBES', totalRow && totalRow.cells[0], 'TOTAL LUBES');
   check('and marked as a total, not another tank', totalRow && totalRow.bold, true);
-  check('it is the last row', out.rows[out.rows.length - 1].isTotal, true);
+
+  const waterRow = out.rows.find(r => r.cells[0] === 'TOTAL WATER');
+  check('a total water row is present', !!waterRow, true);
+  check('water is marked as a total', waterRow && waterRow.isTotal && waterRow.bold, true);
+  check('water is the last row', out.rows[out.rows.length - 1].cells[0], 'TOTAL WATER');
 
   console.log('\nthe figure is the sum of the four lube tanks');
   const num = s => Number(String(s).replace(/,/g, ''));
@@ -57,10 +62,11 @@ const check = (l, a, e) => { c++; const ok = a === e || (typeof a === 'number' &
   check('the listed tanks add to the total', num(totalRow.cells[3]), summed);
   check('and that matches totalLubeRob', num(totalRow.cells[3]), Math.round(out.expectedTotal));
 
-  console.log('\nfresh water is not in it');
-  check('no fresh water row on the snapshot', out.rows.some(r => /FRESH WATER/i.test(r.cells[0])), false);
+  console.log('\nfresh water has its own total, not folded into lube');
+  check('a fresh water tank row is listed', out.rows.some(r => /FRESH WATER/i.test(r.cells[0]) && !r.isTotal), true);
   check('the vessel does hold fresh water', out.fw > 0, true);
-  check('and the total is well below it', num(totalRow.cells[3]) < out.fw, true);
+  check('the lube total is well below the water stock', num(totalRow.cells[3]) < out.fw, true);
+  check('the water total matches totalFwRob', num(waterRow.cells[3]), out.expectedFw);
 
   console.log('\nthe printed sheet carries it too');
   const printed = await pg.evaluate(() => {
@@ -71,22 +77,12 @@ const check = (l, a, e) => { c++; const ok = a === e || (typeof a === 'number' &
     const prevRobData = prior ? robAsOfEntry(prior.id) : { rob: state.setup.rob, robLube: state.setup.robLube };
     const asOf = robAsOfEntry(e.id);
     const row = getComputedRow(e.id);
-    const rows = getRobRows().filter(r => r.cat !== 'fw').map(r => {
-      const dec = robDec(r.cat);
-      return { label: r.label, prevVal: r.cat === 'fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key],
-               consVal: robRowCons(row, r), nowVal: r.cat === 'fuel' ? asOf.rob[r.key] : asOf.robLube[r.key],
-               dec, consDec: dec };
-    });
-    const lubeRows = getRobRows().filter(r => r.cat === 'lube');
-    const lubeCons = lubeRows.map(r => robRowCons(row, r)).filter(v => v != null && !isNaN(v));
-    rows.push({ label: 'TOTAL LUBES', prevVal: totalLubeRob(prevRobData.robLube),
-                consVal: lubeCons.length ? lubeCons.reduce((a, b) => a + b, 0) : null,
-                nowVal: totalLubeRob(asOf.robLube), dec: robDec('lube'), consDec: robDec('lube'), strong: true });
-    // Render exactly what printRobSnapshot renders for the rows.
+    const rows = robBalanceRows(row, prevRobData, asOf);
     return rows.map(r => `<tr${r.strong ? ' class="rob-total"' : ''}><td class="row-lbl">${r.strong ? `<strong>${r.label}</strong>` : r.label}</td></tr>`).join('');
   });
-  check('the print rows include the total', /rob-total/.test(printed), true);
-  check('bolded on paper', /<strong>TOTAL LUBES<\/strong>/.test(printed), true);
+  check('the print rows include the totals', (printed.match(/rob-total/g) || []).length >= 2, true);
+  check('lube bolded on paper', /<strong>TOTAL LUBES<\/strong>/.test(printed), true);
+  check('water bolded on paper', /<strong>TOTAL WATER<\/strong>/.test(printed), true);
 
   console.log('\npage errors');
   check('no uncaught page errors', errs.length, 0);
