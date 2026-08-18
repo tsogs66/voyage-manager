@@ -133,10 +133,10 @@ console.log('\nsignature block sizing and the stamp struck over the line');
   check('the space above the line grew with it', HTML.includes('height:16.8mm; width:42mm; margin-left:auto;'), true);
   check('the signature line itself is untouched at 42mm', HTML.includes('.pr-sign-line{ width:42mm;'), true);
 
-  /* Centred a quarter along the line, and out of flow, so it overlaps whatever is
-     under it instead of displacing it. */
+  /* Out of flow, so it overlaps what is under it instead of displacing it, with its
+     right edge on the line's quarter mark. */
   check('stamp is taken out of flow at the quarter mark', HTML.includes('position:absolute; left:25%; top:16.8mm;'), true);
-  check('stamp is centred on that point', HTML.includes('transform:translate(-50%, -50%);'), true);
+  check('its right edge lands on that point, not its centre', HTML.includes('transform:translate(-100%, -50%);'), true);
   check('stamp sits inside the block it is measured against', HTML.includes('.pr-sign-block{ flex:0 0 42mm; text-align:right; position:relative; }'), true);
   check('stamp markup moved inside the signature block',
     /pr-sign-block">\s*\$\{stamp\}/.test(HTML), true);

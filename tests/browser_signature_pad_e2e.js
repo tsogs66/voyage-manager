@@ -7,9 +7,9 @@
  *
  * Signs the pad with pointer events the way a stylus or fingertip would, saves it
  * against the Chief Engineer, and checks the ink comes back as a transparent PNG
- * that prints on the sheet. Then measures the printed block: the stamp struck a
- * quarter along the signature line, and the two image sizes. Not in CI, which has
- * no browser.
+ * that prints on the sheet. Then measures the printed block: the stamp struck so it
+ * touches only the left quarter of the signature line, and the two image sizes. Not
+ * in CI, which has no browser.
  */
 const { chromium } = require('playwright-core');
 const BASE = process.env.APP_BASE || 'http://127.0.0.1:8867';
@@ -124,24 +124,26 @@ const check = (l, a, e, tol = 0.75) => {
     const name = document.querySelector('.pr-sign-name').getBoundingClientRect();
     const mm = px => px / (line.width / 42);
     return {
-      stampCentreFromLineLeft: stamp.x + stamp.width / 2 - line.x,
+      stampRightFromLineLeft: stamp.right - line.x,
       aQuarterOfLine: line.width / 4,
-      lineClearToTheRight: line.right - stamp.right,
+      lineWidth: line.width,
+      hangsOffToTheLeft: line.x - stamp.x,
       stampCentreOffLine: stamp.y + stamp.height / 2 - line.y,
       stampMm: mm(stamp.height),
       sigHMm: mm(sig.height),
-      overlapsTheName: stamp.x < name.right && stamp.right > name.x && stamp.y < name.bottom && stamp.bottom > name.y
+      overlapsTheLine: stamp.x < line.right && stamp.right > line.x,
+      clearOfTheName: stamp.right < name.right
     };
   });
-  check('the stamp is centred a quarter along the line', g.stampCentreFromLineLeft, g.aQuarterOfLine);
-  /* A square stamp is about the line's own width, so centring it a quarter along
-     leaves roughly the line's right quarter clear — short by the 0.64mm the stamp
-     now overhangs the line, hence the looser tolerance. */
-  check('leaving roughly the line\'s right quarter clear', g.lineClearToTheRight, g.aQuarterOfLine, 3);
-  check('and sits level with the line itself', g.stampCentreOffLine, 0);
+  check('the stamp\'s right edge lands on the line\'s quarter mark', g.stampRightFromLineLeft, g.aQuarterOfLine);
+  check('so it touches only the left quarter of the line', g.overlapsTheLine, true);
+  /* The rest of a stamp wider than the line hangs off to the left rather than
+     covering the name, which is right-aligned at the far end of the block. */
+  check('the rest of it hangs off to the left', g.hangsOffToTheLeft > g.lineWidth / 2, true);
+  check('leaving the printed name clear', g.clearOfTheName, true);
+  check('and it sits level with the line itself', g.stampCentreOffLine, 0);
   check('the stamp prints 42.64mm tall', g.stampMm, 42.64);
   check('the signature prints 16.8mm tall', g.sigHMm, 16.8);
-  check('it overlaps what is under it, the way a stamp does', g.overlapsTheName, true);
 
   console.log('\npage errors');
   check('none', errs.length, 0);
