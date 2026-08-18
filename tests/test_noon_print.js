@@ -125,6 +125,31 @@ console.log('\nrun hours at the top of the sheet cover this report only');
   check('no reference and no row is blank', sandbox.reportPeriodRunHours(entries[2], null), null);
 }
 
+console.log('\nsignature block sizing and the stamp over the left third of the line');
+{
+  /* Stamp 5% down from 44mm, signature 20% up from 14mm / 42mm. */
+  check('stamp height is 41.8mm', HTML.includes('height:41.8mm; width:auto; max-width:76mm;'), true);
+  check('signature grew to 16.8mm tall', HTML.includes('max-height:16.8mm; max-width:50.4mm;'), true);
+  check('the space above the line grew with it', HTML.includes('height:16.8mm; width:42mm; margin-left:auto;'), true);
+  check('the signature line itself is untouched at 42mm', HTML.includes('.pr-sign-line{ width:42mm;'), true);
+
+  /* Struck over the left third of the line — centre at a sixth of its width — and
+     out of flow, so it overlaps whatever is under it instead of displacing it. */
+  check('stamp is taken out of flow', HTML.includes('position:absolute; left:16.667%; top:16.8mm;'), true);
+  check('stamp is centred on that point', HTML.includes('transform:translate(-50%, -50%);'), true);
+  check('stamp sits inside the block it is measured against', HTML.includes('.pr-sign-block{ flex:0 0 42mm; text-align:right; position:relative; }'), true);
+  check('stamp markup moved inside the signature block',
+    /pr-sign-block">\s*\$\{stamp\}/.test(HTML), true);
+}
+
+console.log('\na signature can be drawn as well as uploaded');
+check('the pad is on the page', HTML.includes('id="chEngSignaturePad"'), true);
+check('the upload input is still there', HTML.includes('id="chEngSignatureFile"'), true);
+check('a fingertip draws instead of scrolling', HTML.includes('touch-action:none'), true);
+check('pointer events cover stylus, touch and mouse', HTML.includes("canvas.addEventListener('pointerdown', begin)"), true);
+check('pen pressure widens the stroke', HTML.includes("ev.pointerType === 'pen' && ev.pressure > 0"), true);
+check('the pad exports a transparent PNG', HTML.includes("out.toDataURL('image/png')"), true);
+
 console.log('\nthe sheet prints the stamp the period is measured from');
 check('last report cell replaces the duplicated voyage no.', HTML.includes("{label:'Last Report', value:prevReportStr}"), true);
 check('top hours are labelled as this report only', HTML.includes("{label:'Run Hrs (This Report)', value:fmt(periodHrs, 2)}"), true);
