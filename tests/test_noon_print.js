@@ -224,6 +224,39 @@ console.log('\nthe extra distillate is wired through');
     HTML.includes("incOf('MDO/MGO'), (r.miscCons||{})['MDO/MGO']"), true);
 }
 
+console.log('\ncurrent ROB is read from the record, surveys included');
+{
+  /* A bunker survey re-bases the chain. Reading current ROB as opening baseline plus
+     receipts less consumption cannot see one, so a corrected ROB used to be right on
+     the ROB tab and wrong on the voyage page and in every new leg opened from it. */
+  check('current ROB is the ROB as of the last entry',
+    HTML.includes('const asOf = robAsOfComputedRow(last, rows);'), true);
+  check('the book-figure arithmetic is only the empty-log case',
+    HTML.includes('No log entries yet, so there is nothing to re-base against'), true);
+}
+
+console.log('\nthe preview containers are white so ink shows on them');
+{
+  check('stamp / signature preview is paper white',
+    HTML.includes('border:1px solid #c8d2e0; border-radius:4px; background:#fdfefe; padding:8px;'), true);
+  /* The checkerboard proved transparency but hid dark ink on the dark theme. */
+  check('the checkerboard is gone', HTML.includes('linear-gradient(45deg, rgba(128,128,128,0.22) 25%'), false);
+  check('the empty-state text is legible on white', HTML.includes('.stamp-preview .stamp-empty{font-size:11px; color:#5a6578;'), true);
+  /* Display only: what is stored, and printed, is still the transparent cut-out. */
+  check('the cut-out still runs on upload', HTML.includes('url = await removeWhiteBackgroundDataUrl(url);'), true);
+}
+
+console.log('\na crowded sheet is fitted onto the paper rather than clipped');
+{
+  check('the noon sheet may densify like the others', HTML.includes('if (!isBunker && scale < 0.92){'), true);
+  check('and its tables may go extra small', HTML.includes('if (!isBunker && scale < 0.82){'), true);
+  /* Floors that raise the scale above what fits are what pushed the signature block
+     off the bottom of the page. */
+  check('no floor forces the noon sheet back up', HTML.includes('if (isStdPortrait) scale = Math.max(0.85, scale);'), false);
+  check('nor the other portrait sheets', HTML.includes('else if (!isBunker) scale = Math.max(0.82, scale);'), false);
+  check('the measure floor leaves room for a full sheet', HTML.includes('return Math.max(0.6, Math.min(1,'), true);
+}
+
 console.log('\nthe sheet prints the stamp the period is measured from');
 check('last report cell replaces the duplicated voyage no.', HTML.includes("{label:'Last Report', value:prevReportStr}"), true);
 check('top hours are labelled as this report only', HTML.includes("{label:'Run Hrs (This Report)', value:fmt(periodHrs, 2)}"), true);

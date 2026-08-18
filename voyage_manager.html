@@ -155,25 +155,24 @@
   }
   /* Vessel stamp / Chief Engineer signature upload panels */
   .stamp-row{display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; margin-top:6px;}
+  /* Paper white, whatever the app theme, and the same for the signature preview: a
+     stamp or a signature is dark ink meant for a white sheet, so it has to be shown
+     against one. A checkerboard here made transparency legible but the ink almost
+     invisible on the dark theme — the engineer could not tell whether an upload had
+     even worked. What is stored is still the transparent cut-out, so the printout is
+     unchanged; this is display only. */
   .stamp-preview{
     flex:0 0 auto; width:190px; min-height:90px; display:flex; align-items:center; justify-content:center;
-    border:1px dashed var(--line-strong); border-radius:4px; background:var(--calc-bg); padding:8px;
+    border:1px solid #c8d2e0; border-radius:4px; background:#fdfefe; padding:8px;
   }
-  /* Checkerboard so a transparent cut-out is visibly transparent rather than
-     looking like it still has a white background. */
   .stamp-preview img{
     max-width:100%; max-height:120px; object-fit:contain; display:block;
-    background-image:
-      linear-gradient(45deg, rgba(128,128,128,0.22) 25%, transparent 25%),
-      linear-gradient(-45deg, rgba(128,128,128,0.22) 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, rgba(128,128,128,0.22) 75%),
-      linear-gradient(-45deg, transparent 75%, rgba(128,128,128,0.22) 75%);
-    background-size:12px 12px;
-    background-position:0 0, 0 6px, 6px -6px, -6px 0;
   }
   .stamp-check{display:flex; align-items:center; gap:7px; font-size:11px; color:var(--paper-dim); cursor:pointer;}
   .stamp-check input{accent-color:var(--teal); width:14px; height:14px; cursor:pointer;}
-  .stamp-preview .stamp-empty{font-size:11px; color:var(--paper-dim); text-align:center; line-height:1.4;}
+  /* Its own muted colour: the panel's dim text is tuned for the dark theme and
+     would be unreadable on the white preview. */
+  .stamp-preview .stamp-empty{font-size:11px; color:#5a6578; text-align:center; line-height:1.4;}
   .stamp-controls{flex:1 1 240px; min-width:0; display:flex; flex-direction:column; gap:8px;}
   /* Draw-to-sign pad. touch-action:none so a fingertip draws on it instead of
      scrolling the page underneath, which is what a touch device does by default. */
@@ -7306,7 +7305,26 @@ function deductLubeConsumption(robMap, kind, consumed){
   });
 }
 
+/**
+ * ROB as it stands right now: what the voyage page shows, what the bunker plan and
+ * the Dep/Arr sheet quote, and the figure a new voyage leg opens from.
+ *
+ * This is the ROB as of the last log entry, not the opening baseline plus receipts
+ * less total consumption. The difference is a bunker survey: a survey re-bases the
+ * chain on the measured figure, and the book-figure arithmetic cannot see it. Read
+ * that way, a corrected ROB showed correctly on the ROB tab and the printout while
+ * the voyage page — and every new leg opened from it — silently carried the
+ * pre-correction figure, so the tanks and the book never reconverged.
+ */
 function currentROB(consByFuel, consByLube){
+  const {rows} = computeDerived();
+  const last = rows.length ? rows[rows.length - 1] : null;
+  if (last){
+    const asOf = robAsOfComputedRow(last, rows);
+    if (asOf) return asOf;
+  }
+  /* No log entries yet, so there is nothing to re-base against: the opening
+     baseline plus anything already received is the current ROB. */
   const rob = {};
   fuelTankList().forEach(t=>{
     const received = state.receipts.filter(r=>receiptMatchesTank(r, t, 'fuel')).reduce((s,r)=>s+r.qty,0);
@@ -10940,17 +10958,25 @@ function fitPrintPortraitRoot(doc){
     const availW = Math.max(1, page.clientWidth - 2);
     const contentH = Math.max(1, inner.scrollHeight);
     const contentW = Math.max(1, inner.scrollWidth);
-    return Math.max(0.75, Math.min(1, Math.min(availH / contentH, availW / contentW) * 0.98));
+    /* Floor low enough that a full sheet can always be made to fit. Densifying below
+       runs first, so this depth is only reached by a genuinely crowded report. */
+    return Math.max(0.6, Math.min(1, Math.min(availH / contentH, availW / contentW) * 0.98));
   };
 
   const isStdPortrait = !!inner.querySelector('.pr-sheet-noon, .pr-sheet-report');
   let scale = measure();
-  /* Keep bunker / standard portrait body readable — densify only other sheets */
-  if (!isBunker && !isStdPortrait && scale < 0.92){
+  /* Densify before shrinking: tighter padding and table text costs less legibility
+     than scaling the whole sheet down. The noon and report sheets used to be exempt
+     from both this and from scaling below 0.85, which left a busy sea day — weather,
+     M/E cylinder detail, ECA, soundings and three generators at once — with nothing
+     to give, and the signature block, the stamp and the printed-on line were clipped
+     off the bottom of the paper. A sheet that has to be read at 8pt beats a sheet
+     that comes out unsigned. */
+  if (!isBunker && scale < 0.92){
     inner.querySelector('.pr-sheet')?.classList.add('pr-dense');
     scale = measure();
   }
-  if (!isBunker && !isStdPortrait && scale < 0.82){
+  if (!isBunker && scale < 0.82){
     doc.querySelectorAll('table.pr-table').forEach(t=>{
       if (t.classList.contains('pr-bunker-entry-table')) return;
       t.classList.remove('pr-table-wide');
@@ -10958,8 +10984,6 @@ function fitPrintPortraitRoot(doc){
     });
     scale = measure();
   }
-  if (isStdPortrait) scale = Math.max(0.85, scale);
-  else if (!isBunker) scale = Math.max(0.82, scale);
 
   inner.style.zoom = String(scale);
   doc.documentElement.style.height = '297mm';
@@ -16274,7 +16298,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v137';
+let androidInstallCacheName = 'noon-report-v138';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
