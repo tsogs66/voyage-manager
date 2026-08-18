@@ -42,13 +42,19 @@ function extract(name) {
   return HTML.slice(start, i + 1);
 }
 
-const sandbox = { EORB, console, ShipTime, window: { ShipTime } };
+const sandbox = {
+  EORB, console, ShipTime, window: { ShipTime },
+  /* Constants the extracted helpers close over. */
+  EXTRA_DO_GRADES: ['MDO/MGO', 'LSMGO'],
+  FUEL_DECIMALS: 3
+};
 vm.createContext(sandbox);
 vm.runInContext(
   [extract('isNoonReportOp'), extract('noonSheetTitles'), extract('flagRegistryName'),
    extract('parseSeaTempValue'), extract('entrySeaTemp'),
    extract('sanitizeClockChangeMin'), extract('elapsedShipHours'),
-   extract('previousReportReference'), extract('reportPeriodRunHours')].join('\n'),
+   extract('previousReportReference'), extract('reportPeriodRunHours'),
+   extract('extraDoMap'), extract('hasExtraDo'), extract('sumFuelGroup')].join('\n'),
   sandbox
 );
 
@@ -157,7 +163,7 @@ console.log('\nfuel consumption is totalled per grade, not across grades');
   check('the section is a table, not a stack of rows',
     HTML.includes("const fuelSection = printSection('Fuel Consumption (MT)', `"), true);
   check('only groups actually in use get a column', HTML.includes('const groupsUsed = FUEL_CONS_GROUPS.filter'), true);
-  check('a unit books against its own group only', HTML.includes('const onGroup = (grade, qty) =>'), true);
+  check('a unit books against its own group only', HTML.includes('const meteredOn = (grade, qty) =>'), true);
   /* Four grades, two fuels: the splits are a tank matter, not a difference in what
      went into the engine. */
   check('both residuals share one column',
@@ -165,13 +171,57 @@ console.log('\nfuel consumption is totalled per grade, not across grades');
   check('both distillates share one column',
     HTML.includes("{ label:'DO/GO', grades:['MDO/MGO','LSMGO'] }"), true);
   check('and there are only those two', HTML.includes("grades:['HFO'] }") || HTML.includes("grades:['LSFO'] }"), false);
-  check('misc burn is carried as its own row', HTML.includes("{ label:'Other', cells:"), true);
+  check('misc burn is carried as its own row',
+    HTML.includes("fuelUnitRows.push({ label:'Other', by: burnedOnly(row.miscCons) })"), true);
   /* The total row reads from consByType, which is what the R.O.B. table books per
      tank, so the two halves of the sheet cannot disagree. */
   check('the total row sums the group', HTML.includes('fuelCell(sumFuelGroup(row.consByType, g))'), true);
   check('a group with nothing in it stays blank, a real zero prints', HTML.includes('return seen ? total : null;'), true);
   check('the lumped cross-grade total is gone', HTML.includes("printRow('Total', fmtFuel(row.total))"), false);
   check('the total row is ruled off', HTML.includes('.pr-table tr.pr-total td{'), true);
+}
+
+console.log('\nboiler and incinerator extra distillate');
+{
+  const DO = { grades: ['MDO/MGO', 'LSMGO'] };
+  /* Booked by hand: neither burner is on a meter of its own. */
+  check('nothing booked is a pair of zeroes', sandbox.extraDoMap(null), { 'MDO/MGO': 0, 'LSMGO': 0 });
+  check('what is booked is kept', sandbox.extraDoMap({ 'MDO/MGO': 0.35, 'LSMGO': 0.2 }), { 'MDO/MGO': 0.35, 'LSMGO': 0.2 });
+  check('a residual grade cannot be booked here', sandbox.extraDoMap({ 'LSFO': 5 }), { 'MDO/MGO': 0, 'LSMGO': 0 });
+  /* A blank box, a stray minus sign or a half-typed number must not become fuel. */
+  check('rubbish is not fuel', sandbox.extraDoMap({ 'MDO/MGO': 'abc', 'LSMGO': -3 }), { 'MDO/MGO': 0, 'LSMGO': 0 });
+
+  check('an empty booking shows no row', sandbox.hasExtraDo(sandbox.extraDoMap(null)), false);
+  check('a zero booking shows no row', sandbox.hasExtraDo({ 'MDO/MGO': 0, 'LSMGO': 0 }), false);
+  check('one grade is enough to show it', sandbox.hasExtraDo({ 'MDO/MGO': 0.1, 'LSMGO': 0 }), true);
+
+  /* Both distillates land in the one DO/GO column. */
+  check('the two grades total together',
+    sandbox.sumFuelGroup(sandbox.extraDoMap({ 'MDO/MGO': 0.35, 'LSMGO': 0.2 }), DO), 0.55);
+}
+
+console.log('\nthe extra distillate is wired through');
+{
+  check('boiler boxes are on the summary',
+    HTML.includes('id="vs_blrExtra_mdomgo"') && HTML.includes('id="vs_blrExtra_lsmgo"'), true);
+  check('incinerator boxes are on the summary',
+    HTML.includes('id="vs_incExtra_mdomgo"') && HTML.includes('id="vs_incExtra_lsmgo"'), true);
+  check('the summary saves them', HTML.includes("entry.blrExtraCons = extraDoMap({ 'MDO/MGO': num0('vs_blrExtra_mdomgo')"), true);
+  check('and reads them back', HTML.includes("document.getElementById('vs_incExtra_lsmgo').value = incExtraForm['LSMGO'];"), true);
+  check('a new entry carries the fields', HTML.includes('blrExtraCons: extraDoMap(e.blrExtraCons),'), true);
+  /* Real fuel out of the tanks: it joins the period total and the per-grade figures
+     the R.O.B. chain deducts against. */
+  check('it reaches the period total', HTML.includes('+miscTotal+extraDoTotal;'), true);
+  check('it reaches R.O.B. per grade',
+    HTML.includes('EXTRA_DO_GRADES.forEach(t => { rawFuel[t] += blrExtra[t] + incExtra[t]; });'), true);
+  check('the boiler books its own on the boiler row',
+    HTML.includes("{ label:'Boiler', by: addBurn(meteredOn(entry.blr?.type, row.blrCons), blrExtraRow) }"), true);
+  check('the incinerator gets a row only when it burned something',
+    HTML.includes("if (hasExtraDo(incExtraRow)) fuelUnitRows.push({ label:'Incinerator'"), true);
+  check('both are named in the Boiler & Incinerator block',
+    HTML.includes("printRow('Boiler Extra D.O.'") && HTML.includes("printRow('Incinerator D.O. Cons'"), true);
+  check('the consumption table totals them',
+    HTML.includes("incOf('MDO/MGO'), (r.miscCons||{})['MDO/MGO']"), true);
 }
 
 console.log('\nthe sheet prints the stamp the period is measured from');

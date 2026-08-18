@@ -2212,6 +2212,14 @@
             <div class="field"><label>LS MGO</label><input type="number" step="0.01" id="vs_misc_lsmgo" value="0"></div>
           </div>
           <div class="unit-box">
+            <h3>Boiler / Incinerator Extra D.O. (added to Consumption)</h3>
+            <div class="field"><label>Boiler — MDO/MGO</label><input type="number" step="0.01" id="vs_blrExtra_mdomgo" value="0"></div>
+            <div class="field"><label>Boiler — LS MGO</label><input type="number" step="0.01" id="vs_blrExtra_lsmgo" value="0"></div>
+            <div class="field"><label>Incinerator — MDO/MGO</label><input type="number" step="0.01" id="vs_incExtra_mdomgo" value="0"></div>
+            <div class="field"><label>Incinerator — LS MGO</label><input type="number" step="0.01" id="vs_incExtra_lsmgo" value="0"></div>
+            <div class="hint" style="margin:8px 0 0;">Distillate burned by the boiler's pilot burner and by the incinerator, on top of what the boiler flowmeter measured. Added to consumption and deducted from R.O.B. like any other burn.</div>
+          </div>
+          <div class="unit-box">
             <h3>Fresh Water</h3>
             <div class="form-grid cols2" id="vsFwTankPickRow" style="display:none;">
               <div class="field"><label>Tank for production</label><select id="vs_fwProdTank"></select></div>
@@ -3504,6 +3512,22 @@ const FUEL_CONS_GROUPS = [
   { label:'FUEL',  grades:['HFO','LSFO'] },
   { label:'DO/GO', grades:['MDO/MGO','LSMGO'] }
 ];
+/* Distillate the boiler's pilot burner and the incinerator burn on top of whatever
+   the boiler flowmeter measured. Neither has a meter of its own, so the engineer
+   books the quantity by hand and it is added to consumption like any other burn. */
+const EXTRA_DO_GRADES = ['MDO/MGO','LSMGO'];
+function extraDoMap(src){
+  const out = { 'MDO/MGO':0, 'LSMGO':0 };
+  EXTRA_DO_GRADES.forEach(t => {
+    const v = Number(src?.[t]);
+    if (isFinite(v) && v > 0) out[t] = v;
+  });
+  return out;
+}
+/** True when any grade in an extra-D.O. map carries a quantity. */
+function hasExtraDo(src){
+  return EXTRA_DO_GRADES.some(t => (src?.[t] || 0) > 0);
+}
 function fuelConsGroupFor(grade){
   return FUEL_CONS_GROUPS.find(g => g.grades.includes(grade)) || null;
 }
@@ -4320,6 +4344,8 @@ function entryFromSnap(id, datetime, operation, condition, snap, extra){
     fwProd: snap.fwProd,
     fwRob: snap.fwRob,
     miscCons: e.miscCons || { 'MDO/MGO':0, 'LSMGO':0 },
+    blrExtraCons: extraDoMap(e.blrExtraCons),
+    incExtraCons: extraDoMap(e.incExtraCons),
     robSurvey: e.robSurvey || null,
     consOverride: e.consOverride || null,
     unitOverride: e.unitOverride || { ME:null, GE:null, BLR:null },
@@ -6981,6 +7007,8 @@ function computeDerived(){
     let lubeByType = {"CYL HIGH":null,"CYL LOW":null,"ME SYS OIL":null,"GE SYS OIL":null,"FRESH WATER":null};
     const override = e.consOverride || {};
     const misc = e.miscCons || {"MDO/MGO":0,"LSMGO":0};
+    const blrExtra = extraDoMap(e.blrExtraCons);
+    const incExtra = extraDoMap(e.incExtraCons);
 
     let rpmEff = (e.rpm!==null && e.rpm!==undefined && !isNaN(e.rpm)) ? e.rpm : null;
 
@@ -7009,7 +7037,11 @@ function computeDerived(){
       const miscMdo = misc['MDO/MGO']||0;
       const miscLsmgo = misc['LSMGO']||0;
       const miscTotal = miscMdo + miscLsmgo;
-      total = (meCons||0)+(geCons||0)+(blrCons||0)+miscTotal;
+      /* Hand-booked distillate for the boiler's pilot burner and the incinerator.
+         It is real fuel out of the tanks, so it joins the period total and the ROB
+         chain exactly as the metered burns do. */
+      const extraDoTotal = EXTRA_DO_GRADES.reduce((sum, t) => sum + blrExtra[t] + incExtra[t], 0);
+      total = (meCons||0)+(geCons||0)+(blrCons||0)+miscTotal+extraDoTotal;
 
       const rawFuel = {"HFO":0,"LSFO":0,"MDO/MGO":0,"LSMGO":0};
       if (meCons) rawFuel[e.me.type] += meCons;
@@ -7017,6 +7049,7 @@ function computeDerived(){
       if (blrCons) rawFuel[e.blr.type] += blrCons;
       rawFuel['MDO/MGO'] += miscMdo;
       rawFuel['LSMGO'] += miscLsmgo;
+      EXTRA_DO_GRADES.forEach(t => { rawFuel[t] += blrExtra[t] + incExtra[t]; });
       FUEL_TYPES.forEach(t=>{
         consByType[t] = (overrideForGrade(override, t, fuelTankList())!=null) ? overrideForGrade(override, t, fuelTankList()) : rawFuel[t];
         consByFuel[t] += consByType[t];
@@ -7175,7 +7208,8 @@ function computeDerived(){
     prev = e;
     return {...e, hrs, meCons, geCons, blrCons, total, cylCons, meLoCons, geLoCons, fwProdD, fwConsD,
              fwByTank, fwConsByTank, fwProdByTank,
-             consByType, lubeByType, miscCons: misc, meStopped,
+             consByType, lubeByType, miscCons: misc,
+             blrExtraCons: blrExtra, incExtraCons: incExtra, meStopped,
              /* Δrevs of exactly zero is reported blank alongside the other M/E figures;
                 the printout carries an explicit "M/E stopped" note so the empty M/E
                 block reads as deliberate rather than as missing data. */
@@ -8475,12 +8509,18 @@ function renderVoyageSetupRobFields(rob, robLube){
 function consumptionRowValues(r){
   const meOf = fuel => r.me.type===fuel ? r.meCons : null;
   const geOf = fuel => r.ge.type===fuel ? r.geCons : null;
-  const blrOf = fuel => r.blr.type===fuel ? r.blrCons : null;
   const sum = (...vals) => {
     const parts = vals.filter(v => v!=null && !isNaN(v));
     if (!parts.length) return null;
     return parts.reduce((a,v)=>a+v, 0);
   };
+  /* Hand-booked distillate. The boiler's belongs in the boiler column beside its
+     metered burn; the incinerator has no meter, so it gets a column of its own. */
+  const blrExtra = extraDoMap(r.blrExtraCons);
+  const incExtra = extraDoMap(r.incExtraCons);
+  const extraOf = (src, fuel) => src[fuel] > 0 ? src[fuel] : null;
+  const blrOf = fuel => sum(r.blr.type===fuel ? r.blrCons : null, extraOf(blrExtra, fuel));
+  const incOf = fuel => extraOf(incExtra, fuel);
   const dt = new Date(r.datetime);
   return {
     datetime: dt.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'2-digit'}),
@@ -8490,9 +8530,11 @@ function consumptionRowValues(r){
     lsfoMe: meOf('LSFO'), lsfoGe: geOf('LSFO'), lsfoBlr: blrOf('LSFO'),
     lsfoTotal: sum(meOf('LSFO'), geOf('LSFO'), blrOf('LSFO')),
     mdoMe: meOf('MDO/MGO'), mdoGe: geOf('MDO/MGO'), mdoBlr: blrOf('MDO/MGO'),
-    mdoTotal: sum(meOf('MDO/MGO'), geOf('MDO/MGO'), blrOf('MDO/MGO'), (r.miscCons||{})['MDO/MGO']),
+    mdoInc: incOf('MDO/MGO'),
+    mdoTotal: sum(meOf('MDO/MGO'), geOf('MDO/MGO'), blrOf('MDO/MGO'), incOf('MDO/MGO'), (r.miscCons||{})['MDO/MGO']),
     lsmgoMe: meOf('LSMGO'), lsmgoGe: geOf('LSMGO'), lsmgoBlr: blrOf('LSMGO'),
-    lsmgoTotal: sum(meOf('LSMGO'), geOf('LSMGO'), blrOf('LSMGO'), (r.miscCons||{})['LSMGO']),
+    lsmgoInc: incOf('LSMGO'),
+    lsmgoTotal: sum(meOf('LSMGO'), geOf('LSMGO'), blrOf('LSMGO'), incOf('LSMGO'), (r.miscCons||{})['LSMGO']),
     miscMdo: (r.miscCons||{})['MDO/MGO'] || null,
     miscLsmgo: (r.miscCons||{})['LSMGO'] || null,
     periodTotal: r.total,
@@ -8514,10 +8556,12 @@ const CONSUMPTION_COLS = [
   { key:'mdoMe', label:'MDO/MGO M/E', kind:'fuel' },
   { key:'mdoGe', label:'MDO/MGO G/E', kind:'fuel' },
   { key:'mdoBlr', label:'MDO/MGO Blr', kind:'fuel' },
+  { key:'mdoInc', label:'MDO/MGO Incin', kind:'fuel' },
   { key:'mdoTotal', label:'MDO/MGO Total', kind:'fuel' },
   { key:'lsmgoMe', label:'LSMGO M/E', kind:'fuel' },
   { key:'lsmgoGe', label:'LSMGO G/E', kind:'fuel' },
   { key:'lsmgoBlr', label:'LSMGO Blr', kind:'fuel' },
+  { key:'lsmgoInc', label:'LSMGO Incin', kind:'fuel' },
   { key:'lsmgoTotal', label:'LSMGO Total', kind:'fuel' },
   { key:'miscMdo', label:'Misc MDO/MGO', kind:'fuel' },
   { key:'miscLsmgo', label:'Misc LSMGO', kind:'fuel' },
@@ -12579,6 +12623,12 @@ function openVoyageSummary(entryId){
   const misc = entry.miscCons || {"MDO/MGO":0,"LSMGO":0};
   document.getElementById('vs_misc_mdomgo').value = misc['MDO/MGO'] ?? 0;
   document.getElementById('vs_misc_lsmgo').value = misc['LSMGO'] ?? 0;
+  const blrExtraForm = extraDoMap(entry.blrExtraCons);
+  const incExtraForm = extraDoMap(entry.incExtraCons);
+  document.getElementById('vs_blrExtra_mdomgo').value = blrExtraForm['MDO/MGO'];
+  document.getElementById('vs_blrExtra_lsmgo').value = blrExtraForm['LSMGO'];
+  document.getElementById('vs_incExtra_mdomgo').value = incExtraForm['MDO/MGO'];
+  document.getElementById('vs_incExtra_lsmgo').value = incExtraForm['LSMGO'];
 
   const robBody = document.getElementById('vsRobBody');
   robBody.innerHTML = robBalanceRows(row, prevRobData, asOf).map(r=>{
@@ -13014,6 +13064,8 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
     fwConsTankId: fwDraft.fwConsTankId
   }, previousEntryFor(entry.id) || effectiveCarryover());
   entry.miscCons = { 'MDO/MGO': num0('vs_misc_mdomgo'), 'LSMGO': num0('vs_misc_lsmgo') };
+  entry.blrExtraCons = extraDoMap({ 'MDO/MGO': num0('vs_blrExtra_mdomgo'), 'LSMGO': num0('vs_blrExtra_lsmgo') });
+  entry.incExtraCons = extraDoMap({ 'MDO/MGO': num0('vs_incExtra_mdomgo'), 'LSMGO': num0('vs_incExtra_lsmgo') });
   /* Compare typed unit cons to the flowmeter figure — not getComputedRow, which
      already applies unitOverride. Comparing to the applied figure dropped a real
      override every time an old log's summary was saved, and ROB then deducted
@@ -13341,40 +13393,45 @@ function buildVoyageNoonSheetHTML(entry){
      the same per-grade figure the R.O.B. table lower down books against each tank,
      so the two halves of the sheet agree — including when a consumption override
      has been typed, which the old single total ignored. */
+  /* Every row is a per-grade map; the columns fold those maps into fuels. */
+  const blrExtraRow = extraDoMap(row.blrExtraCons);
+  const incExtraRow = extraDoMap(row.incExtraCons);
+  const meteredOn = (grade, qty) => (grade && qty != null) ? { [grade]: qty } : {};
+  const burnedOnly = (src) => Object.fromEntries(FUEL_TYPES.filter(t => src?.[t] > 0).map(t => [t, src[t]]));
+  const addBurn = (a, b) => {
+    const out = { ...a };
+    FUEL_TYPES.forEach(t => { if (b?.[t] > 0) out[t] = (out[t] || 0) + b[t]; });
+    return out;
+  };
+  /* The boiler's hand-booked distillate belongs on the boiler's own row, beside
+     whatever its flowmeter measured — it is the same burner's fuel. */
+  const fuelUnitRows = [
+    { label:'Main Engine', by: meteredOn(entry.me?.type, row.meCons) },
+    { label:'Diesel Generator', by: meteredOn(entry.ge?.type, row.geCons) },
+    { label:'Boiler', by: addBurn(meteredOn(entry.blr?.type, row.blrCons), blrExtraRow) }
+  ];
+  /* The incinerator and the miscellaneous burn have no meter at all, so their rows
+     appear only on a period that actually booked some. */
+  if (hasExtraDo(incExtraRow)) fuelUnitRows.push({ label:'Incinerator', by: burnedOnly(incExtraRow) });
+  if (FUEL_TYPES.some(t => row.miscCons?.[t] > 0)) fuelUnitRows.push({ label:'Other', by: burnedOnly(row.miscCons) });
+
   const usesGrade = (t) =>
     (entry.me?.type === t && row.meCons != null) ||
     (entry.ge?.type === t && row.geCons != null) ||
     (entry.blr?.type === t && row.blrCons != null) ||
-    (row.miscCons?.[t] > 0) || (row.consByType?.[t] > 0);
+    (row.miscCons?.[t] > 0) || (blrExtraRow[t] > 0) || (incExtraRow[t] > 0) ||
+    (row.consByType?.[t] > 0);
   const groupsUsed = FUEL_CONS_GROUPS.filter(g => g.grades.some(usesGrade));
   /* Nothing burned yet (opening entry): still show the group the M/E is set to. */
   const fuelCols = groupsUsed.length
     ? groupsUsed
     : [fuelConsGroupFor(entry.me?.type) || FUEL_CONS_GROUPS[0]];
-  const onGroup = (grade, qty) => {
-    const own = fuelConsGroupFor(grade);
-    return Object.fromEntries(fuelCols.map(g => [g.label, (own && g.label === own.label) ? qty : null]));
-  };
-  const fuelUnitRows = [
-    { label:'Main Engine', cells: onGroup(entry.me?.type, row.meCons) },
-    { label:'Diesel Generator', cells: onGroup(entry.ge?.type, row.geCons) },
-    { label:'Boiler', cells: onGroup(entry.blr?.type, row.blrCons) }
-  ];
-  /* Miscellaneous burn (lifeboat, emergency generator) is booked by grade already.
-     Nil for a group is left blank rather than printed as a zero it never used. */
-  const miscForGroup = (g) => {
-    const v = g.grades.reduce((sum, t) => sum + (row.miscCons?.[t] || 0), 0);
-    return v > 0 ? v : null;
-  };
-  if (fuelCols.some(g => miscForGroup(g) != null)){
-    fuelUnitRows.push({ label:'Other', cells: Object.fromEntries(fuelCols.map(g => [g.label, miscForGroup(g)])) });
-  }
   const fuelCell = (v) => v == null ? '\u2014' : fmtFuel(v);
   const fuelSection = printSection('Fuel Consumption (MT)', `
     <table class="pr-table">
       <tr><th>Unit</th>${fuelCols.map(g=>`<th>${escPrint(g.label)}</th>`).join('')}</tr>
       ${fuelUnitRows.map(r=>`<tr><td class="row-lbl">${r.label}</td>${
-        fuelCols.map(g=>`<td>${fuelCell(r.cells[g.label])}</td>`).join('')}</tr>`).join('')}
+        fuelCols.map(g=>`<td>${fuelCell(sumFuelGroup(r.by, g))}</td>`).join('')}</tr>`).join('')}
       <tr class="pr-total"><td class="row-lbl"><strong>Total</strong></td>${
         fuelCols.map(g=>`<td><strong>${fuelCell(sumFuelGroup(row.consByType, g))}</strong></td>`).join('')}</tr>
     </table>`);
@@ -13443,9 +13500,13 @@ function buildVoyageNoonSheetHTML(entry){
     printRow('Boiler Runtime (cum.)', blrCur==null?'—':`${fmt(blrCur, 2)} hrs`),
     printRow('Boiler Period Hrs', blrPeriodPrint==null?'—':fmt(blrPeriodPrint, 2)),
     printRow('Boiler Fuel Cons', row.blrCons==null?'—':`${fmtFuel(row.blrCons)} MT`),
+    printRow('Boiler Extra D.O.', hasExtraDo(blrExtraRow)
+      ? `${fmtFuel(sumFuelGroup(blrExtraRow, fuelConsGroupFor('MDO/MGO')))} MT` : '—'),
     printRow('Incinerator Run Time', incRtPrint==null?'—':`${fmt(incRtPrint, 2)} hrs`),
     printRow('Incinerator Avg kW', incKwPrint==null?'—':fmt(incKwPrint, 2)),
-    printRow('Incinerator Load %', incLoadPrint==null?'—':`${fmt(incLoadPrint, 2)}%`)
+    printRow('Incinerator Load %', incLoadPrint==null?'—':`${fmt(incLoadPrint, 2)}%`),
+    printRow('Incinerator D.O. Cons', hasExtraDo(incExtraRow)
+      ? `${fmtFuel(sumFuelGroup(incExtraRow, fuelConsGroupFor('MDO/MGO')))} MT` : '—')
   ].join(''));
 
   const voyageAvgRows = [
@@ -16213,7 +16274,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v136';
+let androidInstallCacheName = 'noon-report-v137';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
