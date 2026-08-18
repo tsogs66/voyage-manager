@@ -127,6 +127,9 @@ const check = (l, a, e, tol = 0.75) => {
       stampRightFromLineLeft: stamp.right - line.x,
       aQuarterOfLine: line.width / 4,
       lineWidth: line.width,
+      /* The overlap seen from each side: a quarter of the stamp, a quarter of the line. */
+      fractionOfStampOverTheLine: (stamp.right - line.x) / stamp.width,
+      fractionOfLineUnderTheStamp: (stamp.right - line.x) / line.width,
       hangsOffToTheLeft: line.x - stamp.x,
       stampCentreOffLine: stamp.y + stamp.height / 2 - line.y,
       stampMm: mm(stamp.height),
@@ -136,7 +139,12 @@ const check = (l, a, e, tol = 0.75) => {
     };
   });
   check('the stamp\'s right edge lands on the line\'s quarter mark', g.stampRightFromLineLeft, g.aQuarterOfLine);
-  check('so it touches only the left quarter of the line', g.overlapsTheLine, true);
+  /* The one overlap region read from both sides: the stamp's right quarter lying
+     over the line's left quarter. They agree because the stamp is within 2% of the
+     line's own width. */
+  check('its right quarter is what lies over the line', g.fractionOfStampOverTheLine, 0.25, 0.01);
+  check('and that covers the line\'s left quarter', g.fractionOfLineUnderTheStamp, 0.25, 0.01);
+  check('so it touches the line and nothing further along it', g.overlapsTheLine, true);
   /* The rest of a stamp wider than the line hangs off to the left rather than
      covering the name, which is right-aligned at the far end of the block. */
   check('the rest of it hangs off to the left', g.hangsOffToTheLeft > g.lineWidth / 2, true);
