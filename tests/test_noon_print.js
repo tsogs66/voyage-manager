@@ -158,10 +158,13 @@ console.log('\nfuel consumption is totalled per grade, not across grades');
     HTML.includes("const fuelSection = printSection('Fuel Consumption (MT)', `"), true);
   check('only groups actually in use get a column', HTML.includes('const groupsUsed = FUEL_CONS_GROUPS.filter'), true);
   check('a unit books against its own group only', HTML.includes('const onGroup = (grade, qty) =>'), true);
-  /* MDO/MGO and LSMGO are one distillate product; the split is a tank matter. */
-  check('the two distillates share one column',
+  /* Four grades, two fuels: the splits are a tank matter, not a difference in what
+     went into the engine. */
+  check('both residuals share one column',
+    HTML.includes("{ label:'FUEL',  grades:['HFO','LSFO'] }"), true);
+  check('both distillates share one column',
     HTML.includes("{ label:'DO/GO', grades:['MDO/MGO','LSMGO'] }"), true);
-  check('the residual grades stay apart', HTML.includes("{ label:'FUEL',  grades:['LSFO'] }"), true);
+  check('and there are only those two', HTML.includes("grades:['HFO'] }") || HTML.includes("grades:['LSFO'] }"), false);
   check('misc burn is carried as its own row', HTML.includes("{ label:'Other', cells:"), true);
   /* The total row reads from consByType, which is what the R.O.B. table books per
      tank, so the two halves of the sheet cannot disagree. */

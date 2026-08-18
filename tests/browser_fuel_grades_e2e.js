@@ -7,11 +7,11 @@
  *
  * The main engine, the generators and the boiler can each be on a different
  * grade, so one figure added across them totals tonnes the ship never bunkered.
- * Sets up a mixed-grade period and checks the printed table books every unit
- * against its own grade, totals each column on its own, and reconciles with the
- * Consumption column of the R.O.B. table further down the same sheet. MDO/MGO and
- * LSMGO are one distillate product and share a column, so the diesel total is
- * those two R.O.B. rows added. Not in CI, which has no browser.
+ * Sets up a mixed-fuel period and checks the printed table books every unit
+ * against its own fuel, totals each column on its own, and reconciles with the
+ * Consumption column of the R.O.B. table further down the same sheet. Four grades
+ * report as two fuels — HFO with LSFO as FUEL, MDO/MGO with LSMGO as DO/GO — so a
+ * column total is its R.O.B. rows added. Not in CI, which has no browser.
  */
 const { chromium } = require('playwright-core');
 const BASE = process.env.APP_BASE || 'http://127.0.0.1:8867';
@@ -84,8 +84,8 @@ const check = (l, a, e) => {
   check('residual column', out.header[1], 'FUEL');
   /* MDO/MGO and LSMGO are the same product — one column, not two. */
   check('one distillate column', out.header[2], 'DO/GO');
-  check('the grades are not split out', out.header.includes('LSMGO') || out.header.includes('MDO/MGO'), false);
-  check('unburned HFO gets no column', out.header.includes('HFO'), false);
+  check('no grade is split out of its fuel',
+    ['HFO','LSFO','LSMGO','MDO/MGO'].some(g => out.header.includes(g)), false);
 
   console.log('\neach unit books against its own fuel only');
   const byLabel = Object.fromEntries(out.body.map(r => [r[0], r.slice(1)]));
@@ -121,6 +121,33 @@ const check = (l, a, e) => {
     out.totalRow[2], (Number(out.rob['MDO/MGO']) + Number(out.rob['LSMGO'])).toFixed(3));
   check('R.O.B. still reports the tanks apart',
     !!out.rob['MDO/MGO'] && !!out.rob['LSMGO'], true);
+
+  /* The residuals travel together too: a ship burning HFO on the main engine and
+     LSFO on the auxiliaries gets one FUEL column carrying both, not two. */
+  console.log('\nboth residuals book to the one FUEL column');
+  const hfo = await pg.evaluate(() => {
+    const list = sortedEntries();
+    const e = list[list.length - 1];
+    e.me.type = 'HFO';
+    e.ge.type = 'LSFO';
+    e.blr.type = 'LSFO';
+    e.miscCons = { 'MDO/MGO': 0, 'LSMGO': 0 };
+    const row = getComputedRow(e.id);
+    const d = document.createElement('div');
+    d.innerHTML = buildVoyageNoonSheetHTML(e);
+    const section = [...d.querySelectorAll('.pr-section')]
+      .find(s => /Fuel Consumption/.test(s.querySelector('.pr-section-title').textContent));
+    const cells = tr => [...tr.querySelectorAll('th,td')].map(x => x.textContent.trim());
+    const rows = [...section.querySelectorAll('tr')].map(cells);
+    return { header: rows[0], rows: rows.slice(1), byType: row.consByType };
+  });
+  check('one column, not one per residual', hfo.header.join(','), 'Unit,FUEL');
+  const hfoByLabel = Object.fromEntries(hfo.rows.map(r => [r[0], r.slice(1)]));
+  check('main engine HFO lands in it', hfoByLabel['Main Engine'][0], '41.160');
+  check('auxiliaries on LSFO land in the same one', hfoByLabel['Diesel Generator'][0], '1.392');
+  check('and they total together',
+    hfoByLabel['Total'][0],
+    (Number(hfo.byType['HFO'].toFixed(3)) + Number(hfo.byType['LSFO'].toFixed(3))).toFixed(3));
 
   console.log('\npage errors');
   check('none', errs.length, 0);
