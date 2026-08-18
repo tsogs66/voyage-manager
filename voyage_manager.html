@@ -13006,6 +13006,38 @@ function renderPrintHistoryList(){
 }
 
 /** Shared noon / voyage-summary sheet used by Log Entry print and Reports tab print. */
+/**
+ * The report this one is measured against: the log entry immediately before it on
+ * ship's clock. For the first report of a leg that is the previous leg's closing
+ * report (the carryover), or the voyage-start reference the opening meter readings
+ * were taken at — there is no earlier report to measure from.
+ */
+function previousReportReference(entry){
+  if (!entry) return null;
+  const sorted = sortedEntries();
+  const idx = sorted.findIndex(x => x.id === entry.id);
+  if (idx > 0) return sorted[idx-1];
+  return effectiveCarryover();
+}
+
+/**
+ * Hours the printed report covers: previous report's date/time up to this report's
+ * date/time, on ship's clock and less any clocks advanced this period. Noon to noon
+ * with no clock change is 24.00 — this is the period figure, never a running total.
+ */
+function reportPeriodRunHours(entry, row){
+  const prev = previousReportReference(entry);
+  if (prev && prev.datetime && entry && entry.datetime){
+    const adj = elapsedShipHours(prev.datetime, entry.datetime, entry.clockChangeMin);
+    if (adj != null) return adj;
+    /* A clock change carried on the wrong entry must not blank the period or turn it
+       negative — fall back to the plain ship's-clock difference. */
+    const raw = elapsedShipHours(prev.datetime, entry.datetime, 0);
+    if (raw != null) return raw;
+  }
+  return row ? row.hrs : null;
+}
+
 function buildVoyageNoonSheetHTML(entry){
   const entryId = entry.id;
   const row = getComputedRow(entryId);
@@ -13018,7 +13050,14 @@ function buildVoyageNoonSheetHTML(entry){
   const prevRobData = priorEntry ? robAsOfEntry(priorEntry.id) : { rob: state.setup.rob, robLube: state.setup.robLube };
   const asOf = robAsOfEntry(entryId);
 
-  const dtStr = new Date(entry.datetime).toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const stamp = (dt)=> dt ? new Date(dt).toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '\u2014';
+  const dtStr = stamp(entry.datetime);
+  /* Hours at the top of the sheet are for this report alone — previous report's
+     date/time to this one's — so the stamp they are measured from is printed beside
+     them and the figure can be checked on the page. */
+  const prevReportRef = previousReportReference(entry);
+  const periodHrs = reportPeriodRunHours(entry, row);
+  const prevReportStr = stamp(prevReportRef && prevReportRef.datetime);
 
   const voyageDist = state.setup.voyageDistance;
   const distanceToGo = (voyageDist!=null && row.cumDistShip!=null) ? (voyageDist - row.cumDistShip) : null;
@@ -13031,14 +13070,14 @@ function buildVoyageNoonSheetHTML(entry){
   const printRpm = row.meStopped ? null : (row.rpmEff!=null ? row.rpmEff : entry.rpm);
   const meRunningEarly = mainEngineInUse(entry, row);
   const kpiItems = meRunningEarly ? [
-    {label:'Run Hrs', value:fmt(row.hrs, 2)},
+    {label:'Run Hrs (This Report)', value:fmt(periodHrs, 2)},
     {label:'Ship Dist (nm)', value:fmt(entry.distanceShip, 2)},
     {label:'RPM', value:fmt(printRpm, 2)},
     {label:'Speed (kn)', value:fmt(row.speedShip,2)},
     {label:'% MCR', value:fmt(row.mcrPct, 2)},
     {label:'Est. kW', value:fmt(row.kwEst, 2)}
   ] : [
-    {label:'Run Hrs', value:fmt(row.hrs, 2)},
+    {label:'Run Hrs (This Report)', value:fmt(periodHrs, 2)},
     {label:'Ship Dist (nm)', value:fmt(entry.distanceShip, 2)}
   ];
 
@@ -13194,7 +13233,7 @@ function buildVoyageNoonSheetHTML(entry){
     ${printDocHeader({ title: titles.title, subtitle: titles.subtitle, badge: entry.condition })}
     ${printMetaGrid([
       {label:'Date & Time', value:dtStr},
-      {label:'Voyage No.', value:state.setup.voyageNumber||'—'},
+      {label:'Last Report', value:prevReportStr},
       {label:'Condition', value:entry.condition},
       {label:'Route', value:`${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}`},
       {label:'IMO No.', value:state.setup.imoNo||'—'},
