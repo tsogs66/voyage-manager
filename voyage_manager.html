@@ -1288,6 +1288,10 @@
   .pr-table tr:nth-child(even) td{ background:#f7f9fc; }
   .pr-table td:first-child, .pr-table th:first-child{ text-align:left; }
   .pr-table td.row-lbl{ font-family:'Inter',sans-serif; font-weight:500; text-align:left; }
+  /* Total row of a print table: ruled off above and no zebra stripe, so the figure
+     reads as a sum rather than as one more reading. Declared after the stripe rule,
+     which it ties with on specificity. */
+  .pr-table tr.pr-total td{ background:#eef2f8; border-top:0.4mm solid #122238; }
   .pr-remarks{
     border:1px solid #d4dce8; border-left:2px solid #8a6b3c;
     padding:1.2mm; margin:1.2mm 0; min-height:5mm; max-height:14mm; overflow:hidden; background:#fffdf8;
@@ -13302,12 +13306,39 @@ function buildVoyageNoonSheetHTML(entry){
     printRow('Daily Revs.', fmt(row.dailyRevs, 2))
   ].join('')) : '';
 
-  const fuelSection = printSection('Fuel Consumption (MT)', [
-    printRow('Main Engine', fmtFuel(row.meCons)),
-    printRow('Diesel Generator', fmtFuel(row.geCons)),
-    printRow('Boiler', fmtFuel(row.blrCons)),
-    printRow('Total', fmtFuel(row.total))
-  ].join(''));
+  /* Fuel consumption by unit AND by grade. Each unit can be burning a different
+     grade, so one figure added straight across them mixes tonnes of residual with
+     tonnes of distillate and totals something the ship never bunkered. Every grade
+     in use this period gets its own column and totals on its own. The total row is
+     the same per-grade figure the R.O.B. table lower down books against each tank,
+     so the two halves of the sheet agree — including when a consumption override
+     has been typed, which the old single total ignored. */
+  const fuelGradesUsed = FUEL_TYPES.filter(t =>
+    (entry.me?.type === t && row.meCons != null) ||
+    (entry.ge?.type === t && row.geCons != null) ||
+    (entry.blr?.type === t && row.blrCons != null) ||
+    (row.miscCons?.[t] > 0) || (row.consByType?.[t] > 0));
+  /* Nothing burned yet (opening entry): still show the grade the M/E is set to. */
+  const fuelCols = fuelGradesUsed.length ? fuelGradesUsed : [entry.me?.type || FUEL_TYPES[1]];
+  const onGrade = (grade, qty) => Object.fromEntries(fuelCols.map(t => [t, t === grade ? qty : null]));
+  const fuelUnitRows = [
+    { label:'Main Engine', cells: onGrade(entry.me?.type, row.meCons) },
+    { label:'Diesel Generator', cells: onGrade(entry.ge?.type, row.geCons) },
+    { label:'Boiler', cells: onGrade(entry.blr?.type, row.blrCons) }
+  ];
+  /* Miscellaneous burn (lifeboat, emergency generator) is booked by grade already. */
+  if (fuelCols.some(t => row.miscCons?.[t] > 0)){
+    fuelUnitRows.push({ label:'Other', cells: Object.fromEntries(fuelCols.map(t => [t, row.miscCons?.[t] || null])) });
+  }
+  const fuelCell = (v) => v == null ? '\u2014' : fmtFuel(v);
+  const fuelSection = printSection('Fuel Consumption (MT)', `
+    <table class="pr-table">
+      <tr><th>Unit</th>${fuelCols.map(t=>`<th>${escPrint(t)}</th>`).join('')}</tr>
+      ${fuelUnitRows.map(r=>`<tr><td class="row-lbl">${r.label}</td>${
+        fuelCols.map(t=>`<td>${fuelCell(r.cells[t])}</td>`).join('')}</tr>`).join('')}
+      <tr class="pr-total"><td class="row-lbl"><strong>Total</strong></td>${
+        fuelCols.map(t=>`<td><strong>${fuelCell(row.consByType?.[t])}</strong></td>`).join('')}</tr>
+    </table>`);
 
   const fwSection = printSection('Fresh Water', [
     printRow('Produced', row.fwProdD==null?'—':`${fmtFw(row.fwProdD)} m³`),
@@ -16143,7 +16174,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v134';
+let androidInstallCacheName = 'noon-report-v135';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',

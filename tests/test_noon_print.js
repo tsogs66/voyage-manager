@@ -150,6 +150,22 @@ check('pointer events cover stylus, touch and mouse', HTML.includes("canvas.addE
 check('pen pressure widens the stroke', HTML.includes("ev.pointerType === 'pen' && ev.pressure > 0"), true);
 check('the pad exports a transparent PNG', HTML.includes("out.toDataURL('image/png')"), true);
 
+console.log('\nfuel consumption is totalled per grade, not across grades');
+{
+  /* Each unit can burn a different grade, so the old single total added residual
+     tonnes to distillate tonnes. Columns are now per grade. */
+  check('the section is a table, not a stack of rows',
+    HTML.includes("const fuelSection = printSection('Fuel Consumption (MT)', `"), true);
+  check('only grades actually in use get a column', HTML.includes('const fuelGradesUsed = FUEL_TYPES.filter'), true);
+  check('a unit books against its own grade only', HTML.includes('const onGrade = (grade, qty) =>'), true);
+  check('misc burn is carried as its own row', HTML.includes("{ label:'Other', cells:"), true);
+  /* The total row reads from consByType, which is what the R.O.B. table books per
+     tank, so the two halves of the sheet cannot disagree. */
+  check('the total row is the per-grade figure', HTML.includes('fuelCell(row.consByType?.[t])'), true);
+  check('the lumped cross-grade total is gone', HTML.includes("printRow('Total', fmtFuel(row.total))"), false);
+  check('the total row is ruled off', HTML.includes('.pr-table tr.pr-total td{'), true);
+}
+
 console.log('\nthe sheet prints the stamp the period is measured from');
 check('last report cell replaces the duplicated voyage no.', HTML.includes("{label:'Last Report', value:prevReportStr}"), true);
 check('top hours are labelled as this report only', HTML.includes("{label:'Run Hrs (This Report)', value:fmt(periodHrs, 2)}"), true);
