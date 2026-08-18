@@ -175,6 +175,19 @@
   .stamp-check input{accent-color:var(--teal); width:14px; height:14px; cursor:pointer;}
   .stamp-preview .stamp-empty{font-size:11px; color:var(--paper-dim); text-align:center; line-height:1.4;}
   .stamp-controls{flex:1 1 240px; min-width:0; display:flex; flex-direction:column; gap:8px;}
+  /* Draw-to-sign pad. touch-action:none so a fingertip draws on it instead of
+     scrolling the page underneath, which is what a touch device does by default. */
+  .sigpad-wrap{margin-top:12px; display:flex; flex-direction:column; gap:8px; max-width:460px;}
+  .sigpad-title{font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--paper-dim);}
+  /* Paper white, whatever the app theme: the ink is the near-black it will print
+     in, and it has to be legible while it is being drawn. */
+  .sigpad{
+    width:100%; height:150px; display:block; box-sizing:border-box;
+    border:1px solid #c8d2e0; border-radius:4px; background:#fdfefe;
+    touch-action:none; -webkit-user-select:none; user-select:none; cursor:crosshair;
+    /* Signing rule painted by CSS, not into the bitmap — the exported PNG is ink only. */
+    background-image:linear-gradient(to bottom, transparent calc(100% - 38px), #c8d2e0 calc(100% - 38px), #c8d2e0 calc(100% - 37px), transparent calc(100% - 37px));
+  }
   @media (max-width:640px){
     .stamp-preview{width:100%;}
   }
@@ -1287,27 +1300,33 @@
   .pr-sign{
     margin-top:2.5mm; padding-top:1.5mm; border-top:1px solid #d4dce8; text-align:right;
   }
-  /* Ship's stamp sits to the left of the Chief Engineer block; the signature image
-     sits inside the space above the line, so it reads as signed over the line. */
-  /* No gap: the stamp's right edge is meant to meet the left end of the signature
-     line, and the block is pinned to the line's width so those two edges coincide.
-     Centred rather than bottom-aligned, so the stamp sits level with the signature
-     instead of towering over it. */
+  /* The signature image sits inside the space above the line, so it reads as
+     signed over the line. */
   .pr-sign-row{
     display:flex; justify-content:flex-end; align-items:center; gap:0;
   }
-  .pr-sign-stamp{ flex:0 0 auto; display:flex; align-items:center; justify-content:center; }
-  .pr-sign-stamp img{
-    height:44mm; width:auto; max-width:80mm; object-fit:contain; display:block;
+  /* The ship's stamp is a rubber stamp: it is struck over the left third of the
+     signature line rather than set beside it, so it lands on top of whatever is
+     under it — line, name, footer — the way a stamp does on paper. Taken out of
+     flow so nothing shifts to make room for it. */
+  .pr-sign-stamp{
+    position:absolute; left:16.667%; top:16.8mm;
+    transform:translate(-50%, -50%);
+    display:flex; align-items:center; justify-content:center;
   }
-  .pr-sign-block{ flex:0 0 42mm; text-align:right; }
+  .pr-sign-stamp img{
+    height:41.8mm; width:auto; max-width:76mm; object-fit:contain; display:block;
+  }
+  .pr-sign-block{ flex:0 0 42mm; text-align:right; position:relative; }
+  /* Height is the signature line's offset from the top of the block — the stamp's
+     `top` is pinned to the same figure so it centres on the line. */
   .pr-sign-space{
-    height:14mm; width:42mm; margin-left:auto; margin-bottom:0; position:relative;
+    height:16.8mm; width:42mm; margin-left:auto; margin-bottom:0; position:relative;
   }
   /* Centred over the line rather than pushed to its right end. */
   .pr-sign-space img{
     position:absolute; left:50%; transform:translateX(-50%); bottom:0;
-    max-height:14mm; max-width:42mm; object-fit:contain;
+    max-height:16.8mm; max-width:50.4mm; object-fit:contain;
   }
   .pr-sign-line{ width:42mm; height:1px; background:#122238; margin-left:auto; margin-bottom:1.2mm; }
   .pr-sign-name{ font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; overflow-wrap:anywhere; }
@@ -1513,7 +1532,17 @@
           </div>
         </div>
       </div>
-      <div class="hint">Printed on the signature line above the Chief Engineer's name on every document. Sign on white paper and photograph it — the paper is made transparent and the image trimmed to the signature. Stored against the name above, so after a crew change each officer keeps their own signature and earlier reports still print theirs. Held on this device only.</div>
+      <div class="sigpad-wrap">
+        <div class="sigpad-title">Or sign here</div>
+        <canvas id="chEngSignaturePad" class="sigpad" aria-label="Sign here with a stylus, a fingertip or the mouse"></canvas>
+        <div class="btn-row" style="margin:0;">
+          <button type="button" class="ghost small" id="btnSigPadUndo">Undo stroke</button>
+          <button type="button" class="ghost small" id="btnSigPadClear">Clear</button>
+          <button type="button" class="small" id="btnSigPadSave">Use this signature</button>
+        </div>
+        <div class="hint" style="margin:0;">Sign with a stylus or a fingertip on a phone or tablet, or with the mouse on a desktop. A pressure-sensitive pen is followed stroke for stroke. Saved as ink on a transparent background, trimmed to the signature.</div>
+      </div>
+      <div class="hint">Printed on the signature line above the Chief Engineer's name on every document. Either sign in the box above, or sign on white paper and photograph it — the paper is made transparent and the image trimmed to the signature. Stored against the name above, so after a crew change each officer keeps their own signature and earlier reports still print theirs. Held on this device only.</div>
       <div class="hint">Each voyage number <strong>starts as B (ballast)</strong> and <strong>ends as L (laden)</strong>. Only these two letters mark voyage condition — never any other. Legs are stored separately so the active log stays short.</div>
     </div>
 
@@ -10954,8 +10983,8 @@ function printSignatory(entry){
   const sig = sigUrl ? `<img src="${sigUrl}" alt="">` : '';
   return `<footer class="pr-sign">
     <div class="pr-sign-row">
-      ${stamp}
       <div class="pr-sign-block">
+        ${stamp}
         <div class="pr-sign-space" aria-hidden="true">${sig}</div>
         <div class="pr-sign-line"></div>
         <div class="pr-sign-name">${escPrint(signer || '—')}</div>
@@ -11926,6 +11955,187 @@ document.getElementById('btnRemoveChEngSignature')?.addEventListener('click', as
   await saveSetup();
   renderChEngSignaturePreview();
 });
+
+/* ---- Draw-to-sign pad ----
+   A signature can be photographed and uploaded, or drawn straight onto the page.
+   Pointer events cover stylus, fingertip and mouse in one path, so a phone or
+   tablet needs nothing extra; where the pen reports pressure the stroke widens
+   with it. Strokes are kept as points rather than pixels so undo can drop the
+   last one and the export can be trimmed to the ink and scaled up cleanly. The
+   pad hands back ink on a transparent background — the same thing the white-
+   background cutout produces from a photograph, and what the sheet prints. */
+const chEngSigPad = (function(){
+  const canvas = document.getElementById('chEngSignaturePad');
+  if (!canvas || !canvas.getContext) return null;
+  const ctx = canvas.getContext('2d');
+  const INK = '#10233d';
+  /** Finished strokes, each an array of {x,y,w} in CSS pixels. */
+  let strokes = [];
+  let current = null;
+  let dpr = 1;
+
+  function paintStroke(c, pts){
+    if (!pts.length) return;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    c.strokeStyle = INK;
+    c.fillStyle = INK;
+    if (pts.length === 1){
+      /* A tap with no travel is still a mark — a dot, not nothing. */
+      c.beginPath();
+      c.arc(pts[0].x, pts[0].y, Math.max(0.6, pts[0].w / 2), 0, Math.PI * 2);
+      c.fill();
+      return;
+    }
+    for (let i = 1; i < pts.length; i++){
+      c.beginPath();
+      c.lineWidth = (pts[i-1].w + pts[i].w) / 2;
+      c.moveTo(pts[i-1].x, pts[i-1].y);
+      c.lineTo(pts[i].x, pts[i].y);
+      c.stroke();
+    }
+  }
+
+  function redraw(){
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    strokes.forEach(function(s){ paintStroke(ctx, s); });
+    if (current) paintStroke(ctx, current);
+  }
+
+  /** Match the bitmap to the element's laid-out size, at the screen's pixel ratio. */
+  function resize(){
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const ratio = Math.min(window.devicePixelRatio || 1, 3);
+    const w = Math.round(rect.width * ratio);
+    const h = Math.round(rect.height * ratio);
+    if (w === canvas.width && h === canvas.height && ratio === dpr) return;
+    dpr = ratio;
+    canvas.width = w;
+    canvas.height = h;
+    redraw();
+  }
+
+  function pointFrom(ev){
+    const rect = canvas.getBoundingClientRect();
+    /* Pen hardware reports real pressure; touch and mouse report 0 or a flat 0.5,
+       so they get an even stroke rather than an arbitrary taper. */
+    const pressure = (ev.pointerType === 'pen' && ev.pressure > 0) ? ev.pressure : 0.5;
+    return {
+      x: ev.clientX - rect.left,
+      y: ev.clientY - rect.top,
+      w: 1.2 + pressure * 3.2
+    };
+  }
+
+  function begin(ev){
+    if (ev.button != null && ev.button > 0) return;
+    ev.preventDefault();
+    try { canvas.setPointerCapture(ev.pointerId); } catch (_e){ /* capture is a nicety */ }
+    current = [pointFrom(ev)];
+    redraw();
+    syncButtons();
+  }
+
+  function extend(ev){
+    if (!current) return;
+    ev.preventDefault();
+    /* A fast stylus outruns pointermove; the coalesced queue keeps the curve smooth. */
+    const events = (typeof ev.getCoalescedEvents === 'function') ? ev.getCoalescedEvents() : null;
+    const list = (events && events.length) ? events : [ev];
+    for (let i = 0; i < list.length; i++) current.push(pointFrom(list[i]));
+    redraw();
+  }
+
+  function finish(){
+    if (!current) return;
+    strokes.push(current);
+    current = null;
+    redraw();
+    syncButtons();
+  }
+
+  canvas.addEventListener('pointerdown', begin);
+  canvas.addEventListener('pointermove', extend);
+  canvas.addEventListener('pointerup', finish);
+  canvas.addEventListener('pointercancel', finish);
+  /* Released off the canvas (capture unavailable) still ends the stroke. */
+  window.addEventListener('pointerup', finish);
+
+  if (typeof ResizeObserver === 'function'){
+    new ResizeObserver(resize).observe(canvas);
+  } else {
+    window.addEventListener('resize', resize);
+  }
+
+  /** Box around every mark, in CSS pixels, allowing for stroke width. */
+  function inkBounds(){
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    strokes.forEach(function(s){
+      s.forEach(function(p){
+        const r = p.w / 2 + 1;
+        if (p.x - r < minX) minX = p.x - r;
+        if (p.x + r > maxX) maxX = p.x + r;
+        if (p.y - r < minY) minY = p.y - r;
+        if (p.y + r > maxY) maxY = p.y + r;
+      });
+    });
+    return isFinite(minX) ? { minX: minX, minY: minY, maxX: maxX, maxY: maxY } : null;
+  }
+
+  function syncButtons(){
+    const has = strokes.length > 0;
+    const undo = document.getElementById('btnSigPadUndo');
+    const clear = document.getElementById('btnSigPadClear');
+    const save = document.getElementById('btnSigPadSave');
+    if (undo) undo.disabled = !has;
+    if (clear) clear.disabled = !has;
+    if (save) save.disabled = !has;
+  }
+
+  return {
+    resize: resize,
+    isEmpty: function(){ return strokes.length === 0; },
+    undo: function(){ strokes.pop(); redraw(); syncButtons(); },
+    clear: function(){ strokes = []; current = null; redraw(); syncButtons(); },
+    syncButtons: syncButtons,
+    /** Ink alone, trimmed and on a transparent background, or null if unsigned. */
+    toDataUrl: function(){
+      const b = inkBounds();
+      if (!b) return null;
+      const pad = 6, scale = 3;
+      const out = document.createElement('canvas');
+      out.width = Math.max(1, Math.round((b.maxX - b.minX + pad * 2) * scale));
+      out.height = Math.max(1, Math.round((b.maxY - b.minY + pad * 2) * scale));
+      const c = out.getContext('2d');
+      c.setTransform(scale, 0, 0, scale, -(b.minX - pad) * scale, -(b.minY - pad) * scale);
+      strokes.forEach(function(s){ paintStroke(c, s); });
+      try { return out.toDataURL('image/png'); } catch (_e){ return null; }
+    }
+  };
+})();
+
+document.getElementById('btnSigPadUndo')?.addEventListener('click', ()=>{ chEngSigPad?.undo(); });
+document.getElementById('btnSigPadClear')?.addEventListener('click', ()=>{ chEngSigPad?.clear(); });
+document.getElementById('btnSigPadSave')?.addEventListener('click', async ()=>{
+  const name = (document.getElementById('s_chEng')?.value || state.setup.chEng || '').trim();
+  if (!name){
+    alert('Enter the Chief Engineer name first — the signature is stored against that name so earlier reports keep the right one.');
+    return;
+  }
+  const url = chEngSigPad?.toDataUrl();
+  if (!url){
+    alert('Sign in the box first, then save.');
+    return;
+  }
+  chEngSignatureMap()[name] = url;
+  state.setup.chEng = name;
+  await saveSetup();
+  renderChEngSignaturePreview();
+});
+chEngSigPad?.syncButtons();
 
 document.getElementById('vs_photoFile')?.addEventListener('change', async (e)=>{
   const file = e.target.files && e.target.files[0];
@@ -13006,6 +13216,38 @@ function renderPrintHistoryList(){
 }
 
 /** Shared noon / voyage-summary sheet used by Log Entry print and Reports tab print. */
+/**
+ * The report this one is measured against: the log entry immediately before it on
+ * ship's clock. For the first report of a leg that is the previous leg's closing
+ * report (the carryover), or the voyage-start reference the opening meter readings
+ * were taken at — there is no earlier report to measure from.
+ */
+function previousReportReference(entry){
+  if (!entry) return null;
+  const sorted = sortedEntries();
+  const idx = sorted.findIndex(x => x.id === entry.id);
+  if (idx > 0) return sorted[idx-1];
+  return effectiveCarryover();
+}
+
+/**
+ * Hours the printed report covers: previous report's date/time up to this report's
+ * date/time, on ship's clock and less any clocks advanced this period. Noon to noon
+ * with no clock change is 24.00 — this is the period figure, never a running total.
+ */
+function reportPeriodRunHours(entry, row){
+  const prev = previousReportReference(entry);
+  if (prev && prev.datetime && entry && entry.datetime){
+    const adj = elapsedShipHours(prev.datetime, entry.datetime, entry.clockChangeMin);
+    if (adj != null) return adj;
+    /* A clock change carried on the wrong entry must not blank the period or turn it
+       negative — fall back to the plain ship's-clock difference. */
+    const raw = elapsedShipHours(prev.datetime, entry.datetime, 0);
+    if (raw != null) return raw;
+  }
+  return row ? row.hrs : null;
+}
+
 function buildVoyageNoonSheetHTML(entry){
   const entryId = entry.id;
   const row = getComputedRow(entryId);
@@ -13018,7 +13260,14 @@ function buildVoyageNoonSheetHTML(entry){
   const prevRobData = priorEntry ? robAsOfEntry(priorEntry.id) : { rob: state.setup.rob, robLube: state.setup.robLube };
   const asOf = robAsOfEntry(entryId);
 
-  const dtStr = new Date(entry.datetime).toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const stamp = (dt)=> dt ? new Date(dt).toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '\u2014';
+  const dtStr = stamp(entry.datetime);
+  /* Hours at the top of the sheet are for this report alone — previous report's
+     date/time to this one's — so the stamp they are measured from is printed beside
+     them and the figure can be checked on the page. */
+  const prevReportRef = previousReportReference(entry);
+  const periodHrs = reportPeriodRunHours(entry, row);
+  const prevReportStr = stamp(prevReportRef && prevReportRef.datetime);
 
   const voyageDist = state.setup.voyageDistance;
   const distanceToGo = (voyageDist!=null && row.cumDistShip!=null) ? (voyageDist - row.cumDistShip) : null;
@@ -13031,14 +13280,14 @@ function buildVoyageNoonSheetHTML(entry){
   const printRpm = row.meStopped ? null : (row.rpmEff!=null ? row.rpmEff : entry.rpm);
   const meRunningEarly = mainEngineInUse(entry, row);
   const kpiItems = meRunningEarly ? [
-    {label:'Run Hrs', value:fmt(row.hrs, 2)},
+    {label:'Run Hrs (This Report)', value:fmt(periodHrs, 2)},
     {label:'Ship Dist (nm)', value:fmt(entry.distanceShip, 2)},
     {label:'RPM', value:fmt(printRpm, 2)},
     {label:'Speed (kn)', value:fmt(row.speedShip,2)},
     {label:'% MCR', value:fmt(row.mcrPct, 2)},
     {label:'Est. kW', value:fmt(row.kwEst, 2)}
   ] : [
-    {label:'Run Hrs', value:fmt(row.hrs, 2)},
+    {label:'Run Hrs (This Report)', value:fmt(periodHrs, 2)},
     {label:'Ship Dist (nm)', value:fmt(entry.distanceShip, 2)}
   ];
 
@@ -13194,7 +13443,7 @@ function buildVoyageNoonSheetHTML(entry){
     ${printDocHeader({ title: titles.title, subtitle: titles.subtitle, badge: entry.condition })}
     ${printMetaGrid([
       {label:'Date & Time', value:dtStr},
-      {label:'Voyage No.', value:state.setup.voyageNumber||'—'},
+      {label:'Last Report', value:prevReportStr},
       {label:'Condition', value:entry.condition},
       {label:'Route', value:`${state.setup.departPort||'—'} → ${state.setup.arrivePort||'—'}`},
       {label:'IMO No.', value:state.setup.imoNo||'—'},
