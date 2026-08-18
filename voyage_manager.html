@@ -3492,17 +3492,16 @@
 <script>
 /* ---------------- constants ---------------- */
 const FUEL_TYPES = ["HFO","LSFO","MDO/MGO","LSMGO"];
-/* Fuel grades as a consumption report groups them. MDO/MGO and LSMGO are the same
-   distillate product — the two entries exist so bunkers and R.O.B. can be held in
-   their own tanks, not because the engine burns anything different — so what was
-   burned is reported as one figure. The residual grades stay apart: HFO and LSFO
-   are different products and the sulphur limit turns on which one was burned.
-   R.O.B. is unaffected and stays per tank. */
+/* Fuel grades as a consumption report groups them: fuel oil against diesel/gas
+   oil, the two things an engineer burns. The four grades exist so bunkers and
+   R.O.B. can be held in their own tanks — HFO apart from LSFO for the sulphur
+   limit, MDO/MGO apart from LSMGO the same way — but that is a tank matter, not a
+   difference in what went into the engine, so consumption reports each side as one
+   figure. R.O.B. is unaffected and still reports every tank on its own. */
 /** Tonnes are reported to the kilogram on every sheet and export. */
 const FUEL_DECIMALS = 3;
 const FUEL_CONS_GROUPS = [
-  { label:'HFO',   grades:['HFO'] },
-  { label:'FUEL',  grades:['LSFO'] },
+  { label:'FUEL',  grades:['HFO','LSFO'] },
   { label:'DO/GO', grades:['MDO/MGO','LSMGO'] }
 ];
 function fuelConsGroupFor(grade){
@@ -13351,7 +13350,7 @@ function buildVoyageNoonSheetHTML(entry){
   /* Nothing burned yet (opening entry): still show the group the M/E is set to. */
   const fuelCols = groupsUsed.length
     ? groupsUsed
-    : [fuelConsGroupFor(entry.me?.type) || FUEL_CONS_GROUPS[1]];
+    : [fuelConsGroupFor(entry.me?.type) || FUEL_CONS_GROUPS[0]];
   const onGroup = (grade, qty) => {
     const own = fuelConsGroupFor(grade);
     return Object.fromEntries(fuelCols.map(g => [g.label, (own && g.label === own.label) ? qty : null]));
@@ -16214,7 +16213,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v135';
+let androidInstallCacheName = 'noon-report-v136';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
