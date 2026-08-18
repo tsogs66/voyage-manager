@@ -1305,17 +1305,19 @@
   .pr-sign-row{
     display:flex; justify-content:flex-end; align-items:center; gap:0;
   }
-  /* The ship's stamp is a rubber stamp: it is struck over the left third of the
-     signature line rather than set beside it, so it lands on top of whatever is
-     under it — line, name, footer — the way a stamp does on paper. Taken out of
-     flow so nothing shifts to make room for it. */
+  /* The ship's stamp is a rubber stamp: it is struck over the signature line rather
+     than set beside it, so it lands on top of whatever is under it — line, name,
+     footer — the way a stamp does on paper. Taken out of flow so nothing shifts to
+     make room for it. Centred a quarter along the line: at roughly the line's own
+     width it then leaves a quarter of the line clear on the right and hangs the
+     same quarter off to the left. */
   .pr-sign-stamp{
-    position:absolute; left:16.667%; top:16.8mm;
+    position:absolute; left:25%; top:16.8mm;
     transform:translate(-50%, -50%);
     display:flex; align-items:center; justify-content:center;
   }
   .pr-sign-stamp img{
-    height:41.8mm; width:auto; max-width:76mm; object-fit:contain; display:block;
+    height:42.64mm; width:auto; max-width:77.52mm; object-fit:contain; display:block;
   }
   .pr-sign-block{ flex:0 0 42mm; text-align:right; position:relative; }
   /* Height is the signature line's offset from the top of the block — the stamp's
