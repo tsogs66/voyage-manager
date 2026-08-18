@@ -3501,9 +3501,9 @@ const FUEL_TYPES = ["HFO","LSFO","MDO/MGO","LSMGO"];
 /** Tonnes are reported to the kilogram on every sheet and export. */
 const FUEL_DECIMALS = 3;
 const FUEL_CONS_GROUPS = [
-  { label:'HFO',    grades:['HFO'] },
-  { label:'LSFO',   grades:['LSFO'] },
-  { label:'DIESEL', grades:['MDO/MGO','LSMGO'] }
+  { label:'HFO',   grades:['HFO'] },
+  { label:'FUEL',  grades:['LSFO'] },
+  { label:'DO/GO', grades:['MDO/MGO','LSMGO'] }
 ];
 function fuelConsGroupFor(grade){
   return FUEL_CONS_GROUPS.find(g => g.grades.includes(grade)) || null;
