@@ -1306,14 +1306,14 @@
     display:flex; justify-content:flex-end; align-items:center; gap:0;
   }
   /* The ship's stamp is a rubber stamp: it is struck over the signature line rather
-     than set beside it, so it lands on top of whatever is under it — line, name,
-     footer — the way a stamp does on paper. Taken out of flow so nothing shifts to
-     make room for it. Centred a quarter along the line: at roughly the line's own
-     width it then leaves a quarter of the line clear on the right and hangs the
-     same quarter off to the left. */
+     than set beside it, so it lands on top of whatever is under it the way a stamp
+     does on paper. Taken out of flow so nothing shifts to make room for it.
+     translateX(-100%) puts its RIGHT edge on the line's quarter mark, so it touches
+     only the left quarter of the line and the rest of it hangs off to the left —
+     clear of the name and the three-quarters of line the signature sits over. */
   .pr-sign-stamp{
     position:absolute; left:25%; top:16.8mm;
-    transform:translate(-50%, -50%);
+    transform:translate(-100%, -50%);
     display:flex; align-items:center; justify-content:center;
   }
   .pr-sign-stamp img{
@@ -16143,7 +16143,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v133';
+let androidInstallCacheName = 'noon-report-v134';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
