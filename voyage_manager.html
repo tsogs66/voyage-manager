@@ -3492,6 +3492,35 @@
 <script>
 /* ---------------- constants ---------------- */
 const FUEL_TYPES = ["HFO","LSFO","MDO/MGO","LSMGO"];
+/* Fuel grades as a consumption report groups them. MDO/MGO and LSMGO are the same
+   distillate product — the two entries exist so bunkers and R.O.B. can be held in
+   their own tanks, not because the engine burns anything different — so what was
+   burned is reported as one figure. The residual grades stay apart: HFO and LSFO
+   are different products and the sulphur limit turns on which one was burned.
+   R.O.B. is unaffected and stays per tank. */
+/** Tonnes are reported to the kilogram on every sheet and export. */
+const FUEL_DECIMALS = 3;
+const FUEL_CONS_GROUPS = [
+  { label:'HFO',    grades:['HFO'] },
+  { label:'LSFO',   grades:['LSFO'] },
+  { label:'DIESEL', grades:['MDO/MGO','LSMGO'] }
+];
+function fuelConsGroupFor(grade){
+  return FUEL_CONS_GROUPS.find(g => g.grades.includes(grade)) || null;
+}
+/** Total a per-grade map over a group. Each grade is rounded to the precision it
+ *  prints at before being added, so the total is what a reader gets adding up the
+ *  figures in front of them — summing the raw values instead lands a kilo off the
+ *  column above it, which on a sheet checked by hand reads as an error. Null only
+ *  when the group carries nothing; a genuine zero still prints as a zero. */
+function sumFuelGroup(byGrade, group){
+  let seen = false, total = 0;
+  group.grades.forEach(t => {
+    const v = byGrade?.[t];
+    if (v != null){ seen = true; total += Number(Number(v).toFixed(FUEL_DECIMALS)); }
+  });
+  return seen ? total : null;
+}
 const LUBE_TYPES = ["CYL HIGH","CYL LOW","ME SYS OIL","GE SYS OIL","FRESH WATER"];
 const LUBE_KINDS = ['cylHigh','cylLow','meSys','geSys'];
 const LUBE_KIND_LABELS = { cylHigh:'CYL HIGH', cylLow:'CYL LOW', meSys:'ME SYS OIL', geSys:'GE SYS OIL' };
@@ -6518,7 +6547,7 @@ function geLoadBandMax(loadPct){
   return (loadPct == null || loadPct === '' || !isFinite(n)) ? null : n * 1.1;
 }
 
-function fmtFuel(n){ return fmt(n, 3); }
+function fmtFuel(n){ return fmt(n, FUEL_DECIMALS); }
 /* Lube oil quantities — whole litres, no decimals. */
 function fmtLube(n){ return fmt(n, 0); }
 /** Fuel & Lube ROB decimals: fuel 3, lube oil none, fresh water 2. */
@@ -13313,31 +13342,42 @@ function buildVoyageNoonSheetHTML(entry){
      the same per-grade figure the R.O.B. table lower down books against each tank,
      so the two halves of the sheet agree — including when a consumption override
      has been typed, which the old single total ignored. */
-  const fuelGradesUsed = FUEL_TYPES.filter(t =>
+  const usesGrade = (t) =>
     (entry.me?.type === t && row.meCons != null) ||
     (entry.ge?.type === t && row.geCons != null) ||
     (entry.blr?.type === t && row.blrCons != null) ||
-    (row.miscCons?.[t] > 0) || (row.consByType?.[t] > 0));
-  /* Nothing burned yet (opening entry): still show the grade the M/E is set to. */
-  const fuelCols = fuelGradesUsed.length ? fuelGradesUsed : [entry.me?.type || FUEL_TYPES[1]];
-  const onGrade = (grade, qty) => Object.fromEntries(fuelCols.map(t => [t, t === grade ? qty : null]));
+    (row.miscCons?.[t] > 0) || (row.consByType?.[t] > 0);
+  const groupsUsed = FUEL_CONS_GROUPS.filter(g => g.grades.some(usesGrade));
+  /* Nothing burned yet (opening entry): still show the group the M/E is set to. */
+  const fuelCols = groupsUsed.length
+    ? groupsUsed
+    : [fuelConsGroupFor(entry.me?.type) || FUEL_CONS_GROUPS[1]];
+  const onGroup = (grade, qty) => {
+    const own = fuelConsGroupFor(grade);
+    return Object.fromEntries(fuelCols.map(g => [g.label, (own && g.label === own.label) ? qty : null]));
+  };
   const fuelUnitRows = [
-    { label:'Main Engine', cells: onGrade(entry.me?.type, row.meCons) },
-    { label:'Diesel Generator', cells: onGrade(entry.ge?.type, row.geCons) },
-    { label:'Boiler', cells: onGrade(entry.blr?.type, row.blrCons) }
+    { label:'Main Engine', cells: onGroup(entry.me?.type, row.meCons) },
+    { label:'Diesel Generator', cells: onGroup(entry.ge?.type, row.geCons) },
+    { label:'Boiler', cells: onGroup(entry.blr?.type, row.blrCons) }
   ];
-  /* Miscellaneous burn (lifeboat, emergency generator) is booked by grade already. */
-  if (fuelCols.some(t => row.miscCons?.[t] > 0)){
-    fuelUnitRows.push({ label:'Other', cells: Object.fromEntries(fuelCols.map(t => [t, row.miscCons?.[t] || null])) });
+  /* Miscellaneous burn (lifeboat, emergency generator) is booked by grade already.
+     Nil for a group is left blank rather than printed as a zero it never used. */
+  const miscForGroup = (g) => {
+    const v = g.grades.reduce((sum, t) => sum + (row.miscCons?.[t] || 0), 0);
+    return v > 0 ? v : null;
+  };
+  if (fuelCols.some(g => miscForGroup(g) != null)){
+    fuelUnitRows.push({ label:'Other', cells: Object.fromEntries(fuelCols.map(g => [g.label, miscForGroup(g)])) });
   }
   const fuelCell = (v) => v == null ? '\u2014' : fmtFuel(v);
   const fuelSection = printSection('Fuel Consumption (MT)', `
     <table class="pr-table">
-      <tr><th>Unit</th>${fuelCols.map(t=>`<th>${escPrint(t)}</th>`).join('')}</tr>
+      <tr><th>Unit</th>${fuelCols.map(g=>`<th>${escPrint(g.label)}</th>`).join('')}</tr>
       ${fuelUnitRows.map(r=>`<tr><td class="row-lbl">${r.label}</td>${
-        fuelCols.map(t=>`<td>${fuelCell(r.cells[t])}</td>`).join('')}</tr>`).join('')}
+        fuelCols.map(g=>`<td>${fuelCell(r.cells[g.label])}</td>`).join('')}</tr>`).join('')}
       <tr class="pr-total"><td class="row-lbl"><strong>Total</strong></td>${
-        fuelCols.map(t=>`<td><strong>${fuelCell(row.consByType?.[t])}</strong></td>`).join('')}</tr>
+        fuelCols.map(g=>`<td><strong>${fuelCell(sumFuelGroup(row.consByType, g))}</strong></td>`).join('')}</tr>
     </table>`);
 
   const fwSection = printSection('Fresh Water', [

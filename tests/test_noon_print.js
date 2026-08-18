@@ -156,12 +156,17 @@ console.log('\nfuel consumption is totalled per grade, not across grades');
      tonnes to distillate tonnes. Columns are now per grade. */
   check('the section is a table, not a stack of rows',
     HTML.includes("const fuelSection = printSection('Fuel Consumption (MT)', `"), true);
-  check('only grades actually in use get a column', HTML.includes('const fuelGradesUsed = FUEL_TYPES.filter'), true);
-  check('a unit books against its own grade only', HTML.includes('const onGrade = (grade, qty) =>'), true);
+  check('only groups actually in use get a column', HTML.includes('const groupsUsed = FUEL_CONS_GROUPS.filter'), true);
+  check('a unit books against its own group only', HTML.includes('const onGroup = (grade, qty) =>'), true);
+  /* MDO/MGO and LSMGO are one distillate product; the split is a tank matter. */
+  check('the two distillates share one column',
+    HTML.includes("{ label:'DIESEL', grades:['MDO/MGO','LSMGO'] }"), true);
+  check('the residual grades stay apart', HTML.includes("{ label:'LSFO',   grades:['LSFO'] }"), true);
   check('misc burn is carried as its own row', HTML.includes("{ label:'Other', cells:"), true);
   /* The total row reads from consByType, which is what the R.O.B. table books per
      tank, so the two halves of the sheet cannot disagree. */
-  check('the total row is the per-grade figure', HTML.includes('fuelCell(row.consByType?.[t])'), true);
+  check('the total row sums the group', HTML.includes('fuelCell(sumFuelGroup(row.consByType, g))'), true);
+  check('a group with nothing in it stays blank, a real zero prints', HTML.includes('return seen ? total : null;'), true);
   check('the lumped cross-grade total is gone', HTML.includes("printRow('Total', fmtFuel(row.total))"), false);
   check('the total row is ruled off', HTML.includes('.pr-table tr.pr-total td{'), true);
 }

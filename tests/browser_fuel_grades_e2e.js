@@ -8,9 +8,10 @@
  * The main engine, the generators and the boiler can each be on a different
  * grade, so one figure added across them totals tonnes the ship never bunkered.
  * Sets up a mixed-grade period and checks the printed table books every unit
- * against its own grade, totals each column on its own, and agrees with the
- * Consumption column of the R.O.B. table further down the same sheet. Not in CI,
- * which has no browser.
+ * against its own grade, totals each column on its own, and reconciles with the
+ * Consumption column of the R.O.B. table further down the same sheet. MDO/MGO and
+ * LSMGO are one distillate product and share a column, so the diesel total is
+ * those two R.O.B. rows added. Not in CI, which has no browser.
  */
 const { chromium } = require('playwright-core');
 const BASE = process.env.APP_BASE || 'http://127.0.0.1:8867';
@@ -77,35 +78,49 @@ const check = (l, a, e) => {
     };
   });
 
-  console.log('\ncolumns are the grades actually burned');
-  check('three grades in play', out.header.length, 4);
+  console.log('\ncolumns are the fuels actually burned');
+  check('residual and distillate, nothing else', out.header.length, 3);
   check('unit column first', out.header[0], 'Unit');
   check('residual column', out.header[1], 'LSFO');
-  check('distillate columns', out.header.slice(2).join(','), 'MDO/MGO,LSMGO');
+  /* MDO/MGO and LSMGO are the same product — one column, not two. */
+  check('one distillate column', out.header[2], 'DIESEL');
+  check('the grades are not split out', out.header.includes('LSMGO') || out.header.includes('MDO/MGO'), false);
   check('unburned HFO gets no column', out.header.includes('HFO'), false);
 
-  console.log('\neach unit books against its own grade only');
+  console.log('\neach unit books against its own fuel only');
   const byLabel = Object.fromEntries(out.body.map(r => [r[0], r.slice(1)]));
-  check('main engine on LSFO alone', byLabel['Main Engine'].join(','), '41.160,—,—');
-  check('generators on LSMGO alone', byLabel['Diesel Generator'].join(','), '—,—,1.392');
-  check('boiler on LSMGO alone', byLabel['Boiler'].join(','), '—,—,0.304');
-  check('misc burn on its own row', byLabel['Other'].join(','), '—,0.120,—');
+  check('main engine on LSFO alone', byLabel['Main Engine'].join(','), '41.160,—');
+  check('generators on diesel alone', byLabel['Diesel Generator'].join(','), '—,1.392');
+  check('boiler on diesel alone', byLabel['Boiler'].join(','), '—,0.304');
+  check('misc burn on its own row', byLabel['Other'].join(','), '—,0.120');
 
   console.log('\neach column totals on its own');
   check('total row is labelled', out.totalRow[0], 'Total');
   check('LSFO total', out.totalRow[1], '41.160');
-  check('MDO/MGO total', out.totalRow[2], '0.120');
-  check('LSMGO total', out.totalRow[3], '1.696');
+  /* 0.120 MDO/MGO + 1.696 LSMGO, the two distillate tanks together. */
+  check('diesel total is both distillates', out.totalRow[2], '1.816');
   check('and is ruled off from the readings', out.totalIsRuled, true);
+
+  /* The point of the whole block: a reader adding the column by hand lands on the
+     printed total, rather than a kilo off it through a rounding step. */
+  out.header.slice(1).forEach((col, i) => {
+    const shown = out.body
+      .map(r => r[i + 1])
+      .filter(v => v !== '\u2014')
+      .reduce((sum, v) => sum + Number(v), 0);
+    check(`${col} column adds up by eye`, shown.toFixed(3), out.totalRow[i + 1]);
+  });
 
   /* The old behaviour: one number adding residual to distillate. */
   check('no column carries the old cross-grade sum',
     out.totalRow.slice(1).includes(out.lumped.toFixed(3)), false);
 
-  console.log('\nit agrees with the R.O.B. table on the same sheet');
+  console.log('\nit reconciles with the R.O.B. table on the same sheet');
   check('LSFO matches R.O.B. consumption', out.totalRow[1], out.rob['LSFO']);
-  check('MDO/MGO matches R.O.B. consumption', out.totalRow[2], out.rob['MDO/MGO']);
-  check('LSMGO matches R.O.B. consumption', out.totalRow[3], out.rob['LSMGO']);
+  check('diesel is the two distillate R.O.B. rows added',
+    out.totalRow[2], (Number(out.rob['MDO/MGO']) + Number(out.rob['LSMGO'])).toFixed(3));
+  check('R.O.B. still reports the tanks apart',
+    !!out.rob['MDO/MGO'] && !!out.rob['LSMGO'], true);
 
   console.log('\npage errors');
   check('none', errs.length, 0);
