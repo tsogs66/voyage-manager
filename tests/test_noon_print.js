@@ -257,6 +257,25 @@ console.log('\na crowded sheet is fitted onto the paper rather than clipped');
   check('the measure floor leaves room for a full sheet', HTML.includes('return Math.max(0.6, Math.min(1,'), true);
 }
 
+console.log('\nsaving and printing the summary read the form the same way');
+{
+  /* Two readers drifted apart: the save wrote some forty fields, the print snapshot
+     merged about half. Printing before saving then built the sheet off the stored
+     entry, so the distance, the generator table and the hand-booked consumption were
+     the previous values. */
+  check('one reader for the form', HTML.includes('function applyVoyageSummaryFormToEntry(entry){'), true);
+  check('the save uses it', HTML.includes('  applyVoyageSummaryFormToEntry(entry);'), true);
+  check('so does the print snapshot', HTML.includes('  applyVoyageSummaryFormToEntry(draft);'), true);
+  /* Half the sheet is derived by computeDerived(), which looks the entry up in
+     state.entries — a draft object on its own would change nothing. */
+  check('the draft stands in while the sheet is built', HTML.includes('function withVoyageSummaryDraft(entry, fn){'), true);
+  check('and is always put back', HTML.includes('finally { state.entries[idx] = stored; }'), true);
+  check('printing goes through it', HTML.includes('const { entry, sheetHtml } = withVoyageSummaryDraft(baseEntry,'), true);
+  /* The override comparison has to see the entry as it was before the form landed. */
+  check('the prior override is captured before the form is applied',
+    HTML.indexOf('const priorUnitOverride') < HTML.indexOf('  applyVoyageSummaryFormToEntry(entry);'), true);
+}
+
 console.log('\nthe sheet prints the stamp the period is measured from');
 check('last report cell replaces the duplicated voyage no.', HTML.includes("{label:'Last Report', value:prevReportStr}"), true);
 check('top hours are labelled as this report only', HTML.includes("{label:'Run Hrs (This Report)', value:fmt(periodHrs, 2)}"), true);

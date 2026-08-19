@@ -9700,62 +9700,32 @@ function formatDouglasSea(state){
 /** Read open Voyage Summary form into a print snapshot so unsaved weather / M/E detail are not dropped. */
 function snapshotVoyageSummaryForPrint(entry){
   if (!entry) return entry;
-  const e = {
-    ...entry,
-    weather: { ...(entry.weather || {}) },
-    report: { ...(entry.report || {}) }
-  };
-  if (!(isVoyageSummaryOpen() && currentVsEntryId === entry.id)) return e;
-
-  const num = (id)=>{
-    const el = document.getElementById(id);
-    if (!el || el.value === '') return null;
-    const v = parseFloat(el.value);
-    return isNaN(v) ? null : v;
-  };
-  const str = (id)=> document.getElementById(id)?.value || '';
-
-  e.weather = {
-    windDir: str('vs_windDir'),
-    windBft: num('vs_windBft'),
-    seaState: num('vs_seaState'),
-    swellDir: str('vs_swellDir'),
-    airTemp: num('vs_airTemp'),
-    seaTemp: readSeaTempFromForm()
-  };
-
-  const cylN = meCylinderCount();
-  const pumpRack = Array.from({length:cylN}, (_,i)=> num(`vs_pumpRack${i+1}`));
-  const exhaustTemp = Array.from({length:cylN}, (_,i)=> num(`vs_exhaust${i+1}`));
-  if (pumpRack.some(v=>v!=null) || exhaustTemp.some(v=>v!=null)){
-    e.report.pumpRack = pumpRack;
-    e.report.exhaustTemp = exhaustTemp;
+  if (!(isVoyageSummaryOpen() && currentVsEntryId === entry.id)){
+    return { ...entry, weather: { ...(entry.weather || {}) }, report: { ...(entry.report || {}) } };
   }
-  const turboN = turboCount();
-  const turbos = Array.from({length:turboN}, (_,i)=>({
-    in: num(`vs_t${i+1}in`), out: num(`vs_t${i+1}out`), rpm: num(`vs_t${i+1}rpm`)
-  }));
-  if (turbos.some(t=>t.in!=null || t.out!=null || t.rpm!=null)){
-    e.report.turbos = turbos;
-    e.report.turbo1 = turbos[0] || null;
-    e.report.turbo2 = turbos[1] || null;
-  }
-  ['erTemp','swTemp','stTemp','bilgeRob','sludgeRob','scavTemp','scavPress','pumpMark','fuelTemp','pressDiff',
-   'airCoolerIn','airCoolerOut','meLoTemp','meLoPress','geLoTemp','purifierHrs','foVisc','foDens','shaftKw'
-  ].forEach((key, idx)=>{
-    const idMap = {
-      /* Sea temp is typed on Engine Room & Tanks and mirrored under Weather. */
-      erTemp:'vs_erTemp', swTemp:'vs_erSeaTemp', stTemp:'vs_stTemp', bilgeRob:'vs_bilgeRob', sludgeRob:'vs_sludgeRob',
-      scavTemp:'vs_scavTemp', scavPress:'vs_scavPress', pumpMark:'vs_pumpMark', fuelTemp:'vs_fuelTemp', pressDiff:'vs_pressDiff',
-      airCoolerIn:'vs_acIn', airCoolerOut:'vs_acOut', meLoTemp:'vs_meLoTemp', meLoPress:'vs_meLoPress',
-      geLoTemp:'vs_geLoTemp', purifierHrs:'vs_purifierHrs', foVisc:'vs_foVisc', foDens:'vs_foDens', shaftKw:'vs_shaftKw'
-    };
-    const v = num(idMap[key]);
-    if (v != null) e.report[key] = v;
-  });
-  const remarks = document.getElementById('vs_remarks')?.value;
-  if (remarks != null) e.report.remarks = remarks;
-  return e;
+  const draft = cloneEntry(entry);
+  applyVoyageSummaryFormToEntry(draft);
+  return draft;
+}
+
+/**
+ * Run fn against the summary's unsaved figures.
+ *
+ * Half the sheet is not read off the entry at all — period hours, consumption by
+ * grade, R.O.B., the generator fuel split — but derived by computeDerived() and
+ * friends, which look the entry up in state.entries. Handing those a draft object
+ * alone changes nothing, so the draft stands in for the stored entry while fn runs
+ * and is taken out again afterwards. Nothing is persisted: the swap is undone in a
+ * finally, and building a sheet is synchronous, so no other code can observe it.
+ */
+function withVoyageSummaryDraft(entry, fn){
+  const draft = snapshotVoyageSummaryForPrint(entry);
+  const idx = state.entries.findIndex(e => e.id === entry?.id);
+  if (idx < 0 || draft === entry) return fn(draft);
+  const stored = state.entries[idx];
+  state.entries[idx] = draft;
+  try { return fn(draft); }
+  finally { state.entries[idx] = stored; }
 }
 
 function printWeatherSection(entry){
@@ -13061,9 +13031,21 @@ function renderVsPerfTable(entryId){
   }).join('')}</tr>`;
 }
 
-document.getElementById('btnSaveVoyageSummary').addEventListener('click', async ()=>{
-  const entry = state.entries.find(e=>e.id===currentVsEntryId);
-  if (!entry) return;
+/**
+ * Read the log entry summary form onto an entry.
+ *
+ * Saving the summary and printing from it both need every figure the engineer just
+ * typed. They used to read the form separately — the save wrote some forty fields,
+ * the print snapshot merged about half that — so printing straight after Add Entry,
+ * before saving, produced a sheet built from the stored entry: the distance, the
+ * generator hours and kW, the boiler and incinerator figures and the hand-booked
+ * consumption were all missing, and speed, slip and R.O.B. followed them wrong. One
+ * reader now serves both, so the two cannot drift apart again.
+ *
+ * Pure with respect to everything but the entry passed in: no persistence, no
+ * re-render, and no writing back to other widgets.
+ */
+function applyVoyageSummaryFormToEntry(entry){
   const num = id => { const el = document.getElementById(id); if (!el || el.value==='') return null; const v = parseFloat(el.value); return isNaN(v) ? null : v; };
   const num0 = id => { const el = document.getElementById(id); if (!el) return 0; const v = parseFloat(el.value); return isNaN(v) ? 0 : v; };
 
@@ -13094,7 +13076,6 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
      already applies unitOverride. Comparing to the applied figure dropped a real
      override every time an old log's summary was saved, and ROB then deducted
      the meter burn again. */
-  const priorUnitOverride = Object.assign({ ME:null, GE:null, BLR:null }, entry.unitOverride || {});
   const meterUnits = meterDerivedUnitCons(entry);
   entry.unitOverride = {
     ME: unitOverrideIfDifferent(num('vs_unit_me'), meterUnits.meCons),
@@ -13109,11 +13090,6 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
     if (el) lubePairs[r.key] = parseFloat(el.value)||0;
   });
   entry.consOverride = mergeLubeConsOverride(entry.consOverride, lubePairs);
-
-  // Keep log-entry bridges in sync
-  document.getElementById('in_distanceShip').value = entry.distanceShip ?? 0;
-  document.getElementById('in_rpm').value = entry.rpm ?? '';
-  document.getElementById('in_revCounter').value = entry.revCounter ?? '';
 
   // Persist full supplementary-report machinery fields from voyage summary
   const prev = previousEntryFor(entry.id);
@@ -13234,6 +13210,20 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   perfTable.INCINERATOR = buildIncineratorPerf(incRunTime, incKw);
   entry.report.perfTable = Object.assign({}, entry.report.perfTable || {}, perfTable);
   entry.report.photo = vsPhotoDataUrl || null;
+}
+
+document.getElementById('btnSaveVoyageSummary').addEventListener('click', async ()=>{
+  const entry = state.entries.find(e=>e.id===currentVsEntryId);
+  if (!entry) return;
+  /* Captured before the form is applied: the cascade below needs to know whether
+     the engineer's typed unit consumption actually changed the override. */
+  const priorUnitOverride = Object.assign({ ME:null, GE:null, BLR:null }, entry.unitOverride || {});
+  applyVoyageSummaryFormToEntry(entry);
+
+  // Keep log-entry bridges in sync
+  document.getElementById('in_distanceShip').value = entry.distanceShip ?? 0;
+  document.getElementById('in_rpm').value = entry.rpm ?? '';
+  document.getElementById('in_revCounter').value = entry.revCounter ?? '';
   entry.updatedAt = new Date().toISOString();
 
   await dbPut('entries', entry);
@@ -13624,9 +13614,12 @@ function buildVoyageNoonSheetHTML(entry){
 function printVoyageSummary(entryId){
   const baseEntry = state.entries.find(e=>e.id===entryId);
   if (!baseEntry || !getComputedRow(entryId)) return;
-  const entry = snapshotVoyageSummaryForPrint(baseEntry);
+  /* Printed from the open summary, so it prints what is on screen — including
+     figures typed since the last save. */
+  const { entry, sheetHtml } = withVoyageSummaryDraft(baseEntry, (e)=>({
+    entry: e, sheetHtml: buildVoyageNoonSheetHTML(e)
+  }));
   const noonOp = isNoonReportOp(entry.operation);
-  const sheetHtml = buildVoyageNoonSheetHTML(entry);
   const fittedHtml = printPortraitSinglePage(sheetHtml);
   recordPrintHistory(noonOp ? 'noon-report' : 'voyage-summary', entry, fittedHtml);
 }
@@ -16298,7 +16291,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v138';
+let androidInstallCacheName = 'noon-report-v139';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
