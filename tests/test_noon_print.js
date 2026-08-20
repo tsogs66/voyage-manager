@@ -54,7 +54,9 @@ vm.runInContext(
    extract('parseSeaTempValue'), extract('entrySeaTemp'),
    extract('sanitizeClockChangeMin'), extract('elapsedShipHours'),
    extract('previousReportReference'), extract('reportPeriodRunHours'),
-   extract('extraDoMap'), extract('hasExtraDo'), extract('sumFuelGroup')].join('\n'),
+   extract('extraDoMap'), extract('hasExtraDo'), extract('sumFuelGroup'),
+   extract('entryMeRunHours'), extract('tankRobDelta'), extract('formatRobDelta'),
+   extract('actualMeSfoc'), extract('rpmFromRevs'), extract('effectiveRpm')].join('\n'),
   sandbox
 );
 
@@ -274,6 +276,57 @@ console.log('\nsaving and printing the summary read the form the same way');
   /* The override comparison has to see the entry as it was before the form landed. */
   check('the prior override is captured before the form is applied',
     HTML.indexOf('const priorUnitOverride') < HTML.indexOf('  applyVoyageSummaryFormToEntry(entry);'), true);
+}
+
+console.log('\nM/E run hours drive the engine figures');
+{
+  /* Blank means the engine ran the whole watch. */
+  check('blank falls back to the watch', sandbox.entryMeRunHours({}, 24), 24);
+  check('typed hours win', sandbox.entryMeRunHours({ meRunHours: 12 }, 24), 12);
+  check('zero is not a run', sandbox.entryMeRunHours({ meRunHours: 0 }, 24), 24);
+  /* The engine cannot have run longer than the watch it is being reported for. */
+  check('capped at the watch', sandbox.entryMeRunHours({ meRunHours: 30 }, 24), 24);
+
+  /* Average RPM over stopped time, then cubed, is what made SFOC absurd: an engine
+     that turned 80 rpm for 12 of 24 hours averaged 40 and reported an eighth of the
+     power, so fuel over that power came out several times too high. */
+  const revs = 80 * 60 * 12;
+  check('revolutions over the watch halve the average', sandbox.rpmFromRevs(revs, 24), 40);
+  check('over the running hours they do not', sandbox.rpmFromRevs(revs, 12), 80);
+  /* Same fuel, same engine — only the hours it is divided by. */
+  const sfocWatch = sandbox.actualMeSfoc(20, 674, 24);
+  const sfocRun = sandbox.actualMeSfoc(20, 5396, 12);
+  check('the watch-hours figure is the wild one', Math.round(sfocWatch) > 3 * Math.round(sfocRun), true);
+}
+
+console.log('\nbilge and sludge carry forward with their change');
+{
+  check('a rise', sandbox.formatRobDelta(sandbox.tankRobDelta(12.2, 11)), '+1.20');
+  check('a fall', sandbox.formatRobDelta(sandbox.tankRobDelta(6.9, 7.5)), '-0.60');
+  check('no change still reads as zero', sandbox.formatRobDelta(sandbox.tankRobDelta(7.5, 7.5)), '0.00');
+  check('nothing to compare against', sandbox.tankRobDelta(7.5, null), null);
+  check('and prints as nothing', sandbox.formatRobDelta(null), '');
+}
+
+console.log('\nthe rest of this batch is wired in');
+{
+  check('run hours are an input, not a readout', HTML.includes('id="me_runtime_period" placeholder='), true);
+  check('and are stored on the entry', HTML.includes('meRunHours: formMeRunHours() ?? existing?.meRunHours ?? null,'), true);
+  /* Editing a watch rebuilds the entry, so anything the summary owns has to be
+     named or it is dropped — this is how weather went missing. */
+  ['weather', 'blrExtraCons', 'incExtraCons', 'shaftKw', 'robSurvey'].forEach(f => {
+    check(`${f} survives an edit`, new RegExp(`\\n\\s+${f}: existing\\?|\\n\\s+${f}: extraDoMap\\(existing`).test(HTML), true);
+  });
+  check('the printed sheet carries the rev counter', HTML.includes("printRow('Rev. Counter', entry.revCounter==null"), true);
+  check('bilge and sludge print their movement', HTML.includes("printRow('Bilge R.O.B.', robWithDelta("), true);
+  check('ECA is gated by the leg', HTML.includes("const ECA_OPS = new Set(['ECA - ENTRY', 'ECA - EXIT']);"), true);
+  check('an entry already carrying changeover data stays editable', HTML.includes('function entryHasEcaData(entry){'), true);
+  check('R.O.B. per report table', HTML.includes('function renderRobByReport(){'), true);
+  check('gauges can be pointed at a report', HTML.includes('function robGaugeSource(){'), true);
+  check('and the rest of the page still shows live R.O.B.', HTML.includes('const {rob, robLube} = asOfPick || live;'), true);
+  check('range totals tab', HTML.includes('function rangeAggregate(ids){'), true);
+  check('the from-report period belongs to the range before it',
+    HTML.includes('return list.slice(fi === ti ? fi : fi + 1, ti + 1).map(e => e.id);'), true);
 }
 
 console.log('\nthe sheet prints the stamp the period is measured from');

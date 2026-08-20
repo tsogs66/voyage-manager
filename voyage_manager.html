@@ -168,6 +168,8 @@
   .stamp-preview img{
     max-width:100%; max-height:120px; object-fit:contain; display:block;
   }
+  /* A tank that fell means oil went ashore or to the incinerator — worth the eye. */
+  .field.calc input.rob-down{color:var(--alert);}
   .stamp-check{display:flex; align-items:center; gap:7px; font-size:11px; color:var(--paper-dim); cursor:pointer;}
   .stamp-check input{accent-color:var(--teal); width:14px; height:14px; cursor:pointer;}
   /* Its own muted colour: the panel's dim text is tuned for the dark theme and
@@ -1498,6 +1500,7 @@
     <div class="tab" data-page="bunkerplan">Bunker Plan</div>
     <div class="tab" data-page="consumption">Consumption</div>
     <div class="tab" data-page="voyageabstract">Voyage Abstract</div>
+    <div class="tab" data-page="rangetotals">Range Totals</div>
     <div class="tab" data-page="receipts">Receipts</div>
     <div class="tab" data-page="reports">Reports</div>
     <div class="tab" data-page="reference">Reference</div>
@@ -1955,7 +1958,7 @@
         <div class="unit-box">
           <h3>Main Engine</h3>
           <div class="field"><label>Runtime (hrs, cumulative)</label><input type="number" step="0.1" id="me_runtime"></div>
-          <div class="field"><label>Period Runtime (hrs, calc)</label><input type="text" id="me_runtime_period" readonly tabindex="-1"></div>
+          <div class="field"><label>M/E Run Hours (this report)</label><input type="number" step="0.1" id="me_runtime_period" placeholder="hrs the engine actually turned"></div>
           <div class="field"><label>Rev. Counter (cumulative)</label><input type="number" step="1" id="in_revCounter"></div>
           <div class="hint" id="meRuntimeHint" style="margin:0;">Period runtime = hours between the previous entry's date/time and the date/time selected above, after any clocks advanced/retarded this period. On a new entry the cumulative counter tracks that period automatically until you type your own reading.</div>
         </div>
@@ -2153,7 +2156,9 @@
               <div class="field"><label>E/R Temp (°C)</label><input type="number" step="0.1" id="vs_erTemp"></div>
               <div class="field"><label>S/T Temp — Stern Tube (°C)</label><input type="number" step="0.1" id="vs_stTemp"></div>
               <div class="field"><label>Bilge ROB (m³)</label><input type="number" step="0.01" id="vs_bilgeRob"></div>
+              <div class="field calc"><label>Bilge change (m³)</label><input type="text" id="vs_bilgeDelta" readonly tabindex="-1"></div>
               <div class="field"><label>Sludge ROB (m³)</label><input type="number" step="0.01" id="vs_sludgeRob"></div>
+              <div class="field calc"><label>Sludge change (m³)</label><input type="text" id="vs_sludgeDelta" readonly tabindex="-1"></div>
               <div class="field"><label>S/W Temp — Sea Water (°C)</label><input type="number" step="0.1" id="vs_erSeaTemp"></div>
             </div>
             <div class="hint" style="margin-top:8px;">Sea temp here is the same reading as Weather &amp; Sea State — type it in either place.</div>
@@ -2426,6 +2431,17 @@
         </table>
       </div>
     </div>
+
+    <div class="panel">
+      <h2>Remaining On Board — All Tanks</h2>
+      <div class="hint">R.O.B. of every tank as it stood at each report, on the same rows as the consumption above. Bunker surveys are honoured, so a corrected figure shows from the report it was taken on.</div>
+      <div class="table-scroll">
+        <table id="robByReportTable">
+          <thead><tr id="robByReportHead"></tr></thead>
+          <tbody id="robByReportBody"><tr class="empty-row"><td>No entries yet.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- BUNKER PLAN (voyage fuel consumption estimator) -->
@@ -2449,7 +2465,45 @@
   </div>
 
   <!-- ROB -->
+  <!-- RANGE TOTALS -->
+  <div class="page" id="page-rangetotals">
+    <div class="panel">
+      <h2>Totals &amp; Averages Over a Report Range</h2>
+      <div class="form-grid cols3">
+        <div class="field"><label>From report</label><select id="rangeFrom"></select></div>
+        <div class="field"><label>To report</label><select id="rangeTo"></select></div>
+        <div class="field" style="align-self:end;"><button class="ghost small" id="btnRangeAll" type="button">Whole voyage</button></div>
+      </div>
+      <div class="hint" id="rangeSummaryHint">Pick the first and last report of the stretch you want. Every figure below is totalled or averaged over the reports from the one after "From" up to and including "To" — the same periods the reports themselves cover.</div>
+    </div>
+    <div class="panel">
+      <h2>Totals</h2>
+      <div class="stat-strip cols4" id="rangeTotals"></div>
+    </div>
+    <div class="panel">
+      <h2>Averages</h2>
+      <div class="stat-strip cols4" id="rangeAverages"></div>
+    </div>
+    <div class="panel">
+      <h2>Reports In Range</h2>
+      <div class="table-scroll">
+        <table id="rangeRowsTable">
+          <thead><tr id="rangeRowsHead"></tr></thead>
+          <tbody id="rangeRowsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="page" id="page-rob">
+    <div class="panel">
+      <h2>Show R.O.B. As Of</h2>
+      <div class="form-grid cols2">
+        <div class="field"><label>Report</label><select id="robAsOfSelect"><option value="">Now — latest R.O.B.</option></select></div>
+        <div class="field" style="align-self:end;"><button class="ghost small" id="btnRobAsOfNow" type="button">Back to latest</button></div>
+      </div>
+      <div class="hint" id="robAsOfHint">The gauges below show current R.O.B. Pick a report to see what was on board at that moment instead.</div>
+    </div>
     <div class="panel">
       <h2>Fuel — Remaining On Board</h2>
       <div class="gauge-grid cols4 large" id="fuelGauges"></div>
@@ -4343,6 +4397,7 @@ function entryFromSnap(id, datetime, operation, condition, snap, extra){
     fwProd: snap.fwProd,
     fwRob: snap.fwRob,
     miscCons: e.miscCons || { 'MDO/MGO':0, 'LSMGO':0 },
+    meRunHours: (Number(e.meRunHours) > 0) ? Number(e.meRunHours) : null,
     blrExtraCons: extraDoMap(e.blrExtraCons),
     incExtraCons: extraDoMap(e.incExtraCons),
     robSurvey: e.robSurvey || null,
@@ -6962,6 +7017,55 @@ function engineDistanceNm(pitchM, dailyRevs, rpm, hrs){
   return null;
 }
 
+/**
+ * Hours the main engine actually turned this report.
+ *
+ * Defaults to the period, which is right for a watch under way throughout. It is
+ * not right for one that manoeuvred or lay stopped for part of it, and the
+ * difference matters more than it looks: average RPM comes from Δrevs over these
+ * hours and power goes as the cube of it, so counting stopped time into the divisor
+ * flattens the average and then cubes the loss. A watch that steamed twelve of
+ * twenty-four hours reported roughly an eighth of the energy it really produced,
+ * and actual SFOC — fuel over that energy — came out several times too high.
+ */
+/**
+ * Bilge and sludge are sounded tank figures, not meters: they carry forward from one
+ * report to the next and move only by what was generated, transferred or discharged.
+ * A blank box on a new report therefore means "unchanged", not "empty", so the last
+ * reported figure is carried in and the difference against it is what the engineer
+ * is really reporting.
+ */
+function lastReportedTankRob(entryId, key){
+  const list = sortedEntries();
+  const idx = entryId ? list.findIndex(e => e.id === entryId) : list.length;
+  for (let i = (idx < 0 ? list.length : idx) - 1; i >= 0; i--){
+    const v = list[i]?.report?.[key];
+    if (v != null && !isNaN(v)) return Number(v);
+  }
+  return null;
+}
+
+/** Signed change against the previous report, or null when there is nothing to compare. */
+function tankRobDelta(current, previous){
+  if (current == null || isNaN(current) || previous == null || isNaN(previous)) return null;
+  return Number(current) - Number(previous);
+}
+
+/** "+1.20" / "-0.35" / "0.00" — the sign is the point, so it is always shown. */
+function formatRobDelta(delta, decimals = 2){
+  if (delta == null || isNaN(delta)) return '';
+  const v = Number(delta);
+  const body = Math.abs(v).toFixed(decimals);
+  if (Math.abs(v) < Math.pow(10, -decimals) / 2) return `0.${'0'.repeat(decimals)}`;
+  return `${v > 0 ? '+' : '-'}${body}`;
+}
+
+function entryMeRunHours(e, periodHrs){
+  const typed = Number(e?.meRunHours);
+  if (isFinite(typed) && typed > 0) return Math.min(typed, periodHrs != null ? periodHrs : typed);
+  return periodHrs;
+}
+
 function rpmFromRevs(dailyRevs, hrs){
   if (dailyRevs == null || isNaN(dailyRevs) || !(hrs > 0)) return null;
   return dailyRevs / (hrs * 60);
@@ -7010,6 +7114,7 @@ function computeDerived(){
     const incExtra = extraDoMap(e.incExtraCons);
 
     let rpmEff = (e.rpm!==null && e.rpm!==undefined && !isNaN(e.rpm)) ? e.rpm : null;
+    let meHrs = null;
 
     if (prev){
       hrs = elapsedShipHours(prev.datetime, e.datetime, e.clockChangeMin);
@@ -7112,8 +7217,11 @@ function computeDerived(){
            which zeros would otherwise drag down. */
         rpmEff = null;
       } else {
-        rpmEff = effectiveRpm(rpmEff, dailyRevs, hrs);
-        distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, hrs);
+        /* Average RPM is revolutions over the hours the shaft was turning, not over
+           the watch. Engine distance is Δrevs × pitch either way. */
+        meHrs = entryMeRunHours(e, hrs);
+        rpmEff = effectiveRpm(rpmEff, dailyRevs, meHrs);
+        distEngine = engineDistanceNm(pitch, dailyRevs, rpmEff, meHrs);
       }
       if (hrs>0) speedShip = e.distanceShip / hrs;
       if (distEngine!=null && distEngine>0 && e.distanceShip!==null){
@@ -7137,22 +7245,26 @@ function computeDerived(){
       }
 
       sfocRef = mcrPct!=null ? referenceSfocAtLoad(mcrPct) : null;
-      const sfocMeas = actualMeSfoc(meCons, kwEst, hrs);
+      /* Energy produced is power × the hours the engine ran, so the fuel that
+         produced it is divided by that, not by the length of the watch. */
+      const sfocHrs = meHrs != null ? meHrs : hrs;
+      const sfocMeas = actualMeSfoc(meCons, kwEst, sfocHrs);
       sfocActual = isoCorrectedSfoc(sfocMeas);
       sfocDelta = sfocDeltaPct(sfocActual, sfocRef);
-      meFuelExpected = expectedMeFuelMtFromSfoc(sfocRef, kwEst, hrs);
+      meFuelExpected = expectedMeFuelMtFromSfoc(sfocRef, kwEst, sfocHrs);
       if (hrs>0 && meCons!=null && !meStopped) meFuelMtDay = (meCons / hrs) * 24;
       if (mcrPct!=null && hrs>0) sumMcrHrs += mcrPct * hrs;
       if (sfocRef!=null && hrs>0){
         sumSfocRefWeighted += sfocRef * hrs;
         sumSfocRefHrs += hrs;
       }
-      if (sfocActual!=null && hrs>0){
-        sumSfocWeighted += sfocActual * hrs;
-        sumSfocHrs += hrs;
+      /* Voyage SFOC is weighted by running hours for the same reason. */
+      if (sfocActual!=null && sfocHrs>0){
+        sumSfocWeighted += sfocActual * sfocHrs;
+        sumSfocHrs += sfocHrs;
         if (sfocDelta!=null){
-          sumSfocDeltaWeighted += sfocDelta * hrs;
-          cntSfocDelta += hrs;
+          sumSfocDeltaWeighted += sfocDelta * sfocHrs;
+          cntSfocDelta += sfocHrs;
         }
       }
 
@@ -7213,7 +7325,7 @@ function computeDerived(){
                 the printout carries an explicit "M/E stopped" note so the empty M/E
                 block reads as deliberate rather than as missing data. */
              distEngine, speedEngine, speedShip, slip, mcrPct, kwEst,
-             dailyRevs: meStopped ? null : dailyRevs, rpmEff,
+             dailyRevs: meStopped ? null : dailyRevs, rpmEff, meHrs,
              sfocRef, sfocActual, sfocDelta, meFuelMtDay, meFuelExpected, gePeriod,
              cumFuel: {...consByFuel}, cumLube: {...consByLube}, cumDistShip: totalDistShip};
   });
@@ -8599,6 +8711,245 @@ function formatConsumptionCell(col, v){
 }
 
 /** Consumption tab: omit columns that are empty for every entry. */
+
+/* ---- R.O.B. of every tank, report by report -------------------------------
+   The consumption table says what each watch burned; this says what was left in
+   each tank when it ended. Both read the same computed rows, so a bunker survey
+   shows here from the report it was taken on. */
+function robByReportRows(){
+  const { rows } = computeDerived();
+  const tanks = [...fuelTankList(), ...lubeTankList(), ...fwTankList()];
+  const cat = (t) => fuelTankList().includes(t) ? 'fuel' : (fwTankList().includes(t) ? 'fw' : 'lube');
+  return rows.map(row => {
+    const asOf = robAsOfComputedRow(row, rows) || { rob: {}, robLube: {} };
+    const cells = tanks.map(t => {
+      const store = cat(t) === 'fuel' ? asOf.rob : asOf.robLube;
+      return { id: t.id, value: store?.[t.id] ?? null, cat: cat(t) };
+    });
+    return {
+      datetime: new Date(row.datetime).toLocaleString(undefined,
+        { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
+      operation: row.operation,
+      surveyed: !!row.robSurvey,
+      cells
+    };
+  });
+}
+
+function renderRobByReport(){
+  const head = document.getElementById('robByReportHead');
+  const body = document.getElementById('robByReportBody');
+  if (!head || !body) return;
+  const tanks = [...fuelTankList(), ...lubeTankList(), ...fwTankList()];
+  head.innerHTML = ['Date/Time', 'Operation', ...tanks.map(t => t.name)]
+    .map(h => `<th>${escHtml(h)}</th>`).join('');
+  const rows = robByReportRows();
+  if (!rows.length){
+    body.innerHTML = `<tr class="empty-row"><td colspan="${tanks.length + 2}">No entries yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map(r => `<tr>
+    <td>${escHtml(r.datetime)}${r.surveyed ? ' <strong>(surveyed)</strong>' : ''}</td>
+    <td>${escHtml(r.operation || '')}</td>
+    ${r.cells.map(c => `<td>${c.value == null ? '—' : fmtRob(c.value, c.cat)}</td>`).join('')}
+  </tr>`).join('');
+}
+
+/* ---- R.O.B. gauges as of a chosen report ----------------------------------
+   The gauges normally show what is on board now. An engineer checking a past
+   report wants the tanks as they stood then, so the whole page can be pointed at
+   one entry without changing anything stored. */
+let robAsOfEntryId = '';
+
+function robGaugeSource(){
+  if (!robAsOfEntryId) return null;
+  return robAsOfEntry(robAsOfEntryId);
+}
+
+function renderRobAsOfSelector(){
+  const sel = document.getElementById('robAsOfSelect');
+  if (!sel) return;
+  const list = sortedEntries().slice().reverse();
+  const current = robAsOfEntryId;
+  sel.innerHTML = '<option value="">Now — latest R.O.B.</option>' + list.map(e => {
+    const dt = new Date(e.datetime).toLocaleString(undefined,
+      { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return `<option value="${e.id}">${escHtml(dt)} — ${escHtml(e.operation || '')}</option>`;
+  }).join('');
+  sel.value = list.some(e => e.id === current) ? current : '';
+  if (sel.value !== current) robAsOfEntryId = sel.value;
+
+  const hint = document.getElementById('robAsOfHint');
+  if (hint){
+    const chosen = state.entries.find(e => e.id === robAsOfEntryId);
+    hint.textContent = chosen
+      ? `Showing R.O.B. as it stood at ${new Date(chosen.datetime).toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })} — ${chosen.operation || ''}. Receipts and consumption after that report are not counted.`
+      : 'The gauges below show current R.O.B. Pick a report to see what was on board at that moment instead.';
+  }
+}
+
+document.getElementById('robAsOfSelect')?.addEventListener('change', (ev)=>{
+  robAsOfEntryId = ev.target.value || '';
+  render();
+  resetRobGaugesToZero();
+  requestAnimationFrame(()=> animateRobGauges());
+});
+document.getElementById('btnRobAsOfNow')?.addEventListener('click', ()=>{
+  robAsOfEntryId = '';
+  render();
+  resetRobGaugesToZero();
+  requestAnimationFrame(()=> animateRobGauges());
+});
+
+/* ---- Totals and averages over a range of reports --------------------------
+   A report covers the period since the one before it, so a range that runs from
+   report A to report B covers the periods of every report after A up to and
+   including B. Picking A as the first report of the voyage therefore totals the
+   whole voyage, which is what "whole voyage" sets. */
+function rangeEntryIds(){
+  const list = sortedEntries();
+  const fromEl = document.getElementById('rangeFrom');
+  const toEl = document.getElementById('rangeTo');
+  if (!list.length) return [];
+  let fi = list.findIndex(e => e.id === fromEl?.value);
+  let ti = list.findIndex(e => e.id === toEl?.value);
+  if (fi < 0) fi = 0;
+  if (ti < 0) ti = list.length - 1;
+  if (ti < fi) [fi, ti] = [ti, fi];
+  /* The "from" report's own period belongs to what came before the range. */
+  return list.slice(fi === ti ? fi : fi + 1, ti + 1).map(e => e.id);
+}
+
+function rangeAggregate(ids){
+  const { rows } = computeDerived();
+  const inRange = rows.filter(r => ids.includes(r.id));
+  const sum = (f) => inRange.reduce((a, r) => a + (Number(f(r)) || 0), 0);
+  const hrs = sum(r => r.hrs);
+  const meHrs = inRange.reduce((a, r) => a + (Number(r.meHrs != null ? r.meHrs : r.hrs) || 0), 0);
+  const wAvg = (val, weight) => {
+    let num = 0, den = 0;
+    inRange.forEach(r => {
+      const v = Number(val(r)), w = Number(weight(r));
+      if (isFinite(v) && isFinite(w) && w > 0){ num += v * w; den += w; }
+    });
+    return den > 0 ? num / den : null;
+  };
+  const fuel = {};
+  FUEL_CONS_GROUPS.forEach(g => { fuel[g.label] = sum(r => sumFuelGroup(r.consByType, g)); });
+  return {
+    reports: inRange.length,
+    hrs, meHrs,
+    distShip: sum(r => r.distanceShip),
+    distEngine: sum(r => r.distEngine),
+    fuel,
+    fuelTotal: Object.values(fuel).reduce((a, v) => a + v, 0),
+    fwProd: sum(r => r.fwProdD),
+    fwCons: sum(r => r.fwConsD),
+    cylCons: sum(r => r.cylCons),
+    co2: totalCO2Tonnes(inRange.reduce((acc, r) => {
+      FUEL_TYPES.forEach(t => { acc[t] = (acc[t] || 0) + (r.consByType?.[t] || 0); });
+      return acc;
+    }, {})),
+    avgSpeed: hrs > 0 ? sum(r => r.distanceShip) / hrs : null,
+    avgRpm: wAvg(r => r.rpmEff, r => (r.meHrs != null ? r.meHrs : r.hrs)),
+    avgMcr: wAvg(r => r.mcrPct, r => (r.meHrs != null ? r.meHrs : r.hrs)),
+    avgKw: wAvg(r => r.kwEst, r => (r.meHrs != null ? r.meHrs : r.hrs)),
+    avgSlip: wAvg(r => r.slip, r => r.hrs),
+    avgSfoc: wAvg(r => r.sfocActual, r => (r.meHrs != null ? r.meHrs : r.hrs)),
+    avgSfocRef: wAvg(r => r.sfocRef, r => (r.meHrs != null ? r.meHrs : r.hrs)),
+    fuelPerDay: hrs > 0 ? (Object.values(fuel).reduce((a, v) => a + v, 0) / hrs) * 24 : null,
+    rows: inRange
+  };
+}
+
+function renderRangeTotals(){
+  const fromEl = document.getElementById('rangeFrom');
+  const toEl = document.getElementById('rangeTo');
+  const totalsBox = document.getElementById('rangeTotals');
+  const avgBox = document.getElementById('rangeAverages');
+  if (!fromEl || !toEl || !totalsBox || !avgBox) return;
+
+  const list = sortedEntries();
+  const opts = list.map(e => {
+    const dt = new Date(e.datetime).toLocaleString(undefined,
+      { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return `<option value="${e.id}">${escHtml(dt)} — ${escHtml(e.operation || '')}</option>`;
+  }).join('');
+  const keep = (el, fallback) => {
+    const had = el.value;
+    el.innerHTML = opts;
+    el.value = list.some(e => e.id === had) ? had : fallback;
+  };
+  keep(fromEl, list[0]?.id || '');
+  keep(toEl, list[list.length - 1]?.id || '');
+
+  if (!list.length){
+    totalsBox.innerHTML = '<div class="hint">No entries yet.</div>';
+    avgBox.innerHTML = '';
+    return;
+  }
+
+  const agg = rangeAggregate(rangeEntryIds());
+  const stat = (v, l) => `<div class="stat"><div class="num">${v}</div><div class="lbl">${escHtml(l)}</div></div>`;
+  const n = (v, d = 2) => v == null || isNaN(v) ? '—' : fmt(v, d);
+
+  totalsBox.innerHTML = [
+    stat(String(agg.reports), 'Reports in range'),
+    stat(n(agg.hrs), 'Period hours'),
+    stat(n(agg.meHrs), 'M/E running hours'),
+    stat(n(agg.distShip), 'Distance by ship (nm)'),
+    stat(n(agg.distEngine), 'Distance by engine (nm)'),
+    ...FUEL_CONS_GROUPS.map(g => stat(n(agg.fuel[g.label], 3), `${g.label} burned (MT)`)),
+    stat(n(agg.fuelTotal, 3), 'All fuel (MT)'),
+    stat(n(agg.co2, 2), 'CO₂ (MT)'),
+    stat(n(agg.cylCons, 0), 'Cylinder oil (L)'),
+    stat(n(litresToM3(agg.fwProd), 2), 'FW produced (m³)'),
+    stat(n(litresToM3(agg.fwCons), 2), 'FW consumed (m³)')
+  ].join('');
+
+  avgBox.innerHTML = [
+    stat(n(agg.avgSpeed), 'Ship speed (kn)'),
+    stat(n(agg.avgRpm), 'RPM'),
+    stat(n(agg.avgMcr), '% MCR'),
+    stat(n(agg.avgKw), 'Shaft power (kW)'),
+    stat(n(agg.avgSlip), 'Slip %'),
+    stat(n(agg.avgSfoc), 'Actual SFOC (g/kWh)'),
+    stat(n(agg.avgSfocRef), 'Reference SFOC (g/kWh)'),
+    stat(n(agg.fuelPerDay, 3), 'Fuel per day (MT)')
+  ].join('');
+
+  const head = document.getElementById('rangeRowsHead');
+  const body = document.getElementById('rangeRowsBody');
+  if (head && body){
+    const cols = ['Date/Time', 'Operation', 'Hrs', 'M/E Hrs', 'Dist (nm)', 'Speed (kn)', 'RPM', '%MCR',
+      ...FUEL_CONS_GROUPS.map(g => `${g.label} (MT)`), 'SFOC'];
+    head.innerHTML = cols.map(h => `<th>${escHtml(h)}</th>`).join('');
+    body.innerHTML = agg.rows.length ? agg.rows.map(r => `<tr>
+      <td>${escHtml(new Date(r.datetime).toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }))}</td>
+      <td>${escHtml(r.operation || '')}</td>
+      <td>${n(r.hrs)}</td>
+      <td>${n(r.meHrs != null ? r.meHrs : r.hrs)}</td>
+      <td>${n(r.distanceShip)}</td>
+      <td>${n(r.speedShip)}</td>
+      <td>${n(r.rpmEff)}</td>
+      <td>${n(r.mcrPct)}</td>
+      ${FUEL_CONS_GROUPS.map(g => `<td>${n(sumFuelGroup(r.consByType, g), 3)}</td>`).join('')}
+      <td>${n(r.sfocActual)}</td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="${cols.length}">No reports in this range.</td></tr>`;
+  }
+}
+
+['rangeFrom', 'rangeTo'].forEach(id => {
+  document.getElementById(id)?.addEventListener('change', renderRangeTotals);
+});
+document.getElementById('btnRangeAll')?.addEventListener('click', ()=>{
+  const list = sortedEntries();
+  if (!list.length) return;
+  document.getElementById('rangeFrom').value = list[0].id;
+  document.getElementById('rangeTo').value = list[list.length - 1].id;
+  renderRangeTotals();
+});
+
 function renderConsumptionTable(rows){
   const head = document.getElementById('consumptionHead');
   const body = document.getElementById('consumptionBody');
@@ -8641,7 +8992,11 @@ function render(){
   renderVesselSelector();
   renderVoyageLibrary().catch(()=>{});
   const {rows, consByFuel, consByLube, perf} = computeDerived();
-  const {rob, robLube} = currentROB(consByFuel, consByLube);
+  /* The R.O.B. tab can be pointed at a past report; everything else on the page
+     still wants the figure as it stands now. */
+  const asOfPick = robGaugeSource();
+  const live = currentROB(consByFuel, consByLube);
+  const {rob, robLube} = asOfPick || live;
   renderLastEntryRef();
   renderEntrySelector();
 
@@ -8781,6 +9136,9 @@ function render(){
 
   // consumption table — hide columns that are empty across every row
   renderConsumptionTable(rows);
+  renderRobByReport();
+  renderRobAsOfSelector();
+  renderRangeTotals();
 
   // summary
   const totalCons = Object.values(consByFuel).reduce((a,b)=>a+b,0);
@@ -9760,7 +10118,7 @@ function printMeCylinderSection(report){
     </table>`);
 }
 
-function printTurboOthersSection(report, { includeMeAux = true } = {}){
+function printTurboOthersSection(report, { includeMeAux = true, entry = null } = {}){
   if (!report) return '';
   const parts = [];
   if (includeMeAux){
@@ -9791,8 +10149,12 @@ function printTurboOthersSection(report, { includeMeAux = true } = {}){
   parts.push(printRow('E.R. Temperature', `${fmtP(report.erTemp, 2)} °C`));
   parts.push(printRow('S/W Temperature (Sea Water)', `${fmtP(report.swTemp, 2)} °C`));
   parts.push(printRow('S/T Temperature (Stern Tube)', `${fmtP(report.stTemp, 2)} °C`));
-  parts.push(printRow('Bilge R.O.B.', `${fmtP(report.bilgeRob,2)} m³`));
-  parts.push(printRow('Sludge R.O.B.', `${fmtP(report.sludgeRob,2)} m³`));
+  /* Beside each figure, what it moved by since the last report — which is the part
+     an inspector reads, and what the ORB has to agree with. */
+  parts.push(printRow('Bilge R.O.B.', robWithDelta(report.bilgeRob,
+    tankRobDelta(report.bilgeRob, lastReportedTankRob(entry?.id, 'bilgeRob')), 'm³')));
+  parts.push(printRow('Sludge R.O.B.', robWithDelta(report.sludgeRob,
+    tankRobDelta(report.sludgeRob, lastReportedTankRob(entry?.id, 'sludgeRob')), 'm³')));
   const title = includeMeAux ? 'Turbocharger &amp; Others' : 'Engine Room &amp; Tank Readings';
   return printSection(title, parts.join(''));
 }
@@ -9815,6 +10177,14 @@ function printEcaSection(report){
     printRow('ROB at ECA exit', eca.robOut==null?'—':`${fmtFuel(eca.robOut)} MT`),
     printRow('Distance in ECA', eca.distNm==null?'—':`${fmtP(eca.distNm,1)} nm`)
   ].join(''));
+}
+
+/** "12.50 m³  (+1.20)" — the reading with the movement that produced it. */
+function robWithDelta(value, delta, unit){
+  if (value == null || isNaN(value)) return '\u2014';
+  const shown = `${fmtP(value, 2)} ${unit}`;
+  const d = formatRobDelta(delta);
+  return d ? `${shown}  (${d})` : shown;
 }
 
 function printSoundingsSection(report){
@@ -11100,6 +11470,11 @@ function loadEntryIntoForm(id){
   document.getElementById('in_revCounter').value = e.revCounter ?? '';
   document.getElementById('in_tbn').value = e.tbn;
   document.getElementById('me_runtime').value = e.meRuntime ?? '';
+  const meRunEl = document.getElementById('me_runtime_period');
+  if (meRunEl){
+    meRunEl.value = e.meRunHours ?? '';
+    if (e.meRunHours != null) meRunEl.dataset.userEdited = '1'; else delete meRunEl.dataset.userEdited;
+  }
   const rpmDisp = document.getElementById('in_rpm_display');
   if (rpmDisp) rpmDisp.value = e.rpm==null?'—':fmt(e.rpm,2);
 
@@ -12371,8 +12746,14 @@ function openVoyageSummary(entryId){
      filled by renderVsCylTurboFields. Sea temp is shown here and under Weather. */
   document.getElementById('vs_erTemp').value = r.erTemp ?? '';
   document.getElementById('vs_stTemp').value = r.stTemp ?? '';
-  document.getElementById('vs_bilgeRob').value = r.bilgeRob ?? '';
-  document.getElementById('vs_sludgeRob').value = r.sludgeRob ?? '';
+  /* Carried forward: an unreported figure means the tank did not change, so the
+     previous report's value is the starting point rather than an empty box. */
+  const prevBilge = lastReportedTankRob(entry.id, 'bilgeRob');
+  const prevSludge = lastReportedTankRob(entry.id, 'sludgeRob');
+  document.getElementById('vs_bilgeRob').value = r.bilgeRob ?? prevBilge ?? '';
+  document.getElementById('vs_sludgeRob').value = r.sludgeRob ?? prevSludge ?? '';
+  vsPrevTankRob = { bilgeRob: prevBilge, sludgeRob: prevSludge };
+  updateVsTankRobDeltas();
   fillSeaTempFields(entrySeaTemp(entry));
   document.getElementById('vs_scavTemp').value = r.scavTemp ?? '';
   document.getElementById('vs_scavPress').value = r.scavPress ?? '';
@@ -13397,7 +13778,10 @@ function buildVoyageNoonSheetHTML(entry){
     printRow('Days To Go', daysToGoVal!=null?fmt(daysToGoVal,2):'—'),
     printRow('ETA', etaStr),
     printRow('Slip %', fmt(row.slip,2)),
-    printRow('Daily Revs.', fmt(row.dailyRevs, 2))
+    printRow('Daily Revs.', fmt(row.dailyRevs, 2)),
+    /* The counter reading the daily figure was taken from, so the sheet carries the
+       evidence as well as the difference. */
+    printRow('Rev. Counter', entry.revCounter==null?'—':fmt(entry.revCounter, 0))
   ].join('')) : '';
 
   /* Fuel consumption by unit AND by grade. Each unit can be burning a different
@@ -13554,7 +13938,7 @@ function buildVoyageNoonSheetHTML(entry){
   const weatherHtml = printWeatherSection(entry);
   const weatherSection = (noonOp || isSea || weatherHtml) ? weatherHtml : '';
   const cylSection = showMeDetail ? printMeCylinderSection(report) : '';
-  const turboOthersSection = printTurboOthersSection(report, { includeMeAux: showMeDetail });
+  const turboOthersSection = printTurboOthersSection(report, { includeMeAux: showMeDetail, entry });
   /* Engine stopped: omit M/E performance entirely — voyage progress and M/E KPIs
      are already dropped, so a blank "STOPPED" block is not needed. */
   const meSectionPrint = meRunning ? meSection : '';
@@ -13665,15 +14049,51 @@ function closeVoyageSummaryPanel(){
  * Hidden wholesale when it is stopped, rather than left showing rows of dashes.
  */
 const VS_ME_ONLY_PANELS = ['vsReferenceBlock', 'vsRunBlock', 'vsEcaBlock', 'vsMeTotalsBlock'];
+/* Changeover is only recorded crossing an ECA boundary, so the block is shown on
+   those legs alone — and on any older entry that already carries changeover data,
+   which must stay correctable. */
+const ECA_OPS = new Set(['ECA - ENTRY', 'ECA - EXIT']);
+function entryHasEcaData(entry){
+  const eca = entry?.report?.eca;
+  if (!eca) return false;
+  return !!(eca.grade || eca.start || eca.end || eca.robIn != null || eca.robOut != null || eca.distNm != null);
+}
+function isEcaEntry(entry){
+  return ECA_OPS.has(entry?.operation) || entryHasEcaData(entry);
+}
 /* Manual override: the rev counter lives inside one of these panels, so hiding them
    unconditionally would leave no way to correct a mistyped reading. */
 let vsForceShowMePanels = false;
 
+/** Previous report's bilge / sludge, held while the summary is open. */
+let vsPrevTankRob = { bilgeRob: null, sludgeRob: null };
+
+function updateVsTankRobDeltas(){
+  [['bilge', 'bilgeRob'], ['sludge', 'sludgeRob']].forEach(([name, key])=>{
+    const input = document.getElementById(`vs_${name}Rob`);
+    const out = document.getElementById(`vs_${name}Delta`);
+    if (!out) return;
+    const cur = input && input.value !== '' ? parseFloat(input.value) : null;
+    const delta = tankRobDelta(cur, vsPrevTankRob[key]);
+    out.value = delta == null ? '—' : formatRobDelta(delta);
+    /* Generated is the ordinary case; a drop means it went ashore or to the
+       incinerator, which is the entry worth catching the eye. */
+    out.classList.toggle('rob-down', delta != null && delta < 0);
+  });
+}
+['vs_bilgeRob', 'vs_sludgeRob'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('input', updateVsTankRobDeltas);
+});
+
 function setVsMePanelsVisible(show){
   const visible = show || vsForceShowMePanels;
+  const entry = state.entries.find(e=>e.id===currentVsEntryId);
   VS_ME_ONLY_PANELS.forEach(id=>{
     const el = document.getElementById(id);
-    if (el) el.style.display = visible ? '' : 'none';
+    if (!el) return;
+    /* ECA is gated by the leg as well as by the engine. */
+    const allowed = visible && (id !== 'vsEcaBlock' || isEcaEntry(entry));
+    el.style.display = allowed ? '' : 'none';
   });
   const note = document.getElementById('vsMeStoppedNote');
   if (note) note.style.display = show ? 'none' : '';
@@ -13751,6 +14171,8 @@ function meRuntimeIsUserEdited(){
 function clearMeRuntimeUserEdit(){
   const el = document.getElementById('me_runtime');
   if (el) delete el.dataset.userEdited;
+  const period = document.getElementById('me_runtime_period');
+  if (period) delete period.dataset.userEdited;
 }
 
 /**
@@ -13785,13 +14207,34 @@ function syncMeRuntimeFromPeriod(){
     else if (elapsed != null) rtEl.value = (prevRt + elapsed).toFixed(1);
   }
 
-  if (periodEl){
+  /* The run-hours box is the engineer's to set: it is suggested from the counter
+     delta, or from the watch length, and left alone the moment it is typed into. */
+  if (periodEl && !meRunHoursIsUserEdited() && document.activeElement !== periodEl){
     const cur = parseFloat(rtEl?.value);
     let period = (prevRt != null && !isNaN(cur)) ? runtimeDelta(cur, prevRt) : null;
     if (period == null && !meStopped) period = elapsed;
-    periodEl.value = (meStopped && !(period > 0)) ? 'M/E stopped'
-      : (period == null ? '—' : fmt(period, 2));
+    periodEl.value = (meStopped && !(period > 0)) ? '' : (period == null ? '' : fmt(period, 2));
   }
+}
+
+/** True once the engineer types their own run hours — stops the suggestion. */
+function meRunHoursIsUserEdited(){
+  return document.getElementById('me_runtime_period')?.dataset.userEdited === '1';
+}
+function clearMeRunHoursUserEdit(){
+  const el = document.getElementById('me_runtime_period');
+  if (el) delete el.dataset.userEdited;
+}
+document.getElementById('me_runtime_period')?.addEventListener('input', (ev)=>{
+  ev.target.dataset.userEdited = '1';
+  updateLivePreview();
+});
+/** Run hours as typed on the log entry form, or null to fall back to the watch. */
+function formMeRunHours(){
+  const el = document.getElementById('me_runtime_period');
+  if (!el || el.value === '') return null;
+  const v = parseFloat(el.value);
+  return (isFinite(v) && v > 0) ? v : null;
 }
 
 let rpmSyncGuard = false;
@@ -14669,6 +15112,16 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     fwConsTankId: existing?.fwConsTankId ?? lastRef?.fwConsTankId ?? fwTankList()[0]?.id ?? null,
     consOverride: existing?.consOverride || {},
     miscCons: existing?.miscCons || { 'MDO/MGO':0, 'LSMGO':0 },
+    /* Owned by the log entry summary, not by this form. The entry is rebuilt from
+       scratch on every save, so anything not named here is dropped — which is how
+       editing a watch used to wipe its weather, its hand-booked distillate, its
+       shaft power, and, worst of all, a bunker survey recorded against it. */
+    weather: existing?.weather || weather(),
+    meRunHours: formMeRunHours() ?? existing?.meRunHours ?? null,
+    blrExtraCons: extraDoMap(existing?.blrExtraCons),
+    incExtraCons: extraDoMap(existing?.incExtraCons),
+    shaftKw: existing?.shaftKw ?? null,
+    robSurvey: existing?.robSurvey || null,
     /* Keep a typed override when the engineer only opened/updated the old log.
        Clearing it on every Update Entry made ROB fall back to the flowmeter and
        deduct again. Meter edits still drop the override so the new readings win. */
@@ -16291,7 +16744,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v139';
+let androidInstallCacheName = 'noon-report-v140';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
