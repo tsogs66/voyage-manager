@@ -3516,6 +3516,10 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
         <span>Abstract</span>
       </button>
+      <button type="button" class="bn-more-item" data-page="rangetotals">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 5H7l6 7-6 7h10"/></svg>
+        <span>Totals</span>
+      </button>
       <button type="button" class="bn-more-item" data-page="receipts">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21V3z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg>
         <span>Receipts</span>
@@ -9382,7 +9386,7 @@ async function saveSetup(){
 }
 
 /* ---------------- tabs ---------------- */
-const BOTTOM_NAV_MORE = new Set(['consumption', 'voyageabstract', 'receipts', 'reports', 'reference', 'orb', 'data', 'voyagesetup', 'setup']);
+const BOTTOM_NAV_MORE = new Set(['consumption', 'voyageabstract', 'rangetotals', 'receipts', 'reports', 'reference', 'orb', 'data', 'voyagesetup', 'setup']);
 const BUNKER_PLAN_LEGS = 10;
 const BUNKER_PLAN_SIDES = [
   { key:'residual', title:'HFO / LSFO', grades:['HFO','LSFO'], defaultGrade:'HFO', qtyLabel:'HFO/LSFO' },
@@ -16774,7 +16778,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v142';
+let androidInstallCacheName = 'noon-report-v143';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
