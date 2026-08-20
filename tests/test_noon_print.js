@@ -56,7 +56,8 @@ vm.runInContext(
    extract('previousReportReference'), extract('reportPeriodRunHours'),
    extract('extraDoMap'), extract('hasExtraDo'), extract('sumFuelGroup'),
    extract('entryMeRunHours'), extract('tankRobDelta'), extract('formatRobDelta'),
-   extract('actualMeSfoc'), extract('rpmFromRevs'), extract('effectiveRpm')].join('\n'),
+   extract('actualMeSfoc'), extract('rpmFromRevs'), extract('effectiveRpm'),
+   extract('unitOverrideIfDifferent')].join('\n'),
   sandbox
 );
 
@@ -327,6 +328,26 @@ console.log('\nthe rest of this batch is wired in');
   check('range totals tab', HTML.includes('function rangeAggregate(ids){'), true);
   check('the from-report period belongs to the range before it',
     HTML.includes('return list.slice(fi === ti ? fi : fi + 1, ti + 1).map(e => e.id);'), true);
+}
+
+console.log('\nsaving a summary you did not edit changes nothing');
+{
+  /* The box is filled with the metered figure rounded to three decimals, so a value
+     that renders the same as the calculation is not an edit. */
+  check('the displayed figure is not an override', sandbox.unitOverrideIfDifferent(0.304, 0.3045), null);
+  check('nor is an exact match', sandbox.unitOverrideIfDifferent(0.304, 0.304), null);
+  /* The case that broke: 0.3045 shows as 0.304 and differs by exactly 0.0005, which
+     the old strict "< 0.0005" test failed, storing an override half a gram light. */
+  check('a half-gram rounding is still not an override', sandbox.unitOverrideIfDifferent(1.2345, 1.234), null);
+  check('and neither is it the other way', sandbox.unitOverrideIfDifferent(1.234, 1.2345), null);
+
+  /* A real correction must still be kept, to the last digit the box can hold. */
+  check('a typed correction is kept', sandbox.unitOverrideIfDifferent(0.305, 0.3045), 0.305);
+  check('one digit is enough to count', sandbox.unitOverrideIfDifferent(0.304, 0.305), 0.304);
+  check('a wholly different figure', sandbox.unitOverrideIfDifferent(12.5, 0.304), 12.5);
+  /* Nothing typed is nothing to store; nothing calculated means the typed value stands. */
+  check('an empty box stores nothing', sandbox.unitOverrideIfDifferent(null, 0.3045), null);
+  check('with no calculation the typed value wins', sandbox.unitOverrideIfDifferent(0.5, null), 0.5);
 }
 
 console.log('\nthe sheet prints the stamp the period is measured from');
