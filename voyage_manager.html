@@ -2370,10 +2370,10 @@
             <th>Cond</th><th>Hrs</th><th>Dist Ship</th><th>RPM</th>
             <th>Rev. Counter</th><th>Daily Revs</th>
             <th>ME Run</th><th>GE Run</th><th>Blr Run</th>
-            <th>ME Cons</th><th>GE Cons</th><th>Blr Cons</th><th>Total Cons</th>
+            <th>ME Cons</th><th>GE Cons</th><th>Blr Cons</th><th>Total FUEL</th><th>Total DO/GO</th>
             <th>Cyl Oil Cons (Grade)</th><th>ME LO</th><th>GE LO</th><th>FW Meter</th><th>FW Produced</th><th>FW ROB</th><th>FW Cons</th><th></th>
           </tr></thead>
-          <tbody id="voyageAbstractBody"><tr class="empty-row"><td colspan="32">No entries yet.</td></tr></tbody>
+          <tbody id="voyageAbstractBody"><tr class="empty-row"><td colspan="33">No entries yet.</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -2399,7 +2399,7 @@
               <th>Cond</th><th>Hrs</th><th>Dist Ship</th><th>RPM</th>
               <th>Rev. Counter</th><th>Daily Revs</th>
               <th>ME Run</th><th>GE Run</th><th>Blr Run</th>
-              <th>ME Cons</th><th>GE Cons</th><th>Blr Cons</th><th>Total Cons</th>
+              <th>ME Cons</th><th>GE Cons</th><th>Blr Cons</th><th>Total FUEL</th><th>Total DO/GO</th>
               <th>Cyl Oil Cons (Grade)</th><th>ME LO</th><th>GE LO</th><th>FW Meter</th><th>FW Produced</th><th>FW ROB</th><th>FW Cons</th>
             </tr></thead>
             <tbody id="abstractViewerBody"></tbody>
@@ -3562,9 +3562,20 @@ const FUEL_TYPES = ["HFO","LSFO","MDO/MGO","LSMGO"];
 /** Tonnes are reported to the kilogram on every sheet and export. */
 const FUEL_DECIMALS = 3;
 const FUEL_CONS_GROUPS = [
-  { label:'FUEL',  grades:['HFO','LSFO'] },
-  { label:'DO/GO', grades:['MDO/MGO','LSMGO'] }
+  { key:'fuel', label:'FUEL',  csv:'FuelCons', grades:['HFO','LSFO'] },
+  { key:'dogo', label:'DO/GO', csv:'DOGOCons', grades:['MDO/MGO','LSMGO'] }
 ];
+/* Column key for a group, on the Voyage Abstract and the consumption table. */
+function fuelGroupColKey(g){ return `cons_${g.key}`; }
+/* A computed row's period consumption per group, keyed for those tables. Reports
+   used to carry one cross-fuel total, which added residual to distillate: a figure
+   nobody bunkers, orders or reconciles a tank against. Every total is now reported
+   the way the noon sheet totals it, one column per group. */
+function rowFuelGroupCells(row){
+  const out = {};
+  FUEL_CONS_GROUPS.forEach(g => { out[fuelGroupColKey(g)] = sumFuelGroup(row?.consByType, g); });
+  return out;
+}
 /* Distillate the boiler's pilot burner and the incinerator burn on top of whatever
    the boiler flowmeter measured. Neither has a meter of its own, so the engineer
    books the quantity by hand and it is added to consumption like any other burn. */
@@ -8411,7 +8422,7 @@ const ABSTRACT_BASE_COLS = [
   { key:'meCons', label:'ME Cons', kind:'fuel' },
   { key:'geCons', label:'GE Cons', kind:'fuel' },
   { key:'blrCons', label:'Blr Cons', kind:'fuel' },
-  { key:'total', label:'Total Cons', kind:'fuel' },
+  ...FUEL_CONS_GROUPS.map(g => ({ key: fuelGroupColKey(g), label: `Total ${g.label}`, kind:'fuel' })),
   { key:'cylOil', label:'Cyl Oil Cons (Grade)', kind:'cyl' },
   { key:'meLoCons', label:'ME LO', kind:'lube' },
   { key:'geLoCons', label:'GE LO', kind:'lube' },
@@ -8495,7 +8506,8 @@ function abstractRowValues(r, robMap){
     hrs2: r.hrs, distanceShip2: r.distanceShip, rpm2: r.meStopped ? null : r.rpm,
     revCounter: r.revCounter, dailyRevs: r.dailyRevs,
     meRun: r.me, geRun: r.ge, blrRun: r.blr?.meter,
-    meCons: r.meCons, geCons: r.geCons, blrCons: r.blrCons, total: r.total,
+    meCons: r.meCons, geCons: r.geCons, blrCons: r.blrCons,
+    ...rowFuelGroupCells(r),
     cylOil: { cons: r.cylCons, tbn: r.tbn },
     meLoCons: r.meLoCons, geLoCons: r.geLoCons,
     fwProd: r.fwProd, fwProdD: r.fwProdD, fwRob: r.fwRob, fwConsD: r.fwConsD,
@@ -8589,7 +8601,8 @@ function abstractRowCells(r){
 }
 
 const ABSTRACT_CSV_BASE_HEADER = ["DateTime","Operation","RunHrs","RPM","DistEngine","SpeedEngine","DistShip","SpeedShip","Slip%","%MCR","EstKW",
-  "Cond","Hrs","DistShip2","RPM2","RevCounter","DailyRevs","MERun","GERun","BlrRun","MECons","GECons","BlrCons","TotalCons",
+  "Cond","Hrs","DistShip2","RPM2","RevCounter","DailyRevs","MERun","GERun","BlrRun","MECons","GECons","BlrCons",
+  ...FUEL_CONS_GROUPS.map(g => g.csv),
   "CylOilCons","CylGrade","MELO","GELO","FWMeter","FWProduced","FWRob","FWCons"];
 /** CSV header including one ROB column per configured fuel grade and lube oil. */
 function abstractCsvHeader(){
@@ -8603,7 +8616,8 @@ function abstractRowToCsv(r, robMap){
     .concat(lubeTankList().map(t=> fmtNum(row[abstractRobKey('lube', t.id)], 0)));
   return [r.datetime, r.operation, fmtNum(r.hrs,2), fmtNum(r.rpm,2), fmtNum(r.distEngine,2), fmtNum(r.speedEngine,2), fmtNum(r.distanceShip,2), fmtNum(r.speedShip,2),
     fmtNum(r.slip,2), fmtNum(r.mcrPct,2), fmtNum(r.kwEst,2), r.condition, fmtNum(r.hrs,2), fmtNum(r.distanceShip,2), fmtNum(r.rpm,2), fmtNum(r.revCounter,2), fmtNum(r.dailyRevs,2),
-    meterCellText(r.me), meterCellText(r.ge), fmtNum(r.blr.meter,2), fmtNum(r.meCons,3), fmtNum(r.geCons,3), fmtNum(r.blrCons,3), fmtNum(r.total,3),
+    meterCellText(r.me), meterCellText(r.ge), fmtNum(r.blr.meter,2), fmtNum(r.meCons,3), fmtNum(r.geCons,3), fmtNum(r.blrCons,3),
+    ...FUEL_CONS_GROUPS.map(g => fmtNum(row[fuelGroupColKey(g)], FUEL_DECIMALS)),
     fmtNum(r.cylCons,0), r.tbn, fmtNum(r.meLoCons,0), fmtNum(r.geLoCons,0), fmtNum(r.fwProd,0), fmtNum(litresToM3(r.fwProdD),2), fmtNum(litresToM3(r.fwRob),2), fmtNum(litresToM3(r.fwConsD),2)]
     .concat(robCells);
 }
@@ -8678,7 +8692,7 @@ function consumptionRowValues(r){
     lsmgoTotal: sum(meOf('LSMGO'), geOf('LSMGO'), blrOf('LSMGO'), incOf('LSMGO'), (r.miscCons||{})['LSMGO']),
     miscMdo: (r.miscCons||{})['MDO/MGO'] || null,
     miscLsmgo: (r.miscCons||{})['LSMGO'] || null,
-    periodTotal: r.total,
+    ...rowFuelGroupCells(r),
     fwCons: r.fwConsD
   };
 }
@@ -8706,7 +8720,7 @@ const CONSUMPTION_COLS = [
   { key:'lsmgoTotal', label:'LSMGO Total', kind:'fuel' },
   { key:'miscMdo', label:'Misc MDO/MGO', kind:'fuel' },
   { key:'miscLsmgo', label:'Misc LSMGO', kind:'fuel' },
-  { key:'periodTotal', label:'Period Total', kind:'fuel' },
+  ...FUEL_CONS_GROUPS.map(g => ({ key: fuelGroupColKey(g), label: `${g.label} Total`, kind:'fuel' })),
   { key:'fwCons', label:'FW Cons', kind:'fw' }
 ];
 
@@ -10363,7 +10377,10 @@ function exportWeeklyAbstractCsv(){
   const cutoff = Date.now() - 7*24*3600*1000;
   const week = rows.filter(r=> new Date(r.datetime).getTime() >= cutoff);
   const src = week.length ? week : rows;
-  const cols = ['datetime','operation','hrs','distanceShip','rpmEff','meCons','geCons','blrCons','total','slip','mcrPct','sfocActual'];
+  const cols = ['datetime','operation','hrs','distanceShip','rpmEff','meCons','geCons','blrCons',
+    ...FUEL_CONS_GROUPS.map(g=>g.csv),
+    'slip','mcrPct','sfocActual'];
+  const groupCsv = new Map(FUEL_CONS_GROUPS.map(g=>[g.csv, g]));
   const esc = (v)=>{
     if (v==null || v==='') return '';
     const s = String(v);
@@ -10372,6 +10389,8 @@ function exportWeeklyAbstractCsv(){
   const lines = [cols.join(',')];
   src.forEach(r=>{
     lines.push(cols.map(c=>{
+      const g = groupCsv.get(c);
+      if (g) return esc(sumFuelGroup(r.consByType, g));
       if (c==='distanceShip') return esc(r.distanceShip);
       return esc(r[c]);
     }).join(','));
@@ -16755,7 +16774,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v141';
+let androidInstallCacheName = 'noon-report-v142';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -17548,14 +17567,22 @@ function downloadCSV(filename, header, lines){
 }
 document.getElementById('btnExportCSVLog').addEventListener('click', ()=>{
   const {rows} = computeDerived();
-  const header = ["DateTime","Operation","Condition","Hours","DistShip","RPM","RevCounter","DailyRevs","MECons","GECons","BlrCons","Total","CylCons","CylGrade","MELo","GELo","FWMeter","FWProduced","FWRob","FWCons"];
-  const lines = rows.map(r=>[r.datetime,r.operation,r.condition,fmtNum(r.hrs,2),fmtNum(r.distanceShip,2),fmtNum(r.rpm,2),fmtNum(r.revCounter,2),fmtNum(r.dailyRevs,2),fmtNum(r.meCons,3),fmtNum(r.geCons,3),fmtNum(r.blrCons,3),fmtNum(r.total,3),fmtNum(r.cylCons,0),r.tbn,fmtNum(r.meLoCons,0),fmtNum(r.geLoCons,0),fmtNum(r.fwProd,0),fmtNum(litresToM3(r.fwProdD),2),fmtNum(litresToM3(r.fwRob),2),fmtNum(litresToM3(r.fwConsD),2)]);
+  const header = ["DateTime","Operation","Condition","Hours","DistShip","RPM","RevCounter","DailyRevs","MECons","GECons","BlrCons",
+    ...FUEL_CONS_GROUPS.map(g=>g.csv),
+    "CylCons","CylGrade","MELo","GELo","FWMeter","FWProduced","FWRob","FWCons"];
+  const lines = rows.map(r=>[r.datetime,r.operation,r.condition,fmtNum(r.hrs,2),fmtNum(r.distanceShip,2),fmtNum(r.rpm,2),fmtNum(r.revCounter,2),fmtNum(r.dailyRevs,2),fmtNum(r.meCons,3),fmtNum(r.geCons,3),fmtNum(r.blrCons,3),
+    ...FUEL_CONS_GROUPS.map(g=>fmtNum(sumFuelGroup(r.consByType, g), FUEL_DECIMALS)),
+    fmtNum(r.cylCons,0),r.tbn,fmtNum(r.meLoCons,0),fmtNum(r.geLoCons,0),fmtNum(r.fwProd,0),fmtNum(litresToM3(r.fwProdD),2),fmtNum(litresToM3(r.fwRob),2),fmtNum(litresToM3(r.fwConsD),2)]);
   downloadCSV('voyage-log.csv', header, lines);
 });
 document.getElementById('btnExportCSVCons').addEventListener('click', ()=>{
   const {rows} = computeDerived();
-  const header = ["DateTime","Operation","METype","MECons","GEType","GECons","BlrType","BlrCons","Total","FWCons"];
-  const lines = rows.map(r=>[r.datetime,r.operation,r.me.type,fmtNum(r.meCons,3),r.ge.type,fmtNum(r.geCons,3),r.blr.type,fmtNum(r.blrCons,3),fmtNum(r.total,3),fmtNum(litresToM3(r.fwConsD),2)]);
+  const header = ["DateTime","Operation","METype","MECons","GEType","GECons","BlrType","BlrCons",
+    ...FUEL_CONS_GROUPS.map(g=>g.csv),
+    "FWCons"];
+  const lines = rows.map(r=>[r.datetime,r.operation,r.me.type,fmtNum(r.meCons,3),r.ge.type,fmtNum(r.geCons,3),r.blr.type,fmtNum(r.blrCons,3),
+    ...FUEL_CONS_GROUPS.map(g=>fmtNum(sumFuelGroup(r.consByType, g), FUEL_DECIMALS)),
+    fmtNum(litresToM3(r.fwConsD),2)]);
   downloadCSV('consumption.csv', header, lines);
 });
 document.getElementById('btnRecalculateAllData')?.addEventListener('click', async ()=>{
