@@ -57,17 +57,9 @@ const check = (l, a, e) => {
     check(boxId, !!(await pg.$('#' + boxId)), true);
   }
 
-  /* Save once before measuring anything. Saving a summary rewrites the unit-cons
-     boxes from what they display, and a metered figure whose third decimal is a 5
-     lands exactly on unitOverrideIfDifferent's 0.0005 tolerance — so the first save
-     of any summary can nudge the total by half a gram whether or not a field was
-     touched. That is unrelated to the boxes under test and predates them; settling
-     it here keeps the deltas below exact. */
-  await pg.click('#btnSaveVoyageSummary');
-  await pg.waitForTimeout(1500);
-  await pg.evaluate((entryId) => openVoyageSummary(entryId), id);
-  await pg.waitForTimeout(800);
-
+  /* Measured straight from the open summary. This used to need a settling save
+     first, because saving a summary nobody had edited shifted the total by half a
+     gram; the deltas below are exact without one now. */
   const before = await pg.evaluate(() => {
     const r = getComputedRow(currentVsEntryId);
     return { mdo: r.consByType['MDO/MGO'], lsmgo: r.consByType['LSMGO'], total: r.total };

@@ -6711,10 +6711,21 @@ function dualDelta(currIn, prevIn, currOut, prevOut, rollIn, rollOut){
 /* Store a typed unit-cons override only when it differs from the meter-derived figure.
    Prefilling the Voyage Summary boxes with the calculated values used to freeze ME/GE/BLR
    on the first save, so later meter edits on the log entry never recalculated. */
+/**
+ * The typed unit consumption, or null when it is not actually an override.
+ *
+ * The box is filled with the metered figure rounded to the decimals it displays, so
+ * a value that renders the same as the calculation is the engineer leaving it alone,
+ * not typing it. Comparing against the unrounded figure instead meant a metered burn
+ * whose next digit is a 5 — 0.3045, shown as 0.304 — sat exactly on the old 0.0005
+ * tolerance and failed it: opening any summary and pressing Save, without touching a
+ * field, stored an override half a gram light and moved R.O.B. with it.
+ */
 function unitOverrideIfDifferent(entered, calculated){
   if (entered==null || isNaN(entered)) return null;
   if (calculated==null || isNaN(calculated)) return entered;
-  if (Math.abs(entered - calculated) < 0.0005) return null;
+  const shown = (v) => Number(v).toFixed(FUEL_DECIMALS);
+  if (shown(entered) === shown(calculated)) return null;
   return entered;
 }
 
@@ -16744,7 +16755,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v140';
+let androidInstallCacheName = 'noon-report-v141';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',

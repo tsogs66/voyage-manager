@@ -41,7 +41,8 @@ function extract(name) {
   return HTML.slice(start, i + 1);
 }
 
-const sandbox = { console };
+/* Constants the extracted helpers close over. */
+const sandbox = { console, FUEL_DECIMALS: 3 };
 vm.createContext(sandbox);
 vm.runInContext(
   [
