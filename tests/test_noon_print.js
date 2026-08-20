@@ -42,17 +42,43 @@ function extract(name) {
   return HTML.slice(start, i + 1);
 }
 
+/*
+ * Pull a top-level `const NAME = <expr>;` out of the app so the checks below read the
+ * real list rather than a copy of it kept in step by hand — a copy is the very thing
+ * that let an operation exist in one list and not another.
+ */
+function extractConst(name) {
+  const start = HTML.indexOf(`const ${name} = `);
+  if (start < 0) throw new Error(`const ${name} not found in voyage_manager.html`);
+  let depth = 0;
+  for (let i = start; i < HTML.length; i++) {
+    const ch = HTML[i];
+    if (ch === '(' || ch === '[' || ch === '{') depth++;
+    else if (ch === ')' || ch === ']' || ch === '}') depth--;
+    /* `const` in a vm script is lexically scoped and never lands on the sandbox
+       object, so the declaration is rewritten to one that does. */
+    else if (ch === ';' && depth === 0) return 'var ' + HTML.slice(start + 'const '.length, i + 1);
+  }
+  throw new Error(`const ${name} is not terminated`);
+}
+
 const sandbox = {
   EORB, console, ShipTime, window: { ShipTime },
   /* Constants the extracted helpers close over. */
   EXTRA_DO_GRADES: ['MDO/MGO', 'LSMGO'],
   FUEL_DECIMALS: 3,
+  escHtml: (v) => String(v),
   FUEL_CONS_GROUPS: [
     { key: 'fuel', label: 'FUEL', csv: 'FuelCons', grades: ['HFO', 'LSFO'] },
     { key: 'dogo', label: 'DO/GO', csv: 'DOGOCons', grades: ['MDO/MGO', 'LSMGO'] }
   ]
 };
 vm.createContext(sandbox);
+vm.runInContext(
+  ['OPERATION_GROUPS', 'DEFAULT_OPERATION', 'OPERATIONS', 'LEGACY_OPERATION_ALIASES',
+   'SEA_TYPE_OPS', 'MANEUVERING_ME_OPS', 'NO_ME_DATA_OPS', 'ECA_OPS'].map(extractConst).join('\n'),
+  sandbox
+);
 vm.runInContext(
   [extract('isNoonReportOp'), extract('noonSheetTitles'), extract('flagRegistryName'),
    extract('parseSeaTempValue'), extract('entrySeaTemp'),
@@ -62,17 +88,18 @@ vm.runInContext(
    extract('entryMeRunHours'), extract('tankRobDelta'), extract('formatRobDelta'),
    extract('actualMeSfoc'), extract('rpmFromRevs'), extract('effectiveRpm'),
    extract('unitOverrideIfDifferent'),
-   extract('fuelGroupColKey'), extract('rowFuelGroupCells')].join('\n'),
+   extract('fuelGroupColKey'), extract('rowFuelGroupCells'),
+   extract('canonicalOperation'), extract('operationNeedsMeData'), extract('canShowMeDetailOp')].join('\n'),
   sandbox
 );
 
 console.log('\nprint title is the operation');
 {
-  const port = sandbox.noonSheetTitles('IN PORT - NOON');
-  check('in-port title', port.title, 'IN PORT - NOON');
+  const port = sandbox.noonSheetTitles('NOON - AT PORT');
+  check('in-port title', port.title, 'NOON - AT PORT');
   check('in-port subtitle is the document kind', port.subtitle, 'Noon Report — Voyage Summary');
-  const sea = sandbox.noonSheetTitles('AT SEA - NOON');
-  check('at-sea title', sea.title, 'AT SEA - NOON');
+  const sea = sandbox.noonSheetTitles('NOON - AT SEA');
+  check('at-sea title', sea.title, 'NOON - AT SEA');
   check('at-sea is still a noon report', sea.subtitle, 'Noon Report — Voyage Summary');
   const bunker = sandbox.noonSheetTitles('BUNKERING');
   check('non-noon title', bunker.title, 'BUNKERING');
@@ -227,6 +254,120 @@ console.log('\nevery report totals fuel the way the sheet does');
     sandbox.FUEL_CONS_GROUPS.map(g => g.csv), ['FuelCons', 'DOGOCons']);
 }
 
+console.log('\nthe operations a watch can be logged against');
+{
+  const ops = sandbox.OPERATIONS;
+  check('the list the deck asked for, in order', ops, [
+    'DEPARTURE - STANDBY', 'DEPARTURE - LAST LINE', 'DEPARTURE - PORT',
+    'DEPARTURE - ANCHORAGE', 'DEPARTURE - PILOT ONBOARD',
+    'SHIFTING STATIONS', 'PILOT ONBOARD', 'PILOT OFFLOAD', 'CHANGE SPEED',
+    'START OF SEA PASSAGE', 'END OF SEA PASSAGE',
+    'NOON - AT PORT', 'NOON - AT SEA', 'NOON - ANCHORAGE', 'NOON - DRIFTING',
+    'DRIFTING - START', 'DRIFTING - END',
+    'ARRIVAL - STANDBY', 'ARRIVAL - FIRST LINE', 'ARRIVAL - ANCHORAGE',
+    'ARRIVAL - FINISHED ENGINE',
+    'ECA - CHANGEOVER START', 'ECA - ENTRY', 'ECA - EXIT', 'ECA - CHANGEOVER COMPLETE',
+    'BUNKERING', 'BUNKER SURVEY'
+  ]);
+  check('none is listed twice', ops.length, new Set(ops).size);
+  check('the default is a sea noon', sandbox.DEFAULT_OPERATION, 'NOON - AT SEA');
+  check('and it is one of them', ops.includes(sandbox.DEFAULT_OPERATION), true);
+
+  /* A logbook is a record: an old name keeps its meaning under the new vocabulary. */
+  console.log('\n  a watch logged under an old name keeps its meaning');
+  const renamed = {
+    'AT SEA - NOON': 'NOON - AT SEA',
+    'IN PORT - NOON': 'NOON - AT PORT',
+    'AT ANCHOR - NOON': 'NOON - ANCHORAGE',
+    'START - PASSAGE': 'START OF SEA PASSAGE',
+    'END - PASSAGE': 'END OF SEA PASSAGE',
+    'EOSP - END OF SEA PASSAGE': 'END OF SEA PASSAGE',
+    'LAST LINE - DEPARTURE': 'DEPARTURE - LAST LINE',
+    'PILOT ONBOARD - DEPARTURE': 'DEPARTURE - PILOT ONBOARD',
+    'STAND BY - ARRIVAL': 'ARRIVAL - STANDBY',
+    'FIRST LINE - ARRIVAL': 'ARRIVAL - FIRST LINE',
+    'CHANGE OF SPEED': 'CHANGE SPEED',
+    'SHIFTING': 'SHIFTING STATIONS'
+  };
+  Object.entries(renamed).forEach(([was, now]) =>
+    check(`${was} → ${now}`, sandbox.canonicalOperation(was), now));
+  check('every alias lands on an operation that exists',
+    Object.values(sandbox.LEGACY_OPERATION_ALIASES).filter(o => !ops.includes(o)), []);
+  check('no alias shadows a current name',
+    Object.keys(sandbox.LEGACY_OPERATION_ALIASES).filter(o => ops.includes(o)), []);
+  check('a current name is left alone', sandbox.canonicalOperation('NOON - AT SEA'), 'NOON - AT SEA');
+  /* Dropped rather than guessed at: bare DRIFTING could be the start or the end. */
+  ['HEAVY WEATHER', 'DRIFTING', 'CARGO - LOADING', 'IDLE IN PORT'].forEach(o =>
+    check(`${o} stays exactly as it was logged`, sandbox.canonicalOperation(o), o));
+  check('nothing is invented for an empty operation', sandbox.canonicalOperation(''), '');
+  check('nor for one that was never set', sandbox.canonicalOperation(null), '');
+
+  console.log('\n  watches that are not about the main engine');
+  const noMe = [
+    'NOON - AT PORT', 'NOON - ANCHORAGE',
+    'DEPARTURE - STANDBY', 'DEPARTURE - LAST LINE', 'DEPARTURE - PORT',
+    'DEPARTURE - ANCHORAGE', 'DEPARTURE - PILOT ONBOARD',
+    'BUNKERING', 'BUNKER SURVEY'
+  ];
+  check('exactly the ones named', [...sandbox.NO_ME_DATA_OPS].sort(), noMe.slice().sort());
+  check('all of them are real operations', noMe.filter(o => !ops.includes(o)), []);
+  noMe.forEach(o => check(`${o} does not ask for M/E figures`, sandbox.operationNeedsMeData(o), false));
+  check('an old name reaches the same rule', sandbox.operationNeedsMeData('IN PORT - NOON'), false);
+  /* The engine is the point of these, so they keep their M/E panels. */
+  ['NOON - AT SEA', 'START OF SEA PASSAGE', 'END OF SEA PASSAGE', 'CHANGE SPEED',
+   'ARRIVAL - STANDBY', 'SHIFTING STATIONS', 'ECA - ENTRY'].forEach(o =>
+    check(`${o} still carries them`, sandbox.operationNeedsMeData(o), true));
+  check('no watch is in both the M/E sets',
+    [...sandbox.SEA_TYPE_OPS].filter(o => sandbox.MANEUVERING_ME_OPS.has(o)), []);
+  check('and none of those is also excused M/E data',
+    [...sandbox.SEA_TYPE_OPS, ...sandbox.MANEUVERING_ME_OPS].filter(o => sandbox.NO_ME_DATA_OPS.has(o)), []);
+  check('cylinder detail follows the same rule',
+    sandbox.canShowMeDetailOp('BUNKERING'), false);
+  check('and is offered where the engine is turning',
+    sandbox.canShowMeDetailOp('NOON - AT SEA'), true);
+
+  console.log('\n  every operation is classified somewhere');
+  const classified = (o) =>
+    sandbox.SEA_TYPE_OPS.has(o) || sandbox.MANEUVERING_ME_OPS.has(o) || sandbox.NO_ME_DATA_OPS.has(o);
+  check('nothing falls through the rules', ops.filter(o => !classified(o)), []);
+  check('the ECA legs are all sea ops',
+    [...sandbox.ECA_OPS].filter(o => !sandbox.SEA_TYPE_OPS.has(o)), []);
+
+  /* The voyage-progress widget decides the ship's status from its own three sets.
+     They are written by hand against the same names, so a rename that missed them
+     would leave a ship steaming alongside. Legacy names are allowed in them. */
+  vm.runInContext(['PORT_OPS', 'ANCHOR_OPS', 'DRIFT_OPS'].map(extractConst).join('\n'), sandbox);
+  const legacy = new Set(Object.keys(sandbox.LEGACY_OPERATION_ALIASES)
+    .concat(['CARGO - LOADING', 'CARGO - DISCHARGING', 'IDLE IN PORT', 'DRIFTING', 'HEAVY WEATHER']));
+  const known = (o) => ops.includes(o) || legacy.has(o);
+  check('port ops are all real names', [...sandbox.PORT_OPS].filter(o => !known(o)), []);
+  check('anchor ops are all real names', [...sandbox.ANCHOR_OPS].filter(o => !known(o)), []);
+  check('drift ops are all real names', [...sandbox.DRIFT_OPS].filter(o => !known(o)), []);
+  check('a ship alongside is not also at anchor',
+    [...sandbox.PORT_OPS].filter(o => sandbox.ANCHOR_OPS.has(o) || sandbox.DRIFT_OPS.has(o)), []);
+  check('the anchorage watches are recognised',
+    ['NOON - ANCHORAGE', 'ARRIVAL - ANCHORAGE', 'DEPARTURE - ANCHORAGE'].filter(o => !sandbox.ANCHOR_OPS.has(o)), []);
+  check('and the drifting ones', ['DRIFTING - START', 'DRIFTING - END', 'NOON - DRIFTING']
+    .filter(o => !sandbox.DRIFT_OPS.has(o)), []);
+  check('a sea passage is never marked alongside',
+    ['NOON - AT SEA', 'START OF SEA PASSAGE', 'CHANGE SPEED'].filter(o => sandbox.PORT_OPS.has(o)), []);
+  /* Reports are filtered by category keyword; an operation matching none of them
+     could only ever be found under "All Entries". */
+  vm.runInContext(extractConst('REPORT_CATEGORIES'), sandbox);
+  const keywords = sandbox.REPORT_CATEGORIES.map(c => c.keyword).filter(Boolean);
+  check('every operation falls under some report category',
+    ops.filter(o => !keywords.some(k => o.toUpperCase().includes(k))), []);
+  check('the pilot movements have one of their own', keywords.includes('PILOT'), true);
+
+  /* The dropdown is built from the list, so the two cannot drift apart. */
+  check('the dropdown is built, not hand-written',
+    HTML.includes('<select id="in_operation"></select>'), true);
+  check('editing an old entry does not blank its operation',
+    HTML.includes("setOperationSelectValue(document.getElementById('in_operation'), e.operation)"), true);
+  check('and loading one brings it up to date',
+    HTML.includes('if (e.operation) e.operation = canonicalOperation(e.operation);'), true);
+}
+
 console.log('\nboiler and incinerator extra distillate');
 {
   const DO = { grades: ['MDO/MGO', 'LSMGO'] };
@@ -363,7 +504,9 @@ console.log('\nthe rest of this batch is wired in');
   });
   check('the printed sheet carries the rev counter', HTML.includes("printRow('Rev. Counter', entry.revCounter==null"), true);
   check('bilge and sludge print their movement', HTML.includes("printRow('Bilge R.O.B.', robWithDelta("), true);
-  check('ECA is gated by the leg', HTML.includes("const ECA_OPS = new Set(['ECA - ENTRY', 'ECA - EXIT']);"), true);
+  check('ECA is gated by the leg — every changeover step counts',
+    [...sandbox.ECA_OPS].sort(),
+    ['ECA - CHANGEOVER COMPLETE', 'ECA - CHANGEOVER START', 'ECA - ENTRY', 'ECA - EXIT']);
   check('an entry already carrying changeover data stays editable', HTML.includes('function entryHasEcaData(entry){'), true);
   check('R.O.B. per report table', HTML.includes('function renderRobByReport(){'), true);
   check('gauges can be pointed at a report', HTML.includes('function robGaugeSource(){'), true);

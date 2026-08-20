@@ -90,7 +90,7 @@ const SCRAPE = `(html) => {
         ...JSON.parse(JSON.stringify(base)),
         id: 'range-print-' + i,
         datetime: new Date(start + i * 24 * 3600 * 1000).toISOString().slice(0, 16),
-        operation: 'AT SEA - NOON',
+        operation: 'NOON - AT SEA',
         distanceShip: 336, rpm, revCounter: rc, cylMeter: cyl,
         me: { ...base.me, meter: me, type: 'LSFO' },
         ge: { ...base.ge, meter: ge, type: 'MDO/MGO' },

@@ -1908,38 +1908,8 @@
         <div class="field span2"><label>Date &amp; Time (ship's clock)</label><input type="datetime-local" id="in_datetime"></div>
         <div class="field span2"><label>Time zone</label><select id="in_tzOffset"></select></div>
         <div class="field span2"><label>Operation</label>
-          <select id="in_operation">
-            <optgroup label="Departure">
-              <option>LAST LINE - DEPARTURE</option>
-              <option>PILOT ONBOARD - DEPARTURE</option>
-            </optgroup>
-            <optgroup label="Sea Passage">
-              <!-- COSP begins the sea passage and is classified in SEA_TYPE_OPS, so it
-                   is grouped with the sea ops rather than with departure manoeuvring. -->
-              <option>START - PASSAGE</option>
-              <option selected>AT SEA - NOON</option>
-              <option>END - PASSAGE</option>
-              <option>CHANGE OF SPEED</option>
-              <option>HEAVY WEATHER</option>
-              <option>DRIFTING</option>
-              <option>ECA - ENTRY</option>
-              <option>ECA - EXIT</option>
-            </optgroup>
-            <optgroup label="Arrival">
-              <option>STAND BY - ARRIVAL</option>
-              <option>EOSP - END OF SEA PASSAGE</option>
-              <option>FIRST LINE - ARRIVAL</option>
-            </optgroup>
-            <optgroup label="Port / Anchorage">
-              <option>IN PORT - NOON</option>
-              <option>AT ANCHOR - NOON</option>
-              <option>SHIFTING</option>
-              <option>BUNKERING</option>
-              <option>CARGO - LOADING</option>
-              <option>CARGO - DISCHARGING</option>
-              <option>IDLE IN PORT</option>
-            </optgroup>
-          </select>
+          <!-- Options are built from OPERATION_GROUPS so the list has one definition. -->
+          <select id="in_operation"></select>
         </div>
         <div class="field"><label>Condition</label><select id="in_condition"><option value="B">B — Ballast</option><option value="L">L — Laden</option></select></div>
       </div>
@@ -4464,7 +4434,7 @@ function buildDemoPackHarbourKey(){
 
   // 1. Alongside — opening reference
   let snap = tr.snapshot(fuelTypes);
-  entries.push(entryFromSnap('e-hk1','2026-07-01T06:00','FIRST LINE - ARRIVAL','L', snap, {
+  entries.push(entryFromSnap('e-hk1','2026-07-01T06:00','ARRIVAL - FIRST LINE','L', snap, {
     ge1Kw:380, ge2Kw:360, generatorsInUse:2,
     report: portReport({
       port:'Singapore PSA T3', cargoOp:'Awaiting discharge',
@@ -4486,7 +4456,7 @@ function buildDemoPackHarbourKey(){
     ...fuelTypes, me:0, ge:1850, blr:620, cyl:0, meLo:0, geLo:28,
     fwProd:0, fwRob:61250, rev:0, meRt:0, blrRt:18, ge1:18, ge2:18
   });
-  entries.push(entryFromSnap('e-hk2','2026-07-02T12:00','IN PORT - NOON','L', snap, {
+  entries.push(entryFromSnap('e-hk2','2026-07-02T12:00','NOON - AT PORT','L', snap, {
     ge1Kw:310, ge2Kw:295, generatorsInUse:2,
     weather: weather({ windDir:'SW', windBft:3, seaState:2, airTemp:31, seaTemp:29 }),
     report: portReport({
@@ -4573,7 +4543,7 @@ function buildDemoPackHarbourKey(){
     ...fuelTypes, me:420, ge:900, blr:180, cyl:8, meLo:5, geLo:12,
     fwProd:0, fwRob:56950, rev:3780, meRt:1.5, blrRt:2, ge1:3, ge2:3
   });
-  entries.push(entryFromSnap('e-hk7','2026-07-06T13:30','SHIFTING','L', snap, {
+  entries.push(entryFromSnap('e-hk7','2026-07-06T13:30','SHIFTING STATIONS','L', snap, {
     distanceShip:10.5, rpm:42, ge1Kw:400, ge2Kw:380, generatorsInUse:2, tbn:'HIGH',
     weather: weather({ windDir:'SE', windBft:2, seaState:1, airTemp:30, seaTemp:29 }),
     report: portReport({
@@ -4590,7 +4560,7 @@ function buildDemoPackHarbourKey(){
     ...fuelTypes, me:0, ge:1400, blr:480, cyl:0, meLo:0, geLo:20,
     fwProd:0, fwRob:56200, rev:0, meRt:0, blrRt:14, ge1:14, ge2:14
   });
-  entries.push(entryFromSnap('e-hk8','2026-07-08T12:00','IN PORT - NOON','L', snap, {
+  entries.push(entryFromSnap('e-hk8','2026-07-08T12:00','NOON - AT PORT','L', snap, {
     ge1Kw:320, ge2Kw:300, generatorsInUse:2,
     report: portReport({
       port:'Singapore PSA T5', cargoOp:'Ready for departure',
@@ -4655,7 +4625,7 @@ function buildDemoPackRoadstead(){
 
   // --- B outbound (voyage starts ballast) ---
   let snap = tr.snapshot(ft);
-  ballastEntries.push(entryFromSnap('e-rd-b1','2026-07-08T10:00','LAST LINE - DEPARTURE','B', snap, {
+  ballastEntries.push(entryFromSnap('e-rd-b1','2026-07-08T10:00','DEPARTURE - LAST LINE','B', snap, {
     tbn:'LOW', ge1Kw:300, ge2Kw:280, generatorsInUse:2,
     report: portReport({ port:'Rotterdam', cargoOp:'Ballast departure', remarks:'Last line. Ballast condition.' })
   }));
@@ -4663,7 +4633,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:48000, ge:1500, blr:200, cyl:180, meLo:40, geLo:25,
     fwProd:1400, fwRob:40200, rev:100800, meRt:24, blrRt:6, ge1:24, ge2:20
   });
-  ballastEntries.push(entryFromSnap('e-rd-b2','2026-07-09T10:00','AT SEA - NOON','B', snap, {
+  ballastEntries.push(entryFromSnap('e-rd-b2','2026-07-09T10:00','NOON - AT SEA','B', snap, {
     distanceShip:248, rpm:70, tbn:'LOW', ge1Kw:340, ge2Kw:320, generatorsInUse:2,
     weather: weather({ windDir:'W', windBft:4, seaState:3, airTemp:15, seaTemp:14 }),
     report: seaReport({ remarks:'Ballast passage toward Hamburg.', generatorsInUse:2 })
@@ -4672,7 +4642,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:12000, ge:600, blr:80, cyl:40, meLo:10, geLo:8,
     fwProd:300, fwRob:39900, rev:25200, meRt:6, blrRt:2, ge1:6, ge2:4
   });
-  ballastEntries.push(entryFromSnap('e-rd-b3','2026-07-09T16:00','END - PASSAGE','B', snap, {
+  ballastEntries.push(entryFromSnap('e-rd-b3','2026-07-09T16:00','END OF SEA PASSAGE','B', snap, {
     distanceShip:62, rpm:70, tbn:'LOW', ge1Kw:320, generatorsInUse:1,
     report: seaReport({ remarks:'Approaching Elbe. End ballast sea passage.', generatorsInUse:1 })
   }));
@@ -4680,7 +4650,7 @@ function buildDemoPackRoadstead(){
   // Reset tracker continuity into laden arrival scenario (laden ROB/meters continue from ballast end)
   // --- L arrival / anchorage wait ---
   snap = tr.snapshot(ft);
-  entries.push(entryFromSnap('e-rd1','2026-07-10T04:00','EOSP - END OF SEA PASSAGE','L', snap, {
+  entries.push(entryFromSnap('e-rd1','2026-07-10T04:00','END OF SEA PASSAGE','L', snap, {
     distanceShip:0, rpm:null, tbn:'LOW', ge1Kw:300, ge2Kw:0, generatorsInUse:1,
     weather: weather({ windDir:'NW', windBft:4, seaState:3, swellDir:'NW', airTemp:16, seaTemp:14 }),
     report: portReport({
@@ -4697,7 +4667,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:0, ge:980, blr:280, cyl:0, meLo:0, geLo:14,
     fwProd:0, fwRob:40450, rev:0, meRt:0, blrRt:12, ge1:12, ge2:0
   });
-  entries.push(entryFromSnap('e-rd2','2026-07-11T12:00','AT ANCHOR - NOON','L', snap, {
+  entries.push(entryFromSnap('e-rd2','2026-07-11T12:00','NOON - ANCHORAGE','L', snap, {
     tbn:'LOW', ge1Kw:265, generatorsInUse:1,
     weather: weather({ windDir:'W', windBft:5, seaState:4, swellDir:'W', airTemp:15, seaTemp:14 }),
     report: portReport({
@@ -4714,7 +4684,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:0, ge:2100, blr:320, cyl:0, meLo:0, geLo:30,
     fwProd:0, fwRob:39700, rev:0, meRt:0, blrRt:14, ge1:14, ge2:14
   });
-  entries.push(entryFromSnap('e-rd3','2026-07-12T12:00','AT ANCHOR - NOON','L', snap, {
+  entries.push(entryFromSnap('e-rd3','2026-07-12T12:00','NOON - ANCHORAGE','L', snap, {
     tbn:'LOW', ge1Kw:310, ge2Kw:290, generatorsInUse:2,
     weather: weather({ windDir:'SW', windBft:6, seaState:5, swellDir:'SW', airTemp:14, seaTemp:13 }),
     report: portReport({
@@ -4748,7 +4718,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:0, ge:1050, blr:260, cyl:0, meLo:0, geLo:15,
     fwProd:0, fwRob:38850, rev:0, meRt:0, blrRt:11, ge1:11, ge2:0
   });
-  entries.push(entryFromSnap('e-rd5','2026-07-14T12:00','AT ANCHOR - NOON','L', snap, {
+  entries.push(entryFromSnap('e-rd5','2026-07-14T12:00','NOON - ANCHORAGE','L', snap, {
     tbn:'LOW', ge1Kw:270, generatorsInUse:1,
     weather: weather({ windDir:'NW', windBft:4, seaState:3, swellDir:'NW', airTemp:15, seaTemp:13 }),
     report: portReport({
@@ -4765,7 +4735,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:0, ge:480, blr:90, cyl:0, meLo:0, geLo:6,
     fwProd:0, fwRob:38680, rev:0, meRt:0, blrRt:3, ge1:4, ge2:0
   });
-  entries.push(entryFromSnap('e-rd5b','2026-07-15T04:00','AT ANCHOR - NOON','L', snap, {
+  entries.push(entryFromSnap('e-rd5b','2026-07-15T04:00','NOON - ANCHORAGE','L', snap, {
     tbn:'LOW', ge1Kw:260, generatorsInUse:1,
     report: portReport({
       port:'Elbe anchorage B', cargoOp:'Awaiting pilot',
@@ -4781,7 +4751,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:620, ge:450, blr:80, cyl:6, meLo:3, geLo:6,
     fwProd:0, fwRob:38600, rev:4320, meRt:1.5, blrRt:2, ge1:1.5, ge2:1.5
   });
-  entries.push(entryFromSnap('e-rd6','2026-07-15T05:30','STAND BY - ARRIVAL','L', snap, {
+  entries.push(entryFromSnap('e-rd6','2026-07-15T05:30','ARRIVAL - STANDBY','L', snap, {
     distanceShip:10.6, rpm:48, tbn:'LOW', ge1Kw:350, ge2Kw:320, generatorsInUse:2,
     report: portReport({
       port:'Hamburg approaches', cargoOp:'Pilot boarding',
@@ -4797,7 +4767,7 @@ function buildDemoPackRoadstead(){
     ...ft, me:380, ge:520, blr:60, cyl:4, meLo:2, geLo:8,
     fwProd:0, fwRob:38400, rev:4200, meRt:2.0, blrRt:1.5, ge1:2.0, ge2:2.0
   });
-  entries.push(entryFromSnap('e-rd7','2026-07-15T07:30','FIRST LINE - ARRIVAL','L', snap, {
+  entries.push(entryFromSnap('e-rd7','2026-07-15T07:30','ARRIVAL - FIRST LINE','L', snap, {
     distanceShip:10.3, rpm:35, tbn:'LOW', ge1Kw:400, ge2Kw:380, generatorsInUse:2,
     report: portReport({
       port:'Hamburg — Hansaport', cargoOp:'All fast berth 4',
@@ -4855,7 +4825,7 @@ function buildDemoPackCircumnav(){
   const lsmgoMe = { meType:'LSMGO', geType:'LSMGO', blrType:'LSMGO', meSg:0.86, geSg:0.86, blrSg:0.86 };
   const entries = [];
 
-  const seaOps = new Set(['START - PASSAGE','AT SEA - NOON','END - PASSAGE','DRIFTING','ECA - ENTRY','ECA - EXIT','CHANGE OF SPEED','HEAVY WEATHER']);
+  const seaOps = new Set(['START OF SEA PASSAGE','NOON - AT SEA','END OF SEA PASSAGE','DRIFTING','ECA - ENTRY','ECA - EXIT','CHANGE SPEED','HEAVY WEATHER']);
   let lastDt = '2026-06-01T10:00';
   function pushSea(id, dt, op, cond, delta, extra){
     const hrs = (new Date(dt) - new Date(lastDt)) / 3600000;
@@ -4900,7 +4870,7 @@ function buildDemoPackCircumnav(){
 
   // 1. Last line
   let snap = tr.snapshot(hfo);
-  entries.push(entryFromSnap('e-cn1','2026-06-01T10:00','LAST LINE - DEPARTURE','B', snap, {
+  entries.push(entryFromSnap('e-cn1','2026-06-01T10:00','DEPARTURE - LAST LINE','B', snap, {
     ge1Kw:420, ge2Kw:400, generatorsInUse:2, tbn:'HIGH',
     report: portReport({
       port:'Rotterdam Europoort', cargoOp:'Departure',
@@ -4911,7 +4881,7 @@ function buildDemoPackCircumnav(){
   }));
 
   // 2. Pilot onboard departure — manoeuvring (Δrevs = 58 RPM × 2.5 h × 60)
-  pushSea('e-cn2','2026-06-01T12:30','PILOT ONBOARD - DEPARTURE','B', {
+  pushSea('e-cn2','2026-06-01T12:30','DEPARTURE - PILOT ONBOARD','B', {
     types:hfo, me:2100, ge:900, blr:150, cyl:12, meLo:6, geLo:10,
     fwProd:0, fwRob:71600, rev:8700, meRt:2.5, blrRt:2, ge1:2.5, ge2:2.5
   }, {
@@ -4923,7 +4893,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 3. Start passage
-  pushSea('e-cn3','2026-06-01T18:00','START - PASSAGE','B', {
+  pushSea('e-cn3','2026-06-01T18:00','START OF SEA PASSAGE','B', {
     types:hfo, me:9800, ge:1100, blr:200, cyl:55, meLo:18, geLo:14,
     fwProd:400, fwRob:71200, rev:26400, meRt:5.5, blrRt:4, ge1:5.5, ge2:5.5
   }, {
@@ -4934,7 +4904,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 4. First sea noon — 18 h from start @ 80 rpm (revs auto)
-  pushSea('e-cn4','2026-06-02T12:00','AT SEA - NOON','B', {
+  pushSea('e-cn4','2026-06-02T12:00','NOON - AT SEA','B', {
     types:hfo, me:39000, ge:1240, blr:210, cyl:158, meLo:34, geLo:21,
     fwProd:1200, fwRob:70100, blrRt:6, ge1:18, ge2:18
   }, {
@@ -4945,7 +4915,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 5. Change of speed — slower for weather / schedule
-  pushSea('e-cn5','2026-06-03T12:00','CHANGE OF SPEED','B', {
+  pushSea('e-cn5','2026-06-03T12:00','CHANGE SPEED','B', {
     types:hfo, me:38000, ge:1580, blr:260, cyl:160, meLo:38, geLo:26,
     fwProd:1500, fwRob:69050, blrRt:6, ge1:24, ge2:20
   }, {
@@ -4968,7 +4938,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 7. Resume normal noon
-  pushSea('e-cn7','2026-06-05T12:00','AT SEA - NOON','B', {
+  pushSea('e-cn7','2026-06-05T12:00','NOON - AT SEA','B', {
     types:hfo, me:53500, ge:1600, blr:200, cyl:220, meLo:48, geLo:27,
     fwProd:1700, fwRob:66800, blrRt:5, ge1:24, ge2:24
   }, {
@@ -4991,7 +4961,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 9. Noon inside ECA on LSMGO (30 h @ 78 rpm)
-  pushSea('e-cn9','2026-06-07T12:00','AT SEA - NOON','B', {
+  pushSea('e-cn9','2026-06-07T12:00','NOON - AT SEA','B', {
     types:lsmgoMe, me:70000, ge:2100, blr:310, cyl:250, meLo:55, geLo:35,
     fwProd:1900, fwRob:65000, blrRt:9, ge1:30, ge2:30
   }, {
@@ -5025,7 +4995,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 12. Long sea noon stretch (compressed mid-voyage)
-  pushSea('e-cn12','2026-06-20T12:00','AT SEA - NOON','B', {
+  pushSea('e-cn12','2026-06-20T12:00','NOON - AT SEA','B', {
     types:hfo, me:580000, ge:18500, blr:3200, cyl:2400, meLo:520, geLo:320,
     fwProd:18000, fwRob:52000, blrRt:90, ge1:272, ge2:260
   }, {
@@ -5036,7 +5006,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 13. End passage
-  pushSea('e-cn13','2026-06-27T20:00','END - PASSAGE','B', {
+  pushSea('e-cn13','2026-06-27T20:00','END OF SEA PASSAGE','B', {
     types:hfo, me:360000, ge:12000, blr:1800, cyl:1500, meLo:320, geLo:200,
     fwProd:11000, fwRob:45500, blrRt:50, ge1:176, ge2:170
   }, {
@@ -5047,7 +5017,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 14. EOSP
-  pushSea('e-cn14','2026-06-28T04:00','EOSP - END OF SEA PASSAGE','B', {
+  pushSea('e-cn14','2026-06-28T04:00','END OF SEA PASSAGE','B', {
     types:hfo, me:8500, ge:900, blr:150, cyl:40, meLo:12, geLo:10,
     fwProd:200, fwRob:45000, blrRt:3, ge1:6, ge2:6
   }, {
@@ -5059,7 +5029,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 15. Stand by arrival
-  pushSea('e-cn15','2026-06-28T07:00','STAND BY - ARRIVAL','B', {
+  pushSea('e-cn15','2026-06-28T07:00','ARRIVAL - STANDBY','B', {
     types:hfo, me:2200, ge:700, blr:80, cyl:10, meLo:4, geLo:8,
     fwProd:0, fwRob:44800, blrRt:2, ge1:3, ge2:3
   }, {
@@ -5070,7 +5040,7 @@ function buildDemoPackCircumnav(){
   });
 
   // 16. First line arrival
-  pushSea('e-cn16','2026-06-28T10:30','FIRST LINE - ARRIVAL','B', {
+  pushSea('e-cn16','2026-06-28T10:30','ARRIVAL - FIRST LINE','B', {
     types:hfo, me:900, ge:550, blr:50, cyl:5, meLo:2, geLo:6,
     fwProd:0, fwRob:44600, blrRt:1, ge1:2, ge2:2
   }, {
@@ -5105,7 +5075,7 @@ function buildDemoPackCircumnav(){
   });
   const ladenEntries = [];
   let ls = trL.snapshot(hfo);
-  ladenEntries.push(entryFromSnap('e-cn-l1','2026-07-05T08:00','LAST LINE - DEPARTURE','L', ls, {
+  ladenEntries.push(entryFromSnap('e-cn-l1','2026-07-05T08:00','DEPARTURE - LAST LINE','L', ls, {
     ge1Kw:420, ge2Kw:400, generatorsInUse:2,
     report: portReport({ port:'Singapore', cargoOp:'Laden departure', remarks:'Laden sailing for Rotterdam.' })
   }));
@@ -5113,7 +5083,7 @@ function buildDemoPackCircumnav(){
     ...hfo, me:52000, ge:1700, blr:240, cyl:200, meLo:45, geLo:28,
     fwProd:1500, fwRob:56800, rev:115200, meRt:24, blrRt:6, ge1:24, ge2:24
   });
-  ladenEntries.push(entryFromSnap('e-cn-l2','2026-07-06T08:00','AT SEA - NOON','L', ls, {
+  ladenEntries.push(entryFromSnap('e-cn-l2','2026-07-06T08:00','NOON - AT SEA','L', ls, {
     distanceShip:345, rpm:80, ge1Kw:380, ge2Kw:360, generatorsInUse:2,
     weather: weather({ windDir:'NE', windBft:3, seaState:2, airTemp:28, seaTemp:27 }),
     report: seaReport({ remarks:'Laden noon. Steady passage.', generatorsInUse:2 })
@@ -5122,7 +5092,7 @@ function buildDemoPackCircumnav(){
     ...hfo, me:50000, ge:1650, blr:220, cyl:190, meLo:42, geLo:26,
     fwProd:1400, fwRob:55600, rev:112320, meRt:24, blrRt:5, ge1:24, ge2:24
   });
-  ladenEntries.push(entryFromSnap('e-cn-l3','2026-07-07T08:00','AT SEA - NOON','L', ls, {
+  ladenEntries.push(entryFromSnap('e-cn-l3','2026-07-07T08:00','NOON - AT SEA','L', ls, {
     distanceShip:338, rpm:78, ge1Kw:370, ge2Kw:350, generatorsInUse:2,
     weather: weather({ windDir:'N', windBft:4, seaState:3, airTemp:27, seaTemp:26 }),
     report: seaReport({ remarks:'Laden noon continued.', generatorsInUse:2 })
@@ -5131,7 +5101,7 @@ function buildDemoPackCircumnav(){
     ...hfo, me:9000, ge:800, blr:100, cyl:35, meLo:10, geLo:10,
     fwProd:200, fwRob:55200, rev:20160, meRt:6, blrRt:2, ge1:6, ge2:6
   });
-  ladenEntries.push(entryFromSnap('e-cn-l4','2026-07-07T14:00','EOSP - END OF SEA PASSAGE','L', ls, {
+  ladenEntries.push(entryFromSnap('e-cn-l4','2026-07-07T14:00','END OF SEA PASSAGE','L', ls, {
     distanceShip:55, rpm:56, ge1Kw:400, ge2Kw:380, generatorsInUse:2,
     weather: weather({ windDir:'NE', windBft:3, seaState:2, airTemp:28, seaTemp:27 }),
     report: portReport({ port:'Approaches', remarks:'EOSP laden leg (compressed demo).' })
@@ -5180,7 +5150,7 @@ function buildDemoPackPacificTrader(){
     meRt:61000, blrRt:1180, ge1:19200, ge2:18700, ge3:0
   });
   const hfo = { meType:'HFO', geType:'MDO/MGO', blrType:'MDO/MGO', meSg:0.98, geSg:0.87, blrSg:0.87 };
-  const seaOps = new Set(['START - PASSAGE','AT SEA - NOON','END - PASSAGE']);
+  const seaOps = new Set(['START OF SEA PASSAGE','NOON - AT SEA','END OF SEA PASSAGE']);
 
   let bucket = null;
   let lastDt = null;
@@ -5236,87 +5206,87 @@ function buildDemoPackPacificTrader(){
 
   /* ---- Voyage 40 — B: Fujairah -> Ras Tanura (ballast reposition) ---- */
   bucket = v40B;
-  openLeg('e-pt-40b-1','2026-04-01T06:00','LAST LINE - DEPARTURE','B','Fujairah Anchorage','Ballast departure',
+  openLeg('e-pt-40b-1','2026-04-01T06:00','DEPARTURE - LAST LINE','B','Fujairah Anchorage','Ballast departure',
     'Last line. Ballast passage to Ras Tanura for loading.', 260, 2);
-  pushSea('e-pt-40b-2','2026-04-02T06:00','AT SEA - NOON','B',
+  pushSea('e-pt-40b-2','2026-04-02T06:00','NOON - AT SEA','B',
     { me:26400, ge:1560, blr:360, cyl:108, meLo:8, geLo:6, fwProd:16800, fwRob:70200, blrRt:7, ge1:24, ge2:0 },
     { rpm:90, slipPct:3, ge1Kw:270, blrKw:120, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:33, seaTemp:27}), remarks:'Steady ballast passage. Single A/E on load.' });
-  pushSea('e-pt-40b-3','2026-04-02T10:00','FIRST LINE - ARRIVAL','B',
+  pushSea('e-pt-40b-3','2026-04-02T10:00','ARRIVAL - FIRST LINE','B',
     { me:4400, ge:260, blr:60, cyl:18, meLo:1, geLo:1, fwProd:2800, fwRob:70600, blrRt:1, ge1:4, ge2:0 },
     { rpm:90, slipPct:3, ge1Kw:280, generatorsInUse:2, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:33, seaTemp:28}),
       remarks:'Ballast passage complete. All fast Ras Tanura.', reportExtra:{ port:'Ras Tanura SPM', cargoOp:'Awaiting berth for loading' } });
 
   /* ---- Voyage 40 — L: Ras Tanura -> Chennai (laden) ---- */
   bucket = v40L;
-  openLeg('e-pt-40l-1','2026-04-03T12:00','LAST LINE - DEPARTURE','L','Ras Tanura','Laden departure',
+  openLeg('e-pt-40l-1','2026-04-03T12:00','DEPARTURE - LAST LINE','L','Ras Tanura','Laden departure',
     'Loaded. Laden passage to Chennai.', 300, 2);
-  pushSea('e-pt-40l-2','2026-04-05T12:00','AT SEA - NOON','L',
+  pushSea('e-pt-40l-2','2026-04-05T12:00','NOON - AT SEA','L',
     { me:48000, ge:3120, blr:720, cyl:216, meLo:14, geLo:12, fwProd:33600, fwRob:79000, blrRt:14, ge1:48, ge2:0 },
     { rpm:88, slipPct:5, ge1Kw:295, blrKw:150, weather: weather({windDir:'W', windBft:4, seaState:3, airTemp:32, seaTemp:29}), remarks:'Full away laden. Arabian Sea, moderate seas.' });
-  pushSea('e-pt-40l-3','2026-04-08T12:00','AT SEA - NOON','L',
+  pushSea('e-pt-40l-3','2026-04-08T12:00','NOON - AT SEA','L',
     { me:72000, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:66500, blrRt:21, ge1:72, ge2:0 },
     { rpm:88, slipPct:5, ge1Kw:290, blrKw:140, weather: weather({windDir:'SW', windBft:5, seaState:4, swellDir:'SW', airTemp:30, seaTemp:28}), remarks:'Mid-passage. Steady laden run toward Bay of Bengal.' });
-  pushSea('e-pt-40l-4','2026-04-10T14:00','FIRST LINE - ARRIVAL','L',
+  pushSea('e-pt-40l-4','2026-04-10T14:00','ARRIVAL - FIRST LINE','L',
     { me:50000, ge:3250, blr:750, cyl:225, meLo:15, geLo:13, fwProd:35000, fwRob:60200, blrRt:15, ge1:50, ge2:0 },
     { rpm:88, slipPct:5, ge1Kw:300, generatorsInUse:2, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:31, seaTemp:29}),
       remarks:'Laden passage complete. All fast Chennai.', reportExtra:{ port:'Chennai', cargoOp:'Awaiting berth for discharge' } });
 
   /* ---- Voyage 41 — B: Chennai -> Ras Tanura (ballast return) ---- */
   bucket = v41B;
-  openLeg('e-pt-41b-1','2026-04-11T14:00','LAST LINE - DEPARTURE','B','Chennai','Ballast departure',
+  openLeg('e-pt-41b-1','2026-04-11T14:00','DEPARTURE - LAST LINE','B','Chennai','Ballast departure',
     'Discharge complete. Ballast return to Ras Tanura for next cargo.', 265, 2);
-  pushSea('e-pt-41b-2','2026-04-14T14:00','AT SEA - NOON','B',
+  pushSea('e-pt-41b-2','2026-04-14T14:00','NOON - AT SEA','B',
     { me:79200, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:76800, blrRt:22, ge1:72, ge2:0 },
     { rpm:90, slipPct:3, ge1Kw:275, blrKw:120, weather: weather({windDir:'E', windBft:3, seaState:2, airTemp:30, seaTemp:28}), remarks:'Ballast passage. Bay of Bengal, moderate weather.' });
-  pushSea('e-pt-41b-3','2026-04-17T14:00','AT SEA - NOON','B',
+  pushSea('e-pt-41b-3','2026-04-17T14:00','NOON - AT SEA','B',
     { me:79200, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:83200, blrRt:22, ge1:72, ge2:0 },
     { rpm:90, slipPct:3, ge1Kw:270, blrKw:115, weather: weather({windDir:'SE', windBft:2, seaState:2, airTemp:32, seaTemp:29}), remarks:'Steady ballast run. Arabian Sea crossing.' });
-  pushSea('e-pt-41b-4','2026-04-18T09:00','FIRST LINE - ARRIVAL','B',
+  pushSea('e-pt-41b-4','2026-04-18T09:00','ARRIVAL - FIRST LINE','B',
     { me:20900, ge:1235, blr:285, cyl:86, meLo:6, geLo:5, fwProd:13300, fwRob:79600, blrRt:6, ge1:19, ge2:0 },
     { rpm:90, slipPct:3, ge1Kw:280, generatorsInUse:2, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:33, seaTemp:28}),
       remarks:'Ballast passage complete. All fast Ras Tanura.', reportExtra:{ port:'Ras Tanura SPM', cargoOp:'Awaiting berth for loading' } });
 
   /* ---- Voyage 41 — L: Ras Tanura -> Chennai (laden) ---- */
   bucket = v41L;
-  openLeg('e-pt-41l-1','2026-04-19T12:00','LAST LINE - DEPARTURE','L','Ras Tanura','Laden departure',
+  openLeg('e-pt-41l-1','2026-04-19T12:00','DEPARTURE - LAST LINE','L','Ras Tanura','Laden departure',
     'Loaded. Laden passage to Chennai.', 300, 2);
-  pushSea('e-pt-41l-2','2026-04-21T12:00','AT SEA - NOON','L',
+  pushSea('e-pt-41l-2','2026-04-21T12:00','NOON - AT SEA','L',
     { me:48000, ge:3120, blr:720, cyl:216, meLo:14, geLo:12, fwProd:33600, fwRob:88000, blrRt:14, ge1:48, ge2:0 },
     { rpm:88, slipPct:5, ge1Kw:295, blrKw:150, weather: weather({windDir:'W', windBft:4, seaState:3, airTemp:32, seaTemp:29}), remarks:'Full away laden. Arabian Sea, moderate seas.' });
-  pushSea('e-pt-41l-3','2026-04-24T12:00','AT SEA - NOON','L',
+  pushSea('e-pt-41l-3','2026-04-24T12:00','NOON - AT SEA','L',
     { me:72000, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:75500, blrRt:21, ge1:72, ge2:0 },
     { rpm:88, slipPct:5, ge1Kw:290, blrKw:140, weather: weather({windDir:'SW', windBft:5, seaState:4, swellDir:'SW', airTemp:30, seaTemp:28}), remarks:'Mid-passage. Steady laden run toward Bay of Bengal.' });
-  pushSea('e-pt-41l-4','2026-04-26T14:00','FIRST LINE - ARRIVAL','L',
+  pushSea('e-pt-41l-4','2026-04-26T14:00','ARRIVAL - FIRST LINE','L',
     { me:50000, ge:3250, blr:750, cyl:225, meLo:15, geLo:13, fwProd:35000, fwRob:69200, blrRt:15, ge1:50, ge2:0 },
     { rpm:88, slipPct:5, ge1Kw:300, generatorsInUse:2, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:31, seaTemp:29}),
       remarks:'Laden passage complete. All fast Chennai.', reportExtra:{ port:'Chennai', cargoOp:'Awaiting berth for discharge' } });
 
   /* ---- Voyage 42 — B: Chennai -> Ras Tanura (ballast return) ---- */
   bucket = v42B;
-  openLeg('e-pt-42b-1','2026-04-27T14:00','LAST LINE - DEPARTURE','B','Chennai','Ballast departure',
+  openLeg('e-pt-42b-1','2026-04-27T14:00','DEPARTURE - LAST LINE','B','Chennai','Ballast departure',
     'Discharge complete. Ballast return to Ras Tanura for next cargo.', 265, 2);
-  pushSea('e-pt-42b-2','2026-04-30T14:00','AT SEA - NOON','B',
+  pushSea('e-pt-42b-2','2026-04-30T14:00','NOON - AT SEA','B',
     { me:79200, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:86000, blrRt:22, ge1:72, ge2:0 },
     { rpm:90, slipPct:3, ge1Kw:275, blrKw:120, weather: weather({windDir:'E', windBft:3, seaState:2, airTemp:30, seaTemp:28}), remarks:'Ballast passage. Bay of Bengal, moderate weather.' });
-  pushSea('e-pt-42b-3','2026-05-03T14:00','AT SEA - NOON','B',
+  pushSea('e-pt-42b-3','2026-05-03T14:00','NOON - AT SEA','B',
     { me:79200, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:92500, blrRt:22, ge1:72, ge2:0 },
     { rpm:90, slipPct:3, ge1Kw:270, blrKw:115, weather: weather({windDir:'SE', windBft:2, seaState:2, airTemp:32, seaTemp:29}), remarks:'Steady ballast run. Arabian Sea crossing.' });
-  pushSea('e-pt-42b-4','2026-05-04T09:00','FIRST LINE - ARRIVAL','B',
+  pushSea('e-pt-42b-4','2026-05-04T09:00','ARRIVAL - FIRST LINE','B',
     { me:20900, ge:1235, blr:285, cyl:86, meLo:6, geLo:5, fwProd:13300, fwRob:88900, blrRt:6, ge1:19, ge2:0 },
     { rpm:90, slipPct:3, ge1Kw:280, generatorsInUse:2, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:33, seaTemp:28}),
       remarks:'Ballast passage complete. All fast Ras Tanura.', reportExtra:{ port:'Ras Tanura SPM', cargoOp:'Awaiting berth for loading' } });
 
   /* ---- Voyage 42 — L: Ras Tanura -> Chennai (laden, final) ---- */
   bucket = v42L;
-  openLeg('e-pt-42l-1','2026-05-05T12:00','LAST LINE - DEPARTURE','L','Ras Tanura','Laden departure',
+  openLeg('e-pt-42l-1','2026-05-05T12:00','DEPARTURE - LAST LINE','L','Ras Tanura','Laden departure',
     'Loaded. Laden passage to Chennai.', 300, 2);
-  pushSea('e-pt-42l-2','2026-05-07T12:00','AT SEA - NOON','L',
+  pushSea('e-pt-42l-2','2026-05-07T12:00','NOON - AT SEA','L',
     { me:48000, ge:3120, blr:720, cyl:216, meLo:14, geLo:12, fwProd:33600, fwRob:97500, blrRt:14, ge1:48, ge2:0 },
     { rpm:88, slipPct:5, ge1Kw:295, blrKw:150, weather: weather({windDir:'W', windBft:4, seaState:3, airTemp:32, seaTemp:29}), remarks:'Full away laden. Arabian Sea, moderate seas.' });
-  pushSea('e-pt-42l-3','2026-05-10T12:00','AT SEA - NOON','L',
+  pushSea('e-pt-42l-3','2026-05-10T12:00','NOON - AT SEA','L',
     { me:72000, ge:4680, blr:1080, cyl:324, meLo:22, geLo:18, fwProd:50400, fwRob:84500, blrRt:21, ge1:72, ge2:0 },
     { rpm:88, slipPct:5, ge1Kw:290, blrKw:140, weather: weather({windDir:'SW', windBft:5, seaState:4, swellDir:'SW', airTemp:30, seaTemp:28}), remarks:'Mid-passage. Steady laden run toward Bay of Bengal.' });
-  pushSea('e-pt-42l-4','2026-05-12T14:00','FIRST LINE - ARRIVAL','L',
+  pushSea('e-pt-42l-4','2026-05-12T14:00','ARRIVAL - FIRST LINE','L',
     { me:50000, ge:3250, blr:750, cyl:225, meLo:15, geLo:13, fwProd:35000, fwRob:78200, blrRt:15, ge1:50, ge2:0 },
     { rpm:88, slipPct:5, ge1Kw:300, generatorsInUse:2, weather: weather({windDir:'NE', windBft:3, seaState:2, airTemp:31, seaTemp:29}),
       remarks:'Laden passage complete, voyage 42 done. All fast Chennai. Awaiting next fixture.', reportExtra:{ port:'Chennai', cargoOp:'Discharge complete' } });
@@ -9378,11 +9348,11 @@ function render(){
     }
   }
 
-  // Average distance during sea passage: from START - PASSAGE to END - PASSAGE (or latest entry if no end yet)
+  // Average distance over the sea passage: COSP to EOSP (or the latest entry if still under way)
   let seaAvgDistStr = '—';
-  const startIdx = rows.findIndex(r => r.operation === 'START - PASSAGE');
+  const startIdx = rows.findIndex(r => r.operation === 'START OF SEA PASSAGE');
   if (startIdx > -1){
-    let endIdx = rows.findIndex((r,i) => i > startIdx && r.operation === 'END - PASSAGE');
+    let endIdx = rows.findIndex((r,i) => i > startIdx && r.operation === 'END OF SEA PASSAGE');
     if (endIdx === -1) endIdx = rows.length - 1;
     if (endIdx > startIdx){
       let sumDist = 0;
@@ -10098,22 +10068,140 @@ const REPORT_CATEGORIES = [
   { label: 'Arrival', keyword: 'ARRIVAL' },
   { label: 'Waiting / Anchor / Drifting', keyword: 'DRIFT' },
   { label: 'Shifting', keyword: 'SHIFTING' },
+  { label: 'Pilot', keyword: 'PILOT' },
   { label: 'Bunkering', keyword: 'BUNKER' },
   { label: 'ECA', keyword: 'ECA' },
   { label: 'Change of Speed', keyword: 'SPEED' },
   { label: 'Heavy Weather', keyword: 'HEAVY' },
 ];
+/* The operations a watch can be logged against, in the order the deck works through
+   them. One definition: the Log Entry dropdown is built from this, and every rule that
+   turns on the operation is written against these names. */
+const OPERATION_GROUPS = [
+  { label:'Departure', ops:[
+    'DEPARTURE - STANDBY', 'DEPARTURE - LAST LINE', 'DEPARTURE - PORT',
+    'DEPARTURE - ANCHORAGE', 'DEPARTURE - PILOT ONBOARD'
+  ]},
+  { label:'Manoeuvring & Passage', ops:[
+    'SHIFTING STATIONS', 'PILOT ONBOARD', 'PILOT OFFLOAD', 'CHANGE SPEED',
+    'START OF SEA PASSAGE', 'END OF SEA PASSAGE'
+  ]},
+  { label:'Noon', ops:[
+    'NOON - AT PORT', 'NOON - AT SEA', 'NOON - ANCHORAGE', 'NOON - DRIFTING'
+  ]},
+  { label:'Drifting', ops:['DRIFTING - START', 'DRIFTING - END'] },
+  { label:'Arrival', ops:[
+    'ARRIVAL - STANDBY', 'ARRIVAL - FIRST LINE', 'ARRIVAL - ANCHORAGE',
+    'ARRIVAL - FINISHED ENGINE'
+  ]},
+  { label:'ECA', ops:[
+    'ECA - CHANGEOVER START', 'ECA - ENTRY', 'ECA - EXIT', 'ECA - CHANGEOVER COMPLETE'
+  ]},
+  { label:'Bunkering', ops:['BUNKERING', 'BUNKER SURVEY'] }
+];
+const DEFAULT_OPERATION = 'NOON - AT SEA';
+const OPERATIONS = OPERATION_GROUPS.flatMap(g => g.ops);
+
+/* Operations renamed when the list was reworked. A logbook is a record, so an entry
+   written under an old name keeps its meaning and adopts the new one; nothing is
+   rewritten to a name that would change what the watch says. Names with no successor
+   — HEAVY WEATHER, bare DRIFTING, the cargo and idle ops — are deliberately absent:
+   they stay exactly as logged and are still classified below, they are just no longer
+   offered for new entries. */
+const LEGACY_OPERATION_ALIASES = {
+  'LAST LINE - DEPARTURE': 'DEPARTURE - LAST LINE',
+  'PILOT ONBOARD - DEPARTURE': 'DEPARTURE - PILOT ONBOARD',
+  'START - PASSAGE': 'START OF SEA PASSAGE',
+  'END - PASSAGE': 'END OF SEA PASSAGE',
+  'EOSP - END OF SEA PASSAGE': 'END OF SEA PASSAGE',
+  'CHANGE OF SPEED': 'CHANGE SPEED',
+  'STAND BY - ARRIVAL': 'ARRIVAL - STANDBY',
+  'FIRST LINE - ARRIVAL': 'ARRIVAL - FIRST LINE',
+  'AT SEA - NOON': 'NOON - AT SEA',
+  'IN PORT - NOON': 'NOON - AT PORT',
+  'AT ANCHOR - NOON': 'NOON - ANCHORAGE',
+  'SHIFTING': 'SHIFTING STATIONS'
+};
+
+/** The current name for an operation, leaving anything unrecognised untouched. */
+function canonicalOperation(op){
+  const key = (op || '').trim().toUpperCase();
+  return LEGACY_OPERATION_ALIASES[key] || (op || '');
+}
+
+/** Fill the Log Entry operation select from the list above. */
+function buildOperationSelect(){
+  const sel = document.getElementById('in_operation');
+  if (!sel) return;
+  sel.innerHTML = OPERATION_GROUPS.map(g =>
+    `<optgroup label="${escHtml(g.label)}">${g.ops.map(o =>
+      `<option${o === DEFAULT_OPERATION ? ' selected' : ''}>${escHtml(o)}</option>`).join('')}</optgroup>`
+  ).join('');
+}
+/* The markup ships an empty select; fill it as soon as this script runs, before
+   anything prefills the form or opens an entry for editing. */
+buildOperationSelect();
+
+/**
+ * Select an operation, adding it to the list first if it is one no longer offered.
+ * Assigning a value a select has no option for silently blanks it, which on an old
+ * entry would rewrite its operation the moment the watch was saved again.
+ */
+function setOperationSelectValue(sel, op){
+  if (!sel) return;
+  const want = canonicalOperation(op);
+  if (!want) return;
+  if (![...sel.options].some(o => o.value === want)){
+    let grp = sel.querySelector('optgroup[label="As Logged"]');
+    if (!grp){
+      grp = document.createElement('optgroup');
+      grp.label = 'As Logged';
+      sel.appendChild(grp);
+    }
+    const opt = document.createElement('option');
+    opt.value = want;
+    opt.textContent = want;
+    grp.appendChild(opt);
+  }
+  sel.value = want;
+}
+
 const SEA_TYPE_OPS = new Set([
-  'START - PASSAGE','AT SEA - NOON','END - PASSAGE','DRIFTING','ECA - ENTRY','ECA - EXIT','CHANGE OF SPEED','HEAVY WEATHER'
+  'START OF SEA PASSAGE', 'END OF SEA PASSAGE', 'NOON - AT SEA', 'NOON - DRIFTING',
+  'CHANGE SPEED', 'DRIFTING - START', 'DRIFTING - END',
+  'ECA - CHANGEOVER START', 'ECA - ENTRY', 'ECA - EXIT', 'ECA - CHANGEOVER COMPLETE',
+  /* No longer offered, still logged against older entries. */
+  'DRIFTING', 'HEAVY WEATHER'
 ]);
 const MANEUVERING_ME_OPS = new Set([
-  'LAST LINE - DEPARTURE','PILOT ONBOARD - DEPARTURE','STAND BY - ARRIVAL','FIRST LINE - ARRIVAL',
-  'EOSP - END OF SEA PASSAGE','SHIFTING'
+  'SHIFTING STATIONS', 'PILOT ONBOARD', 'PILOT OFFLOAD',
+  'ARRIVAL - STANDBY', 'ARRIVAL - FIRST LINE', 'ARRIVAL - ANCHORAGE',
+  'ARRIVAL - FINISHED ENGINE'
 ]);
+
+/* Watches that are not about the main engine: alongside or at anchor over noon, the
+   whole departure sequence up to pilot onboard, and bunkering. The M/E panels are a
+   wall of dashes on these, so the summary and the printed sheet leave them out and
+   collapse to what is actually running. Consumption and R.O.B. are untouched — they
+   are worked from meters, not from the operation — so fuel the engine did burn is
+   still counted. "Show M/E panels anyway" remains for the watch that needs them. */
+const NO_ME_DATA_OPS = new Set([
+  'NOON - AT PORT', 'NOON - ANCHORAGE',
+  'DEPARTURE - STANDBY', 'DEPARTURE - LAST LINE', 'DEPARTURE - PORT',
+  'DEPARTURE - ANCHORAGE', 'DEPARTURE - PILOT ONBOARD',
+  'BUNKERING', 'BUNKER SURVEY'
+]);
+
+/** True when the watch is one the main engine figures belong on. */
+function operationNeedsMeData(op){
+  return !NO_ME_DATA_OPS.has(canonicalOperation(op));
+}
 
 /** Ops that may carry M/E cylinder / T/C detail when the engine is in use. */
 function canShowMeDetailOp(op){
-  return SEA_TYPE_OPS.has(op) || MANEUVERING_ME_OPS.has(op);
+  const o = canonicalOperation(op);
+  if (!operationNeedsMeData(o)) return false;
+  return SEA_TYPE_OPS.has(o) || MANEUVERING_ME_OPS.has(o);
 }
 
 /** True noon / weather noon ops that should carry weather + ME detail on the printout. */
@@ -10165,6 +10253,8 @@ function fillFlagRegistrySelect(selId, selected){
 /** Main engine was turning / burning this period — prefer measured Δrevs / cons over stale typed RPM. */
 function mainEngineInUse(entry, row){
   if (!entry) return false;
+  /* Some watches simply are not about the main engine — see NO_ME_DATA_OPS. */
+  if (!operationNeedsMeData(entry.operation)) return false;
   /* An unchanged rev counter is decisive: the engine did not turn, whatever a
      stale typed RPM or a twitching flowmeter might suggest. */
   if (row?.meStopped) return false;
@@ -11622,7 +11712,7 @@ function loadEntryIntoForm(id){
   if (sel) sel.value = id;
   document.getElementById('in_datetime').value = e.datetime;
   setShipTzUi(e.tzOffsetMin != null ? e.tzOffsetMin : defaultShipTzOffsetMin(), e.clockChangeMin);
-  document.getElementById('in_operation').value = e.operation;
+  setOperationSelectValue(document.getElementById('in_operation'), e.operation);
   document.getElementById('in_condition').value = normalizeCondition(e.condition);
   document.getElementById('in_distanceShip').value = e.distanceShip ?? 0;
   document.getElementById('in_rpm').value = e.rpm ?? '';
@@ -11891,6 +11981,9 @@ document.getElementById('btnToggleShipDetails').addEventListener('click', ()=>{
 });
 
 function normalizeEntry(e){
+  /* An entry logged under an operation's old name adopts the current one, whether it
+     came from this browser, an imported backup, a synced leg or the voyage library. */
+  if (e.operation) e.operation = canonicalOperation(e.operation);
   e.me = e.me || { meter:null, type:'HFO', sg:0.98 };
   e.ge = e.ge || { meter:null, type:'MDO/MGO', sg:0.87 };
   e.blr = e.blr || { meter:null, type:'MDO/MGO', sg:0.87 };
@@ -14212,7 +14305,7 @@ const VS_ME_ONLY_PANELS = ['vsReferenceBlock', 'vsRunBlock', 'vsEcaBlock', 'vsMe
 /* Changeover is only recorded crossing an ECA boundary, so the block is shown on
    those legs alone — and on any older entry that already carries changeover data,
    which must stay correctable. */
-const ECA_OPS = new Set(['ECA - ENTRY', 'ECA - EXIT']);
+const ECA_OPS = new Set(['ECA - CHANGEOVER START', 'ECA - ENTRY', 'ECA - EXIT', 'ECA - CHANGEOVER COMPLETE']);
 function entryHasEcaData(entry){
   const eca = entry?.report?.eca;
   if (!eca) return false;
@@ -14785,9 +14878,15 @@ function renderVoyageProgress(animateShip){
   const seaEff = seaState!=null ? seaState : Math.min(9, Math.max(1, Math.round(bftEff * 0.7)));
 
   // Status: port mooring, anchorage (anchor only), drifting (wave motion), or underway.
-  const PORT_OPS = new Set(['LAST LINE - DEPARTURE','PILOT ONBOARD - DEPARTURE','IN PORT - NOON','STAND BY - ARRIVAL','FIRST LINE - ARRIVAL','EOSP - END OF SEA PASSAGE','SHIFTING','BUNKERING','CARGO - LOADING','CARGO - DISCHARGING','IDLE IN PORT']);
-  const ANCHOR_OPS = new Set(['AT ANCHOR - NOON']);
-  const DRIFT_OPS = new Set(['DRIFTING']);
+  const PORT_OPS = new Set([
+    'DEPARTURE - STANDBY','DEPARTURE - LAST LINE','DEPARTURE - PORT','DEPARTURE - PILOT ONBOARD',
+    'NOON - AT PORT','ARRIVAL - STANDBY','ARRIVAL - FIRST LINE','ARRIVAL - FINISHED ENGINE',
+    'END OF SEA PASSAGE','SHIFTING STATIONS','BUNKERING','BUNKER SURVEY',
+    /* No longer offered, still logged against older entries. */
+    'CARGO - LOADING','CARGO - DISCHARGING','IDLE IN PORT'
+  ]);
+  const ANCHOR_OPS = new Set(['NOON - ANCHORAGE','DEPARTURE - ANCHORAGE','ARRIVAL - ANCHORAGE']);
+  const DRIFT_OPS = new Set(['DRIFTING - START','DRIFTING - END','NOON - DRIFTING','DRIFTING']);
   let shipStatus = 'UNDERWAY';
   if (lastRow){
     if (ANCHOR_OPS.has(lastRow.operation)) shipStatus = 'ANCHORED';
@@ -15244,7 +15343,7 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
     datetime: dtVal,
     tzOffsetMin: formTzOffsetMin(),
     clockChangeMin: formClockChangeMin(),
-    operation: document.getElementById('in_operation').value,
+    operation: canonicalOperation(document.getElementById('in_operation').value),
     condition: normalizeCondition(document.getElementById('in_condition').value),
     distanceShip: parseFloat(document.getElementById('in_distanceShip').value)||0,
     rpm: document.getElementById('in_rpm').value===''? null : parseFloat(document.getElementById('in_rpm').value),
@@ -16904,7 +17003,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v145';
+let androidInstallCacheName = 'noon-report-v146';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',

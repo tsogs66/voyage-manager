@@ -79,7 +79,7 @@ const SCRAPE = `(entryId) => {
       el.dispatchEvent(new Event('change', { bubbles: true }));
     };
     set('in_datetime', '2026-07-06T12:00');
-    set('in_operation', 'AT SEA - NOON');
+    set('in_operation', 'NOON - AT SEA');
     set('in_distanceShip', '340');
     set('in_revCounter', String((s.rc || 0) + 115200));
     set('me_meter', String((s.me || 0) + 42000));

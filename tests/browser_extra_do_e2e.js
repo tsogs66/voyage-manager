@@ -42,7 +42,7 @@ const check = (l, a, e) => {
     const list = sortedEntries();
     const e = list[list.length - 1];
     const prev = list[list.length - 2];
-    e.operation = 'AT SEA - NOON';
+    e.operation = 'NOON - AT SEA';
     e.rpm = 80;
     e.revCounter = (prev.revCounter || 0) + 115200;
     e.me.meter = (prev.me.meter || 0) + 42000;

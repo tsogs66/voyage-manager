@@ -45,7 +45,7 @@ const sigSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200"
     const list = sortedEntries();
     const e = list[list.length - 1];
     const prev = list[list.length - 2];
-    e.operation = 'AT SEA - NOON';
+    e.operation = 'NOON - AT SEA';
     e.rpm = 80;
     e.revCounter = (prev.revCounter || 0) + 115200;
     e.me.meter = (prev.me.meter || 0) + 42000;
