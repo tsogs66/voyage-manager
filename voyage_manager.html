@@ -1293,6 +1293,8 @@
      reads as a sum rather than as one more reading. Declared after the stripe rule,
      which it ties with on specificity. */
   .pr-table tr.pr-total td{ background:#eef2f8; border-top:0.4mm solid #122238; }
+  /* Says the list under it was cut, so a short list is never mistaken for the range. */
+  .pr-note{ font-size:8.5px; color:#5a6578; font-style:italic; margin-top:0.8mm; }
   .pr-remarks{
     border:1px solid #d4dce8; border-left:2px solid #8a6b3c;
     padding:1.2mm; margin:1.2mm 0; min-height:5mm; max-height:14mm; overflow:hidden; background:#fffdf8;
@@ -2475,6 +2477,9 @@
         <div class="field" style="align-self:end;"><button class="ghost small" id="btnRangeAll" type="button">Whole voyage</button></div>
       </div>
       <div class="hint" id="rangeSummaryHint">Pick the first and last report of the stretch you want. Every figure below is totalled or averaged over the reports from the one after "From" up to and including "To" — the same periods the reports themselves cover.</div>
+      <div class="btn-row">
+        <button class="ghost small" type="button" id="btnPrintRangeTotals">Print Totals &amp; Averages</button>
+      </div>
     </div>
     <div class="panel">
       <h2>Totals</h2>
@@ -8855,6 +8860,10 @@ function rangeAggregate(ids){
   const sum = (f) => inRange.reduce((a, r) => a + (Number(f(r)) || 0), 0);
   const hrs = sum(r => r.hrs);
   const meHrs = inRange.reduce((a, r) => a + (Number(r.meHrs != null ? r.meHrs : r.hrs) || 0), 0);
+  /* Revolutions turned over the range: a count, not a rate. The average RPM says how
+     fast the engine turned, this says how much it turned, and an environmental return
+     is worked from the count. A period with the engine stopped contributes nothing. */
+  const revs = sum(r => r.dailyRevs);
   const wAvg = (val, weight) => {
     let num = 0, den = 0;
     inRange.forEach(r => {
@@ -8867,7 +8876,7 @@ function rangeAggregate(ids){
   FUEL_CONS_GROUPS.forEach(g => { fuel[g.label] = sum(r => sumFuelGroup(r.consByType, g)); });
   return {
     reports: inRange.length,
-    hrs, meHrs,
+    hrs, meHrs, revs,
     distShip: sum(r => r.distanceShip),
     distEngine: sum(r => r.distEngine),
     fuel,
@@ -8928,6 +8937,7 @@ function renderRangeTotals(){
     stat(n(agg.meHrs), 'M/E running hours'),
     stat(n(agg.distShip), 'Distance by ship (nm)'),
     stat(n(agg.distEngine), 'Distance by engine (nm)'),
+    stat(n(agg.revs, 0), 'Total revolutions'),
     ...FUEL_CONS_GROUPS.map(g => stat(n(agg.fuel[g.label], 3), `${g.label} burned (MT)`)),
     stat(n(agg.fuelTotal, 3), 'All fuel (MT)'),
     stat(n(agg.co2, 2), 'CO₂ (MT)'),
@@ -8950,7 +8960,7 @@ function renderRangeTotals(){
   const head = document.getElementById('rangeRowsHead');
   const body = document.getElementById('rangeRowsBody');
   if (head && body){
-    const cols = ['Date/Time', 'Operation', 'Hrs', 'M/E Hrs', 'Dist (nm)', 'Speed (kn)', 'RPM', '%MCR',
+    const cols = ['Date/Time', 'Operation', 'Hrs', 'M/E Hrs', 'Dist (nm)', 'Speed (kn)', 'RPM', 'Revs', '%MCR',
       ...FUEL_CONS_GROUPS.map(g => `${g.label} (MT)`), 'SFOC'];
     head.innerHTML = cols.map(h => `<th>${escHtml(h)}</th>`).join('');
     body.innerHTML = agg.rows.length ? agg.rows.map(r => `<tr>
@@ -8961,11 +8971,126 @@ function renderRangeTotals(){
       <td>${n(r.distanceShip)}</td>
       <td>${n(r.speedShip)}</td>
       <td>${n(r.rpmEff)}</td>
+      <td>${n(r.dailyRevs, 0)}</td>
       <td>${n(r.mcrPct)}</td>
       ${FUEL_CONS_GROUPS.map(g => `<td>${n(sumFuelGroup(r.consByType, g), 3)}</td>`).join('')}
       <td>${n(r.sfocActual)}</td>
     </tr>`).join('') : `<tr class="empty-row"><td colspan="${cols.length}">No reports in this range.</td></tr>`;
   }
+}
+
+/* A4 portrait sheet of the range's totals and averages, in the same theme as the
+   noon report and the Dep/Arr R.O.B. sheet. Totals and averages sit side by side so
+   the two read against each other, and the reports the figures came from are listed
+   under them — the sheet is signed, so a reader has to be able to check it.
+
+   The page cannot scroll, so a long range would push the list, the signature and the
+   footer off the paper. Past a page's worth the list is cut and says so, and the range
+   is still fully identified by the first and last report in the meta grid above. */
+const RANGE_PRINT_MAX_ROWS = 20;
+
+function printRangeTotalsSheet(){
+  const list = sortedEntries();
+  if (!list.length){ alert('No entries to total yet.'); return; }
+  const ids = rangeEntryIds();
+  if (!ids.length){ alert('No reports in the selected range.'); return; }
+
+  const agg = rangeAggregate(ids);
+  const n = (v, d = 2) => v == null || isNaN(v) ? '—' : fmt(v, d);
+  const when = (dt) => dt ? new Date(dt).toLocaleString(undefined,
+    { year:'numeric', month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+  const first = agg.rows[0], last = agg.rows[agg.rows.length - 1];
+  /* The range is named by the reports the engineer picked, not by the periods, so the
+     "from" report is the one in the dropdown even though its own period sits outside. */
+  const fromPick = list.find(e => e.id === document.getElementById('rangeFrom')?.value) || list[0];
+  const toPick = list.find(e => e.id === document.getElementById('rangeTo')?.value) || list[list.length - 1];
+
+  const totals = [
+    printRow('Reports in range', String(agg.reports)),
+    printRow('Period hours', n(agg.hrs)),
+    printRow('M/E running hours', n(agg.meHrs)),
+    printRow('Distance by ship', `${n(agg.distShip)} nm`),
+    printRow('Distance by engine', `${n(agg.distEngine)} nm`),
+    printRow('Total revolutions', n(agg.revs, 0)),
+    ...FUEL_CONS_GROUPS.map(g => printRow(`${escPrint(g.label)} burned`, `${n(agg.fuel[g.label], FUEL_DECIMALS)} MT`)),
+    printRow('All fuel', `${n(agg.fuelTotal, FUEL_DECIMALS)} MT`),
+    printRow('CO₂ emitted', `${n(agg.co2)} MT`),
+    printRow('Cylinder oil', `${n(agg.cylCons, 0)} L`),
+    printRow('F.W. produced', `${n(litresToM3(agg.fwProd))} m³`),
+    printRow('F.W. consumed', `${n(litresToM3(agg.fwCons))} m³`)
+  ].join('');
+
+  /* Weighted the way the tab weights them: speed and slip over period hours, the
+     engine figures over M/E running hours, so a short manoeuvring watch does not
+     pull a voyage average around as hard as a full day at sea. */
+  const averages = [
+    printRow('Ship speed', `${n(agg.avgSpeed)} kn`),
+    printRow('M/E revolutions', `${n(agg.avgRpm)} rpm`),
+    printRow('Engine load', `${n(agg.avgMcr)} % MCR`),
+    printRow('Shaft power', `${n(agg.avgKw, 0)} kW`),
+    printRow('Slip', `${n(agg.avgSlip)} %`),
+    printRow('Actual SFOC', `${n(agg.avgSfoc)} g/kWh`, sfocDeltaClass(
+      agg.avgSfoc != null && agg.avgSfocRef ? ((agg.avgSfoc - agg.avgSfocRef) / agg.avgSfocRef) * 100 : null)),
+    printRow('Reference SFOC', `${n(agg.avgSfocRef)} g/kWh`),
+    printRow('Fuel per day', `${n(agg.fuelPerDay, FUEL_DECIMALS)} MT`)
+  ].join('');
+
+  /* The meta grid above carries the full timestamps; in the table a compact date keeps
+     each report on one line, which is what lets a page hold a fortnight of them. */
+  const shortWhen = (dt) => dt ? new Date(dt).toLocaleString(undefined,
+    { month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+  const shown = agg.rows.slice(0, RANGE_PRINT_MAX_ROWS);
+  const hidden = agg.rows.length - shown.length;
+  const reportsTable = `
+    <table class="pr-table pr-table-wide">
+      <tr><th>Date / Time</th><th>Operation</th><th>Hrs</th><th>Dist</th><th>Speed</th><th>RPM</th><th>Revs</th>
+        ${FUEL_CONS_GROUPS.map(g => `<th>${escPrint(g.label)}</th>`).join('')}</tr>
+      ${shown.map(r => `<tr>
+        <td class="row-lbl">${escPrint(shortWhen(r.datetime))}</td>
+        <td class="row-lbl">${escPrint(r.operation || '')}</td>
+        <td>${n(r.hrs)}</td>
+        <td>${n(r.distanceShip)}</td>
+        <td>${n(r.speedShip)}</td>
+        <td>${n(r.rpmEff)}</td>
+        <td>${n(r.dailyRevs, 0)}</td>
+        ${FUEL_CONS_GROUPS.map(g => `<td>${n(sumFuelGroup(r.consByType, g), FUEL_DECIMALS)}</td>`).join('')}
+      </tr>`).join('')}
+      <tr class="pr-total"><td class="row-lbl"><strong>Total / Avg</strong></td><td></td>
+        <td><strong>${n(agg.hrs)}</strong></td>
+        <td><strong>${n(agg.distShip)}</strong></td>
+        <td><strong>${n(agg.avgSpeed)}</strong></td>
+        <td><strong>${n(agg.avgRpm)}</strong></td>
+        <td><strong>${n(agg.revs, 0)}</strong></td>
+        ${FUEL_CONS_GROUPS.map(g => `<td><strong>${n(agg.fuel[g.label], FUEL_DECIMALS)}</strong></td>`).join('')}
+      </tr>
+    </table>
+    ${hidden > 0 ? `<div class="pr-note">Listing the first ${shown.length} of ${agg.rows.length} reports; the totals and averages above cover all ${agg.rows.length}.</div>` : ''}`;
+
+  const sheet = `<div class="pr-sheet">
+    ${printDocHeader({ title: 'Totals & Averages', subtitle: 'Report Range Summary', badge: state.setup.shipCondition || '' })}
+    ${printMetaGrid([
+      {label:'Vessel', value: escPrint(state.setup.vesselName || '—')},
+      {label:'Voyage No.', value: escPrint(state.setup.voyageNumber || '—')},
+      {label:'From Report', value: escPrint(when(fromPick?.datetime))},
+      {label:'To Report', value: escPrint(when(toPick?.datetime))}
+    ], 4)}
+    ${printKpiRow([
+      {label:'Reports', value: String(agg.reports)},
+      {label:'Period Hrs', value: n(agg.hrs)},
+      {label:'Distance (nm)', value: n(agg.distShip)},
+      {label:'Avg Speed (kn)', value: n(agg.avgSpeed)},
+      {label:'All Fuel (MT)', value: n(agg.fuelTotal, FUEL_DECIMALS)}
+    ])}
+    <div class="pr-grid">
+      <div>${printSection('Totals', totals)}</div>
+      <div>${printSection('Averages', averages)}</div>
+      <div class="pr-span2">${printSection(
+        `Reports In Range — ${escPrint(when(first?.datetime))} to ${escPrint(when(last?.datetime))}`,
+        reportsTable)}</div>
+    </div>
+    ${printSignatory()}
+  </div>`;
+  printPortraitSinglePage(sheet);
 }
 
 ['rangeFrom', 'rangeTo'].forEach(id => {
@@ -11754,6 +11879,7 @@ async function persistCiiSetupFromForm(){
   el.addEventListener('change', ()=>{ persistCiiSetupFromForm().catch(console.error); });
 });
 document.getElementById('btnPrintDepArrRob')?.addEventListener('click', ()=> printDepArrRobSheet());
+document.getElementById('btnPrintRangeTotals')?.addEventListener('click', ()=> printRangeTotalsSheet());
 document.getElementById('btnExportWeeklyAbstract')?.addEventListener('click', ()=> exportWeeklyAbstractCsv());
 
 document.getElementById('btnToggleShipDetails').addEventListener('click', ()=>{
@@ -16778,7 +16904,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v143';
+let androidInstallCacheName = 'noon-report-v145';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
