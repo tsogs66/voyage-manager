@@ -46,7 +46,11 @@ const sandbox = {
   EORB, console, ShipTime, window: { ShipTime },
   /* Constants the extracted helpers close over. */
   EXTRA_DO_GRADES: ['MDO/MGO', 'LSMGO'],
-  FUEL_DECIMALS: 3
+  FUEL_DECIMALS: 3,
+  FUEL_CONS_GROUPS: [
+    { key: 'fuel', label: 'FUEL', csv: 'FuelCons', grades: ['HFO', 'LSFO'] },
+    { key: 'dogo', label: 'DO/GO', csv: 'DOGOCons', grades: ['MDO/MGO', 'LSMGO'] }
+  ]
 };
 vm.createContext(sandbox);
 vm.runInContext(
@@ -57,7 +61,8 @@ vm.runInContext(
    extract('extraDoMap'), extract('hasExtraDo'), extract('sumFuelGroup'),
    extract('entryMeRunHours'), extract('tankRobDelta'), extract('formatRobDelta'),
    extract('actualMeSfoc'), extract('rpmFromRevs'), extract('effectiveRpm'),
-   extract('unitOverrideIfDifferent')].join('\n'),
+   extract('unitOverrideIfDifferent'),
+   extract('fuelGroupColKey'), extract('rowFuelGroupCells')].join('\n'),
   sandbox
 );
 
@@ -170,9 +175,9 @@ console.log('\nfuel consumption is totalled per grade, not across grades');
   /* Four grades, two fuels: the splits are a tank matter, not a difference in what
      went into the engine. */
   check('both residuals share one column',
-    HTML.includes("{ label:'FUEL',  grades:['HFO','LSFO'] }"), true);
+    /label:'FUEL',[^}]*grades:\['HFO','LSFO'\]/.test(HTML), true);
   check('both distillates share one column',
-    HTML.includes("{ label:'DO/GO', grades:['MDO/MGO','LSMGO'] }"), true);
+    /label:'DO\/GO',[^}]*grades:\['MDO\/MGO','LSMGO'\]/.test(HTML), true);
   check('and there are only those two', HTML.includes("grades:['HFO'] }") || HTML.includes("grades:['LSFO'] }"), false);
   check('misc burn is carried as its own row',
     HTML.includes("fuelUnitRows.push({ label:'Other', by: burnedOnly(row.miscCons) })"), true);
@@ -182,6 +187,44 @@ console.log('\nfuel consumption is totalled per grade, not across grades');
   check('a group with nothing in it stays blank, a real zero prints', HTML.includes('return seen ? total : null;'), true);
   check('the lumped cross-grade total is gone', HTML.includes("printRow('Total', fmtFuel(row.total))"), false);
   check('the total row is ruled off', HTML.includes('.pr-table tr.pr-total td{'), true);
+}
+
+console.log('\nevery report totals fuel the way the sheet does');
+{
+  /* A watch with the M/E on residual and the generators on distillate: the two
+     figures are not addable, and a report that added them produced a tonnage
+     nobody bunkers, orders or reconciles a tank against. */
+  const row = { consByType: { 'HFO': 0.5, 'LSFO': 1.25, 'MDO/MGO': 2.0, 'LSMGO': 0.75 } };
+  const cells = sandbox.rowFuelGroupCells(row);
+  check('residual column', cells[sandbox.fuelGroupColKey({ key: 'fuel' })], 1.75);
+  check('distillate column', cells[sandbox.fuelGroupColKey({ key: 'dogo' })], 2.75);
+  check('the two still account for every tonne', 1.75 + 2.75, 0.5 + 1.25 + 2.0 + 0.75);
+  check('a grade the vessel does not carry leaves the group blank',
+    sandbox.rowFuelGroupCells({ consByType: { 'MDO/MGO': 1 } })[sandbox.fuelGroupColKey({ key: 'fuel' })], null);
+  check('a genuine zero is still a figure',
+    sandbox.rowFuelGroupCells({ consByType: { 'HFO': 0 } })[sandbox.fuelGroupColKey({ key: 'fuel' })], 0);
+  /* Abstracts archived before the split have no consByType to read. */
+  check('an archived row without grades reports nothing rather than throwing',
+    Object.values(sandbox.rowFuelGroupCells({})), [null, null]);
+  check('keys are stable and distinct',
+    [sandbox.fuelGroupColKey({ key: 'fuel' }), sandbox.fuelGroupColKey({ key: 'dogo' })],
+    ['cons_fuel', 'cons_dogo']);
+
+  /* The surfaces that used to print r.total: the abstract and its CSV, the two
+     exports on the Backup tab, and the weekly abstract. */
+  check('the abstract column is per group',
+    HTML.includes("label: `Total ${g.label}`"), true);
+  check('the consumption table column is per group',
+    HTML.includes("label: `${g.label} Total`"), true);
+  check('the lumped abstract column is gone',
+    HTML.includes("{ key:'total', label:'Total Cons', kind:'fuel' }"), false);
+  check('the lumped consumption column is gone',
+    HTML.includes("{ key:'periodTotal', label:'Period Total', kind:'fuel' }"), false);
+  check('no export still writes the cross-fuel sum', /fmtNum\(r\.total\s*,\s*3\)/.test(HTML), false);
+  check('the abstract CSV names both columns', HTML.includes('...FUEL_CONS_GROUPS.map(g => g.csv)'), true);
+  check('and the weekly abstract does too', HTML.includes("...FUEL_CONS_GROUPS.map(g=>g.csv),"), true);
+  check('the CSV name travels with the group',
+    sandbox.FUEL_CONS_GROUPS.map(g => g.csv), ['FuelCons', 'DOGOCons']);
 }
 
 console.log('\nboiler and incinerator extra distillate');
