@@ -507,32 +507,9 @@
   .orb-tank-card.full .tk-pct{color:var(--alert);}
   .orb-tank-card.high .tk-pct{color:var(--brass);}
 
-  /* The book as it reads on paper: a cream page with ruled columns, so what is on
-     screen and what comes out of the printer are recognisably the same document. */
+  /* The book's own styles live in eorb.js (EORB.BOOK_CSS) and are injected at boot,
+     so the on-screen book and the printed sheet are styled by one stylesheet. */
   .orb-book-wrap{margin-top:10px; overflow-x:auto;}
-  .orb-book{background:#fdfbf4; color:#16202e; border:1px solid #cbbf9e; border-radius:3px;
-    padding:14px 16px; min-width:640px; box-shadow:0 2px 10px rgba(0,0,0,.25);}
-  .orb-book-head{border-bottom:2px solid #16202e; padding-bottom:8px; margin-bottom:10px;}
-  .orb-book-head h3{margin:0 0 2px; font-size:14px; text-transform:uppercase; letter-spacing:.05em; color:#16202e;}
-  .orb-book-head .sub{font-size:11px; color:#4a5568;}
-  .orb-book-meta{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:2px 14px; margin-top:6px; font-size:10.5px; color:#33415c;}
-  .orb-book table{width:100%; border-collapse:collapse; font-size:11px; color:#16202e;}
-  /* The page-wide table rules paint cells for the dark theme — cream text, brass
-     headings, sticky dark header, nowrap. All of that has to be undone here or the
-     book reads as pale grey on cream and the record column refuses to wrap. */
-  .orb-book thead th{background:#e9e2cd; color:#16202e; font-size:9.5px; position:static;
-    text-transform:uppercase; letter-spacing:.04em; text-align:left; border-bottom:1px solid #8d8471;}
-  .orb-book th, .orb-book td{border:1px solid #b9ae8e; padding:4px 6px; vertical-align:top;
-    color:#16202e; white-space:normal;}
-  .orb-book tbody td{color:#16202e; border-bottom:1px solid #b9ae8e;}
-  .orb-book tbody tr:hover{background:rgba(0,0,0,.03);}
-  .orb-book td:nth-child(1){width:88px; white-space:nowrap; font-family:'JetBrains Mono',monospace;}
-  .orb-book td:nth-child(2){width:42px; text-align:center; font-weight:700;}
-  .orb-book td:nth-child(3){width:52px; text-align:center; font-family:'JetBrains Mono',monospace;}
-  .orb-book tr.orb-voided td{color:#7a8496;}
-  .orb-book .orb-sign{margin-top:4px; font-size:9.5px; font-style:italic; color:#4a5568;}
-  .orb-book-empty{padding:22px; text-align:center; color:#6b7280; font-size:11px;}
-  .orb-book-foot{margin-top:10px; padding-top:6px; border-top:1px solid #b9ae8e; font-size:9.5px; color:#6b7280;}
   .orb-table tr.orb-voided td{color:var(--paper-dim); text-decoration:line-through;}
   .orb-table tr.orb-voided td .hint{text-decoration:none; color:var(--alert);}
   /* Chronology guidance for ORB dates — must stay visible on phones, so not .hint */
@@ -17090,7 +17067,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v151';
+let androidInstallCacheName = 'noon-report-v152';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -18867,45 +18844,37 @@ function orbBookEntries(){
   return { entries: all.filter(e => e.date >= start && e.date <= latest), ranged: false, from: start, to: latest };
 }
 
+/* The book's stylesheet lives with the book builder in eorb.js. Injecting it here means
+   the page and the printed sheet are styled by the same declarations rather than by two
+   copies that drift. */
+function ensureOrbBookCss(){
+  if (!window.EORB || document.getElementById('orbBookCss')) return;
+  const el = document.createElement('style');
+  el.id = 'orbBookCss';
+  el.textContent = EORB.BOOK_CSS;
+  document.head.appendChild(el);
+}
+
 function renderOrbBook(){
   const host = document.getElementById('orbBook');
   if (!host || !window.EORB) return;
+  ensureOrbBookCss();
   const setup = orbSetup();
   const { entries, ranged, from, to } = orbBookEntries();
-  const flag = EORB.getFlag(setup.flag);
-  const parts = [...new Set(entries.map(e => Number(e.part) || 1))];
-  const partName = parts.length === 1
-    ? (parts[0] === 3 ? 'Fuel Oil Changeover Record — Part III'
-      : 'Oil Record Book — Part ' + (parts[0] === 2 ? 'II' : 'I'))
-    : 'Oil Record Book';
   const rangeLabel = from && to
     ? `${EORB.formatOrbDate(from)} to ${EORB.formatOrbDate(to)}`
-    : (from || to ? EORB.formatOrbDate(from || to) : '—');
+    : (from || to ? EORB.formatOrbDate(from || to) : '');
 
-  const body = EORB.bookRowsHtml(entries);
-  const table = body
-    ? `<table>
-        <thead><tr><th>Date</th><th>Code</th><th>Item</th><th>Record of operations / signature of officer in charge</th></tr></thead>
-        <tbody>${body}</tbody>
-      </table>`
-    : `<div class="orb-book-empty">No entries ${ranged ? 'in the selected period' : 'in the last ' + ORB_BOOK_DAYS + ' days'}.</div>`;
-
-  host.innerHTML = `<div class="orb-book">
-    <div class="orb-book-head">
-      <h3>${escHtml(partName)}</h3>
-      <div class="sub">${escHtml(rangeLabel)}</div>
-      <div class="orb-book-meta">
-        <div><strong>Name of ship:</strong> ${escHtml(setup.shipName || state.setup.vesselName || '—')}</div>
-        <div><strong>IMO No.:</strong> ${escHtml(setup.imo || '—')}</div>
-        <div><strong>Distinctive number or letters:</strong> ${escHtml(setup.callSign || '—')}</div>
-        <div><strong>Gross tonnage:</strong> ${escHtml(setup.gt == null || setup.gt === '' ? '—' : String(setup.gt))}</div>
-        <div><strong>Flag administration:</strong> ${escHtml(flag.name)}</div>
-        <div><strong>Entries shown:</strong> ${entries.length}</div>
-      </div>
-    </div>
-    ${table}
-    <div class="orb-book-foot">Working view of the book as it prints. MARPOL Annex I Appendix III codes. Official hard-copy replacement requires flag-approved software under IMO MEPC.312(74).</div>
-  </div>`;
+  /* Exactly the document the Print button produces, without the Master's signature
+     block — that belongs on a sheet someone has actually signed, not on a screen. */
+  host.innerHTML = EORB.bookDocumentHtml({
+    ...setup,
+    shipName: setup.shipName || state.setup.vesselName || ''
+  }, entries, {
+    rangeLabel,
+    master: false,
+    emptyText: `No entries ${ranged ? 'in the selected period' : 'in the last ' + ORB_BOOK_DAYS + ' days'}.`
+  });
 
   const title = document.getElementById('orbBookTitle');
   if (title) title.textContent = ranged ? 'Record Book — Selected Period' : 'Record Book — Last 7 Days';
