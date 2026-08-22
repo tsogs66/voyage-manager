@@ -179,7 +179,8 @@ const contrast = (fg, bg) => {
     };
   });
   check('the title says it is a chosen period', ranged.title, 'Record Book — Selected Period');
-  check('the head carries the dates', ranged.range, '16-AUG-2026 to 19-AUG-2026');
+  check('the head carries the dates alongside the part',
+    ranged.range, 'Machinery Space Operations (All Ships) · 16-AUG-2026 to 19-AUG-2026');
   check('and only that period is in it', ranged.dates, ['16-AUG-2026', '18-AUG-2026']);
 
   console.log('\nclearing the dates goes back to the last 7 days');
@@ -238,6 +239,49 @@ const contrast = (fg, bg) => {
   });
   check('the card read the old figure', moved.before, '6.200 m³ · 20.7%');
   check('and the new one after the entry was saved', moved.after, '8.000 m³ · 26.7%');
+
+  console.log('\nthe printout is the same document as the book on screen');
+  const same = await pg.evaluate(async () => {
+    document.getElementById('orb_from').value = '';
+    document.getElementById('orb_to').value = '';
+    document.getElementById('btnOrbFilter').click();
+    await new Promise(r => setTimeout(r, 700));
+    const screenEl = document.querySelector('.orb-book');
+    const { entries, from, to } = orbBookEntries();
+    const label = `${EORB.formatOrbDate(from)} to ${EORB.formatOrbDate(to)}`;
+    const d = document.createElement('div');
+    d.innerHTML = EORB.buildPrintHtml(orbSetup(), entries, label)
+      .replace(/^[\s\S]*?<body>/, '').replace(/<\/body>[\s\S]*$/, '');
+    const grab = (root) => ({
+      title: root.querySelector('.orb-book-head h3').textContent.trim(),
+      sub: root.querySelector('.orb-book-head .sub').textContent.trim(),
+      meta: [...root.querySelectorAll('.orb-book-meta div')].map(x => x.textContent.replace(/\s+/g, ' ').trim()),
+      headings: [...root.querySelectorAll('thead th')].map(x => x.textContent.trim()),
+      rows: [...root.querySelectorAll('tbody tr')].map(tr => [...tr.querySelectorAll('td')].map(td => td.textContent.replace(/\s+/g, ' ').trim())),
+      foot: root.querySelector('.orb-book-foot').textContent.replace(/\s+/g, ' ').trim()
+    });
+    const a = grab(screenEl), b2 = grab(d);
+    return {
+      a, b: b2,
+      screenHasMaster: !!screenEl.querySelector('.orb-book-master'),
+      printHasMaster: !!d.querySelector('.orb-book-master'),
+      /* One stylesheet, injected on the page and embedded in the printed document. */
+      cssInjected: !!document.getElementById('orbBookCss'),
+      cssIsShared: (document.getElementById('orbBookCss') || {}).textContent === EORB.BOOK_CSS,
+      printEmbedsSameCss: EORB.buildPrintHtml(orbSetup(), entries, label).includes(EORB.BOOK_CSS)
+    };
+  });
+  check('same title', same.a.title, same.b.title);
+  check('same subtitle', same.a.sub, same.b.sub);
+  check('same ship particulars, cell for cell', same.a.meta, same.b.meta);
+  check('same column headings', same.a.headings, same.b.headings);
+  check('same rows, cell for cell', same.a.rows, same.b.rows);
+  check('same footer', same.a.foot, same.b.foot);
+  /* The one intended difference: a screen is not a signed sheet. */
+  check('only the printed sheet carries the Master\'s block',
+    [same.screenHasMaster, same.printHasMaster], [false, true]);
+  check('the page uses the book stylesheet from eorb.js', same.cssIsShared, true);
+  check('and the printed document embeds that same stylesheet', same.printEmbedsSameCss, true);
 
   console.log('\nnothing went wrong');
   check('no page errors', errs.length, 0);

@@ -1891,52 +1891,118 @@
     return body;
   }
 
-  function buildPrintHtml(setup, entries, rangeLabel, opts) {
+  /* One stylesheet for the book, wherever it is drawn. The app injects this into the
+     page so the on-screen view uses it, and the printed document embeds it, so the two
+     cannot be restyled apart. Selectors are all under .orb-book and set colour, wrap
+     and position explicitly, because on screen they land inside a dark-theme app whose
+     page-wide table rules would otherwise paint this light page's own cells. */
+  const BOOK_CSS = [
+    '.orb-book{background:#fdfbf4; color:#16202e; border:1px solid #cbbf9e; border-radius:3px;',
+    '  padding:14px 16px; min-width:640px; font-family:Arial,Helvetica,sans-serif;}',
+    '.orb-book-head{border-bottom:2px solid #16202e; padding-bottom:8px; margin-bottom:10px;}',
+    '.orb-book-head h3{margin:0 0 2px; font-size:15px; text-transform:uppercase; letter-spacing:.05em; color:#16202e;}',
+    '.orb-book-head .sub{font-size:11px; color:#4a5568;}',
+    '.orb-book-meta{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:2px 14px; margin-top:6px; font-size:10.5px; color:#33415c;}',
+    '.orb-book table{width:100%; border-collapse:collapse; font-size:11px; color:#16202e;}',
+    '.orb-book thead th{background:#e9e2cd; color:#16202e; font-size:9.5px; position:static; font-family:inherit;',
+    '  text-transform:uppercase; letter-spacing:.04em; text-align:left;}',
+    '.orb-book th, .orb-book td{border:1px solid #b9ae8e; padding:4px 6px; vertical-align:top;',
+    '  color:#16202e; white-space:normal;}',
+    '.orb-book tbody td{color:#16202e; border-bottom:1px solid #b9ae8e;}',
+    '.orb-book tbody tr:hover{background:rgba(0,0,0,.03);}',
+    '.orb-book td:nth-child(1){width:92px; white-space:nowrap;}',
+    '.orb-book td:nth-child(2){width:44px; text-align:center; font-weight:700;}',
+    '.orb-book td:nth-child(3){width:54px; text-align:center;}',
+    '.orb-book tr.orb-voided td{color:#7a8496;}',
+    '.orb-book .orb-sign{margin-top:4px; font-size:9.5px; font-style:italic; color:#4a5568;}',
+    '.orb-book-empty{padding:22px; text-align:center; color:#6b7280; font-size:11px;}',
+    '.orb-book-master{margin-top:16px; display:flex; justify-content:space-between; gap:24px;}',
+    '.orb-book-master > div{flex:1; border-top:1px solid #16202e; padding-top:4px; min-height:34px; font-size:10px; color:#33415c;}',
+    '.orb-book-master img{max-height:24mm; max-width:42mm; object-fit:contain; display:block; margin-top:2px;}',
+    '.orb-book-foot{margin-top:12px; padding-top:6px; border-top:1px solid #b9ae8e; font-size:9px; color:#6b7280; line-height:1.45;}'
+  ].join('\n');
+
+  /** The part this set of entries belongs to, named as the book names it. */
+  function bookPartTitles(entries) {
+    const parts = [...new Set((entries || []).map(e => Number(e.part) || 1))];
+    const p = parts.length === 1 ? parts[0] : 1;
+    if (parts.length > 1) return { title: 'Oil Record Book', subtitle: 'Machinery Space and Cargo Operations' };
+    if (p === 3) return { title: 'Fuel Oil Changeover Record — Part III', subtitle: 'Fuel Changeover (MARPOL Annex VI Reg. 14.6)' };
+    if (p === 2) return { title: 'Oil Record Book — Part II', subtitle: 'Cargo / Ballast Operations (Oil Tankers)' };
+    return { title: 'Oil Record Book — Part I', subtitle: 'Machinery Space Operations (All Ships)' };
+  }
+
+  /**
+   * The book itself: head, ship's particulars, the ruled table, and optionally the
+   * Master's signature block and the flag note that belong on a printed sheet.
+   * Both the on-screen view and the printout are built from this, so what the engineer
+   * checks on screen is the document that comes out of the printer.
+   */
+  function bookDocumentHtml(setup, entries, opts) {
+    opts = opts || {};
     const flag = getFlag(setup.flag);
     const rows = sortEntriesForBook(entries);
-    let body = bookRowsHtml(rows);
-    if (!body) body = '<tr><td colspan="4" style="text-align:center;padding:24px;">No entries in selected period.</td></tr>';
+    const t = bookPartTitles(rows);
+    const body = bookRowsHtml(rows);
+    const sub = [t.subtitle, opts.rangeLabel].filter(Boolean).join(' · ');
+    const table = body
+      ? '<table><thead><tr><th>Date</th><th>Code</th><th>Item</th>' +
+        '<th>Record of operations / signature of officer in charge</th></tr></thead>' +
+        '<tbody>' + body + '</tbody></table>'
+      : '<div class="orb-book-empty">' + escapeHtml(opts.emptyText || 'No entries in the selected period.') + '</div>';
+    const master = opts.master
+      ? '<div class="orb-book-master"><div>Master\'s signature / date</div><div>Ship\'s stamp' +
+        (opts.stampDataUrl ? '<img src="' + opts.stampDataUrl + '" alt="">' : '') + '</div></div>'
+      : '';
+    const foot = opts.foot != null ? opts.foot
+      : ('MARPOL Annex I Appendix III codes. Flag: ' + escapeHtml(flag.admin) +
+         '. Language: ' + escapeHtml(flag.language) + '. ' +
+         'This printout is generated by Noon Report e-ORB. Official electronic ORB use as a hard-copy replacement ' +
+         'requires flag-approved software under IMO MEPC.312(74) and a ship-specific Declaration. ' +
+         escapeHtml(flag.erbNote));
+    return '<div class="orb-book">' +
+      '<div class="orb-book-head">' +
+        '<h3>' + escapeHtml(t.title) + '</h3>' +
+        '<div class="sub">' + escapeHtml(sub) + '</div>' +
+        '<div class="orb-book-meta">' +
+          '<div><strong>Name of ship:</strong> ' + escapeHtml(setup.shipName || '') + '</div>' +
+          '<div><strong>IMO No.:</strong> ' + escapeHtml(setup.imo || '') + '</div>' +
+          '<div><strong>Distinctive number or letters:</strong> ' + escapeHtml(setup.callSign || '') + '</div>' +
+          '<div><strong>Gross tonnage:</strong> ' + escapeHtml(fmtVal(setup.gt)) + '</div>' +
+          '<div><strong>Flag administration:</strong> ' + escapeHtml(flag.name) + '</div>' +
+          '<div><strong>Entries shown:</strong> ' + rows.length + '</div>' +
+        '</div>' +
+      '</div>' +
+      table + master +
+      '<div class="orb-book-foot">' + foot + '</div>' +
+    '</div>';
+  }
 
+  function buildPrintHtml(setup, entries, rangeLabel, opts) {
+    /* The printed sheet is the on-screen book on a page: same builder, same stylesheet,
+       plus the Master's signature block and the flag note a signed record carries. */
+    const inner = bookDocumentHtml(setup, entries, {
+      rangeLabel: rangeLabel || '',
+      master: true,
+      stampDataUrl: opts && opts.stampDataUrl,
+      emptyText: 'No entries in selected period.'
+    });
     return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Oil Record Book</title>' +
       '<style>' +
       '@page{size:A4 portrait;margin:12mm}' +
-      'body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:11px}' +
-      'h1{font-size:16px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.04em}' +
-      'h2{font-size:13px;margin:0 0 10px}' +
-      '.meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;margin-bottom:12px;font-size:11px}' +
-      'table{width:100%;border-collapse:collapse}' +
-      'th,td{border:1px solid #333;padding:5px 6px;vertical-align:top}' +
-      'th{background:#eee;font-size:10px;text-transform:uppercase}' +
-      'td:nth-child(1){width:90px}td:nth-child(2){width:48px;text-align:center}td:nth-child(3){width:52px;text-align:center}' +
-      '.orb-voided td{color:#666}' +
-      '.orb-sign{margin-top:6px;font-size:10px;font-style:italic}' +
-      '.foot{margin-top:14px;font-size:9px;color:#444;line-height:1.4}' +
-      '.master{margin-top:18px;display:flex;justify-content:space-between;gap:24px}' +
-      '.master div{flex:1;border-top:1px solid #333;padding-top:4px;min-height:36px}' +
-      '.master img{max-height:26mm;max-width:44mm;object-fit:contain;display:block;margin-top:2px}' +
-      '</style></head><body>' +
-      '<h1>' + (rows[0] && rows[0].part === 3 ? 'Fuel Oil Changeover Record — Part III'
-        : ('Oil Record Book — Part ' + (rows[0] && rows[0].part === 2 ? 'II' : 'I'))) + '</h1>' +
-      '<h2>' + (rows[0] && rows[0].part === 3 ? 'Fuel Changeover (MARPOL Annex VI Reg. 14.6)'
-        : (rows[0] && rows[0].part === 2 ? 'Cargo / Ballast Operations (Oil Tankers)' : 'Machinery Space Operations (All Ships)')) + '</h2>' +
-      '<div class="meta">' +
-      '<div><strong>Name of ship:</strong> ' + escapeHtml(setup.shipName || '') + '</div>' +
-      '<div><strong>IMO No.:</strong> ' + escapeHtml(setup.imo || '') + '</div>' +
-      '<div><strong>Distinctive number or letters:</strong> ' + escapeHtml(setup.callSign || '') + '</div>' +
-      '<div><strong>Gross tonnage:</strong> ' + escapeHtml(fmtVal(setup.gt)) + '</div>' +
-      '<div><strong>Flag administration:</strong> ' + escapeHtml(flag.name) + '</div>' +
-      '<div><strong>Period:</strong> ' + escapeHtml(rangeLabel || '') + '</div>' +
-      '</div>' +
-      '<table><thead><tr><th>Date</th><th>Code</th><th>Item</th><th>Record of operations / signature of officer in charge</th></tr></thead><tbody>' +
-      body + '</tbody></table>' +
-      '<div class="master"><div>Master\'s signature / date</div><div>Ship\'s stamp' +
-      ((opts && opts.stampDataUrl) ? '<img src="' + opts.stampDataUrl + '" alt="">' : '') +
-      '</div></div>' +
-      '<div class="foot">MARPOL Annex I Appendix III codes. Flag: ' + escapeHtml(flag.admin) +
-      '. Language: ' + escapeHtml(flag.language) + '. ' +
-      'This printout is generated by Noon Report e-ORB. Official electronic ORB use as a hard-copy replacement requires flag-approved software under IMO MEPC.312(74) and a ship-specific Declaration. ' +
-      escapeHtml(flag.erbNote) +
-      '</div></body></html>';
+      'body{margin:0; background:#fff; font-family:Arial,Helvetica,sans-serif;}' +
+      BOOK_CSS +
+      /* After the shared sheet, not before it, or these lose on equal specificity.
+         The card border and rounded corner belong to the panel the book sits in on
+         screen; on paper the sheet is the page. print-color-adjust keeps the cream
+         page and the ruled header band, which browsers drop from printed output by
+         default — without it the sheet comes out plain white and stops matching
+         what the engineer checked on screen. */
+      '.orb-book{border:0; border-radius:0; padding:0; min-width:0;' +
+      '  -webkit-print-color-adjust:exact; print-color-adjust:exact;}' +
+      '.orb-book thead th, .orb-book tbody tr{-webkit-print-color-adjust:exact; print-color-adjust:exact;}' +
+      '.orb-book tbody tr:hover{background:transparent;}' +
+      '</style></head><body>' + inner + '</body></html>';
   }
 
   global.EORB = {
@@ -1963,6 +2029,9 @@
     resolveTankShares,
     buildItemLines,
     bookRowsHtml,
+    bookDocumentHtml,
+    bookPartTitles,
+    BOOK_CSS,
     sortEntriesForBook,
     tankRobStatus,
     TANK_HIGH_PCT,
