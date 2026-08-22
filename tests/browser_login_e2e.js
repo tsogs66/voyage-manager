@@ -122,7 +122,11 @@ const check = (label, actual, expected) => {
   await page.waitForSelector('#loginStepAssign:not([hidden])', { timeout: 15000 });
   check('admin is asked to choose', await page.isVisible('#loginVesselPick'), true);
   const options = await page.$$eval('#login_vesselSelect option', els => els.map(e => e.value));
-  check('all four sample vessels are offered', options.length, 4);
+  /* Name the four the seed creates rather than counting rows: browser_empty_vessel_e2e
+     registers a vessel of its own against the same server, and a leftover from an
+     earlier run would otherwise fail this on vessel count alone. */
+  const seeded = ['mv-harbour-key', 'mv-pacific-trader', 'mv-roadstead', 'mv-circumnav'];
+  check('all four sample vessels are offered', seeded.filter(v => !options.includes(v)), []);
   await page.selectOption('#login_vesselSelect', 'mv-pacific-trader');
   await page.click('#btnLoginLoadVessel');
   await page.waitForSelector('#loginGate', { state: 'hidden', timeout: 15000 });

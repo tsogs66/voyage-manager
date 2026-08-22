@@ -13,3 +13,7 @@ android/.gradle/
 *.aab
 __pycache__/
 *.pyc
+
+# Local sync-server state: accounts database and per-vessel voyage files.
+# Created by running sync-server/server.py; never belongs in the repo.
+sync-data/

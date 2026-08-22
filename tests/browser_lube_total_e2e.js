@@ -92,6 +92,12 @@ const check = (l, a, e) => { c++; const ok = a === e || (typeof a === 'number' &
 
   console.log('\nthe printed sheet carries the lube total');
   const printed = await pg.evaluate(() => {
+    /* Put the second water tank back the way it was found: this section is about a
+       vessel with one water tank, and the check below would otherwise be reading the
+       two-tank setup the previous section left behind. */
+    state.setup.fwTanks = [{ id: 'freshwater', name: 'FRESH WATER' }];
+    state.setup.fwTankCount = 1;
+    delete state.setup.robLube.fw2;
     const e = state.entries[state.entries.length - 1];
     const sorted = sortedEntries();
     const idx = sorted.findIndex(x => x.id === e.id);
