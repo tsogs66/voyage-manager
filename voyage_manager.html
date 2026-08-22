@@ -2826,7 +2826,7 @@
       <div class="panel">
         <h2>Guided New Entry</h2>
         <div class="form-grid cols3">
-          <div class="field"><label>ORB Part</label><select id="orb_part"><option value="1">Part I — Machinery space</option><option value="2">Part II — Cargo/ballast (tankers)</option></select></div>
+          <div class="field"><label>ORB Part</label><select id="orb_part"><option value="1">Part I — Machinery space</option><option value="2">Part II — Cargo/ballast (tankers)</option><option value="3">Part III — Fuel changeover (Annex VI)</option></select></div>
           <div class="field"><label>Date of operation</label><input type="date" id="orb_entryDate"></div>
           <div class="field"><label>Ship position / place (optional default)</label><input id="orb_defaultPos" placeholder="Lat/Long or port"></div>
         </div>
@@ -2930,7 +2930,7 @@
       <div class="panel">
         <h2>Entry Codes by Operation</h2>
         <div class="form-grid cols2">
-          <div class="field"><label>Part</label><select id="orb_codesPart"><option value="1">Part I</option><option value="2">Part II</option></select></div>
+          <div class="field"><label>Part</label><select id="orb_codesPart"><option value="1">Part I</option><option value="2">Part II</option><option value="3">Part III</option></select></div>
           <div class="field"><label>Flag guidance</label><select id="orb_codesFlag"></select></div>
         </div>
         <div class="orb-flag-box" id="orbCodesFlagInfo"></div>
@@ -17003,7 +17003,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v146';
+let androidInstallCacheName = 'noon-report-v147';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -18534,7 +18534,11 @@ function renderOrbPreview(){
     prev.textContent = 'Select item numbers and fill fields to preview the ORB wording.';
     return;
   }
-  prev.textContent = lines.map(l => `${EORB.formatOrbDate(date)}\t${code}\t${l.itemNo}\t${l.text}`).join('\n');
+  /* One date and one code per entry, on its first line — the item numbers underneath
+     belong to that same set. Repeating them down every line is not how the book reads,
+     and the preview has to show the engineer what will actually be printed. */
+  prev.textContent = lines.map((l, i) =>
+    `${i === 0 ? EORB.formatOrbDate(date) : ''}\t${i === 0 ? code : ''}\t${l.itemNo}\t${l.text}`).join('\n');
 }
 
 function openOrbWizard(code, opts){
@@ -18583,10 +18587,14 @@ function openOrbWizard(code, opts){
       } else if (f.type === 'tank' || f.type === 'tankMulti'){
         const group = (opts.fieldTankGroups && opts.fieldTankGroups[f.name]) || f.tankGroup || 'any';
         const tanks = EORB.tanksForGroup(setup, group);
-        /* Frame position in the option text — matches the IOPP Supplement tank list. */
-        const opts = tanks.map(t => `<option value="${escAttr(t.id)}">${escHtml(EORB.tankLabel(setup, t.id))}</option>`).join('');
+        /* Frame position in the option text — matches the IOPP Supplement tank list.
+           Named tankOpts, not opts: the scenario options this block reads on its first
+           line are also called opts, and a same-block const shadowed them into the
+           temporal dead zone, so every operation with a tank field threw here and left
+           the field grid empty. */
+        const tankOpts = tanks.map(t => `<option value="${escAttr(t.id)}">${escHtml(EORB.tankLabel(setup, t.id))}</option>`).join('');
         const empty = tanks.length ? '' : `<option value="" disabled>No tanks configured — add them in Vessel Setup</option>`;
-        control = `<select data-orb-field="${f.name}" ${f.type==='tankMulti'?'multiple size="4"':''}><option value="">—</option>${empty}${opts}</select>`;
+        control = `<select data-orb-field="${f.name}" ${f.type==='tankMulti'?'multiple size="4"':''}><option value="">—</option>${empty}${tankOpts}</select>`;
       } else {
         const t = f.type === 'number' ? 'number' : (f.type === 'time' ? 'time' : 'text');
         const preset = opts.presets && opts.presets[f.name] != null ? String(opts.presets[f.name]) : '';
@@ -18597,6 +18605,27 @@ function openOrbWizard(code, opts){
         + (f.hint ? `<div class="hint" style="margin:2px 0 0;">${escHtml(f.hint)}</div>` : '')
         + `</div>`;
     });
+  });
+  /* A scenario's own fields — the tank, quantity or duration Code I has no item field
+     for. Rendered with the same data-orb-field hook, so they are collected, previewed
+     and applied to R.O.B. exactly like the item fields above. */
+  (opts.extraFields || []).forEach(f => {
+    if (seen.has(f.name)) return;
+    seen.add(f.name);
+    let control = '';
+    if (f.type === 'tank' || f.type === 'tankMulti'){
+      const group = (opts.fieldTankGroups && opts.fieldTankGroups[f.name]) || f.tankGroup || 'any';
+      const tanks = EORB.tanksForGroup(setup, group);
+      const tankOpts = tanks.map(t => `<option value="${escAttr(t.id)}">${escHtml(EORB.tankLabel(setup, t.id))}</option>`).join('');
+      const empty = tanks.length ? '' : `<option value="" disabled>No tanks configured — add them in Vessel Setup</option>`;
+      control = `<select data-orb-field="${f.name}" ${f.type==='tankMulti'?'multiple size="4"':''}><option value="">—</option>${empty}${tankOpts}</select>`;
+    } else {
+      const t = f.type === 'number' ? 'number' : (f.type === 'time' ? 'time' : (f.type === 'date' ? 'date' : 'text'));
+      control = `<input type="${t}" data-orb-field="${f.name}" step="any">`;
+    }
+    html += `<div class="field"><label>${escHtml(f.label)}${f.required?' *':''}</label>${control}`
+      + (f.hint ? `<div class="hint" style="margin:2px 0 0;">${escHtml(f.hint)}</div>` : '')
+      + `</div>`;
   });
   fieldGrid.innerHTML = html || '<div class="hint">No fields for selected items.</div>';
   const iso = orbTodayIso();
@@ -18843,7 +18872,8 @@ document.getElementById('orbScenarioGroups')?.addEventListener('click', (e)=>{
     scenarioId: sc.id,
     title: sc.title,
     blurb: sc.blurb,
-    fieldTankGroups: sc.fieldTankGroups
+    fieldTankGroups: sc.fieldTankGroups,
+    extraFields: sc.extraFields
   });
   document.getElementById('orbEntryWizard')?.scrollIntoView({ behavior:'smooth', block:'start' });
 });
