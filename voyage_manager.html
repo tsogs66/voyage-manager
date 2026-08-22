@@ -9688,9 +9688,6 @@ function renderBunkerPlan(){
   }).join('');
 }
 
-function escAttr(s){
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
-}
 
 function readBunkerPlanFromDom(){
   const bp = ensureBunkerPlan();
@@ -12901,9 +12898,9 @@ function openRobSnapshot(entryId){
 
   document.getElementById('robSnapshotBody').innerHTML = rowsForPrint.map(r=>`<tr${r.strong?' class="rob-total"':''}>
       <td>${r.strong?`<strong>${r.label}</strong>`:r.label}</td>
-      <td>${fmt(r.prevVal,r.dec)}</td>
-      <td>${r.consVal===null||r.consVal===undefined?'—':fmt(r.consVal,r.consDec)}</td>
-      <td>${fmt(r.nowVal,r.dec)}</td>
+      <td>${fmtRob(r.prevVal,r.cat)}</td>
+      <td>${r.consVal===null||r.consVal===undefined?'—':fmtRob(r.consVal,r.cat)}</td>
+      <td>${fmtRob(r.nowVal,r.cat)}</td>
     </tr>`).join('');
 
   document.getElementById('btnPrintRobSnapshot').onclick = () => printRobSnapshot(entry, dt, rowsForPrint);
@@ -17035,7 +17032,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v149';
+let androidInstallCacheName = 'noon-report-v150';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
