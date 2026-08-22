@@ -487,6 +487,52 @@
     font-size:12px; color:var(--paper-dim); line-height:1.45; cursor:pointer;
   }
   .orb-disclaimer input{margin-top:3px; flex-shrink:0;}
+  /* Tank R.O.B. cards: quantity first, then how full, then the bar. The bar is the
+     thing the eye catches across a dozen tanks, so it carries the status colour. */
+  .orb-tank-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px;}
+  .orb-tank-group{margin-bottom:14px;}
+  .orb-tank-group > h4{margin:0 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--paper-dim); font-weight:600;}
+  .orb-tank-card{border:1px solid var(--line); border-radius:6px; padding:9px 11px; background:var(--nav-item-bg);}
+  .orb-tank-card .tk-name{font-size:12px; color:var(--paper); font-weight:600; display:flex; justify-content:space-between; gap:8px;}
+  .orb-tank-card .tk-frame{font-size:10px; color:var(--paper-dim); font-weight:400;}
+  .orb-tank-card .tk-fig{font-family:'JetBrains Mono',monospace; font-size:16px; color:var(--paper); margin:5px 0 2px;}
+  .orb-tank-card .tk-sub{font-size:10.5px; color:var(--paper-dim);}
+  .orb-tank-bar{height:6px; border-radius:3px; background:rgba(255,255,255,.10); margin-top:7px; overflow:hidden;}
+  .orb-tank-bar > span{display:block; height:100%; border-radius:3px; background:var(--teal);}
+  .orb-tank-card.high .orb-tank-bar > span{background:var(--brass);}
+  .orb-tank-card.full .orb-tank-bar > span{background:var(--alert);}
+  .orb-tank-card.high{border-color:var(--brass-dim);}
+  .orb-tank-card.full{border-color:var(--alert);}
+  .orb-tank-card .tk-pct{font-family:'JetBrains Mono',monospace;}
+  .orb-tank-card.full .tk-pct{color:var(--alert);}
+  .orb-tank-card.high .tk-pct{color:var(--brass);}
+
+  /* The book as it reads on paper: a cream page with ruled columns, so what is on
+     screen and what comes out of the printer are recognisably the same document. */
+  .orb-book-wrap{margin-top:10px; overflow-x:auto;}
+  .orb-book{background:#fdfbf4; color:#16202e; border:1px solid #cbbf9e; border-radius:3px;
+    padding:14px 16px; min-width:640px; box-shadow:0 2px 10px rgba(0,0,0,.25);}
+  .orb-book-head{border-bottom:2px solid #16202e; padding-bottom:8px; margin-bottom:10px;}
+  .orb-book-head h3{margin:0 0 2px; font-size:14px; text-transform:uppercase; letter-spacing:.05em; color:#16202e;}
+  .orb-book-head .sub{font-size:11px; color:#4a5568;}
+  .orb-book-meta{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:2px 14px; margin-top:6px; font-size:10.5px; color:#33415c;}
+  .orb-book table{width:100%; border-collapse:collapse; font-size:11px; color:#16202e;}
+  /* The page-wide table rules paint cells for the dark theme — cream text, brass
+     headings, sticky dark header, nowrap. All of that has to be undone here or the
+     book reads as pale grey on cream and the record column refuses to wrap. */
+  .orb-book thead th{background:#e9e2cd; color:#16202e; font-size:9.5px; position:static;
+    text-transform:uppercase; letter-spacing:.04em; text-align:left; border-bottom:1px solid #8d8471;}
+  .orb-book th, .orb-book td{border:1px solid #b9ae8e; padding:4px 6px; vertical-align:top;
+    color:#16202e; white-space:normal;}
+  .orb-book tbody td{color:#16202e; border-bottom:1px solid #b9ae8e;}
+  .orb-book tbody tr:hover{background:rgba(0,0,0,.03);}
+  .orb-book td:nth-child(1){width:88px; white-space:nowrap; font-family:'JetBrains Mono',monospace;}
+  .orb-book td:nth-child(2){width:42px; text-align:center; font-weight:700;}
+  .orb-book td:nth-child(3){width:52px; text-align:center; font-family:'JetBrains Mono',monospace;}
+  .orb-book tr.orb-voided td{color:#7a8496;}
+  .orb-book .orb-sign{margin-top:4px; font-size:9.5px; font-style:italic; color:#4a5568;}
+  .orb-book-empty{padding:22px; text-align:center; color:#6b7280; font-size:11px;}
+  .orb-book-foot{margin-top:10px; padding-top:6px; border-top:1px solid #b9ae8e; font-size:9.5px; color:#6b7280;}
   .orb-table tr.orb-voided td{color:var(--paper-dim); text-decoration:line-through;}
   .orb-table tr.orb-voided td .hint{text-decoration:none; color:var(--alert);}
   /* Chronology guidance for ORB dates — must stay visible on phones, so not .hint */
@@ -2915,7 +2961,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
         <div class="form-grid cols3">
           <div class="field"><label>From date</label><input type="date" id="orb_from"></div>
           <div class="field"><label>To date</label><input type="date" id="orb_to"></div>
-          <div class="field"><label>Part filter</label><select id="orb_browsePart"><option value="all">All</option><option value="1">Part I</option><option value="2">Part II</option></select></div>
+          <div class="field"><label>Part filter</label><select id="orb_browsePart"><option value="all">All</option><option value="1">Part I</option><option value="2">Part II</option><option value="3">Part III</option></select></div>
           <div class="field"><label>Officer filter</label><select id="orb_browseOfficer"><option value="all">All officers</option></select></div>
         </div>
         <div class="btn-row">
@@ -2930,6 +2976,18 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
             <tbody id="orbBrowseBody"></tbody>
           </table>
         </div>
+      </div>
+
+      <div class="panel">
+        <h2>Tank R.O.B. — Present</h2>
+        <div class="hint">What is in each Annex I tank now, after every entry saved in the book. A sludge or bilge holding tank filling up is what forces a landing, so the figure carries how full it is.</div>
+        <div id="orbTankStatus" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="panel">
+        <h2 id="orbBookTitle">Record Book</h2>
+        <div class="hint" id="orbBookHint">The last 7 days as the book reads. Pick a date range above and press Fetch Records to see that period instead.</div>
+        <div class="orb-book-wrap"><div id="orbBook"></div></div>
       </div>
     </div>
 
@@ -17032,7 +17090,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v150';
+let androidInstallCacheName = 'noon-report-v151';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -18749,6 +18807,116 @@ function renderOrbBrowse(){
   }).join('');
 }
 
+/* Present R.O.B. of every Annex I tank, with how full each one is. Reads the same
+   setup the entry wizard writes to, so a saved entry that moved oil shows here at once. */
+function renderOrbTankStatus(){
+  const host = document.getElementById('orbTankStatus');
+  if (!host || !window.EORB) return;
+  const setup = orbSetup();
+  const tanks = EORB.tankRobStatus(setup);
+  if (!tanks.length){
+    host.innerHTML = `<div class="hint">No sludge or bilge tanks configured yet — add them under ORB Setup.</div>`;
+    return;
+  }
+  const groups = [];
+  tanks.forEach(t => {
+    let g = groups.find(x => x.key === t.group);
+    if (!g){ g = { key: t.group, label: t.groupLabel, tanks: [] }; groups.push(g); }
+    g.tanks.push(t);
+  });
+  const fmt3 = (v) => v == null ? '—' : fmt(v, 3);
+  host.innerHTML = groups.map(g => `
+    <div class="orb-tank-group">
+      <h4>${escHtml(g.label)}</h4>
+      <div class="orb-tank-grid">
+        ${g.tanks.map(t => `
+          <div class="orb-tank-card ${t.status}">
+            <div class="tk-name"><span>${escHtml(t.name)}</span>${t.frameNo ? `<span class="tk-frame">Fr. ${escHtml(String(t.frameNo).replace(/^\s*fr\.?\s*/i, ''))}</span>` : ''}</div>
+            <div class="tk-fig">${fmt3(t.robM3)} m³ ${t.pct == null ? '' : `<span class="tk-pct">· ${fmt(t.pct, 1)}%</span>`}</div>
+            <div class="tk-sub">${t.capacityM3 == null
+              ? 'capacity not on record'
+              : `of ${fmt3(t.capacityM3)} m³ · ${fmt3(t.spareM3)} m³ spare`}</div>
+            <div class="orb-tank-bar"><span style="width:${t.pct == null ? 0 : Math.min(100, t.pct)}%"></span></div>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+/* The last 7 days of the book, or the period the engineer fetched. */
+const ORB_BOOK_DAYS = 7;
+
+/* Whether the engineer has asked for a period. Not inferred from the date boxes: the
+   Browse filter opens pre-filled with the last three months, so their having values
+   says nothing about intent. Pressing Fetch Records with a date in either box is the
+   ask; pressing it with both cleared goes back to the last 7 days. */
+let _orbBookRanged = false;
+
+function orbBookEntries(){
+  const from = document.getElementById('orb_from')?.value || '';
+  const to = document.getElementById('orb_to')?.value || '';
+  if (_orbBookRanged && (from || to)){
+    return { entries: filteredOrbEntries(), ranged: true, from, to };
+  }
+  /* No range picked: the last 7 days up to the most recent entry in the book, not up to
+     today — a book that was last written a fortnight ago should still show its last week
+     of work rather than an empty page. */
+  const all = (state.orbEntries || []).filter(e => !e.vesselId || e.vesselId === state.activeVesselId);
+  if (!all.length) return { entries: [], ranged: false, from: '', to: '' };
+  const latest = all.map(e => e.date).sort().slice(-1)[0];
+  const start = EORB.addDaysIso(latest, -(ORB_BOOK_DAYS - 1));
+  return { entries: all.filter(e => e.date >= start && e.date <= latest), ranged: false, from: start, to: latest };
+}
+
+function renderOrbBook(){
+  const host = document.getElementById('orbBook');
+  if (!host || !window.EORB) return;
+  const setup = orbSetup();
+  const { entries, ranged, from, to } = orbBookEntries();
+  const flag = EORB.getFlag(setup.flag);
+  const parts = [...new Set(entries.map(e => Number(e.part) || 1))];
+  const partName = parts.length === 1
+    ? (parts[0] === 3 ? 'Fuel Oil Changeover Record — Part III'
+      : 'Oil Record Book — Part ' + (parts[0] === 2 ? 'II' : 'I'))
+    : 'Oil Record Book';
+  const rangeLabel = from && to
+    ? `${EORB.formatOrbDate(from)} to ${EORB.formatOrbDate(to)}`
+    : (from || to ? EORB.formatOrbDate(from || to) : '—');
+
+  const body = EORB.bookRowsHtml(entries);
+  const table = body
+    ? `<table>
+        <thead><tr><th>Date</th><th>Code</th><th>Item</th><th>Record of operations / signature of officer in charge</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>`
+    : `<div class="orb-book-empty">No entries ${ranged ? 'in the selected period' : 'in the last ' + ORB_BOOK_DAYS + ' days'}.</div>`;
+
+  host.innerHTML = `<div class="orb-book">
+    <div class="orb-book-head">
+      <h3>${escHtml(partName)}</h3>
+      <div class="sub">${escHtml(rangeLabel)}</div>
+      <div class="orb-book-meta">
+        <div><strong>Name of ship:</strong> ${escHtml(setup.shipName || state.setup.vesselName || '—')}</div>
+        <div><strong>IMO No.:</strong> ${escHtml(setup.imo || '—')}</div>
+        <div><strong>Distinctive number or letters:</strong> ${escHtml(setup.callSign || '—')}</div>
+        <div><strong>Gross tonnage:</strong> ${escHtml(setup.gt == null || setup.gt === '' ? '—' : String(setup.gt))}</div>
+        <div><strong>Flag administration:</strong> ${escHtml(flag.name)}</div>
+        <div><strong>Entries shown:</strong> ${entries.length}</div>
+      </div>
+    </div>
+    ${table}
+    <div class="orb-book-foot">Working view of the book as it prints. MARPOL Annex I Appendix III codes. Official hard-copy replacement requires flag-approved software under IMO MEPC.312(74).</div>
+  </div>`;
+
+  const title = document.getElementById('orbBookTitle');
+  if (title) title.textContent = ranged ? 'Record Book — Selected Period' : 'Record Book — Last 7 Days';
+  const hint = document.getElementById('orbBookHint');
+  if (hint){
+    hint.textContent = ranged
+      ? `Showing ${rangeLabel}, the period fetched above. Clear both dates and press Fetch Records to go back to the last ${ORB_BOOK_DAYS} days.`
+      : `The last ${ORB_BOOK_DAYS} days as the book reads. Pick a date range above and press Fetch Records to see that period instead.`;
+  }
+}
+
 function renderOrbUi(){
   if (!window.EORB){
     console.warn('eorb.js not loaded');
@@ -18759,6 +18927,8 @@ function renderOrbUi(){
   renderOrbCodesList();
   fillOrbBrowseOfficerSelect();
   renderOrbBrowse();
+  renderOrbTankStatus();
+  renderOrbBook();
   applyOrbDateBounds();
   const hint = document.getElementById('orbNewHint');
   const flag = EORB.getFlag(orbSetup().flag);
@@ -18772,7 +18942,7 @@ function switchOrbPanel(name){
   const panel = document.getElementById(map[name] || 'orbPanelSetup');
   if (panel) panel.classList.add('active');
   if (name === 'new'){ renderOrbOpGrid(); applyOrbDateBounds(); }
-  if (name === 'browse') renderOrbBrowse();
+  if (name === 'browse'){ renderOrbBrowse(); renderOrbTankStatus(); renderOrbBook(); }
   if (name === 'codes') renderOrbCodesList();
   if (name === 'setup') fillOrbSetupForm();
 }
@@ -19018,6 +19188,8 @@ document.getElementById('btnOrbSaveWeekly')?.addEventListener('click', async ()=
   document.getElementById('orbWeeklyWizard').style.display = 'none';
   fillOrbBrowseOfficerSelect();
   renderOrbBrowse();
+  renderOrbTankStatus();
+  renderOrbBook();
   fillOrbSetupForm();
   applyOrbDateBounds();
   alert('Weekly inventory saved: ' + saved + ' ORB operation(s).\n\n• Code C — sludge tanks (IOPP 3.1)\n' +
@@ -19113,12 +19285,21 @@ document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>
   _orbWizard.code = null;
   fillOrbBrowseOfficerSelect();
   renderOrbBrowse();
+  renderOrbTankStatus();
+  renderOrbBook();
   fillOrbSetupForm();
   applyOrbDateBounds();
   alert('ORB entry saved: ' + EORB.formatOrbDate(date) + ' code ' + code + ' (' + lines.length + ' item line(s)).' +
     (robNotes.length ? ('\n\nTank ROB updated:\n• ' + robNotes.join('\n• ')) : ''));
 });
-document.getElementById('btnOrbFilter')?.addEventListener('click', renderOrbBrowse);
+document.getElementById('btnOrbFilter')?.addEventListener('click', ()=>{
+  const from = document.getElementById('orb_from')?.value || '';
+  const to = document.getElementById('orb_to')?.value || '';
+  _orbBookRanged = !!(from || to);
+  renderOrbBrowse();
+  renderOrbTankStatus();
+  renderOrbBook();
+});
 document.getElementById('btnOrbVoid')?.addEventListener('click', async ()=>{
   const ids = [...document.querySelectorAll('.orb-browse-check:checked')].map(c=>c.value);
   if (!ids.length){ alert('Select the entry to void.'); return; }
@@ -19140,6 +19321,7 @@ document.getElementById('btnOrbVoid')?.addEventListener('click', async ()=>{
   }
   if (!n){ alert('Those lines are already voided.'); return; }
   renderOrbBrowse();
+  renderOrbBook();
   applyOrbDateBounds();
   alert(n + ' ORB line(s) struck through. Record the correct operation as a new entry.');
 });

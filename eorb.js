@@ -1813,11 +1813,63 @@
    * @param {object} [opts] - { stampDataUrl } prints the ship's stamp in the
    *   "Ship's stamp" cell rather than leaving it blank for a wet stamp.
    */
-  function buildPrintHtml(setup, entries, rangeLabel, opts) {
-    const flag = getFlag(setup.flag);
-    const rows = (entries || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+  /* How full a tank is, and whether that is a problem yet. A sludge or bilge holding
+     tank filling up is the thing that forces a disposal: once it is full there is
+     nowhere to collect into, so the engineer wants to see it coming, not discover it.
+     Thresholds are deliberately conservative — 75% is "plan a landing", 90% is "act". */
+  const TANK_HIGH_PCT = 75;
+  const TANK_FULL_PCT = 90;
+  const TANK_GROUP_LABELS = {
+    sludge: 'Oil residue / sludge (IOPP 3.1)',
+    bilge: 'Oily bilge water holding (IOPP 3.3)',
+    bilgeWells: 'Bilge wells',
+    fuel: 'Fuel oil',
+    lube: 'Lubricating oil',
+    cargo: 'Cargo', slop: 'Slop', cbt: 'Clean ballast', dirtyBallast: 'Dirty ballast'
+  };
+
+  /**
+   * Present R.O.B. of every configured tank with how full it is.
+   * `pct` is null when no capacity is on record — the quantity is still reported, but
+   * a percentage of an unknown capacity would be an invention.
+   */
+  function tankRobStatus(setup, groups) {
+    const want = groups && groups.length ? groups : ['sludge', 'bilge', 'bilgeWells'];
+    const out = [];
+    want.forEach(group => {
+      tanksForGroup(setup, group).forEach(t => {
+        const cap = numOrNull(t.capacityM3);
+        const rob = numOrNull(t.robM3) || 0;
+        const pct = (cap != null && cap > 0) ? (rob / cap) * 100 : null;
+        out.push({
+          id: t.id, name: t.name, frameNo: t.frameNo || '',
+          group, groupLabel: TANK_GROUP_LABELS[group] || group,
+          capacityM3: cap, robM3: round3(rob),
+          pct: pct == null ? null : Math.round(pct * 10) / 10,
+          status: pct == null ? 'unknown' : (pct >= TANK_FULL_PCT ? 'full' : (pct >= TANK_HIGH_PCT ? 'high' : 'ok')),
+          spareM3: cap != null ? round3(Math.max(0, cap - rob)) : null
+        });
+      });
+    });
+    return out;
+  }
+
+  /** Entries in book order: by date, then by the order they were written that day. */
+  function sortEntriesForBook(entries) {
+    return (entries || []).slice().sort((a, b) =>
+      String(a.date).localeCompare(String(b.date)) ||
+      String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+  }
+
+  /**
+   * The body of the record book: one <tr> per item line, with the date and the letter
+   * code printed only on the first line of each entry, and the officer's signature under
+   * its last. Shared by the printed sheet and the on-screen book so the two cannot drift
+   * apart — they are meant to be the same document.
+   */
+  function bookRowsHtml(entries) {
     let body = '';
-    rows.forEach(e => {
+    sortEntriesForBook(entries).forEach(e => {
       const lines = e.lines || [];
       const voided = !!e.voided;
       lines.forEach((ln, idx) => {
@@ -1836,6 +1888,13 @@
           '<td>' + (voided ? ('<s>' + text + '</s>') : text) + signed + '</td></tr>';
       });
     });
+    return body;
+  }
+
+  function buildPrintHtml(setup, entries, rangeLabel, opts) {
+    const flag = getFlag(setup.flag);
+    const rows = sortEntriesForBook(entries);
+    let body = bookRowsHtml(rows);
     if (!body) body = '<tr><td colspan="4" style="text-align:center;padding:24px;">No entries in selected period.</td></tr>';
 
     return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Oil Record Book</title>' +
@@ -1903,6 +1962,11 @@
     parseTankSplit,
     resolveTankShares,
     buildItemLines,
+    bookRowsHtml,
+    sortEntriesForBook,
+    tankRobStatus,
+    TANK_HIGH_PCT,
+    TANK_FULL_PCT,
     buildWeeklyInventory,
     autofillOperationValues,
     capacityWarnings,
