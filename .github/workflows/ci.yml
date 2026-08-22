@@ -42,6 +42,9 @@ jobs:
       - name: Check stale ship_time.js does not crash startup
         run: node tests/test_shiptime_compat.js
 
+      - name: Check summary generator hours are per unit
+        run: node tests/test_ge_summary_hours.js
+
       - name: Check flowmeter and fresh-water consumption formulas
         run: node tests/test_flow_cons.js
 
