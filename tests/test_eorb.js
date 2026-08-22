@@ -270,6 +270,72 @@ console.log('\none date and one code per entry, whatever its item set');
   checkTrue('while every item line is still there', (body.match(/<tr/g) || []).length === 6);
 }
 
+console.log('\ntank R.O.B. carries how full each tank is');
+{
+  const st = EORB.defaultOrbSetup({});
+  st.tanks.sludge = [
+    { id: 'SL1', name: 'Sludge Tk', capacityM3: 20, robM3: 19 },
+    { id: 'SL2', name: 'Settling', capacityM3: 10, robM3: 8 },
+    { id: 'SL3', name: 'Quarter full', capacityM3: 20, robM3: 5 },
+    { id: 'SL4', name: 'No capacity on record', robM3: 3 }
+  ];
+  st.tanks.bilge = [{ id: 'BW1', name: 'Bilge Holding', capacityM3: 30, robM3: 6 }];
+  const rows = EORB.tankRobStatus(st);
+  const by = (n) => rows.find(r => r.name === n);
+
+  check('every configured tank is reported', rows.length >= 5, true);
+  check('percentage is quantity over capacity', by('Sludge Tk').pct, 95);
+  check('a tank at 95% is flagged full', by('Sludge Tk').status, 'full');
+  check('a tank at 80% is flagged high', by('Settling').status, 'high');
+  check('a tank at 25% is not flagged', by('Quarter full').status, 'ok');
+  /* An invented percentage is worse than none: without a capacity there is nothing
+     to be a percentage of, and the quantity still has to be reported. */
+  check('no capacity means no percentage', by('No capacity on record').pct, null);
+  check('but the quantity is still there', by('No capacity on record').robM3, 3);
+  check('and it is marked unknown, not full', by('No capacity on record').status, 'unknown');
+  check('spare room is capacity less what is in it', by('Bilge Holding').spareM3, 24);
+  check('a tank over its capacity has no negative spare',
+    EORB.tankRobStatus({ tanks: { sludge: [{ id: 'X', name: 'X', capacityM3: 5, robM3: 7 }] } })[0].spareM3, 0);
+  check('the R.O.B. groups are named for the certificate',
+    [...new Set(rows.map(r => r.groupLabel))].slice(0, 2),
+    ['Oil residue / sludge (IOPP 3.1)', 'Oily bilge water holding (IOPP 3.3)']);
+  check('the thresholds are the ones the cards colour by',
+    [EORB.TANK_HIGH_PCT, EORB.TANK_FULL_PCT], [75, 90]);
+}
+
+console.log('\nthe on-screen book and the printed sheet are one document');
+{
+  const st = EORB.defaultOrbSetup({});
+  const entries = [
+    { date: '2026-08-18', code: 'D', part: 1, officerName: 'A. Ruiz', officerRank: 'Chief Engineer',
+      createdAt: '2026-08-18T00:00:00Z',
+      lines: [{ itemNo: '13', text: '3.500 m³ bilge water' }, { itemNo: '14', text: 'start: 02:10, stop: 04:35' }] },
+    { date: '2026-08-16', code: 'C', part: 1, officerName: 'A. Ruiz', createdAt: '2026-08-16T00:00:00Z',
+      lines: [{ itemNo: '11.1', text: 'Sludge Tk' }, { itemNo: '11.3', text: '16.10 m³' }] }
+  ];
+  const rowsHtml = EORB.bookRowsHtml(entries);
+  /* The print sheet is built from the same helper, so what is on screen is what
+     comes out of the printer — the pair that silently diverged once before. */
+  const printed = EORB.buildPrintHtml(st, entries, 'test');
+  check('the printed sheet contains exactly the shared rows', printed.indexOf(rowsHtml) !== -1, true);
+
+  check('entries come out in book order, oldest first',
+    rowsHtml.indexOf('Sludge Tk') < rowsHtml.indexOf('3.500 m³ bilge water'), true);
+  const dates = (rowsHtml.match(/16-AUG-2026|18-AUG-2026/g) || []);
+  check('each date is written once for its whole entry', dates, ['16-AUG-2026', '18-AUG-2026']);
+  const codes = (rowsHtml.match(/<td>[CD]<\/td>/g) || []);
+  check('and so is each letter code', codes, ['<td>C</td>', '<td>D</td>']);
+  check('every item line is present', (rowsHtml.match(/<tr/g) || []).length, 4);
+  check('the officer signs under the last line of the entry',
+    (rowsHtml.match(/orb-sign/g) || []).length, 2);
+
+  const voided = EORB.bookRowsHtml([{ date: '2026-08-16', code: 'C', part: 1, officerName: 'A',
+    voided: true, voidReason: 'wrong tank', lines: [{ itemNo: '11.1', text: 'Sludge Tk' }] }]);
+  check('a struck line is struck in the book too', /<s>Sludge Tk<\/s>/.test(voided), true);
+  check('with the reason it was struck', /wrong tank/.test(voided), true);
+  check('an empty book builds nothing rather than throwing', EORB.bookRowsHtml([]), '');
+}
+
 console.log();
 if (failures.length) {
   console.log(`FAILED — ${failures.length} of ${checks} checks`);
