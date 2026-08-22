@@ -38,6 +38,7 @@ const check = (l, a, e) => { c++; const ok = a === e || (typeof a === 'number' &
       rows,
       lubeLabels,
       expectedTotal: totalLubeRob(asOf.robLube),
+      expectedFw: totalFwRob(asOf.robLube),
       fw: asOf.robLube[fwTankList()[0].id]
     };
   });
@@ -47,7 +48,9 @@ const check = (l, a, e) => { c++; const ok = a === e || (typeof a === 'number' &
   check('a total row is present', !!totalRow, true);
   check('it is labelled TOTAL LUBES', totalRow && totalRow.cells[0], 'TOTAL LUBES');
   check('and marked as a total, not another tank', totalRow && totalRow.bold, true);
-  check('it is the last row', out.rows[out.rows.length - 1].isTotal, true);
+
+  const waterRow = out.rows.find(r => r.cells[0] === 'TOTAL WATER');
+  check('one water tank does not grow a total row', !!waterRow, false);
 
   console.log('\nthe figure is the sum of the four lube tanks');
   const num = s => Number(String(s).replace(/,/g, ''));
@@ -57,12 +60,37 @@ const check = (l, a, e) => { c++; const ok = a === e || (typeof a === 'number' &
   check('the listed tanks add to the total', num(totalRow.cells[3]), summed);
   check('and that matches totalLubeRob', num(totalRow.cells[3]), Math.round(out.expectedTotal));
 
-  console.log('\nfresh water is not in it');
-  check('no fresh water row on the snapshot', out.rows.some(r => /FRESH WATER/i.test(r.cells[0])), false);
+  console.log('\nfresh water is listed in m³, not folded into lube');
+  const fwRow = out.rows.find(r => /FRESH WATER/i.test(r.cells[0]) && !r.isTotal);
+  check('a fresh water tank row is listed', !!fwRow, true);
   check('the vessel does hold fresh water', out.fw > 0, true);
-  check('and the total is well below it', num(totalRow.cells[3]) < out.fw, true);
+  check('the lube total is well below the water stock in litres', num(totalRow.cells[3]) < out.fw, true);
+  check('the water row shows cubic metres', num(fwRow && fwRow.cells[3]), Number((out.fw / 1000).toFixed(2)));
 
-  console.log('\nthe printed sheet carries it too');
+  console.log('\ntwo water tanks grow a total');
+  const two = await pg.evaluate(() => {
+    state.setup.fwTanks = [
+      { id: 'freshwater', name: 'FRESH WATER' },
+      { id: 'fw2', name: 'FW SETTLING' }
+    ];
+    state.setup.fwTankCount = 2;
+    state.setup.robLube.fw2 = 20000;
+    const e = state.entries[state.entries.length - 1];
+    openRobSnapshot(e.id);
+    const rows = [...document.querySelectorAll('#robSnapshotBody tr')].map(tr => ({
+      cells: [...tr.querySelectorAll('td')].map(td => td.textContent.trim()),
+      isTotal: tr.classList.contains('rob-total')
+    }));
+    return {
+      labels: rows.map(r => r.cells[0]),
+      waterTotal: rows.find(r => r.cells[0] === 'TOTAL WATER'),
+      expected: totalFwRob(robAsOfEntry(e.id).robLube)
+    };
+  });
+  check('the snapshot then lists TOTAL WATER', !!(two.waterTotal), true);
+  check('that total is the two tanks in m³', num(two.waterTotal && two.waterTotal.cells[3]), Number((two.expected / 1000).toFixed(2)));
+
+  console.log('\nthe printed sheet carries the lube total');
   const printed = await pg.evaluate(() => {
     const e = state.entries[state.entries.length - 1];
     const sorted = sortedEntries();
@@ -71,22 +99,12 @@ const check = (l, a, e) => { c++; const ok = a === e || (typeof a === 'number' &
     const prevRobData = prior ? robAsOfEntry(prior.id) : { rob: state.setup.rob, robLube: state.setup.robLube };
     const asOf = robAsOfEntry(e.id);
     const row = getComputedRow(e.id);
-    const rows = getRobRows().filter(r => r.cat !== 'fw').map(r => {
-      const dec = robDec(r.cat);
-      return { label: r.label, prevVal: r.cat === 'fuel' ? prevRobData.rob[r.key] : prevRobData.robLube[r.key],
-               consVal: robRowCons(row, r), nowVal: r.cat === 'fuel' ? asOf.rob[r.key] : asOf.robLube[r.key],
-               dec, consDec: dec };
-    });
-    const lubeRows = getRobRows().filter(r => r.cat === 'lube');
-    const lubeCons = lubeRows.map(r => robRowCons(row, r)).filter(v => v != null && !isNaN(v));
-    rows.push({ label: 'TOTAL LUBES', prevVal: totalLubeRob(prevRobData.robLube),
-                consVal: lubeCons.length ? lubeCons.reduce((a, b) => a + b, 0) : null,
-                nowVal: totalLubeRob(asOf.robLube), dec: robDec('lube'), consDec: robDec('lube'), strong: true });
-    // Render exactly what printRobSnapshot renders for the rows.
+    const rows = robBalanceRows(row, prevRobData, asOf);
     return rows.map(r => `<tr${r.strong ? ' class="rob-total"' : ''}><td class="row-lbl">${r.strong ? `<strong>${r.label}</strong>` : r.label}</td></tr>`).join('');
   });
-  check('the print rows include the total', /rob-total/.test(printed), true);
-  check('bolded on paper', /<strong>TOTAL LUBES<\/strong>/.test(printed), true);
+  check('the print rows include the lube total', (printed.match(/rob-total/g) || []).length >= 1, true);
+  check('lube bolded on paper', /<strong>TOTAL LUBES<\/strong>/.test(printed), true);
+  check('a single water tank is not totalled on paper', /<strong>TOTAL WATER<\/strong>/.test(printed), false);
 
   console.log('\npage errors');
   check('no uncaught page errors', errs.length, 0);

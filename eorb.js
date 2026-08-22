@@ -99,6 +99,31 @@
     return Object.assign({ name, label, type: type || 'text', required: false }, opts || {});
   }
 
+  /* Scenario-level fields.
+     Codes A–H carry the fields MARPOL prescribes for each item. Code I is a single
+     free-text remark, so an operation recorded under it — de-bunkering, a seal broken,
+     condensate led to a bilge tank — has nowhere to put the tank, the quantity or the
+     duration it actually involved. These render after the item fields, are written into
+     the remark wording, and where the operation moves oil they draw down and top up
+     tank R.O.B. exactly as a Code C or D movement does, so the book and the next weekly
+     inventory cannot drift apart. */
+  const EXTRA_FIELDS = {
+    fromTank: field('extraFromTank', 'From tank', 'tank', { tankGroup: 'any' }),
+    toTank: field('extraToTank', 'To tank', 'tank', { tankGroup: 'any' }),
+    qty: field('extraQty', 'Quantity (m³)', 'number'),
+    qtyT: field('extraQtyT', 'Quantity (t)', 'number'),
+    fromRetained: field('extraFromRetained', 'Quantity retained in source (m³)', 'number'),
+    toTotal: field('extraToTotal', 'Total content of receiving tank (m³)', 'number'),
+    testDuration: field('testDurationMin', 'Duration of test (minutes)', 'number',
+      { hint: 'How long the test ran. Recorded in the entry wording.' }),
+    place: field('extraPlace', 'Place / port', 'text'),
+    timeStart: field('extraTimeStart', 'Start time', 'time'),
+    timeStop: field('extraTimeStop', 'Stop time', 'time'),
+    sealNo: field('extraSealNo', 'Seal number(s)', 'text'),
+    equipment: field('extraEquipment', 'Valve / equipment', 'text'),
+    missedDate: field('extraMissedDate', 'Date the operation was actually carried out', 'date')
+  };
+
   /** Part I — Machinery space operations (all ships ≥400 GT / tankers ≥150 GT) */
   const PART_I = [
     {
@@ -465,6 +490,55 @@
     ]}
   ];
 
+  /* Part III — Fuel oil changeover record.
+     Not part of the Annex I Oil Record Book: sulphur-limit changeover is an Annex VI
+     Regulation 14.6 record, which asks for the volume of low-sulphur fuel in each tank
+     and the date, time and position at the completion of changeover before entering an
+     ECA and at the commencement of changeover after leaving one. Flag e-ORB software
+     keeps it alongside Parts I and II because the engineer writes both from the same
+     watch, and this follows that convention. */
+  const PART_III = [
+    {
+      code: 'C', title: 'Fuel oil changeover (ECA / sulphur limit)',
+      guide: 'MARPOL Annex VI Reg. 14.6. Record each changeover as two entries — commencement and completion — with position, time and the volume of low-sulphur fuel on board.',
+      common: true,
+      items: [
+        { no: '1', label: 'Changeover commencement — residual (HFO) to distillate (MGO/LSMGO)', fields: [
+          field('coTime', 'Time', 'time', { required: true }),
+          field('coPosition', 'Position', 'text', { required: true }),
+          field('coToGrade', 'Fuel changing to', 'text', { required: true }),
+          field('coSulphur', 'Sulphur content of new fuel (% m/m)', 'number'),
+          field('coTanks', 'Tank(s) in service', 'tankMulti', { tankGroup: 'fuel' }),
+          field('coVolume', 'Volume of low-sulphur fuel on board (m³)', 'number')
+        ]},
+        { no: '2', label: 'Changeover completion — residual (HFO) to distillate (MGO/LSMGO)', fields: [
+          field('coTime', 'Time', 'time', { required: true }),
+          field('coPosition', 'Position', 'text', { required: true }),
+          field('coToGrade', 'Fuel changing to', 'text', { required: true }),
+          field('coSulphur', 'Sulphur content of new fuel (% m/m)', 'number'),
+          field('coTanks', 'Tank(s) in service', 'tankMulti', { tankGroup: 'fuel' }),
+          field('coVolume', 'Volume of low-sulphur fuel on board (m³)', 'number')
+        ]},
+        { no: '3', label: 'Changeover commencement — distillate (MGO/LSMGO) to residual (HFO)', fields: [
+          field('coTime', 'Time', 'time', { required: true }),
+          field('coPosition', 'Position', 'text', { required: true }),
+          field('coToGrade', 'Fuel changing to', 'text', { required: true }),
+          field('coSulphur', 'Sulphur content of new fuel (% m/m)', 'number'),
+          field('coTanks', 'Tank(s) in service', 'tankMulti', { tankGroup: 'fuel' }),
+          field('coVolume', 'Volume of low-sulphur fuel on board (m³)', 'number')
+        ]},
+        { no: '4', label: 'Changeover completion — distillate (MGO/LSMGO) to residual (HFO)', fields: [
+          field('coTime', 'Time', 'time', { required: true }),
+          field('coPosition', 'Position', 'text', { required: true }),
+          field('coToGrade', 'Fuel changing to', 'text', { required: true }),
+          field('coSulphur', 'Sulphur content of new fuel (% m/m)', 'number'),
+          field('coTanks', 'Tank(s) in service', 'tankMulti', { tankGroup: 'fuel' }),
+          field('coVolume', 'Volume of low-sulphur fuel on board (m³)', 'number')
+        ]}
+      ]
+    }
+  ];
+
   /**
    * Plain-language operation scenarios mapped to the MARPOL code + item numbers they
    * require. Engineers think "I transferred sludge from the settling tank to the sludge
@@ -487,13 +561,26 @@
       items: ['I'],
       requires: { ows: true },
       weeklyKind: 'ows-test',
+      extraFields: [EXTRA_FIELDS.testDuration, EXTRA_FIELDS.timeStart, EXTRA_FIELDS.timeStop],
       presets: { remarks: 'Weekly operational test of 15 ppm bilge alarm / oily-water separator carried out. Equipment found in good working order.' } },
+    { id: 'ows-ocm-test', group: 'Routine', part: 1, code: 'I',
+      title: 'OWS / OCM test (15 ppm alarm and oil content meter)',
+      blurb: 'Test of the oil content meter and 15 ppm alarm, including the duration the test ran. Recorded under Code I. Use Code F if the equipment failed.',
+      items: ['I'],
+      requires: { ows: true },
+      extraFields: [EXTRA_FIELDS.testDuration, EXTRA_FIELDS.timeStart, EXTRA_FIELDS.timeStop],
+      presets: { remarks: 'Operational test of oil content meter (OCM) and 15 ppm bilge alarm carried out. Alarm and automatic stopping device confirmed working.' } },
 
     /* ---- Fuel oil ---- */
     { id: 'bunker-fuel', group: 'Fuel oil', part: 1, code: 'H',
       title: 'Bunkering fuel oil',
       blurb: 'Taking fuel oil bunkers. Records place, time, grade, quantity and tank totals after loading.',
       items: ['26.1', '26.2', '26.3'] },
+    { id: 'bunker-diesel', group: 'Fuel oil', part: 1, code: 'H',
+      title: 'Bunkering diesel oil',
+      blurb: 'Taking diesel / gas oil bunkers. Same Code H record as fuel oil — grade, quantity and tank totals after loading.',
+      items: ['26.1', '26.2', '26.3'],
+      presets: { fuelType: 'MGO' } },
     { id: 'bunker-lube', group: 'Fuel oil', part: 1, code: 'H',
       title: 'Bunkering lubricating oil',
       blurb: 'Taking bulk lube oil. Records place, time, grade, quantity and tank totals.',
@@ -525,6 +612,22 @@
       blurb: 'Moving oil residue between IOPP 3.1 tanks. Source retained and receiving total are calculated for you.',
       items: ['12.2'] },
 
+    { id: 'sludge-water-drain', group: 'Sludge / oil residue', part: 1, code: 'C',
+      title: 'Draining water from a sludge tank to a bilge water holding tank',
+      blurb: 'Settled water drawn off a sludge tank into the oily bilge water holding tank. Recorded as a transfer — the source is drawn down and the receiving tank topped up.',
+      items: ['12.2'],
+      fieldTankGroups: { fromTank: 'sludge', toTank: 'bilge' } },
+    { id: 'sludge-evaporation', group: 'Sludge / oil residue', part: 1, code: 'C',
+      title: 'Evaporation of water from a sludge tank',
+      blurb: 'Water evaporated off a sludge tank by heating. Disposal by another method — state the quantity evaporated and what is left in the tank.',
+      items: ['12.4'],
+      presets: { otherMethod: 'Evaporation of water from sludge tank by heating' } },
+    { id: 'sludge-regeneration', group: 'Sludge / oil residue', part: 1, code: 'C',
+      title: 'FO / LO regeneration from oil residue (sludge)',
+      blurb: 'Oil recovered from sludge and returned to service as fuel or lube oil. Disposal by another method.',
+      items: ['12.4'],
+      presets: { otherMethod: 'FO/LO regeneration from oil residue (sludge)' } },
+
     /* ---- Bilge water ---- */
     { id: 'bilge-well-to-tank', group: 'Bilge water', part: 1, code: 'D',
       title: 'Bilge water transfer — bilge well to holding tank',
@@ -547,6 +650,16 @@
       title: 'Bilge water landed ashore to reception facility',
       blurb: 'Bilge water discharged to a shore reception facility — keep the receipt with the ORB.',
       items: ['13', '14', '15.2'] },
+    { id: 'bilge-tank-transfer', group: 'Bilge water', part: 1, code: 'D',
+      title: 'Bilge water transfer between holding tanks (IOPP 3.3)',
+      blurb: 'Moving bilge water between tanks listed in item 3.3 of the IOPP Certificate. Both tanks follow the quantity moved.',
+      items: ['13', '14', '15.3'],
+      fieldTankGroups: { fromTank: 'bilge', toTank: 'bilge' } },
+    { id: 'bilge-to-sludge', group: 'Bilge water', part: 1, code: 'D',
+      title: 'Bilge water disposed to a sludge tank',
+      blurb: 'Bilge water pumped into an IOPP 3.1 sludge tank. Everything in a sludge tank counts as sludge from that point on.',
+      items: ['13', '14', '15.3'],
+      fieldTankGroups: { fromTank: 'bilge', toTank: 'sludge' } },
     { id: 'bilge-manual-mode', group: 'Bilge water', part: 1, code: 'E',
       title: 'Bilge system placed in manual mode',
       blurb: 'Recording the change of the automatic bilge system into manual operation.',
@@ -573,10 +686,75 @@
       title: '15 ppm / OWS equipment failure',
       blurb: 'Any failure of the oil filtering equipment must be recorded, with the reason and the date repaired.',
       items: ['19', '20', '21'] },
+    { id: 'ows-restored', group: 'Machinery & equipment', part: 1, code: 'F',
+      title: '15 ppm / OWS equipment restored to operation',
+      blurb: 'The oil filtering equipment made operational again after a failure. Record the time it was restored and what was done.',
+      items: ['20', '21'] },
     { id: 'general-remarks', group: 'Machinery & equipment', part: 1, code: 'I',
       title: 'Additional procedure or general remark',
       blurb: 'Additional operational procedures and remarks. Never use this in place of codes A–H.',
       items: ['I'] },
+
+    /* ---- Code I operations (additional procedures) ----
+       MARPOL gives Code I no item fields of its own, so each of these carries the tank,
+       quantity or duration the operation actually involved through the scenario's extra
+       fields — which also move the tank R.O.B. where oil changed tanks. */
+    { id: 'bilge-oily-to-tank', group: 'Code I operations', part: 1, code: 'I',
+      title: 'Pumping oily bilge water to a tank listed in IOPP 3.3',
+      blurb: 'Oily bilge water moved into a holding tank listed in item 3.3 of the IOPP Certificate.',
+      items: ['I'],
+      extraFields: [EXTRA_FIELDS.fromTank, EXTRA_FIELDS.toTank, EXTRA_FIELDS.qty,
+        EXTRA_FIELDS.fromRetained, EXTRA_FIELDS.toTotal, EXTRA_FIELDS.timeStart, EXTRA_FIELDS.timeStop],
+      presets: { remarks: 'Oily bilge water pumped to holding tank listed in item 3.3 of the IOPP Certificate.' } },
+    { id: 'bilge-unit-maintenance', group: 'Code I operations', part: 1, code: 'I',
+      title: 'Emptying / filling the bilge separation unit for maintenance',
+      blurb: 'Draining or refilling the 15 ppm separator itself for servicing — not a discharge.',
+      items: ['I'],
+      requires: { ows: true },
+      extraFields: [EXTRA_FIELDS.fromTank, EXTRA_FIELDS.toTank, EXTRA_FIELDS.qty, EXTRA_FIELDS.timeStart, EXTRA_FIELDS.timeStop],
+      presets: { remarks: 'Bilge separation unit emptied and refilled for maintenance purposes. No discharge to sea.' } },
+    { id: 'bilge-evaporation', group: 'Code I operations', part: 1, code: 'I',
+      title: 'Evaporation of water from a bilge tank',
+      blurb: 'Water evaporated off a bilge tank. The quantity comes out of that tank\u2019s R.O.B.',
+      items: ['I'],
+      extraFields: [EXTRA_FIELDS.fromTank, EXTRA_FIELDS.qty, EXTRA_FIELDS.fromRetained],
+      presets: { remarks: 'Water evaporated from bilge water holding tank by heating.' } },
+    { id: 'aircooler-condensate', group: 'Code I operations', part: 1, code: 'I',
+      title: 'Condensate from air coolers to a bilge water holding tank',
+      blurb: 'Condensed water from the scavenge / charge air coolers led to a bilge water holding tank.',
+      items: ['I'],
+      extraFields: [EXTRA_FIELDS.toTank, EXTRA_FIELDS.qty, EXTRA_FIELDS.toTotal],
+      presets: { remarks: 'Condensated water from air coolers led to bilge water holding tank.' } },
+    { id: 'debunker-fuel', group: 'Code I operations', part: 1, code: 'I',
+      title: 'De-bunkering fuel oil',
+      blurb: 'Landing fuel oil off the ship. Recorded under Code I — Code H covers bunkers taken on, not given up.',
+      items: ['I'],
+      extraFields: [EXTRA_FIELDS.fromTank, EXTRA_FIELDS.qtyT, EXTRA_FIELDS.place, EXTRA_FIELDS.timeStart, EXTRA_FIELDS.timeStop],
+      presets: { remarks: 'Fuel oil de-bunkered from the vessel.' } },
+    { id: 'debunker-diesel', group: 'Code I operations', part: 1, code: 'I',
+      title: 'De-bunkering diesel oil',
+      blurb: 'Landing diesel / gas oil off the ship.',
+      items: ['I'],
+      extraFields: [EXTRA_FIELDS.fromTank, EXTRA_FIELDS.qtyT, EXTRA_FIELDS.place, EXTRA_FIELDS.timeStart, EXTRA_FIELDS.timeStop],
+      presets: { remarks: 'Diesel oil de-bunkered from the vessel.' } },
+    { id: 'seal-applied', group: 'Code I operations', part: 1, code: 'I',
+      title: 'Sealing of a MARPOL Annex I valve or equipment',
+      blurb: 'A seal fitted to an Annex I related valve or item of equipment. Record the seal number.',
+      items: ['I'],
+      extraFields: [EXTRA_FIELDS.equipment, EXTRA_FIELDS.sealNo, EXTRA_FIELDS.timeStart],
+      presets: { remarks: 'Seal fitted to MARPOL Annex I related valve and/or equipment.' } },
+    { id: 'seal-broken', group: 'Code I operations', part: 1, code: 'I',
+      title: 'Breaking a seal on a MARPOL Annex I valve or equipment',
+      blurb: 'A seal broken on an Annex I related valve or item of equipment — record the seal number and the reason.',
+      items: ['I'],
+      extraFields: [EXTRA_FIELDS.equipment, EXTRA_FIELDS.sealNo, EXTRA_FIELDS.timeStart],
+      presets: { remarks: 'Seal broken on MARPOL Annex I related valve and/or equipment. Reason: ' } },
+    { id: 'missed-entry', group: 'Code I operations', part: 1, code: 'I',
+      title: 'Entry for an earlier missed operation',
+      blurb: 'Recording an operation that was carried out earlier but not entered at the time. The book keeps today\u2019s date; the date it actually happened goes in the wording.',
+      items: ['I'],
+      extraFields: [EXTRA_FIELDS.missedDate],
+      presets: { remarks: 'Entry pertaining to an earlier missed operational entry. Details: ' } },
 
     /* ---- Exceptional ---- */
     { id: 'accidental-discharge', group: 'Exceptional', part: 1, code: 'G',
@@ -602,7 +780,25 @@
     { id: 'residue-transfer', group: 'Cargo (tankers)', part: 2, code: 'J',
       title: 'Collection / transfer / disposal of residues', blurb: 'Slop and residue movements. Retained and receiving totals are calculated for you.', items: ['55', '56', '57.3'] },
     { id: 'odme-condition', group: 'Cargo (tankers)', part: 2, code: 'M',
-      title: 'Condition of the ODME system', blurb: 'Failure or condition of the oil discharge monitoring and control system.', items: ['70', '71', '72'], requires: { odme: true } }
+      title: 'Condition of the ODME system', blurb: 'Failure or condition of the oil discharge monitoring and control system.', items: ['70', '71', '72'], requires: { odme: true } },
+
+    /* ---- Part III — fuel changeover (Annex VI Reg. 14.6) ---- */
+    { id: 'changeover-to-ls-start', group: 'Fuel changeover', part: 3, code: 'C',
+      title: 'Changeover commencement — HFO to MGO',
+      blurb: 'Starting the change to low-sulphur fuel before entering an ECA. Record position, time and the volume of low-sulphur fuel on board.',
+      items: ['1'] },
+    { id: 'changeover-to-ls-complete', group: 'Fuel changeover', part: 3, code: 'C',
+      title: 'Changeover completion — HFO to MGO',
+      blurb: 'Changeover complete and low-sulphur fuel in service. This must be recorded before the ship enters the ECA.',
+      items: ['2'] },
+    { id: 'changeover-to-hs-start', group: 'Fuel changeover', part: 3, code: 'C',
+      title: 'Changeover commencement — MGO to HFO',
+      blurb: 'Starting the change back to residual fuel after leaving an ECA. This must not begin before the ship is clear of the area.',
+      items: ['3'] },
+    { id: 'changeover-to-hs-complete', group: 'Fuel changeover', part: 3, code: 'C',
+      title: 'Changeover completion — MGO to HFO',
+      blurb: 'Changeover back to residual fuel complete, with position, time and the low-sulphur volume remaining on board.',
+      items: ['4'] }
   ];
 
   /** Scenarios available for a part, filtered by what the ship is actually fitted with. */
@@ -770,7 +966,10 @@
   }
 
   function getPartOps(part) {
-    return Number(part) === 2 ? PART_II : PART_I;
+    const p = Number(part);
+    if (p === 2) return PART_II;
+    if (p === 3) return PART_III;
+    return PART_I;
   }
 
   function getOperation(part, code) {
@@ -1283,6 +1482,8 @@
    */
   function applyOperationRob(setup, part, code, selectedItems, values) {
     const notes = [];
+    /* Part III is the Annex VI changeover record — it moves fuel between service tanks,
+       not oil residue, so it has no Annex I tank R.O.B. effect. */
     if (!setup || (Number(part) !== 1 && Number(part) !== 2)) return notes;
     const v = values || {};
     const want = new Set(selectedItemNos(selectedItems));
@@ -1384,6 +1585,29 @@
     if (code === 'H' && want.has('26.3')) applyBunker('fuelTank', 'fuelQty', 'fuelSplit', 'fuelTotal');
     if (code === 'H' && want.has('26.4')) applyBunker('lubeTank', 'lubeQty', 'lubeSplit', 'lubeTotal');
 
+    /* Code I records operations MARPOL gives no item fields for, so the movement is
+       described by the scenario's extra fields instead. Oil that left a tank has to
+       leave its R.O.B. too, or the next weekly inventory disagrees with the book. */
+    if (code === 'I') {
+      const qty = numOrNull(v.extraQty);
+      if (v.extraFromTank) {
+        if (numOrNull(v.extraFromRetained) != null) setRob(v.extraFromTank, Number(v.extraFromRetained));
+        else if (qty != null) {
+          const hit = findTank(setup, v.extraFromTank);
+          const base = hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
+          setRob(v.extraFromTank, Math.max(0, base - qty));
+        }
+      }
+      if (v.extraToTank) {
+        if (numOrNull(v.extraToTotal) != null) setRob(v.extraToTank, Number(v.extraToTotal));
+        else if (qty != null) {
+          const hit = findTank(setup, v.extraToTank);
+          const base = hit && hit.tank.robM3 != null ? Number(hit.tank.robM3) : 0;
+          setRob(v.extraToTank, base + qty);
+        }
+      }
+    }
+
     return notes;
   }
 
@@ -1422,6 +1646,29 @@
 
   function selectedItemNos(selected) {
     return (selected || []).slice().sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+  }
+
+  /* Detail typed into a scenario's extra fields, as a sentence appended to the Code I
+     remark. Held apart from the remark textarea so the wording stays consistent between
+     entries and the same values can drive the tank R.O.B. */
+  function extraDetailText(v, setup) {
+    const bits = [];
+    const named = (id) => (tankIdentity(setup, id) || id);
+    if (v.extraEquipment) bits.push('Valve / equipment: ' + v.extraEquipment);
+    if (v.extraSealNo) bits.push('Seal no. ' + v.extraSealNo);
+    if (v.extraPlace) bits.push('Place: ' + v.extraPlace);
+    if (numOrNull(v.extraQty) != null) bits.push('Quantity ' + fmtVal(Number(v.extraQty)) + ' m³');
+    if (numOrNull(v.extraQtyT) != null) bits.push('Quantity ' + fmtVal(Number(v.extraQtyT)) + ' t');
+    if (v.extraFromTank) bits.push('from ' + named(v.extraFromTank));
+    if (v.extraToTank) bits.push('to ' + named(v.extraToTank));
+    if (numOrNull(v.extraFromRetained) != null) bits.push(fmtVal(Number(v.extraFromRetained)) + ' m³ retained in source tank');
+    if (numOrNull(v.extraToTotal) != null) bits.push('total content of receiving tank ' + fmtVal(Number(v.extraToTotal)) + ' m³');
+    if (v.extraTimeStart || v.extraTimeStop) {
+      bits.push('time ' + (v.extraTimeStart || '—') + ' to ' + (v.extraTimeStop || '—'));
+    }
+    if (numOrNull(v.testDurationMin) != null) bits.push('duration of test ' + fmtVal(Number(v.testDurationMin)) + ' minutes');
+    if (v.extraMissedDate) bits.push('operation actually carried out on ' + formatOrbDate(v.extraMissedDate));
+    return bits.length ? (bits.join(', ') + '.') : '';
   }
 
   function buildItemLines(part, code, selectedItems, values, setup) {
@@ -1501,7 +1748,19 @@
           (split ? (', split ' + split) : '') +
           (total !== '' ? (', total content ' + total + ' t') : '');
       }
-      if ((code === 'I' || code === 'O') && (item.no === 'I' || item.no === 'O')) text = resolve(item.fields[0]);
+      if ((code === 'I' || code === 'O') && (item.no === 'I' || item.no === 'O')) {
+        text = [resolve(item.fields[0]), extraDetailText(val, setup)].filter(Boolean).join(' ');
+      }
+      if (Number(part) === 3 && code === 'C') {
+        const dir = item.no === '1' || item.no === '2' ? 'to low-sulphur fuel' : 'to residual fuel';
+        const stage = item.no === '1' || item.no === '3' ? 'commenced' : 'completed';
+        text = ['Changeover ' + stage + ' ' + dir + ' (' + resolve(item.fields[2]) + ')',
+          'at ' + resolve(item.fields[0]) + ', position ' + resolve(item.fields[1]),
+          resolve(item.fields[3]) !== '' ? ('sulphur ' + resolve(item.fields[3]) + '% m/m') : '',
+          resolve(item.fields[4]) ? ('tank(s) ' + resolve(item.fields[4])) : '',
+          resolve(item.fields[5]) !== '' ? (resolve(item.fields[5]) + ' m³ low-sulphur fuel on board') : ''
+        ].filter(Boolean).join(', ');
+      }
       if (!text) return;
       lines.push({ itemNo: item.no, text });
     });
@@ -1597,8 +1856,10 @@
       '.master div{flex:1;border-top:1px solid #333;padding-top:4px;min-height:36px}' +
       '.master img{max-height:26mm;max-width:44mm;object-fit:contain;display:block;margin-top:2px}' +
       '</style></head><body>' +
-      '<h1>Oil Record Book — Part ' + (rows[0] && rows[0].part === 2 ? 'II' : 'I') + '</h1>' +
-      '<h2>' + (rows[0] && rows[0].part === 2 ? 'Cargo / Ballast Operations (Oil Tankers)' : 'Machinery Space Operations (All Ships)') + '</h2>' +
+      '<h1>' + (rows[0] && rows[0].part === 3 ? 'Fuel Oil Changeover Record — Part III'
+        : ('Oil Record Book — Part ' + (rows[0] && rows[0].part === 2 ? 'II' : 'I'))) + '</h1>' +
+      '<h2>' + (rows[0] && rows[0].part === 3 ? 'Fuel Changeover (MARPOL Annex VI Reg. 14.6)'
+        : (rows[0] && rows[0].part === 2 ? 'Cargo / Ballast Operations (Oil Tankers)' : 'Machinery Space Operations (All Ships)')) + '</h2>' +
       '<div class="meta">' +
       '<div><strong>Name of ship:</strong> ' + escapeHtml(setup.shipName || '') + '</div>' +
       '<div><strong>IMO No.:</strong> ' + escapeHtml(setup.imo || '') + '</div>' +
@@ -1623,7 +1884,10 @@
     FLAGS,
     PART_I,
     PART_II,
+    PART_III,
+    EXTRA_FIELDS,
     SCENARIOS,
+    extraDetailText,
     getScenarios,
     getScenario,
     getScenarioGroups,
