@@ -17067,7 +17067,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v152';
+let androidInstallCacheName = 'noon-report-v153';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
@@ -18855,15 +18855,25 @@ function ensureOrbBookCss(){
   document.head.appendChild(el);
 }
 
+/* The period a book view covers, worded the way the book writes dates. Shared by the
+   on-screen view and the Print button: the handler used to hand the builder raw ISO
+   dates and an arrow, so the printed subtitle read 2026-08-16 → 2026-08-21 above a Date
+   column reading 16-AUG-2026. */
+function orbRangeLabel(from, to){
+  if (!window.EORB) return '';
+  if (from && to) return `${EORB.formatOrbDate(from)} to ${EORB.formatOrbDate(to)}`;
+  if (from) return `from ${EORB.formatOrbDate(from)}`;
+  if (to) return `to ${EORB.formatOrbDate(to)}`;
+  return '';
+}
+
 function renderOrbBook(){
   const host = document.getElementById('orbBook');
   if (!host || !window.EORB) return;
   ensureOrbBookCss();
   const setup = orbSetup();
   const { entries, ranged, from, to } = orbBookEntries();
-  const rangeLabel = from && to
-    ? `${EORB.formatOrbDate(from)} to ${EORB.formatOrbDate(to)}`
-    : (from || to ? EORB.formatOrbDate(from || to) : '');
+  const rangeLabel = orbRangeLabel(from, to);
 
   /* Exactly the document the Print button produces, without the Master's signature
      block — that belongs on a sheet someone has actually signed, not on a screen. */
@@ -19301,7 +19311,7 @@ document.getElementById('btnOrbPrint')?.addEventListener('click', ()=>{
   if (checked.size) rows = rows.filter(e => checked.has(e.id));
   const from = document.getElementById('orb_from')?.value || '';
   const to = document.getElementById('orb_to')?.value || '';
-  let range = (from || to) ? `${from || '…'} → ${to || '…'}` : 'All saved entries';
+  let range = orbRangeLabel(from, to) || 'All saved entries';
   /* Name the officer on the printout when the report is filtered to one. */
   const officerId = document.getElementById('orb_browseOfficer')?.value || 'all';
   if (officerId !== 'all'){

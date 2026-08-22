@@ -283,6 +283,100 @@ const contrast = (fg, bg) => {
   check('the page uses the book stylesheet from eorb.js', same.cssIsShared, true);
   check('and the printed document embeds that same stylesheet', same.printEmbedsSameCss, true);
 
+  console.log('\nthe Print button prints what the book shows');
+  const printed = await pg.evaluate(async () => {
+    document.getElementById('orb_from').value = '2026-08-16';
+    document.getElementById('orb_to').value = '2026-08-21';
+    document.getElementById('btnOrbFilter').click();
+    await new Promise(r => setTimeout(r, 700));
+    /* Capture what the handler builds, rather than a label invented by the test —
+       the handler used to hand the builder raw ISO dates and an arrow. */
+    let captured = null;
+    const real = EORB.buildPrintHtml;
+    EORB.buildPrintHtml = function(){ captured = real.apply(this, arguments); return captured; };
+    try { document.getElementById('btnOrbPrint').click(); }
+    finally { EORB.buildPrintHtml = real; }
+    await new Promise(r => setTimeout(r, 600));
+    document.querySelectorAll('iframe').forEach(f => f.remove());
+    return { doc: captured, screenSub: document.querySelector('#orbBook .orb-book-head .sub').textContent.trim() };
+  });
+  check('the button produced a document', typeof printed.doc === 'string' && printed.doc.length > 500, true);
+  const printedSub = (printed.doc.match(/class="sub">([^<]*)</) || [])[1];
+  check('the printed period reads as the book writes dates',
+    printedSub, printed.screenSub);
+  check('and not as raw ISO with an arrow', /\d{4}-\d{2}-\d{2} →/.test(printedSub || ''), false);
+
+  console.log('\nprinting from a phone gives the same sheet as from a desktop');
+  const phone = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+  const mob = await phone.newPage();
+  const mobErrs = [];
+  mob.on('pageerror', e => mobErrs.push(e.message));
+  mob.on('dialog', async d => { await d.accept(); });
+  await mob.goto(`${BASE}/voyage_manager.html`, { waitUntil: 'domcontentloaded' });
+  await mob.waitForTimeout(1200);
+  await mob.evaluate(() => document.getElementById('loginGate')?.setAttribute('hidden', ''));
+  await mob.evaluate(async () => { await installTestFleet({ switchToFirst: true }); });
+  await mob.waitForTimeout(4000);
+  const fromPhone = await mob.evaluate(async () => {
+    switchTab('orb');
+    const st = orbSetup();
+    st.shipName = 'M/V HARBOUR KEY'; st.imo = '9684412'; st.callSign = 'V7AB9'; st.gt = 24560;
+    state.setup.orb = st;
+    fillOrbSetupForm();
+    const day = (n) => new Date(Date.UTC(2026, 7, 22 - n)).toISOString().slice(0, 10);
+    state.orbEntries = [{
+      id: 'ph1', vesselId: state.activeVesselId, part: 1, code: 'C', date: day(1),
+      lines: [{ itemNo: '12.3', text: '1.100 m³ from Sludge Tank, incinerated 3.5 h' }],
+      officerName: 'A. Ruiz', officerRank: 'Chief Engineer',
+      officerSignedAt: day(1) + 'T12:00:00', createdAt: day(1) + 'T12:00:00', voided: false
+    }];
+    switchOrbPanel('browse');
+    await new Promise(r => setTimeout(r, 600));
+    let captured = null;
+    const real = EORB.buildPrintHtml;
+    EORB.buildPrintHtml = function(){ captured = real.apply(this, arguments); return captured; };
+    try { document.getElementById('btnOrbPrint').click(); }
+    finally { EORB.buildPrintHtml = real; }
+    await new Promise(r => setTimeout(r, 600));
+    const frame = [...document.querySelectorAll('iframe')].slice(-1)[0];
+    const css = frame ? frame.style.cssText : '';
+    document.querySelectorAll('iframe').forEach(f => f.remove());
+    return { doc: captured, css };
+  });
+  check('a phone produces a document too', typeof fromPhone.doc === 'string' && fromPhone.doc.length > 500, true);
+  /* The sheet is laid out in an iframe pinned to A4, so the phone's own screen width
+     never reaches the page. */
+  check('printed through an A4-sized frame, not the phone viewport',
+    /width:\s*210mm/.test(fromPhone.css) && /height:\s*297mm/.test(fromPhone.css), true);
+
+  /* Lay the phone's document out and check it neither overflows A4 nor breaks narrow. */
+  const sheet = await phone.newPage();
+  await sheet.setViewportSize({ width: 794, height: 1123 });
+  await sheet.setContent(fromPhone.doc);
+  await sheet.waitForTimeout(500);
+  const a4 = await sheet.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+    minWidth: getComputedStyle(document.querySelector('.orb-book')).minWidth,
+    border: getComputedStyle(document.querySelector('.orb-book')).borderTopWidth
+  }));
+  check('the sheet does not run off A4', a4.overflow, false);
+  /* The card border and the 640px floor belong to the panel on screen, not to paper. */
+  check('the page has no card border on paper', a4.border, '0px');
+  check('and no minimum width to overflow a narrow preview', a4.minWidth, '0px');
+  await sheet.setViewportSize({ width: 390, height: 844 });
+  await sheet.waitForTimeout(400);
+  const narrow = await sheet.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+    rows: document.querySelectorAll('tbody tr').length,
+    stillSigned: !!document.querySelector('.orb-book-master')
+  }));
+  check('it reflows into a narrow preview rather than being cut', narrow.overflow, false);
+  check('with every row still there', narrow.rows > 0, true);
+  check('and the Master\'s block still on it', narrow.stillSigned, true);
+  check('no page errors on the phone', mobErrs.length, 0);
+  if (mobErrs.length) console.log(mobErrs.slice(0, 5));
+  await phone.close();
+
   console.log('\nnothing went wrong');
   check('no page errors', errs.length, 0);
   if (errs.length) console.log(errs.slice(0, 5));
