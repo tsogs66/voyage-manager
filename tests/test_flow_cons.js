@@ -41,7 +41,8 @@ function extract(name) {
   return HTML.slice(start, i + 1);
 }
 
-const sandbox = { console };
+/* Constants the extracted helpers close over. */
+const sandbox = { console, FUEL_DECIMALS: 3 };
 vm.createContext(sandbox);
 vm.runInContext(
   [
@@ -50,6 +51,14 @@ vm.runInContext(
     extract('meGeRawLitres'),
     extract('fwPeriodBalance'),
     extract('unitOverrideIfDifferent'),
+    extract('sameMeterReading'),
+    extract('logFuelMetersUnchanged'),
+    extract('preserveUnitOverrideOnLogSave'),
+    extract('unitOverrideChanged'),
+    extract('mergeLubeConsOverride'),
+    extract('entryGeKw'),
+    extract('lastKnownGeKw'),
+    extract('entryGeKwCarried'),
   ].join('\n'),
   sandbox
 );
@@ -114,6 +123,60 @@ check('match within 0.0005 is not an override', sandbox.unitOverrideIfDifferent(
 check('blank is not an override', sandbox.unitOverrideIfDifferent(null, 1.2), null);
 check('typed 1.500 vs calc 1.200 is kept', sandbox.unitOverrideIfDifferent(1.5, 1.2), 1.5);
 check('no calculated figure keeps the typed one', sandbox.unitOverrideIfDifferent(0.8, null), 0.8);
+/* getComputedRow already applies the override. Comparing the typed box to that
+   applied figure (1.5 vs 1.5) would drop a real 1.5-vs-meter-1.2 override. */
+check('must compare to meter 1.2, not applied 1.5', sandbox.unitOverrideIfDifferent(1.5, 1.2), 1.5);
+check('comparing to the already-applied figure would wipe it', sandbox.unitOverrideIfDifferent(1.5, 1.5), null);
+
+console.log('\nlog save keeps unitOverride when meters are unchanged');
+{
+  const existing = {
+    me: { meter: 1000 },
+    ge: { meter: 200 },
+    blr: { meter: 50 },
+    unitOverride: { ME: 1.5, GE: 0.4, BLR: 0.1 },
+  };
+  const kept = sandbox.preserveUnitOverrideOnLogSave(existing, { meter: 1000 }, { meter: 200 }, 50);
+  check('unchanged meters keep M/E override', kept.ME, 1.5);
+  check('unchanged meters keep G/E override', kept.GE, 0.4);
+  check('unchanged meters keep boiler override', kept.BLR, 0.1);
+  const cleared = sandbox.preserveUnitOverrideOnLogSave(existing, { meter: 1100 }, { meter: 200 }, 50);
+  check('changed M/E meter drops override', cleared.ME, null);
+  check('new entry has no override to keep', sandbox.preserveUnitOverrideOnLogSave(null, { meter: 1000 }, { meter: 200 }, 50).ME, null);
+  check('meters-unchanged helper is true', sandbox.logFuelMetersUnchanged(existing, { meter: 1000 }, { meter: 200 }, 50), true);
+  check('meters-changed helper is false', sandbox.logFuelMetersUnchanged(existing, { meter: 1100 }, { meter: 200 }, 50), false);
+}
+
+console.log('\nVoyage Summary save keeps fuel-grade consOverride');
+{
+  const merged = sandbox.mergeLubeConsOverride(
+    { HFO: 12.5, 'MDO/MGO': 0.8, 'CYL HIGH': 40 },
+    { 'CYL HIGH': 42, 'ME SYS OIL': 5 }
+  );
+  check('HFO override survives lube refresh', merged.HFO, 12.5);
+  check('MDO override survives lube refresh', merged['MDO/MGO'], 0.8);
+  check('cyl oil is updated from the form', merged['CYL HIGH'], 42);
+  check('new lube row is added', merged['ME SYS OIL'], 5);
+}
+
+console.log('\nunitOverrideChanged only when ME/GE/BLR figures move');
+check('same override is not a change', sandbox.unitOverrideChanged({ ME:1.5, GE:0.4, BLR:null }, { ME:1.5, GE:0.4, BLR:null }), false);
+check('dropped override is a change', sandbox.unitOverrideChanged({ ME:1.5, GE:0.4, BLR:null }, { ME:null, GE:0.4, BLR:null }), true);
+
+console.log('\ngenerator kW carries from the previous watch');
+{
+  const entries = [
+    { ge1Kw: 380, report: { generators: [{ avgKw: 380 }] } },
+    { ge1Kw: null, report: { generators: [{ avgKw: null }] } },
+    { ge1Kw: 410 },
+  ];
+  check('own kW wins', sandbox.entryGeKw(entries[0], 1), 380);
+  check('blank watch walks back to 380', sandbox.lastKnownGeKw(entries, 1, 1), 380);
+  check('later typed kW is 410', sandbox.lastKnownGeKw(entries, 2, 1), 410);
+  check('carried from previous entry', sandbox.entryGeKwCarried(entries[1], 1, entries[0]), 380);
+  check('own kW is not replaced by previous', sandbox.entryGeKwCarried(entries[2], 1, entries[1]), 410);
+  check('no history stays blank', sandbox.entryGeKwCarried({}, 1, null), null);
+}
 
 console.log('\nfresh water — single tank (legacy total)');
 {

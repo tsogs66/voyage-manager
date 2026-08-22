@@ -48,11 +48,17 @@ jobs:
       - name: Check flowmeter and fresh-water consumption formulas
         run: node tests/test_flow_cons.js
 
+      - name: Check lube and water totals
+        run: node tests/test_lube_total.js
+
       - name: Check noon print title and flag registry
         run: node tests/test_noon_print.js
 
       - name: Check device enrollment helpers
         run: node tests/test_device_enrollment.js
+
+      - name: Check login-gate theme contrast tokens
+        run: node tests/test_login_theme.js
 
   sync-server:
     name: Sync server (auth matrix)
