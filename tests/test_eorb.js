@@ -146,6 +146,130 @@ checkTrue('voided row is marked', html.indexOf('orb-voided') !== -1);
 checkTrue('voided text is struck', html.indexOf('<s>Sludge Tank</s>') !== -1);
 checkTrue('void reason is printed', html.indexOf('VOID') !== -1 && html.indexOf('wrong tank') !== -1);
 
+console.log('\nthe operation list covers what the flag e-ORB offers');
+{
+  /* Every operation on the reference list, by the code and item it is filed under.
+     A missing one means the engineer has to file it as a bare general remark. */
+  const WANTED = [
+    ['C', '11.4', 'manual collection into a sludge tank'],
+    ['C', '12.1', 'sludge ashore via shore connection'],
+    ['C', '12.2', 'draining water from a sludge tank to a bilge holding tank'],
+    ['C', '12.2', 'sludge tank to tank transfer'],
+    ['C', '12.3', 'incineration of sludge'],
+    ['C', '12.4', 'evaporation of water from a sludge tank'],
+    ['C', '12.4', 'FO/LO regeneration from sludge'],
+    ['D', '15.1', 'bilge water overboard from an IOPP 3.3 tank'],
+    ['D', '15.2', 'bilge water ashore via shore connection'],
+    ['D', '15.3', 'bilge wells to a holding tank'],
+    ['D', '15.3', 'bilge water between IOPP 3.3 tanks'],
+    ['D', '15.3', 'bilge water to a sludge tank'],
+    ['F', '19', 'failure of the oily water separator'],
+    ['F', '20', 'restore of the oily water separator'],
+    ['G', '22', 'accidental pollution'],
+    ['H', '26.3', 'bunkering of fuel oil'],
+    ['H', '26.3', 'bunkering of diesel oil'],
+    ['H', '26.4', 'bunkering of bulk lubricating oil'],
+    ['I', 'I', 'emptying and filling the bilge separation unit for maintenance'],
+    ['I', 'I', 'pumping oily bilge water to an IOPP 3.3 tank'],
+    ['I', 'I', 'entry for an earlier missed operation'],
+    ['I', 'I', 'de-bunkering of fuel oil'],
+    ['I', 'I', 'de-bunkering of diesel oil'],
+    ['I', 'I', 'sealing of an Annex I valve / equipment'],
+    ['I', 'I', 'breaking a seal on an Annex I valve / equipment'],
+    ['I', 'I', 'evaporation of water from a bilge tank'],
+    ['I', 'I', 'OWS / OCM test'],
+    ['I', 'I', 'condensate from air coolers to a bilge holding tank'],
+    ['I', 'I', 'additional operational procedures and general remarks']
+  ];
+  const part1 = EORB.SCENARIOS.filter(s => Number(s.part) === 1);
+  const covered = (code, item) => part1.some(s => s.code === code && (s.items || []).indexOf(item) !== -1);
+  WANTED.forEach(([code, item, what]) => {
+    checkTrue(`${code}.${item} — ${what}`, covered(code, item));
+  });
+  /* One scenario per operation, not one shared entry doing several jobs. */
+  const ids = part1.map(s => s.id);
+  check('scenario ids are unique', ids.length, new Set(ids).size);
+}
+
+console.log('\nCode I carries the tank, quantity and duration MARPOL gives it no field for');
+{
+  const s2 = EORB.defaultOrbSetup({});
+  s2.tanks.sludge = [{ id: 'SL1', name: 'Sludge Tk', capacityM3: 30, robM3: 12 }];
+  s2.tanks.bilge = [{ id: 'BW1', name: 'Bilge Holding Tk', capacityM3: 20, robM3: 8 }];
+
+  const move = { remarks: 'Oily bilge water pumped to holding tank.', extraFromTank: 'SL1', extraToTank: 'BW1', extraQty: 2.5 };
+  const line = EORB.buildItemLines(1, 'I', ['I'], move, s2)[0];
+  checkTrue('the wording names the quantity', line.text.indexOf('2.5 m³') !== -1);
+  checkTrue('and both tanks', line.text.indexOf('Sludge Tk') !== -1 && line.text.indexOf('Bilge Holding Tk') !== -1);
+
+  /* The point of the extra fields: a Code I operation that moves oil moves R.O.B. too,
+     or the next weekly inventory disagrees with the book. */
+  const notes = EORB.applyOperationRob(s2, 1, 'I', ['I'], move);
+  check('source drawn down', s2.tanks.sludge[0].robM3, 9.5);
+  check('receiving topped up', s2.tanks.bilge[0].robM3, 10.5);
+  check('both movements reported', notes.length, 2);
+
+  /* A retained figure the engineer sounded beats the arithmetic. */
+  const s3 = EORB.defaultOrbSetup({});
+  s3.tanks.bilge = [{ id: 'BW1', name: 'Bilge Holding Tk', capacityM3: 20, robM3: 8 }];
+  EORB.applyOperationRob(s3, 1, 'I', ['I'], { extraFromTank: 'BW1', extraQty: 3, extraFromRetained: 4.2 });
+  check('sounded retention wins over the subtraction', s3.tanks.bilge[0].robM3, 4.2);
+
+  /* Never below empty, however much is claimed. */
+  const s4 = EORB.defaultOrbSetup({});
+  s4.tanks.bilge = [{ id: 'BW1', name: 'Bilge Holding Tk', capacityM3: 20, robM3: 1 }];
+  EORB.applyOperationRob(s4, 1, 'I', ['I'], { extraFromTank: 'BW1', extraQty: 5 });
+  check('a tank cannot go negative', s4.tanks.bilge[0].robM3, 0);
+
+  const test = EORB.buildItemLines(1, 'I', ['I'],
+    { remarks: 'Operational test of OCM and 15 ppm bilge alarm carried out.', testDurationMin: 20 }, s2)[0];
+  checkTrue('test duration reaches the entry', test.text.indexOf('duration of test 20 minutes') !== -1);
+
+  const owsTest = EORB.SCENARIOS.find(x => x.id === 'ows-weekly-test');
+  checkTrue('the weekly OWS test offers a duration box',
+    (owsTest.extraFields || []).some(f => f.name === 'testDurationMin'));
+}
+
+console.log('\nPart III — fuel changeover (Annex VI Reg. 14.6)');
+{
+  const s5 = EORB.defaultOrbSetup({});
+  check('Part III has its own operation table', EORB.getPartOps(3).length, 1);
+  check('four changeover events', EORB.getPartOps(3)[0].items.map(i => i.no), ['1', '2', '3', '4']);
+  check('and a scenario for each', EORB.getScenarios(s5, 3).length, 4);
+  const v = { coTime: '06:30', coPosition: '51 20 N 002 10 E', coToGrade: 'LSMGO', coSulphur: 0.08, coVolume: 145 };
+  const done = EORB.buildItemLines(3, 'C', ['2'], v, s5)[0];
+  checkTrue('completion reads as completed', done.text.indexOf('Changeover completed') !== -1);
+  checkTrue('to low-sulphur fuel', done.text.indexOf('low-sulphur fuel') !== -1);
+  checkTrue('carries the position', done.text.indexOf('51 20 N 002 10 E') !== -1);
+  checkTrue('and the volume on board', done.text.indexOf('145 m³') !== -1);
+  const start = EORB.buildItemLines(3, 'C', ['3'], v, s5)[0];
+  checkTrue('the reverse leg reads as commenced', start.text.indexOf('Changeover commenced') !== -1);
+  checkTrue('and back to residual', start.text.indexOf('residual fuel') !== -1);
+  /* Changeover moves fuel between service tanks, not Annex I oil residue. */
+  check('no Annex I tank R.O.B. effect', EORB.applyOperationRob(s5, 3, 'C', ['2'], v), []);
+  const html3 = EORB.buildPrintHtml(s5, [{ date: '2026-08-01', code: 'C', part: 3, lines: [done], officerName: 'A. Ruiz' }], 'test');
+  checkTrue('prints under its own heading', html3.indexOf('Fuel Oil Changeover Record — Part III') !== -1);
+}
+
+console.log('\none date and one code per entry, whatever its item set');
+{
+  const s6 = EORB.defaultOrbSetup({});
+  const entry = {
+    date: '2026-08-01', code: 'C', part: 1, officerName: 'A. Ruiz',
+    lines: [
+      { itemNo: '11.1', text: 'Sludge Tk 1' }, { itemNo: '11.2', text: '30 m³' }, { itemNo: '11.3', text: '12 m³' },
+      { itemNo: '11.1', text: 'Sludge Tk 2' }, { itemNo: '11.2', text: '20 m³' }, { itemNo: '11.3', text: '4 m³' }
+    ]
+  };
+  const html6 = EORB.buildPrintHtml(s6, [entry], 'test');
+  const body = html6.slice(html6.indexOf('<tbody>'), html6.indexOf('</tbody>'));
+  const dateCells = (body.match(/01-AUG-2026/g) || []).length;
+  const codeCells = (body.match(/<td>C<\/td>/g) || []).length;
+  check('the date is printed once for the whole set', dateCells, 1);
+  check('and so is the letter code', codeCells, 1);
+  checkTrue('while every item line is still there', (body.match(/<tr/g) || []).length === 6);
+}
+
 console.log();
 if (failures.length) {
   console.log(`FAILED — ${failures.length} of ${checks} checks`);
