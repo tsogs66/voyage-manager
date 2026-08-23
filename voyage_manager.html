@@ -15956,6 +15956,24 @@ async function syncServerIsUnprotected(requestUrl){
   return false;
 }
 
+/*
+ * How big was the push? A 413 is about size, so say the size — it is the difference
+ * between "raise the limit a bit" and "something is wrong with this payload".
+ */
+function syncBodySizeNote(opts){
+  const b = opts && opts.body;
+  if (typeof b !== 'string' || !b) return '';
+  const mb = b.length / (1024 * 1024);
+  return ' — this push was about ' + (mb >= 1 ? mb.toFixed(1) + ' MB' : Math.max(1, Math.round(b.length / 1024)) + ' KB');
+}
+
+function syncTooLargeMessage(opts){
+  return 'Sync upload rejected as too large (HTTP 413)' + syncBodySizeNote(opts) + '. ' +
+    'The proxy in front of the sync server caps the request body — raise nginx\'s ' +
+    'client_max_body_size (the installer sets 64m; run install/proxmox-update.sh on the ' +
+    'server to apply it). The URL and API token are not the problem.';
+}
+
 async function fetchSyncJson(url, options = {}){
   const opts = Object.assign({ cache: 'no-store' }, options || {});
   let res;
@@ -15978,6 +15996,21 @@ async function fetchSyncJson(url, options = {}){
     }catch(_){
       const snippet = trimmed.replace(/\s+/g, ' ').slice(0, 140);
       const looksHtml = /^</.test(trimmed) || /<!doctype|<html/i.test(trimmed);
+      /*
+       * An HTML body used to be reported as "you typed the wrong URL", whatever the
+       * status line said. A ship hit 413 — nginx's own Request Entity Too Large page,
+       * served because the proxy's upload limit was below the size of a full voyage
+       * push — and was told to go and fix a URL that was correct. Read the status
+       * first: only fall back to the URL advice for statuses that do not name a cause.
+       */
+      if (res.status === 413) throw new Error(syncTooLargeMessage(opts));
+      if (res.status === 502 || res.status === 503 || res.status === 504){
+        throw new Error(
+          'Sync server is not answering (HTTP ' + res.status + '). The proxy is up but voyage-sync ' +
+          'behind it is down or restarting — check `systemctl status voyage-sync` on the server. ' +
+          'The URL is reaching the right machine.'
+        );
+      }
       if (looksHtml){
         throw new Error(
           'Sync server returned a web page instead of JSON (HTTP ' + res.status + '). ' +
@@ -15990,6 +16023,9 @@ async function fetchSyncJson(url, options = {}){
   }
   if (!res.ok){
     const detail = (body && (body.error || body.message)) ? String(body.error || body.message) : ('HTTP ' + res.status);
+    /* A patched proxy answers 413 with JSON, so it parses and never reaches the
+       HTML branch above. Same cause, same remedy — give the same message. */
+    if (res.status === 413) throw new Error(syncTooLargeMessage(opts));
     if (res.status === 401 || res.status === 403){
       const sentAuth = (opts.headers && opts.headers.Authorization) || '';
       const sentToken = sentAuth.replace(/^Bearer\s+/i, '');
@@ -17067,7 +17103,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v153';
+let androidInstallCacheName = 'noon-report-v154';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',

@@ -189,6 +189,13 @@ server {
     root ${INSTALL_DIR};
     index voyage_manager.html;
 
+    # A voyage leg is pushed as one JSON body: every log entry, receipt, abstract and
+    # e-ORB record for the leg, plus the vessel stamp, the chief engineer's signature
+    # and any uploaded documents, all as data URLs. That passes nginx's 1m default
+    # easily, and nginx then answers with an HTML 413 the app cannot read. 64m leaves
+    # room for a full leg with scanned documents.
+    client_max_body_size 64m;
+
     location / {
         try_files \$uri \$uri/ /voyage_manager.html;
     }
@@ -210,6 +217,15 @@ server {
     location @api_upstream_down {
         default_type application/json;
         return 502 '{"ok":false,"error":"sync server unavailable"}';
+    }
+
+    # 413 is raised by nginx itself before anything is proxied, so
+    # proxy_intercept_errors above never sees it. Answer in JSON here too, or the app
+    # receives nginx's HTML error page and can only guess at what went wrong.
+    error_page 413 = @api_too_large;
+    location @api_too_large {
+        default_type application/json;
+        return 413 '{"ok":false,"error":"payload larger than the sync server accepts (client_max_body_size)"}';
     }
 }
 NGINX
