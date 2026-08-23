@@ -8157,24 +8157,30 @@ function stampFwOnEntry(entry, fw, prev){
   }
 }
 
+/*
+ * Repaint one engine's meter box, but only when the flowmeter arrangement actually
+ * changed. render() runs on every save, sync and edit, and it used to rebuild both
+ * boxes unconditionally — which wiped the M/E and G/E readings prefilled from the
+ * last entry, so the engineer opened a new entry with those two fields blank while
+ * the boiler, cylinder-oil and rev-counter fields (static markup, never rebuilt)
+ * still showed theirs. Nothing else writes to these boxes, so the recorded mode is
+ * a faithful account of what is on screen.
+ */
+function paintFuelMeterBox(box, dual, prefix){
+  if (!box) return;
+  const mode = dual ? 'dual' : 'single';
+  if (box.dataset.meterMode === mode) return;
+  box.innerHTML = dual
+    ? `<div class="field"><label>Inlet Flowmeter</label><input type="number" id="${prefix}_meter_in"></div>
+       <div class="field"><label>Outlet Flowmeter</label><input type="number" id="${prefix}_meter_out"></div>`
+    : `<div class="field"><label>Fuel Meter</label><input type="number" id="${prefix}_meter"></div>`;
+  box.dataset.meterMode = mode;
+}
+
 function renderFuelMeterFields(){
   const arr = state.setup.flowArr || 'SINGLE';
-  const meDual = arr==='DUAL_ME' || arr==='DUAL_BOTH';
-  const geDual = arr==='DUAL_GE' || arr==='DUAL_BOTH';
-  const meBox = document.getElementById('meMeterFields');
-  const geBox = document.getElementById('geMeterFields');
-  if (meBox){
-    meBox.innerHTML = meDual
-      ? `<div class="field"><label>Inlet Flowmeter</label><input type="number" id="me_meter_in"></div>
-         <div class="field"><label>Outlet Flowmeter</label><input type="number" id="me_meter_out"></div>`
-      : `<div class="field"><label>Fuel Meter</label><input type="number" id="me_meter"></div>`;
-  }
-  if (geBox){
-    geBox.innerHTML = geDual
-      ? `<div class="field"><label>Inlet Flowmeter</label><input type="number" id="ge_meter_in"></div>
-         <div class="field"><label>Outlet Flowmeter</label><input type="number" id="ge_meter_out"></div>`
-      : `<div class="field"><label>Fuel Meter</label><input type="number" id="ge_meter"></div>`;
-  }
+  paintFuelMeterBox(document.getElementById('meMeterFields'), arr==='DUAL_ME' || arr==='DUAL_BOTH', 'me');
+  paintFuelMeterBox(document.getElementById('geMeterFields'), arr==='DUAL_GE' || arr==='DUAL_BOTH', 'ge');
 }
 
 function slugTankId(prefix, name){
@@ -17103,7 +17109,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v154';
+let androidInstallCacheName = 'noon-report-v155';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
