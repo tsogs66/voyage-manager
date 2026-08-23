@@ -107,7 +107,8 @@ check "the helper reports it is patching" \
 check "directive inserted exactly once" "$(count_directive "$WORK/conf")" "1"
 check "413 handler inserted" "$(grep -c 'location @api_too_large' "$WORK/conf")" "1"
 check "server block still closed exactly once" "$(grep -c '^}' "$WORK/conf")" "1"
-check "the original was backed up" "$(ls "$WORK"/conf.bak.* 2>/dev/null | wc -l)" "1"
+check "the original was backed up" \
+  "$(find "$WORK" -maxdepth 1 -name 'conf.bak.*' | wc -l)" "1"
 check "the limit lands inside the server block" \
   "$(awk '/^server \{/{s=1} /^\}/{s=0} s && /^[[:space:]]*client_max_body_size/{n++} END{print n+0}' "$WORK/conf")" "1"
 

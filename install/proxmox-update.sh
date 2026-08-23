@@ -193,7 +193,8 @@ patch_nginx_upload_limit() {
   command -v nginx >/dev/null 2>&1 || return 0
 
   log "Raising the nginx upload limit for voyage sync..."
-  local backup="${conf}.bak.$(date +%Y%m%d%H%M%S)"
+  local backup
+  backup="${conf}.bak.$(date +%Y%m%d%H%M%S)"
   cp -a "$conf" "$backup"
 
   if ! grep -qE "$have_limit" "$conf"; then
