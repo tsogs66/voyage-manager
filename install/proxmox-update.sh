@@ -117,6 +117,8 @@ update_in_container(){
   mkdir -p "${INSTALL_DIR}/sync-server/sync-data"
   chmod 750 "${INSTALL_DIR}/sync-server/sync-data"
 
+  patch_nginx_upload_limit
+
   if systemctl is-enabled nginx >/dev/null 2>&1; then
     log "Reloading nginx..."
     nginx -t
@@ -172,6 +174,54 @@ update_via_proxmox(){
     VOYAGE_WEB_PORT="${VOYAGE_WEB_PORT:-8080}" \
     VOYAGE_SYNC_PORT="${VOYAGE_SYNC_PORT:-8787}" \
     bash -c "curl -fsSL '$SCRIPT_URL' | bash"
+}
+
+# The site config is written once by the installer and never rewritten by a git pull, so
+# an install made before the upload limit existed keeps nginx's 1m default. A voyage leg
+# carrying documents, the vessel stamp and the chief engineer's signature passes that
+# easily, and the ship then sees "sync failed" with nginx's HTML 413 behind it. Add the
+# directives when they are missing; leave alone a config that already has them. The
+# previous file is kept, and restored if nginx will not accept the result.
+patch_nginx_upload_limit() {
+  local conf="/etc/nginx/sites-available/voyage-manager"
+  [[ -f "$conf" ]] || return 0
+  # Match the directive at the start of a line, not the words: the 413 handler's
+  # JSON message below also contains "client_max_body_size", so a loose grep would
+  # report the limit as already set on a conf that only has the handler.
+  local have_limit="^[[:space:]]*client_max_body_size"
+  grep -qE "$have_limit" "$conf" && grep -q "api_too_large" "$conf" && return 0
+  command -v nginx >/dev/null 2>&1 || return 0
+
+  log "Raising the nginx upload limit for voyage sync..."
+  local backup="${conf}.bak.$(date +%Y%m%d%H%M%S)"
+  cp -a "$conf" "$backup"
+
+  if ! grep -qE "$have_limit" "$conf"; then
+    sed -i '0,/index voyage_manager.html;/s//index voyage_manager.html;\n\n    client_max_body_size 64m;/' "$conf"
+  fi
+
+  # Insert before the server block's final closing brace.
+  if ! grep -q "api_too_large" "$conf"; then
+    local tmp
+    tmp="$(mktemp)"
+    head -n -1 "$conf" > "$tmp"
+    cat >> "$tmp" <<'EOF413'
+
+    error_page 413 = @api_too_large;
+    location @api_too_large {
+        default_type application/json;
+        return 413 '{"ok":false,"error":"payload larger than the sync server accepts (client_max_body_size)"}';
+    }
+}
+EOF413
+    cat "$tmp" > "$conf"
+    rm -f "$tmp"
+  fi
+
+  if ! nginx -t >/dev/null 2>&1; then
+    log "nginx rejected the patched config — restoring $backup"
+    cp -a "$backup" "$conf"
+  fi
 }
 
 main(){
