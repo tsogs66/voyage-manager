@@ -216,6 +216,13 @@
   .unit-group.cols6{grid-template-columns:repeat(6,1fr);}
   .unit-group.contents > *{min-width:0;}
   #vsTurboFields{display:contents;}
+  /* Each unit's typed consumption sits beside the flowmeter figure it came from,
+     so an override reads as a departure from a stated basis rather than a bare number. */
+  .cons-row{display:grid; grid-template-columns:1fr auto; gap:10px; align-items:end; margin-bottom:6px;}
+  .cons-row .field{margin-bottom:0;}
+  .cons-basis{display:flex; flex-direction:column; align-items:flex-end; padding-bottom:7px; line-height:1.25;}
+  .cons-basis .cb-lbl{font-size:9px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted);}
+  .cons-basis .cb-val{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted);}
   /* Voyage Summary: keep ER readings and cylinder containers on one horizontal row */
   #voyageSummaryPanel .form-grid.cols5{
     grid-template-columns:repeat(5, minmax(0, 1fr));
@@ -238,6 +245,12 @@
      as the cols3 rule above or that one wins and forces three columns. */
   #vsTurboScavRow.unit-group.cols3.no-turbos{
     grid-template-columns:repeat(2, minmax(0, 1fr));
+  }
+  #vsTurboScavRow.unit-group.cols3.no-others{
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+  }
+  #vsTurboScavRow.unit-group.cols3.no-turbos.no-others{
+    grid-template-columns:minmax(0, 1fr);
   }
   #vsTurboScavRow .unit-box{min-width:0;}
   #vsOthersFields.form-grid.cols2{
@@ -2044,7 +2057,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
         <span><i class="calc"></i> Calculated — filled by the app</span>
       </div>
       <div class="vs-entry-context" id="vsMeStoppedNote" style="display:none;">
-        <div>M/E stopped this period — rev counter unchanged. Main engine panels are hidden; generators, boiler, ROB and soundings below still apply.</div>
+        <div>M/E stopped this period — rev counter unchanged. Main engine panels are hidden; generators, boiler and ROB below still apply.</div>
         <button type="button" class="ghost small" id="btnVsShowMePanels" style="margin-top:8px;">Show M/E panels anyway</button>
       </div>
       <div class="panel" style="margin:0 0 16px; padding:16px;" id="vsReferenceBlock">
@@ -2191,7 +2204,6 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
         <div class="form-grid cols3">
           <div class="field"><label>Boiler Run Hours (this report)</label><input type="number" step="0.1" id="vs_blrRuntime"></div>
           <div class="field"><label>Boiler Running Hours (cumulative)</label><input type="number" step="0.1" id="vs_blrCumHours"></div>
-          <div class="field"><label>Total G/E Fuel Cons (MT)</label><input type="number" step="0.001" id="vs_geTotalCons"></div>
           <div class="field"><label>Boiler Avg Load (kW)</label><input type="number" step="1" id="vs_blrKw"></div>
           <div class="field"><label>Boiler Load % (calc)</label><input type="text" id="vs_blrLoadPct" readonly></div>
           <div class="field"></div>
@@ -2210,7 +2222,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
           <div class="unit-box">
             <h3>Fuel Cons. (by unit — edit to override)</h3>
             <div id="vsFuelConsBox"></div>
-            <button class="ghost small" id="btnVsResetUnitCons" type="button" style="margin-top:8px;">Reset Unit Cons. to Calculated</button>
+            <div class="hint" style="margin-top:8px;">Each box opens on the figure the flowmeters measured, shown beside it as the basis. Type over any of them to override; clear the box to go back to the metered figure.</div>
           </div>
           <div class="unit-box">
             <h3>Misc. Cons. (manual, added to Consumption)</h3>
@@ -2250,15 +2262,6 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
           </table>
         </div>
         <button class="ghost small" id="btnVsResetConsOverride" type="button" style="margin-top:8px;">Reset Lube ROB Cons. to Calculated</button>
-        <h3 class="sub">Tank Soundings (optional)</h3>
-        <div class="table-scroll">
-          <table>
-            <thead><tr><th>Tank</th><th>Sounding (cm)</th><th>Temp (°C)</th><th>Volume (MT / L / m³)</th></tr></thead>
-            <tbody id="vsSoundingsBody"></tbody>
-          </table>
-        </div>
-        <div class="hint">Record ullage/sounding and observed temperature for handover. Volume is manual (from sounding tables) — does not override calculated R.O.B. To correct R.O.B. from a survey, use Bunker Survey below.</div>
-
         <h3 class="sub">Bunker Survey / R.O.B. Correction</h3>
         <div class="table-scroll">
           <table>
@@ -2339,11 +2342,11 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
       </div>
 
       <div class="btn-row">
-        <button class="primary" id="btnSaveVoyageSummary">Save Summary &amp; Report Data</button>
-        <button class="ghost" id="btnPrintVoyageSummary">Print Noon / Voyage Summary (A4 Portrait)</button>
+        <button class="primary" id="btnSaveVoyageSummary">Save Report</button>
+        <button class="ghost" id="btnPrintVoyageSummary">Print &amp; Save (A4 Portrait)</button>
         <button class="ghost" id="btnCloseVoyageSummary">Close</button>
       </div>
-      <div class="hint">Edit distance, RPM, boiler/incinerator, freshwater, misc., unit fuel cons, and ROB consumption here. Consumption cells default from meter readings — override any cell as needed. Saving updates this entry and recalculates every later entry.</div>
+      <div class="hint">Edit distance, RPM, boiler/incinerator, freshwater, misc., unit fuel cons, and ROB consumption here. Consumption cells default from meter readings — override any cell as needed. Saving updates this entry and recalculates every later entry. Print &amp; Save commits the report before printing, so the sheet you hand over and the record kept on board are the same figures.</div>
     </div>
 
     <div class="panel">
@@ -8904,9 +8907,34 @@ function rangeAggregate(ids){
   };
   const fuel = {};
   FUEL_CONS_GROUPS.forEach(g => { fuel[g.label] = sum(r => sumFuelGroup(r.consByType, g)); });
+  /* Fuel split by what burned it, not by grade. An environmental return and any
+     charter-party claim are argued per consumer — "the main engine burned this, the
+     generators that" — and the grade split above cannot answer it. Boiler carries
+     its own hand-booked distillate because that is the same burner's fuel; the
+     incinerator and the miscellaneous burn have no meter at all, so they land
+     together under Other. Together these four are the whole burn. */
+  const extraTotal = (src) => EXTRA_DO_GRADES.reduce((a, t) => a + (extraDoMap(src)[t] || 0), 0);
+  /* Round each report's figure to the precision it is printed at before accumulating,
+     the same way sumFuelGroup does for the grade split. Summing raw values instead
+     left the four consumers half a kilo apart from the all-fuel total printed beside
+     them on the same sheet, which reads as an error in the report. */
+  const mt = (v) => Number(Number(v || 0).toFixed(FUEL_DECIMALS));
+  const byConsumer = {
+    'Main Engine': sum(r => mt(r.meCons)),
+    'Generator':   sum(r => mt(r.geCons)),
+    'Boiler':      sum(r => mt(r.blrCons) + mt(extraTotal(r.blrExtraCons))),
+    'Other':       sum(r => mt(extraTotal(r.incExtraCons))
+                          + FUEL_TYPES.reduce((a, t) => a + mt(r.miscCons?.[t]), 0))
+  };
+  const perDay = (v) => hrs > 0 ? (v / hrs) * 24 : null;
+  const byConsumerPerDay = {};
+  Object.keys(byConsumer).forEach(k => { byConsumerPerDay[k] = perDay(byConsumer[k]); });
   return {
     reports: inRange.length,
     hrs, meHrs, revs,
+    byConsumer,
+    byConsumerPerDay,
+    consumerTotal: Object.values(byConsumer).reduce((a, v) => a + v, 0),
     distShip: sum(r => r.distanceShip),
     distEngine: sum(r => r.distEngine),
     fuel,
@@ -8969,6 +8997,7 @@ function renderRangeTotals(){
     stat(n(agg.distEngine), 'Distance by engine (nm)'),
     stat(n(agg.revs, 0), 'Total revolutions'),
     ...FUEL_CONS_GROUPS.map(g => stat(n(agg.fuel[g.label], 3), `${g.label} burned (MT)`)),
+    ...Object.keys(agg.byConsumer).map(k => stat(n(agg.byConsumer[k], 3), `${k} (MT)`)),
     stat(n(agg.fuelTotal, 3), 'All fuel (MT)'),
     stat(n(agg.co2, 2), 'CO₂ (MT)'),
     stat(n(agg.cylCons, 0), 'Cylinder oil (L)'),
@@ -8984,7 +9013,9 @@ function renderRangeTotals(){
     stat(n(agg.avgSlip), 'Slip %'),
     stat(n(agg.avgSfoc), 'Actual SFOC (g/kWh)'),
     stat(n(agg.avgSfocRef), 'Reference SFOC (g/kWh)'),
-    stat(n(agg.fuelPerDay, 3), 'Fuel per day (MT)')
+    stat(n(agg.fuelPerDay, 3), 'Fuel per day (MT)'),
+    ...Object.keys(agg.byConsumerPerDay).map(k =>
+      stat(n(agg.byConsumerPerDay[k], 3), `${k} per day (MT)`))
   ].join('');
 
   const head = document.getElementById('rangeRowsHead');
@@ -9065,6 +9096,28 @@ function printRangeTotalsSheet(){
     printRow('Fuel per day', `${n(agg.fuelPerDay, FUEL_DECIMALS)} MT`)
   ].join('');
 
+  /* Fuel split by what burned it. This is its own section rather than eight more rows
+     across Totals and Averages, because the total and the per-day rate for one
+     consumer only mean anything read together — and the sum has to be shown so a
+     reader can see the four cover the whole burn. */
+  const consumerRows = Object.keys(agg.byConsumer).map(k => `<tr>
+      <td class="row-lbl">${escPrint(k)}</td>
+      <td>${n(agg.byConsumer[k], FUEL_DECIMALS)}</td>
+      <td>${n(agg.byConsumerPerDay[k], FUEL_DECIMALS)}</td>
+      <td>${agg.consumerTotal > 0 ? n((agg.byConsumer[k] / agg.consumerTotal) * 100, 1) : '—'}</td>
+    </tr>`).join('');
+  const consumerTable = `
+    <table class="pr-table">
+      <tr><th>Consumer</th><th>Total (MT)</th><th>Per Day (MT)</th><th>Share %</th></tr>
+      ${consumerRows}
+      <tr class="pr-total">
+        <td class="row-lbl"><strong>All consumers</strong></td>
+        <td><strong>${n(agg.consumerTotal, FUEL_DECIMALS)}</strong></td>
+        <td><strong>${n(agg.fuelPerDay, FUEL_DECIMALS)}</strong></td>
+        <td><strong>${agg.consumerTotal > 0 ? '100.0' : '—'}</strong></td>
+      </tr>
+    </table>`;
+
   /* The meta grid above carries the full timestamps; in the table a compact date keeps
      each report on one line, which is what lets a page hold a fortnight of them. */
   const shortWhen = (dt) => dt ? new Date(dt).toLocaleString(undefined,
@@ -9114,6 +9167,7 @@ function printRangeTotalsSheet(){
     <div class="pr-grid">
       <div>${printSection('Totals', totals)}</div>
       <div>${printSection('Averages', averages)}</div>
+      <div class="pr-span2">${printSection('Fuel Consumption By Consumer', consumerTable)}</div>
       <div class="pr-span2">${printSection(
         `Reports In Range — ${escPrint(when(first?.datetime))} to ${escPrint(when(last?.datetime))}`,
         reportsTable)}</div>
@@ -11382,6 +11436,16 @@ function openReportEditor(entryId){
     const liveReport = readReportFormValues();
     printSupplementaryReport(e, isSea, liveReport);
   };
+  /* The editor opens below the category buttons and the whole matching-entries
+     list, so pressing Select changed nothing that was on screen. Centre it — but
+     only when it fits: this panel is usually taller than the window, and centring
+     a tall element puts its heading above the top edge, so the engineer lands in
+     the middle of a form with no title telling them which report they opened. */
+  const editorPanel = document.getElementById('reportEditorPanel');
+  editorPanel.scrollIntoView({
+    behavior:'smooth',
+    block: editorPanel.getBoundingClientRect().height <= window.innerHeight ? 'center' : 'start'
+  });
 }
 
 function fmtP(n, d=2){
@@ -13097,27 +13161,8 @@ function openVoyageSummary(entryId){
      Chief Engineer, which is what their reports already print. */
   const entryCeEl = document.getElementById('vs_entryChEng');
   if (entryCeEl) entryCeEl.value = entry.chEng ?? state.setup.chEng ?? '';
-  // Tank soundings
   renderVsSurvey();
-  const sndBody = document.getElementById('vsSoundingsBody');
-  if (sndBody){
-    const snd = r.soundings || {};
-    const allTanks = [...fuelTankList(), ...lubeTankList(), ...fwTankList()];
-    sndBody.innerHTML = allTanks.map(tk=>{
-      const s = snd[tk.id] || {};
-      return `<tr>
-        <td>${tk.name}</td>
-        <td><input type="number" step="0.1" id="vs_snd_cm_${tk.id}" value="${s.soundingCm??''}"></td>
-        <td><input type="number" step="0.1" id="vs_snd_temp_${tk.id}" value="${s.tempC??''}"></td>
-        <td><input type="number" step="0.01" id="vs_snd_vol_${tk.id}" value="${s.volume??''}"></td>
-      </tr>`;
-    }).join('');
-  }
-  ['vs_scavTemp','vs_scavPress','vs_pumpMark','vs_fuelTemp','vs_meLoTemp','vs_meLoPress','vs_geLoTemp','vs_purifierHrs'].forEach(id=>{
-    const el = document.getElementById(id);
-    const wrap = el?.closest('.field');
-    if (wrap) wrap.style.display = showMeDetail ? '' : 'none';
-  });
+  setVsOthersVisible(showMeDetail);
 
   // Sea + M/E in use: cylinders + turbos; ER others always stay beside
   const cylBox = document.getElementById('vsCylFields');
@@ -13220,10 +13265,6 @@ function openVoyageSummary(entryId){
   }
   document.getElementById('vs_blrPeriod').value = (()=>{ const t = blrVoyageRunHours(); return t==null ? '—' : fmt(t, 2); })();
   document.getElementById('vs_blrCons').value = row.blrCons==null ? '—' : fmtFuel(row.blrCons);
-  /* Total G/E fuel is entered here and mirrors down to D/G under Fuel Cons, so it
-     honours any saved override rather than always showing the metered figure. */
-  const geTotalVal = entry.unitOverride?.GE != null ? entry.unitOverride.GE : row.geCons;
-  document.getElementById('vs_geTotalCons').value = (geTotalVal==null || isNaN(geTotalVal)) ? '' : Number(geTotalVal).toFixed(3);
   document.getElementById('vs_blrKw').value = entry?.report?.perfTable?.BOILER?.avgPower ?? '';
   syncBoilerLoadPctDisplay('vs_blrKw', 'vs_blrLoadPct');
   document.getElementById('vs_incRuntime').value = entryIncineratorRunTime(entry) ?? '';
@@ -13262,12 +13303,6 @@ function openVoyageSummary(entryId){
     syncIncineratorLoadPctDisplay('vs_incKw', 'vs_incLoadPct');
     renderVsPerfTable(entryId);
   };
-  /* Typing the G/E total re-splits it across the running generators and mirrors it
-     into the read-only D/G box under Fuel Cons. */
-  document.getElementById('vs_geTotalCons').oninput = ()=>{
-    if (window.__syncVsGeTotal) window.__syncVsGeTotal();
-    updateVsGeSplit(entryId);
-  };
   renderVsPerfTable(entryId);
 
   const unitOv = entry.unitOverride || {};
@@ -13275,41 +13310,61 @@ function openVoyageSummary(entryId){
   const geConsVal = unitOv.GE!=null ? unitOv.GE : row.geCons;
   const blrConsVal = unitOv.BLR!=null ? unitOv.BLR : row.blrCons;
   const unitVal = v => (v==null || isNaN(v)) ? '' : Number(v).toFixed(3);
-  document.getElementById('vsFuelConsBox').innerHTML = `
-    <div class="field"><label>M/E (MT)</label><input class="pf-input" type="number" step="0.001" id="vs_unit_me" value="${unitVal(meConsVal)}"></div>
-    <div class="field calc"><label>D/G (MT)</label><input class="pf-input" type="text" id="vs_unit_ge" value="${unitVal(geConsVal)}" readonly tabindex="-1" title="Enter the G/E total under Generators, Boiler &amp; Incinerator"></div>
-    <div class="field"><label>Boiler (MT)</label><input class="pf-input" type="number" step="0.001" id="vs_unit_blr" value="${unitVal(blrConsVal)}"></div>
-    <div class="field"><label>TOTAL (MT)</label><input type="text" id="vs_unit_total" value="${fmtFuel((meConsVal||0)+(geConsVal||0)+(blrConsVal||0))}" readonly></div>
-  `;
-  const refreshVsUnitTotal = ()=>{
-    const a = parseFloat(document.getElementById('vs_unit_me')?.value)||0;
-    const b = parseFloat(document.getElementById('vs_unit_ge')?.value)||0;
-    const c = parseFloat(document.getElementById('vs_unit_blr')?.value)||0;
-    const tot = document.getElementById('vs_unit_total');
-    if (tot) tot.value = fmtFuel(a+b+c);
+  /* What the flowmeters actually measured for this period, before any override.
+     Shown beside each typed box so the engineer overriding a figure can see the
+     basis being departed from — previously the metered figure was only reachable
+     by pressing a button that discarded the override to reveal it. */
+  const metered = meterDerivedUnitCons(entry);
+  const basis = v => (v==null || isNaN(v)) ? '—' : Number(v).toFixed(3);
+  const consRow = (label, id, val, meterVal, editable) => `
+    <div class="cons-row">
+      <div class="field${editable ? '' : ' calc'}"><label>${label}</label>
+        <input class="pf-input" type="${editable ? 'number' : 'text'}"${editable ? ' step="0.001"' : ' readonly tabindex="-1"'} id="${id}" value="${unitVal(val)}"></div>
+      <div class="cons-basis" title="Consumption calculated from the flowmeter readings for this period">
+        <span class="cb-lbl">flowmeter</span><span class="cb-val" id="${id}_meter">${basis(meterVal)}</span>
+      </div>
+    </div>`;
+  document.getElementById('vsFuelConsBox').innerHTML =
+    consRow('M/E (MT)',    'vs_unit_me',  meConsVal,  metered.meCons,  true) +
+    consRow('D/G (MT)',    'vs_unit_ge',  geConsVal,  metered.geCons,  true) +
+    consRow('Boiler (MT)', 'vs_unit_blr', blrConsVal, metered.blrCons, true) +
+    `<div class="cons-row">
+      <div class="field"><label>TOTAL (MT)</label><input type="text" id="vs_unit_total" value="${fmtFuel((meConsVal||0)+(geConsVal||0)+(blrConsVal||0))}" readonly></div>
+      <div class="cons-basis"><span class="cb-lbl">flowmeter</span><span class="cb-val" id="vs_unit_total_meter">${
+        basis([metered.meCons, metered.geCons, metered.blrCons].every(v=>v==null) ? null
+          : (metered.meCons||0)+(metered.geCons||0)+(metered.blrCons||0))}</span></div>
+    </div>`;
+  /* An empty box means "use the flowmeter", not "burned nothing" — everything else
+     here reads it that way, so the total has to as well or clearing one unit's
+     override silently drops that unit's fuel out of the reported total. */
+  const unitOrMeter = (id, meterVal) => {
+    const raw = document.getElementById(id)?.value;
+    if (raw !== '' && raw != null){
+      const v = parseFloat(raw);
+      if (!isNaN(v)) return v;
+    }
+    return meterVal || 0;
   };
-  ['vs_unit_me','vs_unit_blr'].forEach(id=>{
+  const refreshVsUnitTotal = ()=>{
+    const tot = document.getElementById('vs_unit_total');
+    if (tot) tot.value = fmtFuel(
+      unitOrMeter('vs_unit_me',  metered.meCons) +
+      unitOrMeter('vs_unit_ge',  metered.geCons) +
+      unitOrMeter('vs_unit_blr', metered.blrCons));
+  };
+  ['vs_unit_me','vs_unit_ge','vs_unit_blr'].forEach(id=>{
     document.getElementById(id)?.addEventListener('input', ()=>{
       refreshVsUnitTotal();
       updateVsRobLiveFromCons();
       /* Boiler Fuel Cons under Generator Voyage Totals reads back the figure typed
          here, so it has to follow every keystroke rather than the saved value. */
       syncVsBoilerConsReadout();
+      /* D/G is typed here now rather than under the generators, so this box is what
+         apportions fuel across the running sets. */
+      if (id === 'vs_unit_ge') updateVsGeSplit(entryId);
     });
   });
   syncVsBoilerConsReadout();
-  /* D/G is driven from the Total G/E Fuel Cons box above, so the figure is entered
-     once beside the generators that burned it and mirrors down here read-only. */
-  window.__syncVsGeTotal = ()=>{
-    const src = document.getElementById('vs_geTotalCons');
-    const dst = document.getElementById('vs_unit_ge');
-    if (!src || !dst) return;
-    const v = src.value==='' ? null : parseFloat(src.value);
-    dst.value = (v==null || isNaN(v)) ? '' : Number(v).toFixed(3);
-    refreshVsUnitTotal();
-    updateVsRobLiveFromCons();
-  };
-  window.__syncVsGeTotal();
 
   fillFwForm('vs', entry, previousEntryFor(entry.id) || effectiveCarryover());
   document.getElementById('vs_fwProduced').value = row.fwProdD==null?'—':fmtRob(row.fwProdD, 'fw');
@@ -13591,11 +13646,11 @@ function syncVsBoilerConsReadout(){
 }
 
 /**
- * G/E fuel to apportion across the generators: the figure typed into Total G/E Fuel
- * Cons when present, otherwise the metered consumption for the period.
+ * G/E fuel to apportion across the generators: the figure typed into the D/G box
+ * under Fuel Cons when present, otherwise the metered consumption for the period.
  */
 function geTotalForSplit(row, inputId){
-  const el = document.getElementById(inputId || 'vs_geTotalCons');
+  const el = inputId ? document.getElementById(inputId) : null;
   if (el && el.value !== ''){
     const v = parseFloat(el.value);
     if (!isNaN(v)) return v;
@@ -13604,7 +13659,7 @@ function geTotalForSplit(row, inputId){
 }
 /* Function declarations, not const arrows — these are called from render paths that
    sit earlier in the file, and a temporal dead zone here would break them. */
-function vsGeTotalForSplit(row){ return geTotalForSplit(row, 'vs_geTotalCons'); }
+function vsGeTotalForSplit(row){ return geTotalForSplit(row, 'vs_unit_ge'); }
 function repGeTotalForSplit(row){ return geTotalForSplit(row, 'rep_geTotalCons'); }
 
 /** Accumulated run hours for generator n across every entry BEFORE the given one. */
@@ -13782,7 +13837,7 @@ function applyVoyageSummaryFormToEntry(entry){
   entry.unitOverride = {
     ME: unitOverrideIfDifferent(num('vs_unit_me'), meterUnits.meCons),
     /* G/E total is typed under Generators, Boiler & Incinerator; D/G below mirrors it. */
-    GE: unitOverrideIfDifferent(num('vs_geTotalCons') ?? num('vs_unit_ge'), meterUnits.geCons),
+    GE: unitOverrideIfDifferent(num('vs_unit_ge'), meterUnits.geCons),
     BLR: unitOverrideIfDifferent(num('vs_unit_blr'), meterUnits.blrCons)
   };
   const lubePairs = {};
@@ -13830,15 +13885,13 @@ function applyVoyageSummaryFormToEntry(entry){
     robOut: num('vs_ecaRobOut'),
     distNm: num('vs_ecaDist')
   };
-  entry.report.soundings = {};
-  [...fuelTankList(), ...lubeTankList(), ...fwTankList()].forEach(tk=>{
-    const soundingCm = num('vs_snd_cm_'+tk.id);
-    const tempC = num('vs_snd_temp_'+tk.id);
-    const volume = num('vs_snd_vol_'+tk.id);
-    if (soundingCm!=null || tempC!=null || volume!=null){
-      entry.report.soundings[tk.id] = { soundingCm, tempC, volume };
-    }
-  });
+  /* Tank soundings are no longer entered on the log: R.O.B. is carried by the
+     flowmeters and corrected by Bunker Survey, and the sounding table duplicated
+     that without feeding anything. Entries recorded before it was removed keep
+     their soundings — leave entry.report.soundings alone rather than rebuilding
+     it from fields that no longer exist, which would erase them on the next save.
+     printSoundingsSection still prints them for those entries and omits the
+     section entirely when there are none. */
   /* vs_blrRuntime is the hours run this report; the cumulative meter is stored
      separately and only pinned when the engineer typed an actual reading. */
   entry.report.blrRunHours = blrRuntime;
@@ -13914,9 +13967,14 @@ function applyVoyageSummaryFormToEntry(entry){
   entry.report.photo = vsPhotoDataUrl || null;
 }
 
-document.getElementById('btnSaveVoyageSummary').addEventListener('click', async ()=>{
+/*
+ * Commit the open summary. Print & Save needs the same commit without the panel
+ * closing under it — printing reads the form, and the close path clears it — so
+ * the close-and-reset half is optional rather than a second copy of this.
+ */
+async function saveOpenVoyageSummary({ close = true } = {}){
   const entry = state.entries.find(e=>e.id===currentVsEntryId);
-  if (!entry) return;
+  if (!entry) return null;
   /* Captured before the form is applied: the cascade below needs to know whether
      the engineer's typed unit consumption actually changed the override. */
   const priorUnitOverride = Object.assign({ ME:null, GE:null, BLR:null }, entry.unitOverride || {});
@@ -13941,6 +13999,7 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
   }
   markPendingSync();
   render();
+  if (!close) return entry;
   closeVoyageSummaryPanel();
   /* Reset next-watch distance/RPM bridges so the last summary does not leak into the new log entry */
   prefillFromLastEntry();
@@ -13951,7 +14010,12 @@ document.getElementById('btnSaveVoyageSummary').addEventListener('click', async 
     else if (id === 'vs_rpm' || id === 'vs_revCounter') el.value = '';
     else el.value = '—';
   });
-  alert('Voyage summary saved — distance, RPM, consumption, freshwater, misc., and machinery data updated. Later entries recalculated.');
+  return entry;
+}
+
+document.getElementById('btnSaveVoyageSummary').addEventListener('click', async ()=>{
+  const saved = await saveOpenVoyageSummary({ close: true });
+  if (saved) alert('Report saved — distance, RPM, consumption, freshwater, misc., and machinery data updated. Later entries recalculated.');
 });
 /* ---------------- print history (Log Entry) ---------------- */
 async function recordPrintHistory(label, entry, htmlContent){
@@ -14330,9 +14394,18 @@ function printVoyageSummary(entryId){
   const fittedHtml = printPortraitSinglePage(sheetHtml);
   recordPrintHistory(noonOp ? 'noon-report' : 'voyage-summary', entry, fittedHtml);
 }
-document.getElementById('btnPrintVoyageSummary').addEventListener('click', ()=>{
+/*
+ * Print used to leave the report unsaved: the sheet was built from the open form,
+ * so it could be signed and filed while the figures on it existed nowhere but that
+ * form — close the panel afterwards and the printed report had no record behind it.
+ * Commit first, then print, so the paper and the entry always agree.
+ */
+document.getElementById('btnPrintVoyageSummary').addEventListener('click', async ()=>{
   if (!currentVsEntryId) return;
-  printVoyageSummary(currentVsEntryId);
+  const id = currentVsEntryId;
+  const saved = await saveOpenVoyageSummary({ close: false });
+  if (!saved) return;
+  printVoyageSummary(id);
 });
 
 document.getElementById('btnCloseVoyageSummary').addEventListener('click', ()=>{
@@ -14408,6 +14481,29 @@ function updateVsTankRobDeltas(){
   document.getElementById(id)?.addEventListener('input', updateVsTankRobDeltas);
 });
 
+/*
+ * Every field in the Others box is an M/E reading, so on a watch with the engine
+ * stopped the box emptied out but its heading and border stayed — a tall blank
+ * panel to scroll past. Hide the box itself once nothing in it is showing, and let
+ * the row reflow around what is left. Kept out of the summary's render pass so
+ * "Show M/E panels anyway" can call it too: the button used to reveal the M/E
+ * panels while these fields stayed hidden, which is not what it says it does.
+ */
+const VS_ME_DETAIL_FIELDS = ['vs_scavTemp','vs_scavPress','vs_pumpMark','vs_fuelTemp',
+  'vs_meLoTemp','vs_meLoPress','vs_geLoTemp','vs_purifierHrs'];
+
+function setVsOthersVisible(show){
+  VS_ME_DETAIL_FIELDS.forEach(id=>{
+    const wrap = document.getElementById(id)?.closest('.field');
+    if (wrap) wrap.style.display = show ? '' : 'none';
+  });
+  const box = document.getElementById('vsOthersBox');
+  if (!box) return;
+  const anyVisible = [...box.querySelectorAll('.field')].some(f => f.style.display !== 'none');
+  box.style.display = anyVisible ? '' : 'none';
+  document.getElementById('vsTurboScavRow')?.classList.toggle('no-others', !anyVisible);
+}
+
 function setVsMePanelsVisible(show){
   const visible = show || vsForceShowMePanels;
   const entry = state.entries.find(e=>e.id===currentVsEntryId);
@@ -14432,7 +14528,9 @@ document.getElementById('btnVsResetEntryChEng')?.addEventListener('click', ()=>{
 document.getElementById('btnVsShowMePanels')?.addEventListener('click', ()=>{
   vsForceShowMePanels = !vsForceShowMePanels;
   const entry = state.entries.find(e=>e.id===currentVsEntryId);
-  setVsMePanelsVisible(entry ? mainEngineInUse(entry, getComputedRow(entry.id)) : false);
+  const running = entry ? mainEngineInUse(entry, getComputedRow(entry.id)) : false;
+  setVsMePanelsVisible(running);
+  setVsOthersVisible((running && entry && canShowMeDetailOp(entry.operation)) || vsForceShowMePanels);
 });
 
 /** Label the summary with the entry it belongs to — critical on stacked mobile layouts. */
@@ -15314,20 +15412,6 @@ function renderEntryConsTable(){
   });
 }
 
-document.getElementById('btnVsResetUnitCons')?.addEventListener('click', ()=>{
-  if (!currentVsEntryId) return;
-  const entry = state.entries.find(e=>e.id===currentVsEntryId);
-  if (!entry) return;
-  entry.unitOverride = { ME:null, GE:null, BLR:null };
-  const row = getComputedRow(currentVsEntryId);
-  const set = (id, val)=>{ const el=document.getElementById(id); if (el) el.value = val==null?'': (typeof val==='number'? Number(val).toFixed(3):val); };
-  set('vs_unit_me', row?.meCons);
-  set('vs_unit_ge', row?.geCons);
-  set('vs_unit_blr', row?.blrCons);
-  const tot = document.getElementById('vs_unit_total');
-  if (tot) tot.value = fmtFuel((row?.meCons||0)+(row?.geCons||0)+(row?.blrCons||0));
-  updateVsRobLiveFromCons();
-});
 document.getElementById('btnVsResetConsOverride')?.addEventListener('click', ()=>{
   if (!currentVsEntryId) return;
   const entry = state.entries.find(e=>e.id===currentVsEntryId);
@@ -15576,6 +15660,12 @@ function prefillFromLastEntry(){
   }
 
   const set = (id, val) => { const el = document.getElementById(id); if (el && val!=null && val!==undefined) el.value = val; };
+  /* A watch almost always repeats the operation before it — a sea passage is a run of
+     NOON REPORTs — so open on the last one rather than on the list's default, which
+     the engineer had to re-pick every single time. setOperationSelectValue adds the
+     option back if the operation is one no longer offered, so an old log's wording
+     survives instead of silently blanking the field. */
+  setOperationSelectValue(document.getElementById('in_operation'), last.operation);
   set('in_condition', last.condition || state.setup.shipCondition);
   set('in_tbn', last.tbn);
   set('in_revCounter', last.revCounter);
@@ -17109,7 +17199,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v155';
+let androidInstallCacheName = 'noon-report-v156';
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',

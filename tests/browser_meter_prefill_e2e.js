@@ -55,6 +55,31 @@ const check = (l, a, e) => { c++; const ok = String(a) === String(e);
   // The boiler field is static markup and always worked — it is the control.
   check('boiler still shows its reading', single.after.blr, single.last.blr);
 
+  console.log('\noperation carries over too');
+  /* A sea passage is a run of the same operation, so opening on the list's default
+     meant re-picking it on every single watch. */
+  const op = await pg.evaluate(() => {
+    switchTab('entry');
+    prefillFromLastEntry();
+    return { field: document.getElementById('in_operation').value,
+             last: sortedEntries().slice(-1)[0].operation };
+  });
+  check('the new entry opens on the last operation', op.field, op.last);
+
+  const retired = await pg.evaluate(() => {
+    /* An operation no longer offered must not blank the field — a logbook keeps
+       what was written. */
+    const last = sortedEntries().slice(-1)[0];
+    const was = last.operation;
+    last.operation = 'HEAVY WEATHER';
+    prefillFromLastEntry();
+    const v = document.getElementById('in_operation').value;
+    last.operation = was;
+    prefillFromLastEntry();
+    return v;
+  });
+  check('a retired operation survives the prefill', retired, 'HEAVY WEATHER');
+
   console.log('\ntyped-but-unsaved readings');
   const typed = await pg.evaluate(() => {
     document.getElementById('me_meter').value = '123456';

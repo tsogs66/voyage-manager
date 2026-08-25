@@ -33,6 +33,13 @@ const CAPTURE = `() => {
 }`;
 
 const SCRAPE = `(html) => {
+  /* The fitter strips and re-assigns pr-table-wide while it densifies the sheet, so
+     the reports list has to be found by the section it lives in, not by that class. */
+  const sectionTable = (root, name) => [...root.querySelectorAll('.pr-section')]
+    .find(s => s.querySelector('.pr-section-title')?.textContent.trim().startsWith(name))
+    ?.querySelector('table') || null;
+  const listTable = (root) => sectionTable(root, 'Reports In Range');
+  const consumerTable = (root) => sectionTable(root, 'Fuel Consumption By Consumer');
   const d = document.createElement('div');
   d.innerHTML = html;
   const rows = {};
@@ -49,8 +56,12 @@ const SCRAPE = `(html) => {
     kpis: [...d.querySelectorAll('.pr-kpi-lbl')].map(k => k.textContent.trim()),
     sections: [...d.querySelectorAll('.pr-section-title')].map(s => s.textContent.trim().split(' —')[0]),
     rows,
-    listRows: d.querySelectorAll('.pr-table tr').length,
-    totalRowLabel: d.querySelector('.pr-table tr.pr-total .row-lbl')?.textContent.trim(),
+    listRows: listTable(d) ? listTable(d).querySelectorAll('tr').length : 0,
+    totalRowLabel: listTable(d)?.querySelector('tr.pr-total .row-lbl')?.textContent.trim(),
+    consumerRows: consumerTable(d)
+      ? [...consumerTable(d).querySelectorAll('tr')].slice(1).map(tr =>
+          [...tr.querySelectorAll('td')].map(td => td.textContent.trim()))
+      : null,
     note: d.querySelector('.pr-note')?.textContent.trim() || null,
     hasSignature: !!d.querySelector('.pr-sign'),
     hasFooter: !!d.querySelector('.pr-foot')
@@ -115,9 +126,25 @@ const SCRAPE = `(html) => {
   check('meta names the vessel, voyage and both ends of the range',
     s.meta, ['Vessel', 'Voyage No.', 'From Report', 'To Report']);
   check('a KPI strip leads', s.kpis, ['Reports', 'Period Hrs', 'Distance (nm)', 'Avg Speed (kn)', 'All Fuel (MT)']);
-  check('totals, averages and the reports behind them',
-    s.sections, ['Totals', 'Averages', 'Reports In Range']);
+  check('totals, averages, the consumer split and the reports behind them',
+    s.sections, ['Totals', 'Averages', 'Fuel Consumption By Consumer', 'Reports In Range']);
   check('it is signed', s.hasSignature, true);
+
+  /* Fuel split by what burned it. The four consumers have to account for the whole
+     burn, or the sheet contradicts the All Fuel figure printed beside them — so the
+     check is that they add up to the printed total, not that each is some value. */
+  const consumers = s.consumerRows || [];
+  check('one row per consumer plus the sum', consumers.length, 5);
+  check('the consumers named', consumers.slice(0, 4).map(r => r[0]),
+    ['Main Engine', 'Generator', 'Boiler', 'Other']);
+  const mt = (x) => parseFloat(String(x).replace(/,/g, '')) || 0;
+  const consumerSum = consumers.slice(0, 4).reduce((a, r) => a + mt(r[1]), 0);
+  check('they add up to the printed total', consumerSum.toFixed(3), mt(consumers[4][1]).toFixed(3));
+  check('and that total is the All Fuel figure', mt(consumers[4][1]).toFixed(3),
+    mt(s.rows['Totals/All fuel']).toFixed(3));
+  const shareSum = consumers.slice(0, 4).reduce((a, r) => a + mt(r[3]), 0);
+  check('the shares come to 100%', Math.round(shareSum), 100);
+  check('each consumer carries a per-day rate', consumers.slice(0, 4).every(r => /^[\d.]+$/.test(r[2])), true);
   check('and carries the printed-on footer', s.hasFooter, true);
 
   console.log('\nthe figures are the ones the tab shows');
@@ -192,9 +219,13 @@ const SCRAPE = `(html) => {
     try { printRangeTotalsSheet(); } finally { window.printPortraitSinglePage = real; }
     const d = document.createElement('div');
     d.innerHTML = out;
+    /* Same reason as SCRAPE: find the list by its section, not by pr-table-wide. */
+    const list2 = [...d.querySelectorAll('.pr-section')]
+      .find(s => s.querySelector('.pr-section-title')?.textContent.trim().startsWith('Reports In Range'))
+      ?.querySelector('table');
     return {
       note: d.querySelector('.pr-note')?.textContent.trim() || null,
-      listRows: d.querySelectorAll('.pr-table tr').length,
+      listRows: list2 ? list2.querySelectorAll('tr').length : 0,
       reports: d.querySelector('.pr-kpi-val')?.textContent.trim()
     };
   });
