@@ -13,8 +13,7 @@
 <link rel="icon" type="image/png" href="icons/logoBG.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="fonts/fonts.css" rel="stylesheet">
 <script src="eorb.js"></script>
 <script src="ship_time.js"></script>
 <script>
@@ -11482,7 +11481,7 @@ function sizePrintTables(root){
 function buildPrintDocumentHtml(bodyInner){
   const css = printDocumentCss();
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Print</title>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="fonts/fonts.css" rel="stylesheet">
 <style>
 @page{ size: A4 landscape; margin: 0; }
 html, body{
@@ -11604,7 +11603,7 @@ function printSinglePage(sheetHtml){
 function buildPrintDocumentHtmlPortrait(bodyInner){
   const css = printDocumentCss();
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Print</title>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="fonts/fonts.css" rel="stylesheet">
 <style>
 @page{ size: A4 portrait; margin: 0; }
 html, body{
@@ -17209,7 +17208,26 @@ let androidInstallAssets = [
   './icons/logoBG.png',
   './icons/apple-touch-icon.png',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  './fonts/IBMPlexMono-400-latin-ext.woff2',
+  './fonts/IBMPlexMono-400-latin.woff2',
+  './fonts/IBMPlexMono-500-latin-ext.woff2',
+  './fonts/IBMPlexMono-500-latin.woff2',
+  './fonts/IBMPlexMono-600-latin-ext.woff2',
+  './fonts/IBMPlexMono-600-latin.woff2',
+  './fonts/Inter-400-latin-ext.woff2',
+  './fonts/Inter-400-latin.woff2',
+  './fonts/Inter-500-latin-ext.woff2',
+  './fonts/Inter-500-latin.woff2',
+  './fonts/Inter-600-latin-ext.woff2',
+  './fonts/Inter-600-latin.woff2',
+  './fonts/Oswald-500-latin-ext.woff2',
+  './fonts/Oswald-500-latin.woff2',
+  './fonts/Oswald-600-latin-ext.woff2',
+  './fonts/Oswald-600-latin.woff2',
+  './fonts/Oswald-700-latin-ext.woff2',
+  './fonts/Oswald-700-latin.woff2',
+  './fonts/fonts.css'
 ];
 
 function isStandalonePwa(){

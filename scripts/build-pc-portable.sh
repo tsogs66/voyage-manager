@@ -6,12 +6,22 @@ OUT="${1:-$ROOT/dist/NoonReport-PC}"
 ZIP="${2:-$ROOT/dist/NoonReport-PC.zip}"
 
 rm -rf "$OUT"
-mkdir -p "$OUT/icons" "$(dirname "$ZIP")"
+mkdir -p "$OUT" "$(dirname "$ZIP")"
 
-cp "$ROOT/voyage_manager.html" "$OUT/"
-cp "$ROOT/sw.js" "$OUT/"
-cp "$ROOT/manifest.webmanifest" "$OUT/"
-cp -r "$ROOT/icons/." "$OUT/icons/"
+# Copy from the shared asset list rather than naming files here. This block used to
+# be hand-maintained and had gone stale: eorb.js and ship_time.js were never copied,
+# so every portable download 404'd on both and ran without the e-ORB module or the
+# ship-time logic.
+while IFS= read -r f; do
+  [[ -n "$f" ]] || continue
+  cp "$ROOT/$f" "$OUT/"
+done < <(python3 -c "import json;print('\n'.join(json.load(open('$ROOT/scripts/app-assets.json'))['files']))")
+while IFS= read -r d; do
+  [[ -n "$d" ]] || continue
+  mkdir -p "$OUT/$d"
+  cp -r "$ROOT/$d/." "$OUT/$d/"
+done < <(python3 -c "import json;print('\n'.join(json.load(open('$ROOT/scripts/app-assets.json'))['dirs']))")
+
 cp "$ROOT/install/pc/Start-NoonReport.ps1" "$OUT/"
 cp "$ROOT/install/pc/Start-NoonReport.bat" "$OUT/Start Noon Report.bat"
 cp "$ROOT/install/pc/Update-NoonReport.ps1" "$OUT/"

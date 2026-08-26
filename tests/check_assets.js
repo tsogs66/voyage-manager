@@ -102,6 +102,39 @@ for (const rel of precache || []) {
   check('no page is offered twice on the phone', barItems.length + moreItems.length - 1, reachable.size);
 }
 
+/* Everything a package has to ship.
+   The PC portable build hand-listed its files and had gone stale: it copied
+   voyage_manager.html without eorb.js or ship_time.js, so every download 404'd on
+   both and ran without the e-ORB module or the ship-time logic. The list is shared
+   now; this asserts it stays honest about what the page actually loads. */
+{
+  const assets = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'app-assets.json'), 'utf8'));
+  const html = fs.readFileSync(path.join(REPO_ROOT, 'voyage_manager.html'), 'utf8');
+
+  const scripts = [...html.matchAll(/<script[^>]+src="\.?\/?([^"]+)"/g)].map(m => m[1]);
+  const missing = scripts.filter(f => !assets.files.includes(f));
+  check('every script the page loads is in the asset list', missing, []);
+
+  const gone = assets.files.filter(f => !fs.existsSync(path.join(REPO_ROOT, f)));
+  check('every file in the asset list exists', gone, []);
+  const goneDirs = assets.dirs.filter(d => !fs.existsSync(path.join(REPO_ROOT, d)));
+  check('every folder in the asset list exists', goneDirs, []);
+
+  // The service worker precaches for offline use, so anything it names has to ship too.
+  const swSrc = fs.readFileSync(path.join(REPO_ROOT, 'sw.js'), 'utf8');
+  const precached = [...swSrc.matchAll(/'\.\/([^']+)'/g)].map(m => m[1])
+    .filter(f => !f.endsWith('/') && f !== 'index.html');
+  const unshipped = precached.filter(f =>
+    !assets.files.includes(f) && !assets.dirs.some(d => f.startsWith(d + '/')));
+  check('every file the service worker precaches is in the asset list', unshipped, []);
+
+  // The three packaging paths must read the list rather than name files themselves.
+  const readsList = (rel) => fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8').includes('app-assets.json');
+  check('the www sync reads the shared list', readsList('scripts/sync-www.js'), true);
+  check('the portable build reads the shared list', readsList('scripts/build-pc-portable.sh'), true);
+  check('the Windows installer reads the shared list', readsList('scripts/build-windows-installer.sh'), true);
+}
+
 console.log();
 if (failures.length) {
   console.log(`FAILED — ${failures.length} of ${checked} checks`);

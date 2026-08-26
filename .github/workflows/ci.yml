@@ -92,7 +92,7 @@ jobs:
       # These run as root on a Proxmox host and are piped straight from curl to bash,
       # so a quoting slip is expensive and never seen in review.
       - name: Shellcheck
-        run: shellcheck install/proxmox-install.sh install/proxmox-update.sh scripts/build-pc-portable.sh tests/test_install_quoting.sh tests/test_nginx_upload_limit.sh
+        run: shellcheck install/proxmox-install.sh install/proxmox-update.sh scripts/build-pc-portable.sh scripts/build-windows-installer.sh scripts/fetch-fonts.sh tests/test_install_quoting.sh tests/test_nginx_upload_limit.sh
 
       # A token with a space or a % used to reach server.py truncated, leaving it on
       # its default token — rejecting the very token the installer printed. Checked

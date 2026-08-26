@@ -30,12 +30,14 @@ function copyDir(src, dest) {
 rmrf(www);
 fs.mkdirSync(www, { recursive: true });
 
-copyFile(path.join(root, 'voyage_manager.html'), path.join(www, 'index.html'));
-copyFile(path.join(root, 'voyage_manager.html'), path.join(www, 'voyage_manager.html'));
-copyFile(path.join(root, 'eorb.js'), path.join(www, 'eorb.js'));
-copyFile(path.join(root, 'ship_time.js'), path.join(www, 'ship_time.js'));
-copyFile(path.join(root, 'sw.js'), path.join(www, 'sw.js'));
-copyFile(path.join(root, 'manifest.webmanifest'), path.join(www, 'manifest.webmanifest'));
-copyDir(path.join(root, 'icons'), path.join(www, 'icons'));
+/* One list, shared with the portable zip and the Windows installer, so a file added
+   to the app cannot reach one package and miss another. */
+const assets = JSON.parse(fs.readFileSync(path.join(__dirname, 'app-assets.json'), 'utf8'));
 
-console.log('www/ synced for Android build');
+assets.files.forEach(f => copyFile(path.join(root, f), path.join(www, f)));
+assets.dirs.forEach(d => copyDir(path.join(root, d), path.join(www, d)));
+/* Capacitor loads index.html; the app is also reachable under its own name so a
+   link or bookmark written against the web build still resolves inside the APK. */
+copyFile(path.join(root, 'voyage_manager.html'), path.join(www, 'index.html'));
+
+console.log(`www/ synced for Android build — ${assets.files.length + 1} files, ${assets.dirs.length} folder(s)`);
