@@ -8,7 +8,26 @@ const PRECACHE = [
   './icons/logoBG.png',
   './icons/apple-touch-icon.png',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  './fonts/IBMPlexMono-400-latin-ext.woff2',
+  './fonts/IBMPlexMono-400-latin.woff2',
+  './fonts/IBMPlexMono-500-latin-ext.woff2',
+  './fonts/IBMPlexMono-500-latin.woff2',
+  './fonts/IBMPlexMono-600-latin-ext.woff2',
+  './fonts/IBMPlexMono-600-latin.woff2',
+  './fonts/Inter-400-latin-ext.woff2',
+  './fonts/Inter-400-latin.woff2',
+  './fonts/Inter-500-latin-ext.woff2',
+  './fonts/Inter-500-latin.woff2',
+  './fonts/Inter-600-latin-ext.woff2',
+  './fonts/Inter-600-latin.woff2',
+  './fonts/Oswald-500-latin-ext.woff2',
+  './fonts/Oswald-500-latin.woff2',
+  './fonts/Oswald-600-latin-ext.woff2',
+  './fonts/Oswald-600-latin.woff2',
+  './fonts/Oswald-700-latin-ext.woff2',
+  './fonts/Oswald-700-latin.woff2',
+  './fonts/fonts.css'
 ];
 
 async function notifyClients(message){

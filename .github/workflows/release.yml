@@ -1,0 +1,152 @@
+name: Packages
+
+# Builds the two things a ship actually installs: a Windows .exe and an Android
+# APK. Both run with no internet connection; server sync stays optional and is
+# switched on inside the app.
+#
+# The Android SDK is the reason this lives in CI rather than in a local script —
+# it is a ~1 GB download that a dev machine may not have, and GitHub's runners
+# come with it. The Windows installer is built here too so both artifacts of a
+# release come off the same commit.
+
+on:
+  push:
+    tags: ['v*']
+    branches: [main]
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'scripts/**'
+      - 'install/windows/**'
+      - 'fonts/**'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-installer:
+    name: Windows installer (.exe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # makensis cross-compiles a real Windows installer from Linux, so no Windows
+      # runner is needed for a package that only ever runs on Windows.
+      - name: Install NSIS
+        run: sudo apt-get update -qq && sudo apt-get install -y nsis
+
+      - name: Build installer
+        run: bash scripts/build-windows-installer.sh dist
+
+      # A package that is missing a file still builds — the last one shipped
+      # without eorb.js or ship_time.js and 404'd on both at sea. Open the
+      # installer back up and check the payload before publishing it.
+      - name: Verify the payload is complete
+        run: |
+          sudo apt-get install -y p7zip-full
+          EXE="$(ls dist/NoonReport-Setup-*.exe)"
+          7z x -o/tmp/payload "$EXE" > /dev/null
+          missing=0
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            if [ ! -f "/tmp/payload/$f" ]; then echo "MISSING: $f"; missing=1; fi
+          done < <(python3 -c "import json;print('\n'.join(json.load(open('scripts/app-assets.json'))['files']))")
+          while IFS= read -r d; do
+            [ -n "$d" ] || continue
+            if [ ! -d "/tmp/payload/$d" ]; then echo "MISSING DIR: $d"; missing=1; fi
+          done < <(python3 -c "import json;print('\n'.join(json.load(open('scripts/app-assets.json'))['dirs']))")
+          if [ ! -f "/tmp/payload/Start Noon Report.bat" ]; then echo "MISSING: launcher"; missing=1; fi
+          # The app must not reach the internet to render. A stylesheet link to a
+          # remote host is the failure this check exists for.
+          if grep -q "fonts.googleapis.com" /tmp/payload/voyage_manager.html; then
+            echo "MISSING: fonts are still loaded from the internet"; missing=1
+          fi
+          [ "$missing" = 0 ] && echo "Payload complete." || exit 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/NoonReport-Setup-*.exe
+          if-no-files-found: error
+
+  android-apk:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Copies the app into www/ from the shared asset list, then Capacitor packs
+      # www/ into the APK's assets. Everything the app needs is inside the APK,
+      # which is what makes it work with no connection.
+      - name: Sync the web app into the Android project
+        run: |
+          npm run www:sync
+          npx cap sync android
+
+      - name: Build APK
+        # Debug signing: the APK is sideloaded onto the fleet's own tablets, not
+        # published to Play, and a debug-signed build installs on any device with
+        # no keystore to manage. To ship a release-signed build instead, add a
+        # keystore to the repository secrets and swap this for assembleRelease
+        # with a signingConfig.
+        run: cd android && ./gradlew --no-daemon assembleDebug
+
+      - name: Name it after the build it carries
+        run: |
+          V="$(sed -n "s/^const CACHE = 'noon-report-v\([0-9]\+\)';.*/\1/p" sw.js)"
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/NoonReport-1.0.${V}.apk"
+          ls -la dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: dist/NoonReport-*.apk
+          if-no-files-found: error
+
+  release:
+    name: Attach to the release
+    needs: [windows-installer, android-apk]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/windows-installer/*.exe
+            artifacts/android-apk/*.apk
+          body: |
+            Install on a PC or a tablet. Both run with no internet connection.
+
+            **Windows** — download the `.exe` and run it. It installs for the
+            current user, so no administrator rights are needed, and puts
+            "Noon Report" on the Desktop and in the Start menu.
+
+            **Android phone / tablet** — download the `.apk` and open it. Allow
+            installing from this source if the device asks.
+
+            Server sync is optional and stays available: switch it on in the app
+            under Setup → Server Sync.

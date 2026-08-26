@@ -1,5 +1,21 @@
 apply plugin: 'com.android.application'
 
+/*
+ * Version the APK from the service-worker cache in sw.js, the one number already
+ * bumped on every release. It used to be pinned at versionCode 1 / versionName
+ * "1.0", so every build a ship received looked like the same version as the one it
+ * replaced: nothing on the About screen or in Android's app info could tell an
+ * engineer which build was actually installed, and a sideloaded update gave no
+ * signal it had changed anything. The Windows installer names itself from the same
+ * number, so a PC and a tablet reporting "1.0.156" are genuinely the same build.
+ */
+def appCacheVersion = {
+    def sw = file("$rootDir/../sw.js")
+    if (!sw.exists()) return 1
+    def m = (sw.text =~ /const CACHE = 'noon-report-v(\d+)'/)
+    return m ? m[0][1].toInteger() : 1
+}()
+
 android {
     namespace "com.noonreport.voyagemanager"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +23,8 @@ android {
         applicationId "com.noonreport.voyagemanager"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appCacheVersion
+        versionName "1.0.${appCacheVersion}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
