@@ -9,7 +9,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUT_DIR="${1:-$ROOT/dist}"
+# Resolve the output directory to an absolute path before anything uses it.
+# NSIS resolves a relative OutFile against the .nsi file's own directory rather
+# than the working directory, so passing a relative "dist" here made makensis try
+# to write into install/windows/dist and fail with "Can't open output file" —
+# while the default (an absolute path) worked, which is what hid it.
+OUT_DIR_ARG="${1:-$ROOT/dist}"
+mkdir -p "$OUT_DIR_ARG"
+OUT_DIR="$(cd "$OUT_DIR_ARG" && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
