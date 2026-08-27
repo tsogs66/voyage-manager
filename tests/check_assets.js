@@ -131,8 +131,9 @@ for (const rel of precache || []) {
   // The three packaging paths must read the list rather than name files themselves.
   const readsList = (rel) => fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8').includes('app-assets.json');
   check('the www sync reads the shared list', readsList('scripts/sync-www.js'), true);
-  check('the portable build reads the shared list', readsList('scripts/build-pc-portable.sh'), true);
+  check('the portable zip reads the shared list', readsList('scripts/build-pc-portable.sh'), true);
   check('the Windows installer reads the shared list', readsList('scripts/build-windows-installer.sh'), true);
+  check('the Windows portable exe reads the shared list', readsList('scripts/build-windows-portable.sh'), true);
 }
 
 /* The author credit.
@@ -210,6 +211,14 @@ for (const rel of precache || []) {
   const nsiName = fs.readFileSync(path.join(REPO_ROOT, 'install', 'windows', 'noonreport.nsi'), 'utf8');
   check('the Windows installer name matches',
     nsiName.includes('!define APP_NAME     "' + appName + '"'), true);
+
+  const portableNsi = fs.readFileSync(path.join(REPO_ROOT, 'install', 'windows', 'portable.nsi'), 'utf8');
+  check('the portable exe name matches',
+    portableNsi.includes('!define APP_NAME      "' + appName + '"'), true);
+  check('the portable exe unpacks beside itself', portableNsi.includes('InstallDir "$EXEDIR\\VoyageChief"'), true);
+  check('the portable exe does not write uninstall registry', portableNsi.includes('WriteRegStr'), false);
+  check('the portable exe does not create a Desktop shortcut', portableNsi.includes('$DESKTOP'), false);
+  check('the portable exe has no uninstaller', portableNsi.includes('WriteUninstaller'), false);
 
   /* Each rename leaves the previous version's shortcuts and launcher on the PC under
      their old names, where nothing this installer writes will overwrite them — several

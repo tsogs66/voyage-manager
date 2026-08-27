@@ -75,6 +75,50 @@ jobs:
           path: dist/VoyageChief-Setup-*.exe
           if-no-files-found: error
 
+  windows-portable:
+    name: Windows portable (.exe for USB)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NSIS
+        run: sudo apt-get update -qq && sudo apt-get install -y nsis
+
+      - name: Build portable package
+        run: bash scripts/build-windows-portable.sh dist
+
+      - name: Verify the portable payload is complete
+        run: |
+          sudo apt-get install -y p7zip-full
+          EXE="$(ls dist/VoyageChief-Portable-*.exe)"
+          7z x -o/tmp/portable "$EXE" > /dev/null
+          missing=0
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            if [ ! -f "/tmp/portable/$f" ]; then echo "MISSING: $f"; missing=1; fi
+          done < <(python3 -c "import json;print('\n'.join(json.load(open('scripts/app-assets.json'))['files']))")
+          while IFS= read -r d; do
+            [ -n "$d" ] || continue
+            if [ ! -d "/tmp/portable/$d" ]; then echo "MISSING DIR: $d"; missing=1; fi
+          done < <(python3 -c "import json;print('\n'.join(json.load(open('scripts/app-assets.json'))['dirs']))")
+          if [ ! -f "/tmp/portable/Start Voyage Chief.bat" ]; then echo "MISSING: launcher"; missing=1; fi
+          if grep -q "fonts.googleapis.com" /tmp/portable/voyage_manager.html; then
+            echo "MISSING: fonts are still loaded from the internet"; missing=1
+          fi
+          if grep -q WriteUninstaller install/windows/portable.nsi; then
+            echo "portable.nsi must not write an uninstaller"; missing=1
+          fi
+          if grep -q WriteRegStr install/windows/portable.nsi; then
+            echo "portable.nsi must not write the registry"; missing=1
+          fi
+          [ "$missing" = 0 ] && echo "Portable payload complete." || exit 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: dist/VoyageChief-Portable-*.exe
+          if-no-files-found: error
+
   android-apk:
     name: Android APK
     runs-on: ubuntu-latest
@@ -126,7 +170,7 @@ jobs:
 
   release:
     name: Attach to the release
-    needs: [windows-installer, android-apk]
+    needs: [windows-installer, windows-portable, android-apk]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -137,13 +181,23 @@ jobs:
         with:
           files: |
             artifacts/windows-installer/*.exe
+            artifacts/windows-portable/*.exe
             artifacts/android-apk/*.apk
           body: |
             Install on a PC or a tablet. Both run with no internet connection.
 
-            **Windows** — download the `.exe` and run it. It installs for the
-            current user, so no administrator rights are needed, and puts
-            "Voyage Chief" on the Desktop and in the Start menu.
+            **Windows (install on this PC)** — download `VoyageChief-Setup-*.exe`
+            and run it. It installs for the current user, so no administrator
+            rights are needed, and puts "Voyage Chief" on the Desktop and in
+            the Start menu.
+
+            **Windows (USB / no install)** — download `VoyageChief-Portable-*.exe`,
+            copy it onto a USB stick, and double-click it. It unpacks a
+            VoyageChief folder next to the .exe (on the stick) and starts from
+            there. No install, no registry, no administrator rights. Voyage
+            data stays in the browser on the PC that is running it — take a
+            Database Backup onto the stick if the records have to travel with
+            the files.
 
             **Android phone / tablet** — download the `.apk` and open it. Allow
             installing from this source if the device asks.
