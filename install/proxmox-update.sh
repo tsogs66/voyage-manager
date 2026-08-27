@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Voyage Report / Voyage Manager — pull latest from GitHub and restart services
+# Voyage Chief — pull latest from GitHub and restart services
 #
 # From Proxmox host (auto-finds CT from /root/voyage-manager-ct*.env if VOYAGE_CTID unset):
 #   curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-update.sh | bash
@@ -139,7 +139,7 @@ update_in_container(){
   cat <<EOF
 
 ================================================================================
- Voyage Report updated
+ Voyage Chief updated
 ================================================================================
 
  Commit:       $commit
@@ -165,7 +165,7 @@ update_via_proxmox(){
 
   pct status "$ctid" >/dev/null 2>&1 || die "Container CT $ctid not found"
 
-  log "Updating Voyage Report inside CT $ctid..."
+  log "Updating Voyage Chief inside CT $ctid..."
   pct exec "$ctid" -- env \
     VOYAGE_IN_CONTAINER=1 \
     VOYAGE_REPO_URL="$REPO_URL" \

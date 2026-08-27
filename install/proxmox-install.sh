@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Voyage Report / Voyage Manager — Proxmox host installer
+# Voyage Chief — Proxmox host installer
 # Creates a new LXC container and installs the app inside it.
 #
 # Run on the Proxmox host (as root):
@@ -239,7 +239,7 @@ NGINX
   log "Creating sync server service..."
   cat > /etc/systemd/system/voyage-sync.service <<UNIT
 [Unit]
-Description=Voyage Report Sync Server
+Description=Voyage Chief Sync Server
 After=network.target
 
 [Service]
@@ -273,7 +273,7 @@ UNIT
   cat <<EOF
 
 ================================================================================
- Voyage Report installed inside container
+ Voyage Chief installed inside container
 ================================================================================
 
  Web app:      http://${ip:-localhost}:${WEB_PORT}/voyage_manager.html
@@ -338,7 +338,7 @@ provision_lxc_on_proxmox(){
   ct_ip="$(wait_for_container_network "$ctid")"
 
   cat > "$creds_file" <<CREDS
-# Voyage Report — CT ${ctid} (${VOYAGE_HOSTNAME})
+# Voyage Chief — CT ${ctid} (${VOYAGE_HOSTNAME})
 VOYAGE_CTID=${ctid}
 VOYAGE_WEB_URL=http://${ct_ip:-<container-ip>}:${WEB_PORT}/voyage_manager.html
 VOYAGE_SYNC_URL=http://${ct_ip:-<container-ip>}:${WEB_PORT}
@@ -349,7 +349,7 @@ CREDS
   cat <<EOF
 
 ================================================================================
- Proxmox LXC created and Voyage Report installed
+ Proxmox LXC created and Voyage Chief installed
 ================================================================================
 
  Container:    CT ${ctid} (${VOYAGE_HOSTNAME})

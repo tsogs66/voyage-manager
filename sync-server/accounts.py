@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Central account database for Voyage Report / Voyage Manager.
+"""Central account database for Voyage Chief.
 
 One SQLite file beside the voyage JSON holds every login and every vessel:
 

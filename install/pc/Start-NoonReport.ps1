@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-  Start Voyage Report on this PC via a local http://127.0.0.1 server (offline-capable).
+  Start Voyage Chief on this PC via a local http://127.0.0.1 server (offline-capable).
 .DESCRIPTION
   Serves the app files from this folder (or the installed App folder) and opens the browser.
   Voyage data stays in the browser IndexedDB on this PC - same behavior every launch.
@@ -104,7 +104,7 @@ try {
 
 $homeUrl = $prefix + "voyage_manager.html"
 Write-Host ""
-Write-Host "  Voyage Report - local PC server" -ForegroundColor Yellow
+Write-Host "  Voyage Chief - local PC server" -ForegroundColor Yellow
 Write-Host ("  Folder : {0}" -f $root)
 Write-Host ("  URL    : {0}" -f $homeUrl)
 Write-Host "  Press Ctrl+C to stop." -ForegroundColor DarkGray

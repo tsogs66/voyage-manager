@@ -1,4 +1,4 @@
-Voyage Report — PC local install
+Voyage Chief — PC local install
 ================================
 
 One-click install (Windows PowerShell):
@@ -8,7 +8,7 @@ One-click install (Windows PowerShell):
 Or download the portable ZIP from GitHub Releases / build with scripts/build-pc-portable.sh,
 unzip, then double-click:
 
-  Start Voyage Report.bat
+  Start Voyage Chief.bat
 
 How it works
 ------------

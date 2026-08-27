@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# Voyage Report - one-click PC installer (local http://127.0.0.1, not the website).
+# Voyage Chief - one-click PC installer (local http://127.0.0.1, not the website).
 #
 # Recommended (Windows PowerShell):
 #   $f="$env:TEMP\noon-install-pc.ps1"; iwr https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 -UseBasicParsing -OutFile $f; powershell -NoProfile -ExecutionPolicy Bypass -File $f
@@ -32,7 +32,7 @@ $ZipUrl = "https://github.com/$Repo/archive/refs/heads/$Branch.zip"
 $RawBase = "https://raw.githubusercontent.com/$Repo/$Branch/install/pc"
 
 Write-Host ""
-Write-Host "  Voyage Report - PC installer" -ForegroundColor Yellow
+Write-Host "  Voyage Chief - PC installer" -ForegroundColor Yellow
 Write-Host "  Install folder: $InstallRoot"
 Write-Host ""
 
@@ -135,7 +135,7 @@ try {
     $sc.TargetPath = $TargetBat
     $sc.WorkingDirectory = $WorkDir
     $sc.WindowStyle = 1
-    $sc.Description = "Voyage Report - local PC (offline-capable)"
+    $sc.Description = "Voyage Chief - local PC (offline-capable)"
     $sc.IconLocation = "$env:SystemRoot\System32\shell32.dll,13"
     $sc.Save()
   }
@@ -144,10 +144,10 @@ try {
   if (Test-Path -LiteralPath $bat) {
     foreach ($desktop in (Get-DesktopDirs)) {
       try {
-        $shortcutPath = Join-Path $desktop "Voyage Report.lnk"
+        $shortcutPath = Join-Path $desktop "Voyage Chief.lnk"
         New-NoonReportShortcut -LinkPath $shortcutPath -TargetBat $bat -WorkDir $AppDir
         # Also drop a plain .bat launcher on Desktop (works if .lnk is blocked)
-        $deskBat = Join-Path $desktop "Voyage Report.bat"
+        $deskBat = Join-Path $desktop "Voyage Chief.bat"
         $deskBatBody = @"
 @echo off
 start "" /D "$AppDir" powershell -NoProfile -ExecutionPolicy Bypass -File "$startPs1Path" -AppDir "$AppDir"
@@ -168,7 +168,7 @@ start "" /D "$AppDir" powershell -NoProfile -ExecutionPolicy Bypass -File "$star
       if (-not (Test-Path -LiteralPath $startMenu)) {
         New-Item -ItemType Directory -Force -Path $startMenu | Out-Null
       }
-      $smLink = Join-Path $startMenu "Voyage Report.lnk"
+      $smLink = Join-Path $startMenu "Voyage Chief.lnk"
       New-NoonReportShortcut -LinkPath $smLink -TargetBat $bat -WorkDir $AppDir
       Write-Host "Start Menu shortcut: $smLink" -ForegroundColor Green
       $shortcutMade = $true
@@ -185,7 +185,7 @@ start "" /D "$AppDir" powershell -NoProfile -ExecutionPolicy Bypass -File "$star
   Write-Host ""
   Write-Host "Installed successfully." -ForegroundColor Green
   Write-Host "  App files : $AppDir"
-  Write-Host "  Start     : Desktop 'Voyage Report' shortcut, or:"
+  Write-Host "  Start     : Desktop 'Voyage Chief' shortcut, or:"
   Write-Host "              $bat"
   Write-Host "  Update    : $BinDir\Update-NoonReport.bat"
   Write-Host ""
@@ -194,7 +194,7 @@ start "" /D "$AppDir" powershell -NoProfile -ExecutionPolicy Bypass -File "$star
 
   $startPs1 = Join-Path $BinDir "Start-NoonReport.ps1"
   if ((-not $NoStart) -and (Test-Path -LiteralPath $startPs1)) {
-    Write-Host "Starting Voyage Report..."
+    Write-Host "Starting Voyage Chief..."
     Start-Process -FilePath "powershell.exe" -ArgumentList @(
       "-NoProfile",
       "-ExecutionPolicy", "Bypass",

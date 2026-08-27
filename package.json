@@ -1,7 +1,7 @@
 {
   "name": "voyage-manager",
   "version": "1.0.0",
-  "description": "Voyage Report \u2014 Voyage Manager (PWA + Android)",
+  "description": "Voyage Chief \u2014 engine log and voyage reporting (PWA + Android)",
   "private": true,
   "scripts": {
     "test": "node tests/check_js_syntax.js && node tests/check_assets.js && node tests/test_lube_total.js && node tests/test_ge_load_band.js && node tests/test_rob_survey.js && node tests/test_eorb.js && node tests/test_clock_change.js && node tests/test_voyage_init_tz.js && node tests/test_shiptime_compat.js && node tests/test_ge_summary_hours.js && node tests/test_flow_cons.js && node tests/test_noon_print.js && node tests/test_device_enrollment.js && node tests/test_login_theme.js && python3 tests/test_sync_auth.py && python3 tests/test_accounts.py && bash tests/test_install_quoting.sh && bash tests/test_nginx_upload_limit.sh",

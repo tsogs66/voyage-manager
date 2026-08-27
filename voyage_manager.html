@@ -1,19 +1,19 @@
 <!DOCTYPE html>
 <!--
-  Voyage Manager — Voyage Report / Engine Log
+  Voyage Chief — engine log, e-ORB and voyage reporting
   ts0gs · Marvin C. Endozo
 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Voyage Report — Engine Log</title>
+<title>Voyage Chief — Engine Log</title>
 <meta name="author" content="Marvin C. Endozo (ts0gs)">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a1420">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Voyage Report">
+<meta name="apple-mobile-web-app-title" content="Voyage Chief">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icons/logoBG.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -1467,7 +1467,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
     <div class="login-head">
       <img src="icons/logoBG.png" width="44" height="44" alt="">
       <div>
-        <h2 id="loginGateTitle">Voyage Report</h2>
+        <h2 id="loginGateTitle">Voyage Chief</h2>
         <p class="login-sub" id="loginGateSub">Sign in to load your vessel</p>
       </div>
     </div>
@@ -1535,9 +1535,9 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
 
   <div class="masthead">
     <div class="masthead-left">
-      <img class="app-logo" src="icons/logoBG.png" width="52" height="52" alt="Voyage Report">
+      <img class="app-logo" src="icons/logoBG.png" width="52" height="52" alt="Voyage Chief">
       <div>
-        <h1>Voyage Report</h1>
+        <h1>Voyage Chief</h1>
         <div class="subtitle" id="activeVesselLabel">Engine Department — Voyage Log &amp; Performance</div>
         <div class="byline" id="appByline"></div>
       </div>
@@ -2839,7 +2839,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
         </label>
         <div class="btn-row">
           <button class="primary small" type="button" id="btnOrbSaveSetup">Save ORB Setup</button>
-          <button class="ghost small" type="button" id="btnOrbPrefillFromVessel">Prefill from Voyage Report vessel</button>
+          <button class="ghost small" type="button" id="btnOrbPrefillFromVessel">Prefill from Voyage Chief vessel</button>
         </div>
       </div>
       <div class="panel">
@@ -3032,7 +3032,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
     </div>
     <div class="panel" id="androidInstallPanel">
       <h2>Install on Android / tablet</h2>
-      <div class="hint" id="androidInstallHint">Install Voyage Report on this device for offline use and a home-screen icon. Works on Android phones, Android tablets, and iPad (Safari). On slow ship internet, wait for the progress bar to finish before leaving this page.</div>
+      <div class="hint" id="androidInstallHint">Install Voyage Chief on this device for offline use and a home-screen icon. Works on Android phones, Android tablets, and iPad (Safari). On slow ship internet, wait for the progress bar to finish before leaving this page.</div>
       <div class="btn-row" style="margin-top:10px;">
         <button class="primary small" type="button" id="btnInstallApp">Install App</button>
         <button class="ghost small" type="button" id="btnInstallHelp">How to install</button>
@@ -3060,7 +3060,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
     </div>
     <div class="panel">
       <h2>Install on PC (local)</h2>
-      <div class="hint">First-time ship PC setup — one command installs Voyage Report onto the computer and always runs it locally (<code>http://127.0.0.1</code>), not from the website. Later updates use the same local install. Voyage data stays in this PC’s browser.</div>
+      <div class="hint">First-time ship PC setup — one command installs Voyage Chief onto the computer and always runs it locally (<code>http://127.0.0.1</code>), not from the website. Later updates use the same local install. Voyage data stays in this PC’s browser.</div>
       <div class="field span2" style="margin-top:10px;">
         <label>Windows one-click (PowerShell)</label>
         <input id="pcInstallCmd" readonly value="$f=&quot;$env:TEMP\noon-install-pc.ps1&quot;; iwr https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 -UseBasicParsing -OutFile $f; powershell -NoProfile -ExecutionPolicy Bypass -File $f" style="font-size:12px;">
@@ -3070,7 +3070,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
         <a class="btn-link-like" id="pcInstallRawLink" href="https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1" target="_blank" rel="noopener">Open install script</a>
         <a class="btn-link-like" href="https://github.com/tsogs66/voyage-manager/tree/main/install/pc" target="_blank" rel="noopener">PC install docs</a>
       </div>
-      <div class="hint">After install: use Desktop shortcut <strong>Voyage Report</strong>. To update later, run <code>Update-NoonReport.bat</code> in <code>%LOCALAPPDATA%\NoonReport\bin</code> (or paste the same PowerShell command again).</div>
+      <div class="hint">After install: use Desktop shortcut <strong>Voyage Chief</strong>. To update later, run <code>Update-NoonReport.bat</code> in <code>%LOCALAPPDATA%\NoonReport\bin</code> (or paste the same PowerShell command again).</div>
     </div>
     <div class="panel">
       <h2>Database Backup / Restore / Merge</h2>
@@ -3509,7 +3509,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
     </div>
   </div>
 
-  <div class="footer-note">Voyage Report — offline-capable PWA with local IndexedDB storage and optional self-hosted sync. Install on Android or PC from the Setup tab when served over HTTPS.</div>
+  <div class="footer-note">Voyage Chief — offline-capable PWA with local IndexedDB storage and optional self-hosted sync. Install on Android or PC from the Setup tab when served over HTTPS.</div>
 </div>
 
 <nav class="bottom-nav" id="bottomNav" aria-label="Primary">
@@ -12291,7 +12291,7 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
   const stamp = now.getFullYear().toString() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0')
     + '-' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0');
   const safe = s => (s||'unknown').toString().replace(/[^a-zA-Z0-9-_]/g,'_');
-  const backupName = `voyage-report-backup_${safe(state.setup.voyageNumber)}_${safe(state.setup.shipCondition)}_${stamp}.json`;
+  const backupName = `voyage-chief-backup_${safe(state.setup.voyageNumber)}_${safe(state.setup.shipCondition)}_${stamp}.json`;
   const backupBlob = new Blob([JSON.stringify(backupPayload, null, 2)], {type:'application/json'});
   const backupLink = document.createElement('a');
   backupLink.href = URL.createObjectURL(backupBlob);
@@ -12299,7 +12299,7 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
   backupLink.click();
 
   // Also save + download a Voyage Abstract snapshot, same naming scheme with an "abstract" identifier
-  const abstractName = `voyage-report-backup_${safe(state.setup.voyageNumber)}_${safe(state.setup.shipCondition)}_${stamp}_abstract.csv`;
+  const abstractName = `voyage-chief-backup_${safe(state.setup.voyageNumber)}_${safe(state.setup.shipCondition)}_${stamp}_abstract.csv`;
   const abstractRecord = {
     id: uid(), savedAt: new Date().toISOString(),
     vesselId: state.activeVesselId,
@@ -17212,7 +17212,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v158';
+let androidInstallCacheName = 'noon-report-v160';
 
 /*
  * What the program is called.
@@ -17232,7 +17232,7 @@ let androidInstallCacheName = 'noon-report-v158';
  * painted from here, so the name is right before any script runs; check_assets.js
  * holds all of those to this value.
  */
-const APP_NAME = 'Voyage Report';
+const APP_NAME = 'Voyage Chief';
 
 /*
  * Who wrote this. One definition, used by the masthead byline, every printed
@@ -17878,7 +17878,7 @@ document.getElementById('btnExportVessel')?.addEventListener('click', async ()=>
     setVesselExportStatus('Building vessel export…');
     const payload = await buildVesselExport(vesselId);
     const stamp = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
-    const name = `voyage-report-vessel_${payload.vessel.slug || 'vessel'}_${stamp}.json`;
+    const name = `voyage-chief-vessel_${payload.vessel.slug || 'vessel'}_${stamp}.json`;
     downloadJsonFile(name, payload);
     const total = Object.values(payload.counts || {}).reduce((a,b)=>a+(b||0),0);
     const summary = vesselExportCountSummary(payload.counts);
@@ -17931,7 +17931,7 @@ document.getElementById('btnDbBackup')?.addEventListener('click', async ()=>{
     setDbBackupStatus('Building full database backup…');
     const payload = await buildFullDatabaseBackup();
     const stamp = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
-    const name = `voyage-report-db-backup_${stamp}.json`;
+    const name = `voyage-chief-db-backup_${stamp}.json`;
     downloadJsonFile(name, payload);
     const total = Object.values(payload.counts || {}).reduce((a,b)=>a+(b||0),0);
     setDbBackupStatus(`Backup downloaded: ${name} — ${payload.vessels.length} vessel(s), ${total} store record(s).`);
@@ -18004,7 +18004,7 @@ document.getElementById('btnExportJSON').addEventListener('click', ()=>{
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `voyage-report-${(state.setup.voyageNumber||'voyage')}.json`;
+  a.download = `voyage-chief-${(state.setup.voyageNumber||'voyage')}.json`;
   a.click();
 });
 
@@ -18013,7 +18013,7 @@ document.getElementById('btnExportSetupJSON').addEventListener('click', ()=>{
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `voyage-report-setup-${(state.setup.voyageNumber||'template')}.json`;
+  a.download = `voyage-chief-setup-${(state.setup.voyageNumber||'template')}.json`;
   a.click();
 });
 

@@ -24,7 +24,7 @@
 
   /* Same reason: the record book names the program that produced it, and this module
      cannot see the app's APP_NAME. check_assets.js holds the two spellings together. */
-  const APP_NAME = 'Voyage Report';
+  const APP_NAME = 'Voyage Chief';
 
   const FLAGS = [
     {
