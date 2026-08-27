@@ -50,7 +50,7 @@ jobs:
       - name: Verify the payload is complete
         run: |
           sudo apt-get install -y p7zip-full
-          EXE="$(ls dist/VoyageReport-Setup-*.exe)"
+          EXE="$(ls dist/VoyageChief-Setup-*.exe)"
           7z x -o/tmp/payload "$EXE" > /dev/null
           missing=0
           while IFS= read -r f; do
@@ -61,7 +61,7 @@ jobs:
             [ -n "$d" ] || continue
             if [ ! -d "/tmp/payload/$d" ]; then echo "MISSING DIR: $d"; missing=1; fi
           done < <(python3 -c "import json;print('\n'.join(json.load(open('scripts/app-assets.json'))['dirs']))")
-          if [ ! -f "/tmp/payload/Start Voyage Report.bat" ]; then echo "MISSING: launcher"; missing=1; fi
+          if [ ! -f "/tmp/payload/Start Voyage Chief.bat" ]; then echo "MISSING: launcher"; missing=1; fi
           # The app must not reach the internet to render. A stylesheet link to a
           # remote host is the failure this check exists for.
           if grep -q "fonts.googleapis.com" /tmp/payload/voyage_manager.html; then
@@ -72,7 +72,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: dist/VoyageReport-Setup-*.exe
+          path: dist/VoyageChief-Setup-*.exe
           if-no-files-found: error
 
   android-apk:
@@ -115,13 +115,13 @@ jobs:
         run: |
           V="$(sed -n "s/^const CACHE = 'noon-report-v\([0-9]\+\)';.*/\1/p" sw.js)"
           mkdir -p dist
-          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/VoyageReport-1.0.${V}.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/VoyageChief-1.0.${V}.apk"
           ls -la dist/
 
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: dist/VoyageReport-*.apk
+          path: dist/VoyageChief-*.apk
           if-no-files-found: error
 
   release:
@@ -143,7 +143,7 @@ jobs:
 
             **Windows** — download the `.exe` and run it. It installs for the
             current user, so no administrator rights are needed, and puts
-            "Voyage Report" on the Desktop and in the Start menu.
+            "Voyage Chief" on the Desktop and in the Start menu.
 
             **Android phone / tablet** — download the `.apk` and open it. Allow
             installing from this source if the device asks.

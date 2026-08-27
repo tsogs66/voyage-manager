@@ -1,6 +1,6 @@
 {
   "appId": "com.noonreport.voyagemanager",
-  "appName": "Voyage Report",
+  "appName": "Voyage Chief",
   "webDir": "www",
   "server": {
     "androidScheme": "https"

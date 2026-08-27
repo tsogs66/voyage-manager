@@ -1,4 +1,4 @@
-# Voyage Chief — Voyage Report
+# Voyage Chief
 
 Offline-capable ship performance and fuel logging app for engine department noon reports. Tracks fuel consumption, RPM, speed, slip, ROB, lube oil, and supplementary machinery readings.
 
@@ -205,7 +205,7 @@ Copy/paste in PowerShell:
 $f="$env:TEMP\noon-install-pc.ps1"; iwr https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 -UseBasicParsing -OutFile $f; powershell -NoProfile -ExecutionPolicy Bypass -File $f
 ```
 
-This downloads the latest `main` build into `%LOCALAPPDATA%\NoonReport`, creates a **Desktop → Voyage Report** shortcut, and starts the app.
+This downloads the latest `main` build into `%LOCALAPPDATA%\NoonReport`, creates a **Desktop → Voyage Chief** shortcut, and starts the app.
 
 - **Start later:** double-click the Desktop shortcut  
 - **Update later:** `%LOCALAPPDATA%\NoonReport\bin\Update-NoonReport.bat` (or re-run the one-click command)
@@ -216,7 +216,7 @@ This downloads the latest `main` build into `%LOCALAPPDATA%\NoonReport`, creates
 ./scripts/build-pc-portable.sh
 ```
 
-Share `dist/VoyageReport-PC.zip`. On the ship PC: unzip → double-click **Start Voyage Report.bat**.
+Share `dist/VoyageChief-PC.zip`. On the ship PC: unzip → double-click **Start Voyage Chief.bat**.
 
 Details: [`install/pc/README.txt`](install/pc/README.txt).
 

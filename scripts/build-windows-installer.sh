@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the Voyage Report Windows installer (VoyageReport-Setup-<version>.exe).
+# Build the Voyage Chief Windows installer (VoyageChief-Setup-<version>.exe).
 #
 # makensis runs on Linux, so the release is produced by CI without a Windows
 # machine. The installer itself is a normal Windows .exe: per-user, no admin
@@ -57,13 +57,13 @@ done < <(python3 -c "import json;print('\n'.join(json.load(open('$ROOT/scripts/a
 # worker that makes the app work offline will not register, and browsers treat
 # its storage as a different origin on every launch.
 cp "$ROOT/install/pc/Start-NoonReport.ps1" "$PAYLOAD/"
-cp "$ROOT/install/pc/Start-NoonReport.bat" "$PAYLOAD/Start Voyage Report.bat"
+cp "$ROOT/install/pc/Start-NoonReport.bat" "$PAYLOAD/Start Voyage Chief.bat"
 cp "$ROOT/install/pc/Update-NoonReport.ps1" "$PAYLOAD/"
 cp "$ROOT/install/pc/Update-NoonReport.bat" "$PAYLOAD/"
 cp "$ROOT/install/pc/install-pc.ps1" "$PAYLOAD/"
 cp "$ROOT/install/windows/README.txt" "$PAYLOAD/README.txt"
 
-OUT_EXE="$OUT_DIR/VoyageReport-Setup-${VERSION}.exe"
+OUT_EXE="$OUT_DIR/VoyageChief-Setup-${VERSION}.exe"
 rm -f "$OUT_EXE"
 
 makensis -V2 \

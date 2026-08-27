@@ -1,4 +1,4 @@
-; Voyage Report — Windows installer
+; Voyage Chief — Windows installer
 ;
 ; Built on Linux with makensis (see scripts/build-windows-installer.sh), so the
 ; release can be produced by CI without a Windows machine.
@@ -29,13 +29,13 @@ ManifestDPIAware true
   !define APP_VERSION "0.0.0"
 !endif
 !ifndef OUT_FILE
-  !define OUT_FILE "VoyageReport-Setup.exe"
+  !define OUT_FILE "VoyageChief-Setup.exe"
 !endif
 !ifndef PAYLOAD_DIR
   !define PAYLOAD_DIR "payload"
 !endif
 
-!define APP_NAME     "Voyage Report"
+!define APP_NAME     "Voyage Chief"
 !define APP_PUBLISHER "ts0gs · Marvin C. Endozo"
 ; APP_ID is deliberately still "NoonReport" after the rename. It is not shown to
 ; anyone — it is the install folder under %LOCALAPPDATA% and the key this program is
@@ -44,7 +44,7 @@ ManifestDPIAware true
 ; installed, listed and reachable from its shortcuts. The visible name comes from
 ; APP_NAME, which every shortcut, page and registry value below is built from.
 !define APP_ID       "NoonReport"
-!define APP_EXE      "Start Voyage Report.bat"
+!define APP_EXE      "Start Voyage Chief.bat"
 !define UNINST_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}"
 
 Name "${APP_NAME}"
@@ -128,15 +128,27 @@ VIAddVersionKey "LegalCopyright"  "${APP_PUBLISHER}"
   ; previous version.
   Delete "$DESKTOP\Noon Report.bat"
 
-  ; Left over from when this program was called Noon Report. Nothing above replaces
-  ; these: the installer only overwrites files and shortcuts it creates, and those
-  ; are all named from APP_NAME, which is now different. Without this an engineer
-  ; ends up with two Desktop icons and two Start menu entries for one program.
+  ; Left over from the names this program has been called before. Nothing above
+  ; replaces these: the installer only overwrites files and shortcuts it creates,
+  ; and those are all named from APP_NAME, which is now different. Without this an
+  ; engineer ends up with several Desktop icons for one program, all but one of
+  ; them starting a copy that has been replaced.
+  ;
+  ; Both earlier names are cleared, not just the last one: a PC that skips a
+  ; version upgrades straight from the oldest, and the intermediate installer
+  ; never ran there to tidy up after itself.
   Delete "$INSTDIR\Start Noon Report.bat"
   Delete "$DESKTOP\Noon Report.lnk"
   Delete "$SMPROGRAMS\Noon Report\Noon Report.lnk"
   Delete "$SMPROGRAMS\Noon Report\Uninstall Noon Report.lnk"
   RMDir  "$SMPROGRAMS\Noon Report"
+
+  Delete "$INSTDIR\Start Voyage Report.bat"
+  Delete "$DESKTOP\Voyage Report.lnk"
+  Delete "$DESKTOP\Voyage Report.bat"
+  Delete "$SMPROGRAMS\Voyage Report\Voyage Report.lnk"
+  Delete "$SMPROGRAMS\Voyage Report\Uninstall Voyage Report.lnk"
+  RMDir  "$SMPROGRAMS\Voyage Report"
 !macroend
 
 Section "Application" SEC_APP

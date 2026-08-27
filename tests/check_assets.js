@@ -211,11 +211,15 @@ for (const rel of precache || []) {
   check('the Windows installer name matches',
     nsiName.includes('!define APP_NAME     "' + appName + '"'), true);
 
-  /* The rename leaves the previous version's shortcuts and launcher on the PC under
-     their old names, where nothing this installer writes will overwrite them — two
-     icons for one program, one of them starting the copy we just replaced. */
+  /* Each rename leaves the previous version's shortcuts and launcher on the PC under
+     their old names, where nothing this installer writes will overwrite them — several
+     icons for one program, all but one starting a copy already replaced. Every name
+     this program has had stays listed: a PC that skips a version upgrades straight
+     from the oldest, and the intermediate installer never ran there to clean up. */
   for (const leftover of ['$DESKTOP\\Noon Report.lnk', '$SMPROGRAMS\\Noon Report',
-                          '$INSTDIR\\Start Noon Report.bat']) {
+                          '$INSTDIR\\Start Noon Report.bat',
+                          '$DESKTOP\\Voyage Report.lnk', '$SMPROGRAMS\\Voyage Report',
+                          '$INSTDIR\\Start Voyage Report.bat']) {
     check('the installer clears the old-name leftover ' + leftover,
       nsiName.includes(leftover), true);
   }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Self-hosted sync server for Voyage Report / Voyage Chief.
+"""Self-hosted sync server for Voyage Chief.
 
 Stores voyage snapshots as JSON files under:
   <DATA_DIR>/<vessel>/<voyageNo>/<CONDITION>.json
@@ -1345,7 +1345,7 @@ def main() -> None:
     bootstrap_admin()
     ACCOUNTS.purge_expired_sessions()
     httpd = ThreadingHTTPServer((HOST, PORT), SyncHandler)
-    print(f"Voyage Report sync server listening on http://{HOST}:{PORT}")
+    print(f"Voyage Chief sync server listening on http://{HOST}:{PORT}")
     print(f"Data directory: {DATA_DIR.resolve()}")
     print("Layout: <data>/<vessel>/<voyageNo>/<B|L>.json  (B=ballast, L=laden)")
     if STATIC_DIR:
