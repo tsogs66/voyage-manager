@@ -84,6 +84,7 @@
   h1{font-family:'Oswald',sans-serif; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; font-size:24px; margin:0;}
   .subtitle{font-size:11px; color:var(--paper-dim); letter-spacing:0.08em; text-transform:uppercase; margin-top:2px;}
   #dbStatus{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--teal);}
+  #appVersion{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted);}
 
   .tabs{display:flex; gap:2px; margin:18px 0 20px; border-bottom:1px solid var(--line); flex-wrap:wrap;}
   .tab{
@@ -1534,6 +1535,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
       <button type="button" class="ghost small" id="btnToggleBright" title="Day / bright mode for sunlight">Bright</button>
       <div id="dbStatus">● local database ready</div>
       <div id="syncStatus">○ sync not configured</div>
+      <div id="appVersion" title="The build this device is running. Quote it when reporting a problem."></div>
     </div>
   </div>
 
@@ -17199,6 +17201,23 @@ function registerServiceWorker(){
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
 let androidInstallCacheName = 'noon-report-v156';
+
+/*
+ * Show the running build in the header.
+ *
+ * A ship reported "it installs the old system" and there was no way, from the
+ * screen, to tell one build from another — you had to know which features to look
+ * for. The installer and the APK are both named from this same number, so an
+ * engineer can now compare what the header says against the file they installed,
+ * and quote it when something is wrong.
+ */
+function showAppVersion(){
+  const el = document.getElementById('appVersion');
+  if (!el) return;
+  const n = String(androidInstallCacheName || '').replace(/^noon-report-v/, '');
+  el.textContent = n ? ('v1.0.' + n) : '';
+}
+showAppVersion();
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',
