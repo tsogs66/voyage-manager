@@ -79,8 +79,52 @@ VIAddVersionKey "LegalCopyright"  "${APP_PUBLISHER}"
 
 !insertmacro MUI_LANGUAGE "English"
 
+; Remove the install this replaces.
+;
+; A PC that already ran install-pc.ps1 has a different layout: the app in
+; NoonReport\app\ and the launchers in NoonReport\bin\. This installer writes to
+; NoonReport\ itself, so both would sit side by side — and every shortcut that PC
+; already had still points at the old copy:
+;
+;   Desktop "Noon Report.bat"  hardcodes  -AppDir "...\NoonReport\app"
+;   bin\Start-NoonReport.bat   falls through to app\ because bin\ holds no HTML
+;
+; So the new files land correctly and the engineer, clicking the shortcut they have
+; always clicked, still gets the old application. Clear the old layout out first, so
+; there is one app on the machine and every route reaches it.
+;
+; Named files and RMDir without /r, as in the uninstaller: these folders were the old
+; installer's, but a blind recursive delete of a folder under the user's profile is
+; not something to do on the strength of an assumption about what is in it.
+!macro RemoveLegacyInstall
+  Delete "$INSTDIR\app\voyage_manager.html"
+  Delete "$INSTDIR\app\eorb.js"
+  Delete "$INSTDIR\app\ship_time.js"
+  Delete "$INSTDIR\app\sw.js"
+  Delete "$INSTDIR\app\manifest.webmanifest"
+  Delete "$INSTDIR\app\Start-NoonReport.ps1"
+  Delete "$INSTDIR\app\Start-NoonReport.bat"
+  Delete "$INSTDIR\app\icons\*.png"
+  RMDir  "$INSTDIR\app\icons"
+  RMDir  "$INSTDIR\app"
+
+  Delete "$INSTDIR\bin\Start-NoonReport.ps1"
+  Delete "$INSTDIR\bin\Start-NoonReport.bat"
+  Delete "$INSTDIR\bin\Update-NoonReport.ps1"
+  Delete "$INSTDIR\bin\Update-NoonReport.bat"
+  Delete "$INSTDIR\bin\install-pc.ps1"
+  RMDir  "$INSTDIR\bin"
+
+  ; The plain .bat the old installer dropped beside its shortcut, for PCs where a
+  ; .lnk is blocked by policy. It names the old folder outright, so it survives a
+  ; shortcut being overwritten and is the most likely way an engineer lands on the
+  ; previous version.
+  Delete "$DESKTOP\Noon Report.bat"
+!macroend
+
 Section "Application" SEC_APP
   SectionIn RO
+  !insertmacro RemoveLegacyInstall
   SetOutPath "$INSTDIR"
   ; Replacing a running install: the launcher holds the folder open while it serves,
   ; so overwrite what we can and let the rest go on next start rather than failing.
@@ -136,6 +180,11 @@ Section "Uninstall"
   Delete "$INSTDIR\Uninstall.exe"
   Delete "$INSTDIR\icons\*.png"
   RMDir  "$INSTDIR\icons"
+  Delete "$INSTDIR\fonts\*.woff2"
+  Delete "$INSTDIR\fonts\fonts.css"
+  RMDir  "$INSTDIR\fonts"
+  ; Anything the previous install layout left behind, on a PC that upgraded.
+  !insertmacro RemoveLegacyInstall
   RMDir  "$INSTDIR"
 
   DeleteRegKey HKCU "${UNINST_KEY}"
