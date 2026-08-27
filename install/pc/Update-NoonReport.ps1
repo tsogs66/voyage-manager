@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# Update the local Noon Report PC install from GitHub (still runs locally afterward).
+# Update the local Voyage Report PC install from GitHub (still runs locally afterward).
 
 $ErrorActionPreference = "Stop"
 try {
@@ -16,7 +16,7 @@ if (-not (Test-Path -LiteralPath $installer)) {
   Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
 }
 
-Write-Host "Updating local Noon Report from $NoonReportRepo @ $NoonReportBranch (local install only)..." -ForegroundColor Yellow
+Write-Host "Updating local Voyage Report from $NoonReportRepo @ $NoonReportBranch (local install only)..." -ForegroundColor Yellow
 $NoonReportNoStart = $true
 & $installer
 Write-Host "Update done. Your voyage data in the browser is unchanged." -ForegroundColor Green

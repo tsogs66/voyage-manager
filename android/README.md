@@ -1,6 +1,6 @@
 # Android Studio build (Capacitor)
 
-This repo includes a Capacitor Android project under `android/`. The WebView loads the Noon Report PWA from bundled assets (`www/` → `android/app/src/main/assets/public`).
+This repo includes a Capacitor Android project under `android/`. The WebView loads the Voyage Report PWA from bundled assets (`www/` → `android/app/src/main/assets/public`).
 
 ## Requirements
 
@@ -71,7 +71,7 @@ Then rebuild/run in Android Studio. **Required after pulling web UI fixes** (bot
 | Field | Value |
 |-------|--------|
 | Application ID | `com.noonreport.voyagemanager` |
-| App name | Noon Report |
+| App name | Voyage Report |
 | Min SDK | 23 |
 | Target / Compile SDK | 35 |
 

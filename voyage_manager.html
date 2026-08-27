@@ -1,19 +1,19 @@
 <!DOCTYPE html>
 <!--
-  Voyage Manager — Noon Report / Engine Log
+  Voyage Manager — Voyage Report / Engine Log
   ts0gs · Marvin C. Endozo
 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Noon Report — Engine Log</title>
+<title>Voyage Report — Engine Log</title>
 <meta name="author" content="Marvin C. Endozo (ts0gs)">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a1420">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Noon Report">
+<meta name="apple-mobile-web-app-title" content="Voyage Report">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icons/logoBG.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -1467,7 +1467,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
     <div class="login-head">
       <img src="icons/logoBG.png" width="44" height="44" alt="">
       <div>
-        <h2 id="loginGateTitle">Noon Report</h2>
+        <h2 id="loginGateTitle">Voyage Report</h2>
         <p class="login-sub" id="loginGateSub">Sign in to load your vessel</p>
       </div>
     </div>
@@ -1500,7 +1500,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
           <button class="primary" id="btnLoginLoadVessel">Load vessel</button>
           <button class="ghost" id="btnLoginFleetOffice" type="button">Open Fleet Office</button>
         </div>
-        <p class="login-note">Only one vessel is loaded at a time. Fleet Office manages crew and ships without loading a noon report.</p>
+        <p class="login-note">Only one vessel is loaded at a time. Fleet Office manages crew and ships without loading a vessel.</p>
       </div>
 
       <div id="loginVesselClaim" hidden>
@@ -1535,9 +1535,9 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
 
   <div class="masthead">
     <div class="masthead-left">
-      <img class="app-logo" src="icons/logoBG.png" width="52" height="52" alt="Noon Report">
+      <img class="app-logo" src="icons/logoBG.png" width="52" height="52" alt="Voyage Report">
       <div>
-        <h1>Noon Report</h1>
+        <h1>Voyage Report</h1>
         <div class="subtitle" id="activeVesselLabel">Engine Department — Voyage Log &amp; Performance</div>
         <div class="byline" id="appByline"></div>
       </div>
@@ -2839,7 +2839,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
         </label>
         <div class="btn-row">
           <button class="primary small" type="button" id="btnOrbSaveSetup">Save ORB Setup</button>
-          <button class="ghost small" type="button" id="btnOrbPrefillFromVessel">Prefill from Noon Report vessel</button>
+          <button class="ghost small" type="button" id="btnOrbPrefillFromVessel">Prefill from Voyage Report vessel</button>
         </div>
       </div>
       <div class="panel">
@@ -3032,7 +3032,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
     </div>
     <div class="panel" id="androidInstallPanel">
       <h2>Install on Android / tablet</h2>
-      <div class="hint" id="androidInstallHint">Install Noon Report on this device for offline use and a home-screen icon. Works on Android phones, Android tablets, and iPad (Safari). On slow ship internet, wait for the progress bar to finish before leaving this page.</div>
+      <div class="hint" id="androidInstallHint">Install Voyage Report on this device for offline use and a home-screen icon. Works on Android phones, Android tablets, and iPad (Safari). On slow ship internet, wait for the progress bar to finish before leaving this page.</div>
       <div class="btn-row" style="margin-top:10px;">
         <button class="primary small" type="button" id="btnInstallApp">Install App</button>
         <button class="ghost small" type="button" id="btnInstallHelp">How to install</button>
@@ -3060,7 +3060,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
     </div>
     <div class="panel">
       <h2>Install on PC (local)</h2>
-      <div class="hint">First-time ship PC setup — one command installs Noon Report onto the computer and always runs it locally (<code>http://127.0.0.1</code>), not from the website. Later updates use the same local install. Voyage data stays in this PC’s browser.</div>
+      <div class="hint">First-time ship PC setup — one command installs Voyage Report onto the computer and always runs it locally (<code>http://127.0.0.1</code>), not from the website. Later updates use the same local install. Voyage data stays in this PC’s browser.</div>
       <div class="field span2" style="margin-top:10px;">
         <label>Windows one-click (PowerShell)</label>
         <input id="pcInstallCmd" readonly value="$f=&quot;$env:TEMP\noon-install-pc.ps1&quot;; iwr https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1 -UseBasicParsing -OutFile $f; powershell -NoProfile -ExecutionPolicy Bypass -File $f" style="font-size:12px;">
@@ -3070,7 +3070,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
         <a class="btn-link-like" id="pcInstallRawLink" href="https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/pc/install-pc.ps1" target="_blank" rel="noopener">Open install script</a>
         <a class="btn-link-like" href="https://github.com/tsogs66/voyage-manager/tree/main/install/pc" target="_blank" rel="noopener">PC install docs</a>
       </div>
-      <div class="hint">After install: use Desktop shortcut <strong>Noon Report</strong>. To update later, run <code>Update-NoonReport.bat</code> in <code>%LOCALAPPDATA%\NoonReport\bin</code> (or paste the same PowerShell command again).</div>
+      <div class="hint">After install: use Desktop shortcut <strong>Voyage Report</strong>. To update later, run <code>Update-NoonReport.bat</code> in <code>%LOCALAPPDATA%\NoonReport\bin</code> (or paste the same PowerShell command again).</div>
     </div>
     <div class="panel">
       <h2>Database Backup / Restore / Merge</h2>
@@ -3509,7 +3509,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
     </div>
   </div>
 
-  <div class="footer-note">Noon Report — offline-capable PWA with local IndexedDB storage and optional self-hosted sync. Install on Android or PC from the Setup tab when served over HTTPS.</div>
+  <div class="footer-note">Voyage Report — offline-capable PWA with local IndexedDB storage and optional self-hosted sync. Install on Android or PC from the Setup tab when served over HTTPS.</div>
 </div>
 
 <nav class="bottom-nav" id="bottomNav" aria-label="Primary">
@@ -11760,7 +11760,7 @@ function printDocHeader(opts){
   return `<header class="pr-doc-header">
     <div>
       <div class="pr-doc-vessel">${escPrint(state.setup.vesselName || 'Vessel')}</div>
-      <div class="pr-doc-dept">Engine Department — Noon Report</div>
+      <div class="pr-doc-dept">Engine Department — ${escPrint(APP_NAME)}</div>
     </div>
     <div class="pr-doc-title-wrap">
       ${badge ? `<div class="pr-doc-badge">${escPrint(badge)}</div>` : ''}
@@ -12291,7 +12291,7 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
   const stamp = now.getFullYear().toString() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0')
     + '-' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0');
   const safe = s => (s||'unknown').toString().replace(/[^a-zA-Z0-9-_]/g,'_');
-  const backupName = `noon-report-backup_${safe(state.setup.voyageNumber)}_${safe(state.setup.shipCondition)}_${stamp}.json`;
+  const backupName = `voyage-report-backup_${safe(state.setup.voyageNumber)}_${safe(state.setup.shipCondition)}_${stamp}.json`;
   const backupBlob = new Blob([JSON.stringify(backupPayload, null, 2)], {type:'application/json'});
   const backupLink = document.createElement('a');
   backupLink.href = URL.createObjectURL(backupBlob);
@@ -12299,7 +12299,7 @@ document.getElementById('btnResetVoyage').addEventListener('click', async ()=>{
   backupLink.click();
 
   // Also save + download a Voyage Abstract snapshot, same naming scheme with an "abstract" identifier
-  const abstractName = `noon-report-backup_${safe(state.setup.voyageNumber)}_${safe(state.setup.shipCondition)}_${stamp}_abstract.csv`;
+  const abstractName = `voyage-report-backup_${safe(state.setup.voyageNumber)}_${safe(state.setup.shipCondition)}_${stamp}_abstract.csv`;
   const abstractRecord = {
     id: uid(), savedAt: new Date().toISOString(),
     vesselId: state.activeVesselId,
@@ -17014,7 +17014,7 @@ document.getElementById('btnTestSync')?.addEventListener('click', async ()=>{
     setSyncSaveStatus('Testing connection to ' + base + '…', 'saving');
     const { body } = await fetchSyncJson(`${base}/api/health`, { headers: syncRequestHeaders() });
     if (!body || body.ok !== true){
-      throw new Error('Health check response was JSON but not a Noon Report sync server.');
+      throw new Error('Health check response was JSON but not a ' + APP_NAME + ' sync server.');
     }
     /*
      * /api/health is unauthenticated, so it proves the URL is reachable and nothing
@@ -17212,7 +17212,27 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v157';
+let androidInstallCacheName = 'noon-report-v158';
+
+/*
+ * What the program is called.
+ *
+ * It is not "Noon Report": a noon report is one of the sheets this produces, and
+ * naming the whole program after it made every departure, arrival and bunker sheet
+ * come out headed as a noon report. The noon-specific wording that remains is the
+ * genuine article — isNoonReportOp() and the "Noon Report — Voyage Summary" title
+ * still say noon, because there the report actually is one.
+ *
+ * Storage keys, backup format strings and the service-worker cache prefix keep the
+ * old spelling on purpose. They are identifiers, not labels: renaming noonReportDB
+ * would orphan every ship's voyage history, and renaming noon-report-db-v1 would
+ * make backups already written on board unrestorable.
+ *
+ * The static title, the masthead and the login card spell it out rather than being
+ * painted from here, so the name is right before any script runs; check_assets.js
+ * holds all of those to this value.
+ */
+const APP_NAME = 'Voyage Report';
 
 /*
  * Who wrote this. One definition, used by the masthead byline, every printed
@@ -17473,7 +17493,7 @@ window.addEventListener('appinstalled', ()=>{
 
 document.getElementById('btnInstallApp')?.addEventListener('click', async ()=>{
   if (isStandalonePwa()){
-    alert('Noon Report is already installed on this device.');
+    alert(APP_NAME + ' is already installed on this device.');
     return;
   }
   if (androidInstallBusy) return;
@@ -17565,7 +17585,7 @@ async function buildFullDatabaseBackup(){
   }
   return {
     format: DB_BACKUP_FORMAT,
-    app: 'Noon Report',
+    app: APP_NAME,
     exportedAt: new Date().toISOString(),
     activeVesselId: state.activeVesselId,
     vessels: state.vessels.slice(),
@@ -17755,7 +17775,7 @@ async function buildVesselExport(vesselId){
 
   return {
     format: VESSEL_EXPORT_FORMAT,
-    app: 'Noon Report',
+    app: APP_NAME,
     exportedAt: new Date().toISOString(),
     vessel: { ...vessel },
     setup: setupForVesselExport(setupRow ? setupRow.value : null),
@@ -17858,7 +17878,7 @@ document.getElementById('btnExportVessel')?.addEventListener('click', async ()=>
     setVesselExportStatus('Building vessel export…');
     const payload = await buildVesselExport(vesselId);
     const stamp = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
-    const name = `noon-report-vessel_${payload.vessel.slug || 'vessel'}_${stamp}.json`;
+    const name = `voyage-report-vessel_${payload.vessel.slug || 'vessel'}_${stamp}.json`;
     downloadJsonFile(name, payload);
     const total = Object.values(payload.counts || {}).reduce((a,b)=>a+(b||0),0);
     const summary = vesselExportCountSummary(payload.counts);
@@ -17911,7 +17931,7 @@ document.getElementById('btnDbBackup')?.addEventListener('click', async ()=>{
     setDbBackupStatus('Building full database backup…');
     const payload = await buildFullDatabaseBackup();
     const stamp = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
-    const name = `noon-report-db-backup_${stamp}.json`;
+    const name = `voyage-report-db-backup_${stamp}.json`;
     downloadJsonFile(name, payload);
     const total = Object.values(payload.counts || {}).reduce((a,b)=>a+(b||0),0);
     setDbBackupStatus(`Backup downloaded: ${name} — ${payload.vessels.length} vessel(s), ${total} store record(s).`);
@@ -17926,7 +17946,7 @@ document.getElementById('btnDbBackup')?.addEventListener('click', async ()=>{
 });
 
 document.getElementById('btnDbRestore')?.addEventListener('click', ()=>{
-  if (!confirm('RESTORE replaces ALL local Noon Report data in this browser (every vessel, voyage library, e-ORB).\n\nExport a Backup first if you are unsure.\n\nContinue to choose a backup file?')) return;
+  if (!confirm('RESTORE replaces ALL local ' + APP_NAME + ' data in this browser (every vessel, voyage library, e-ORB).\n\nExport a Backup first if you are unsure.\n\nContinue to choose a backup file?')) return;
   document.getElementById('fileDbRestore')?.click();
 });
 document.getElementById('fileDbRestore')?.addEventListener('change', async (ev)=>{
@@ -17984,7 +18004,7 @@ document.getElementById('btnExportJSON').addEventListener('click', ()=>{
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `noon-report-${(state.setup.voyageNumber||'voyage')}.json`;
+  a.download = `voyage-report-${(state.setup.voyageNumber||'voyage')}.json`;
   a.click();
 });
 
@@ -17993,7 +18013,7 @@ document.getElementById('btnExportSetupJSON').addEventListener('click', ()=>{
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `noon-report-setup-${(state.setup.voyageNumber||'template')}.json`;
+  a.download = `voyage-report-setup-${(state.setup.voyageNumber||'template')}.json`;
   a.click();
 });
 
@@ -19152,7 +19172,7 @@ document.getElementById('btnOrbPrefillFromVessel')?.addEventListener('click', ()
   }
   state.setup.orb = setup;
   fillOrbSetupForm();
-  alert('Prefilled ship name / IMO / C/E (and fuel tanks if empty) from Noon Report setup.');
+  alert('Prefilled ship name / IMO / C/E (and fuel tanks if empty) from ' + APP_NAME + ' setup.');
 });
 document.getElementById('btnOrbSaveSetup')?.addEventListener('click', async ()=>{
   readOrbSetupFromForm();

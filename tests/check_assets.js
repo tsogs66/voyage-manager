@@ -164,6 +164,63 @@ for (const rel of precache || []) {
   check('the installer names its publisher', nsi.includes(appName), true);
 }
 
+/* What the program is called, on every surface that spells it out.
+
+   The name is written out literally in the static title, the masthead and the login
+   card so it is correct before a line of script runs, and again in the manifest, the
+   Capacitor config, the Android strings and the installer — each of which is read by
+   a different build and cannot reference the others. Six copies of a name drift; the
+   program was called "Noon Report" in the window long after that stopped being what
+   it was. Hold them all to the one constant.
+
+   Deliberately not checked, because they must NOT follow the name: noonReportDB and
+   the localStorage keys, the noon-report-*-v1 backup and export formats, the
+   noon-report-v cache prefix, and the Android applicationId. Those are identifiers
+   that existing installs are already keyed to. */
+{
+  const appName = matchOrDie(html, /const APP_NAME = '([^']+)'/, 'APP_NAME in voyage_manager.html');
+
+  check('the page title names it', new RegExp('<title>' + appName + ' — ').test(html), true);
+  check('the iOS home-screen title names it',
+    html.includes('name="apple-mobile-web-app-title" content="' + appName + '"'), true);
+  check('the masthead names it', html.includes('<h1>' + appName + '</h1>'), true);
+  check('the login card names it',
+    html.includes('<h2 id="loginGateTitle">' + appName + '</h2>'), true);
+  check('the printed sheet header names it',
+    html.includes('Engine Department — ${escPrint(APP_NAME)}'), true);
+
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'manifest.webmanifest'), 'utf8'));
+  check('the web manifest short_name matches', manifest.short_name, appName);
+  check('the web manifest name starts with it', manifest.name.startsWith(appName), true);
+
+  const cap = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'capacitor.config.json'), 'utf8'));
+  check('the Capacitor app name matches', cap.appName, appName);
+
+  const strings = fs.readFileSync(
+    path.join(REPO_ROOT, 'android', 'app', 'src', 'main', 'res', 'values', 'strings.xml'), 'utf8');
+  check('the Android launcher label matches',
+    strings.includes('<string name="app_name">' + appName + '</string>'), true);
+
+  const orbJs = fs.readFileSync(path.join(REPO_ROOT, 'eorb.js'), 'utf8');
+  check('eorb.js spells the name the same way',
+    matchOrDie(orbJs, /const APP_NAME = '([^']+)'/, 'APP_NAME in eorb.js'), appName);
+  check('the e-ORB printout names the program that produced it',
+    orbJs.includes("' + escapeHtml(APP_NAME) + ' e-ORB"), true);
+
+  const nsiName = fs.readFileSync(path.join(REPO_ROOT, 'install', 'windows', 'noonreport.nsi'), 'utf8');
+  check('the Windows installer name matches',
+    nsiName.includes('!define APP_NAME     "' + appName + '"'), true);
+
+  /* The rename leaves the previous version's shortcuts and launcher on the PC under
+     their old names, where nothing this installer writes will overwrite them — two
+     icons for one program, one of them starting the copy we just replaced. */
+  for (const leftover of ['$DESKTOP\\Noon Report.lnk', '$SMPROGRAMS\\Noon Report',
+                          '$INSTDIR\\Start Noon Report.bat']) {
+    check('the installer clears the old-name leftover ' + leftover,
+      nsiName.includes(leftover), true);
+  }
+}
+
 console.log();
 if (failures.length) {
   console.log(`FAILED — ${failures.length} of ${checked} checks`);

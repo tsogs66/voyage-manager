@@ -1,6 +1,6 @@
 {
-  "name": "Noon Report — Voyage Manager",
-  "short_name": "Noon Report",
+  "name": "Voyage Report — Voyage Manager",
+  "short_name": "Voyage Report",
   "description": "Ship fuel consumption, RPM, speed and performance logging with offline support",
   "start_url": "./voyage_manager.html",
   "scope": "./",
