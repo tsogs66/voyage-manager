@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Self-hosted sync server for Voyage Report / Voyage Manager.
+"""Self-hosted sync server for Voyage Report / Voyage Chief.
 
 Stores voyage snapshots as JSON files under:
   <DATA_DIR>/<vessel>/<voyageNo>/<CONDITION>.json

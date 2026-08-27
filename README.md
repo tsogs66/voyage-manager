@@ -1,4 +1,4 @@
-# Voyage Manager — Voyage Report
+# Voyage Chief — Voyage Report
 
 Offline-capable ship performance and fuel logging app for engine department noon reports. Tracks fuel consumption, RPM, speed, slip, ROB, lube oil, and supplementary machinery readings.
 

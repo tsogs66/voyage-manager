@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Voyage Report / Voyage Manager — Proxmox host installer
+# Voyage Report / Voyage Chief — Proxmox host installer
 # Creates a new LXC container and installs the app inside it.
 #
 # Run on the Proxmox host (as root):

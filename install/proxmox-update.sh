@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Voyage Report / Voyage Manager — pull latest from GitHub and restart services
+# Voyage Report / Voyage Chief — pull latest from GitHub and restart services
 #
 # From Proxmox host (auto-finds CT from /root/voyage-manager-ct*.env if VOYAGE_CTID unset):
 #   curl -fsSL https://raw.githubusercontent.com/tsogs66/voyage-manager/main/install/proxmox-update.sh | bash

@@ -1,4 +1,4 @@
-/* Voyage Manager — ship time / clock change
+/* Voyage Chief — ship time / clock change
  * ts0gs · Marvin C. Endozo
  */
 /**

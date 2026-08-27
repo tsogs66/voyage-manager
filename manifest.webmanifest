@@ -1,5 +1,5 @@
 {
-  "name": "Voyage Report — Voyage Manager",
+  "name": "Voyage Report — Voyage Chief",
   "short_name": "Voyage Report",
   "description": "Ship fuel consumption, RPM, speed and performance logging with offline support",
   "start_url": "./voyage_manager.html",
