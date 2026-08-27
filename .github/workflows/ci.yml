@@ -60,6 +60,9 @@ jobs:
       - name: Check login-gate theme contrast tokens
         run: node tests/test_login_theme.js
 
+      - name: Check sync and load progress reporting
+        run: node tests/test_activity_progress.js
+
   sync-server:
     name: Sync server (auth matrix)
     runs-on: ubuntu-latest

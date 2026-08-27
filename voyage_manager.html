@@ -90,6 +90,40 @@
   .subtitle{font-size:11px; color:var(--paper-dim); letter-spacing:0.08em; text-transform:uppercase; margin-top:2px;}
   #dbStatus{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--teal);}
   #appVersion{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted);}
+  body.activity-busy{cursor:progress;}
+  .activity-banner{
+    position:fixed; top:0; left:0; right:0; z-index:10050;
+    background:rgba(10,20,32,0.96);
+    border-bottom:1px solid var(--brass-dim);
+    padding:8px 16px 10px;
+    box-shadow:0 10px 28px rgba(0,0,0,0.4);
+  }
+  html.bright .activity-banner{
+    background:rgba(255,255,255,0.97);
+    box-shadow:0 8px 22px rgba(18,34,56,0.16);
+  }
+  .activity-banner[hidden]{display:none !important;}
+  .activity-banner-meta{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--paper);
+    display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap;
+  }
+  .activity-banner-kicker{
+    font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--teal); margin-right:8px;
+  }
+  .activity-banner-pct{color:var(--brass); font-weight:600; white-space:nowrap;}
+  .activity-banner-track{
+    height:8px; border-radius:4px; background:rgba(0,0,0,0.28);
+    border:1px solid var(--line-strong); overflow:hidden; position:relative; margin-top:7px;
+  }
+  .activity-banner-bar{
+    height:100%; width:0%;
+    background:linear-gradient(90deg, var(--brass-dim), var(--brass-bright), var(--teal));
+    transition:width 0.18s ease;
+  }
+  .activity-banner-track.indeterminate .activity-banner-bar{
+    width:38% !important; transition:none;
+    animation:install-progress-slide 1.15s ease-in-out infinite;
+  }
   /* Quieter than the vessel subtitle above it: a credit to find, not a line to read
      every time you open the app. */
   .byline{font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.04em;
@@ -1528,6 +1562,16 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
         <button class="ghost small" id="btnLoginBack">Sign in as someone else</button>
       </div>
     </div>
+  </div>
+</div>
+
+<div id="activityBanner" class="activity-banner" hidden aria-live="polite" role="status">
+  <div class="activity-banner-meta">
+    <div><span class="activity-banner-kicker" id="activityBannerKicker">Working</span><span id="activityBannerLabel">Starting…</span></div>
+    <span class="activity-banner-pct" id="activityBannerPct"></span>
+  </div>
+  <div class="activity-banner-track indeterminate" id="activityBannerTrack" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+    <div class="activity-banner-bar" id="activityBannerBar"></div>
   </div>
 </div>
 
@@ -4215,6 +4259,182 @@ async function dbClear(store){
   });
 }
 
+/* ACTIVITY_PROGRESS_BEGIN */
+/*
+ * Live progress for work that used to sit silent: server pull/push/sync, and
+ * loading or saving on this device. Nested calls stack so "syncing" can still
+ * say "saving entries 12/40" without losing the outer job.
+ */
+const ACTIVITY_BUSY_BUTTONS = [
+  'btnSyncNow','btnPullRemote','btnPullVoyageLeg','btnListRemoteVoyages','btnTestSync',
+  'btnPushVesselRemote','btnPullVesselRemote','btnSaveSyncSettings'
+];
+let _activityStack = [];
+let _activityPaintAt = 0;
+let _activityHideTimer = null;
+let _programReady = false;
+
+function activityIsActive(){ return _activityStack.length > 0; }
+function activityHasSource(source){ return _activityStack.some(item => item.source === source); }
+function activityItemPct(item){
+  if (!item) return null;
+  if (item.pct != null && isFinite(Number(item.pct))) return Math.max(0, Math.min(100, Math.round(Number(item.pct))));
+  if (item.total > 0 && item.current != null && isFinite(Number(item.current))){
+    return Math.max(0, Math.min(100, Math.round(100 * Number(item.current) / Number(item.total))));
+  }
+  return null;
+}
+function activityProgressSnapshot(){
+  return _activityStack.map(item => ({
+    id: item.id,
+    label: item.label || '',
+    source: item.source || 'program',
+    current: item.current == null ? null : Number(item.current),
+    total: item.total == null ? null : Number(item.total),
+    pct: activityItemPct(item)
+  }));
+}
+function activityFind(id){
+  if (!id) return _activityStack[_activityStack.length - 1] || null;
+  return _activityStack.find(item => item.id === id) || null;
+}
+function beginActivity(id, label, opts){
+  const o = opts || {};
+  if (_activityHideTimer){ clearTimeout(_activityHideTimer); _activityHideTimer = null; }
+  let item = id ? _activityStack.find(x => x.id === id) : null;
+  if (!item){
+    item = { id: id || ('job-' + Date.now()), shownAt: Date.now() };
+    _activityStack.push(item);
+  }
+  item.label = label || item.label || 'Working…';
+  item.source = o.source || item.source || 'program';
+  if ('pct' in o) item.pct = o.pct;
+  if ('current' in o) item.current = o.current;
+  if ('total' in o) item.total = o.total;
+  if (!item.shownAt) item.shownAt = Date.now();
+  paintActivity(true);
+  return item.id;
+}
+function updateActivity(id, patch){
+  const item = activityFind(id);
+  if (!item || !patch) return;
+  if (typeof patch === 'string'){ item.label = patch; paintActivity(true); return; }
+  const labelChanged = patch.label != null && patch.label !== item.label;
+  if (patch.label != null) item.label = patch.label;
+  if (patch.source) item.source = patch.source;
+  if ('pct' in patch) item.pct = patch.pct;
+  if ('current' in patch) item.current = patch.current;
+  if ('total' in patch) item.total = patch.total;
+  paintActivity(labelChanged);
+}
+function endActivity(id){
+  const i = id
+    ? _activityStack.findIndex(item => item.id === id)
+    : _activityStack.length - 1;
+  if (i >= 0) _activityStack.splice(i, 1);
+  paintActivity(true);
+}
+async function withActivity(id, label, fn, opts){
+  beginActivity(id, label, opts);
+  try{
+    return await fn({
+      update: (patch) => updateActivity(id, patch)
+    });
+  } finally {
+    endActivity(id);
+  }
+}
+function setActivityButtonsBusy(busy){
+  if (typeof document === 'undefined') return;
+  ACTIVITY_BUSY_BUTTONS.forEach(btnId => {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.disabled = !!busy;
+  });
+}
+function paintActivity(force){
+  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  if (!force && now - _activityPaintAt < 80) return;
+  _activityPaintAt = now;
+
+  const top = _activityStack[_activityStack.length - 1] || null;
+  const banner = (typeof document !== 'undefined') ? document.getElementById('activityBanner') : null;
+  const labelEl = (typeof document !== 'undefined') ? document.getElementById('activityBannerLabel') : null;
+  const kickerEl = (typeof document !== 'undefined') ? document.getElementById('activityBannerKicker') : null;
+  const pctEl = (typeof document !== 'undefined') ? document.getElementById('activityBannerPct') : null;
+  const track = (typeof document !== 'undefined') ? document.getElementById('activityBannerTrack') : null;
+  const bar = (typeof document !== 'undefined') ? document.getElementById('activityBannerBar') : null;
+  const syncEl = (typeof document !== 'undefined') ? document.getElementById('syncStatus') : null;
+  const dbEl = (typeof document !== 'undefined') ? document.getElementById('dbStatus') : null;
+
+  if (typeof document !== 'undefined' && document.body){
+    document.body.classList.toggle('activity-busy', !!top);
+  }
+
+  if (!top){
+    const hide = ()=>{
+      if (_activityStack.length) return;
+      if (banner) banner.hidden = true;
+      setActivityButtonsBusy(false);
+      if (syncEl && typeof renderSyncUi === 'function'){
+        try{ renderSyncUi(); }catch(_){}
+      }
+      if (dbEl && _programReady && !/error/i.test(dbEl.textContent || '')){
+        dbEl.textContent = '● local database ready';
+      }
+      if (typeof setSyncSaveStatus === 'function' && typeof document !== 'undefined'){
+        const saveEl = document.getElementById('syncSaveStatus');
+        if (saveEl && saveEl.classList.contains('saving')) setSyncSaveStatus('', null);
+      }
+    };
+    const shownAt = (typeof document !== 'undefined' && banner && !banner.hidden)
+      ? (banner.dataset.shownAt ? Number(banner.dataset.shownAt) : Date.now())
+      : Date.now();
+    const wait = Math.max(0, 280 - (Date.now() - shownAt));
+    if (_activityHideTimer) clearTimeout(_activityHideTimer);
+    _activityHideTimer = setTimeout(hide, wait);
+    return;
+  }
+
+  const pct = activityItemPct(top);
+  const fromServer = top.source === 'server';
+  const kicker = fromServer ? 'Server' : 'This device';
+  const countBit = (top.total > 0 && top.current != null)
+    ? ` (${top.current}/${top.total})`
+    : '';
+  const label = (top.label || 'Working…') + countBit;
+
+  if (banner){
+    banner.hidden = false;
+    banner.dataset.shownAt = String(banner.dataset.shownAt || Date.now());
+  }
+  if (kickerEl) kickerEl.textContent = kicker;
+  if (labelEl) labelEl.textContent = label;
+  if (pctEl) pctEl.textContent = pct == null ? '…' : (pct + '%');
+  if (track){
+    track.classList.toggle('indeterminate', pct == null);
+    track.setAttribute('aria-valuenow', String(pct == null ? 0 : pct));
+  }
+  if (bar) bar.style.width = pct == null ? '38%' : (pct + '%');
+
+  const serverItem = [..._activityStack].reverse().find(item => item.source === 'server');
+  if (serverItem && syncEl){
+    const syncLabel = (top.source === 'server')
+      ? (top.label || 'syncing…')
+      : ((serverItem.label || 'syncing') + ' — ' + (top.label || 'working…'));
+    syncEl.textContent = '● ' + syncLabel;
+    syncEl.className = 'pending';
+  }
+  if (dbEl && !fromServer){
+    dbEl.textContent = '● ' + (top.label || 'working…');
+  }
+  setActivityButtonsBusy(!!serverItem);
+  if (serverItem && typeof setSyncSaveStatus === 'function'){
+    try{ setSyncSaveStatus(label, 'saving'); }catch(_){}
+  }
+}
+/* ACTIVITY_PROGRESS_END */
+
 /* ---------------- state ---------------- */
 const state = {
   setup: {
@@ -5429,32 +5649,42 @@ async function clearVesselPackData(vesselId){
 }
 
 async function installTestFleet({ switchToFirst = true } = {}){
-  const created = [];
-  for (const spec of TEST_FLEET_VESSELS){
-    let vessel = state.vessels.find(v=>v.id===spec.id || v.slug===spec.slug);
-    if (!vessel){
-      vessel = { id: spec.id, name: spec.name, slug: spec.slug, createdAt: new Date().toISOString() };
-      state.vessels.push(vessel);
-    } else {
-      vessel.name = spec.name;
-      vessel.slug = spec.slug;
-      await clearVesselPackData(vessel.id);
+  return withActivity('test-fleet', 'Installing the test fleet on this device…', async ({ update })=>{
+    const created = [];
+    for (let i = 0; i < TEST_FLEET_VESSELS.length; i++){
+      const spec = TEST_FLEET_VESSELS[i];
+      update({
+        label: `Installing ${spec.name}…`,
+        current: i + 1,
+        total: TEST_FLEET_VESSELS.length,
+        source: 'program'
+      });
+      let vessel = state.vessels.find(v=>v.id===spec.id || v.slug===spec.slug);
+      if (!vessel){
+        vessel = { id: spec.id, name: spec.name, slug: spec.slug, createdAt: new Date().toISOString() };
+        state.vessels.push(vessel);
+      } else {
+        vessel.name = spec.name;
+        vessel.slug = spec.slug;
+        await clearVesselPackData(vessel.id);
+      }
+      const pack = spec.pack();
+      await saveVesselPack(vessel.id, pack);
+      created.push(vessel);
     }
-    const pack = spec.pack();
-    await saveVesselPack(vessel.id, pack);
-    created.push(vessel);
-  }
-  await saveVesselRegistry();
-  if (switchToFirst && created[0]){
-    await loadVesselFromDb(created[0].id);
-    await dbPut('meta', { key:'activeVesselId', value: created[0].id });
-  }
-  renderVesselSelector();
-  render();
-  applyEntryDefaults();
-  prefillFromLastEntry();
-  renderSyncUi();
-  return created;
+    await saveVesselRegistry();
+    if (switchToFirst && created[0]){
+      update({ label: `Loading ${created[0].name}…` });
+      await loadVesselFromDb(created[0].id);
+      await dbPut('meta', { key:'activeVesselId', value: created[0].id });
+    }
+    renderVesselSelector();
+    render();
+    applyEntryDefaults();
+    prefillFromLastEntry();
+    renderSyncUi();
+    return created;
+  }, { source: 'program' });
 }
 
 
@@ -5635,6 +5865,9 @@ async function activateVoyageLeg(vesselId, voyageNumber, condition){
   const vn = (voyageNumber || '').trim();
   const cond = normalizeCondition(condition);
   if (!vid || !vn) throw new Error('Voyage number required');
+  const own = !activityIsActive();
+  if (own) beginActivity('load-leg', `Loading voyage ${vn} ${cond} on this device…`, { source: 'program' });
+  try {
 
   /* Persist whatever is on screen first so switching never loses work. */
   if (state.activeVesselId === vid && (state.setup.voyageNumber || '').trim()){
@@ -5691,6 +5924,9 @@ async function activateVoyageLeg(vesselId, voyageNumber, condition){
   for (const p of state.printHistory) await dbPut('printHistory', tagVesselId(p));
   exitEditMode();
   return leg;
+  } finally {
+    if (own) endActivity('load-leg');
+  }
 }
 
 /** Vessel whose Voyage Library is shown — selected fleet vessel, else active. */
@@ -5820,6 +6056,9 @@ async function saveVesselPack(vesselId, pack){
 }
 
 async function loadVesselFromDb(vesselId){
+  const own = !activityIsActive();
+  if (own) beginActivity('load-vessel', 'Loading vessel data on this device…', { source: 'program' });
+  try{
   state.activeVesselId = vesselId;
   const metaAll = await dbGetAll('meta');
   const setupRow = metaAll.find(m=>m.key===`setup:${vesselId}`) || metaAll.find(m=>m.key==='setup');
@@ -5868,36 +6107,65 @@ async function loadVesselFromDb(vesselId){
   exitEditMode();
   await applyMirroredSyncCredentials();
   await renderVoyageLibrary();
+  } finally {
+    if (own) endActivity('load-vessel');
+  }
 }
 
 async function saveCurrentVesselState(){
   if (!state.activeVesselId) return;
+  const own = !activityIsActive();
+  if (own) beginActivity('save-vessel', 'Saving this vessel on the device…', { source: 'program' });
+  try{
   const v = activeVessel();
   if (v && state.setup.vesselName) v.name = state.setup.vesselName;
   await archiveActiveVoyageLeg();
   await saveSetup();
   await saveVesselRegistry();
-  for (const e of state.entries) await dbPut('entries', tagVesselId(e));
-  for (const r of state.receipts) await dbPut('receipts', tagVesselId(r));
-  for (const d of state.documents) await dbPut('documents', tagVesselId(d));
-  for (const a of state.abstracts) await dbPut('abstracts', tagVesselId(a));
-  for (const p of state.printHistory) await dbPut('printHistory', tagVesselId(p));
+  const groups = [
+    ['entries', state.entries],
+    ['receipts', state.receipts],
+    ['documents', state.documents],
+    ['abstracts', state.abstracts],
+    ['printHistory', state.printHistory]
+  ];
+  const total = groups.reduce((n, [, arr]) => n + (arr || []).length, 0);
+  let done = 0;
+  for (const [store, items] of groups){
+    for (const rec of (items || [])){
+      done++;
+      updateActivity(own ? 'save-vessel' : null, {
+        label: `Saving ${store} on this device…`,
+        current: done,
+        total: total || 1,
+        source: 'program'
+      });
+      await dbPut(store, tagVesselId(rec));
+    }
+  }
   await renderVoyageLibrary();
+  } finally {
+    if (own) endActivity('save-vessel');
+  }
 }
 
 async function switchVessel(vesselId){
   if (!vesselId || vesselId === state.activeVesselId) return;
   const target = state.vessels.find(v=>v.id===vesselId);
   if (!target) return;
-  await saveCurrentVesselState();
-  await loadVesselFromDb(vesselId);
-  await dbPut('meta', { key:'activeVesselId', value: vesselId });
-  render();
-  applyEntryDefaults();
-  prefillFromLastEntry();
-  renderSyncUi();
-  const lbl = document.getElementById('activeVesselLabel');
-  if (lbl) lbl.textContent = `${state.setup.vesselName || target.name} — Voyage Log & Performance`;
+  return withActivity('switch-vessel', `Switching to ${target.name}…`, async ({ update })=>{
+    update({ label: `Saving ${state.setup.vesselName || 'current vessel'}…`, source: 'program' });
+    await saveCurrentVesselState();
+    update({ label: `Loading ${target.name}…` });
+    await loadVesselFromDb(vesselId);
+    await dbPut('meta', { key:'activeVesselId', value: vesselId });
+    render();
+    applyEntryDefaults();
+    prefillFromLastEntry();
+    renderSyncUi();
+    const lbl = document.getElementById('activeVesselLabel');
+    if (lbl) lbl.textContent = `${state.setup.vesselName || target.name} — Voyage Log & Performance`;
+  }, { source: 'program' });
 }
 
 async function createNewVessel(name){
@@ -6025,15 +6293,19 @@ async function pullVesselFromServer(vesselId){
   if (!vessel) return;
   if (!syncApiBase()){ alert('Configure the sync server URL on the Setup tab first.'); return; }
   const prevOverride = _syncSlugOverride;
+  return withActivity('pull-vessel', `Pulling ${vessel.name} from the server…`, async ({ update })=>{
   try {
     if (vesselId !== state.activeVesselId) await switchVessel(vesselId);
     /* Pin the target after the switch — syncNow re-reads the Setup form, which would
        otherwise point the pull at whichever slug that form happens to show. */
     _syncSlugOverride = vesselOwnSyncSlug(vesselId);
+    update({ label: `Clearing local records for ${vessel.name}…`, source: 'server' });
     for (const store of ['entries','receipts','documents','abstracts','printHistory']){
       await clearVesselStore(store, vesselId);
     }
+    update({ label: `Pulling ${vessel.name} from the server…` });
     await syncNow({ pullOnly:true, policy:'remote' });
+    update({ label: 'Saving pulled records on this device…', source: 'program' });
     await persistAllToDb();
     await loadVesselFromDb(vesselId);
     render();
@@ -6043,6 +6315,7 @@ async function pullVesselFromServer(vesselId){
   } finally {
     _syncSlugOverride = prevOverride;
   }
+  }, { source: 'server' });
 }
 
 /**
@@ -6069,7 +6342,10 @@ async function pushVesselToServer(vesselId){
   let prevCondition = 'B';
 
   try {
-    if (vesselId !== state.activeVesselId) await switchVessel(vesselId);
+    if (vesselId !== state.activeVesselId){
+      updateActivity('push-vessel', { label: `Opening ${vessel.name}…` });
+      await switchVessel(vesselId);
+    }
     prevVoyage = (state.setup.voyageNumber || '').trim();
     prevCondition = normalizeCondition(state.setup.shipCondition);
     slug = vesselOwnSyncSlug(vesselId);
@@ -6090,8 +6366,16 @@ async function pushVesselToServer(vesselId){
       legs.push({ voyageNumber: prevVoyage, condition: prevCondition });
     }
 
-    for (const leg of legs){
+    await withActivity('push-vessel', `Pushing ${vessel.name} to the server…`, async ({ update })=>{
+    for (let i = 0; i < legs.length; i++){
+      const leg = legs[i];
       const label = `${leg.voyageNumber}/${leg.condition}`;
+      update({
+        label: `Uploading ${vessel.name} — voyage ${label}`,
+        current: i + 1,
+        total: legs.length,
+        source: 'server'
+      });
       try{
         await activateVoyageLeg(vesselId, leg.voyageNumber, leg.condition);
         _syncSlugOverride = slug;   /* leg setup may carry another ship's slug */
@@ -6101,6 +6385,7 @@ async function pushVesselToServer(vesselId){
         failed.push(`${label}: ${err.message || err}`);
       }
     }
+    }, { source: 'server', current: 0, total: legs.length });
   } catch(err){
     failed.push(err.message || String(err));
   } finally {
@@ -6530,9 +6815,11 @@ async function recalculateAllProgramData({ interactive = true } = {}){
     if (!ok) return null;
   }
 
+  return withActivity('recalc', 'Recalculating voyage data on this device…', async ({ update })=>{
   const summary = { vessels: 0, legs: 0, entries: 0, rpmFixed: 0 };
 
   /* 1) Active working set */
+  update({ label: 'Recalculating the active voyage…', source: 'program' });
   const activeStats = await recalculateCurrentEntries({ persist: true, clearOverrides: false });
   summary.entries += activeStats.entryCount;
   summary.rpmFixed += activeStats.rpmFixed;
@@ -6546,7 +6833,14 @@ async function recalculateAllProgramData({ interactive = true } = {}){
   for (const v of vessels){
     summary.vessels++;
     const legs = await listVoyageLegsForVessel(v.id);
-    for (const leg of legs){
+    for (let i = 0; i < legs.length; i++){
+      const leg = legs[i];
+      update({
+        label: `Recalculating ${v.name || v.id} — ${leg.voyageNumber || ''} ${leg.condition || ''}`.trim(),
+        current: i + 1,
+        total: Math.max(legs.length, 1),
+        source: 'program'
+      });
       /* Skip re-writing the active leg we just archived — still safe to refresh. */
       const rebuilt = await recalculateLegPack(leg);
       const next = {
@@ -6582,6 +6876,7 @@ async function recalculateAllProgramData({ interactive = true } = {}){
     );
   }
   return summary;
+  }, { source: 'program' });
 }
 
 function snapshotLaterEntries(afterDatetime, afterId){
@@ -16085,6 +16380,9 @@ function syncTooLargeMessage(opts){
 
 async function fetchSyncJson(url, options = {}){
   const opts = Object.assign({ cache: 'no-store' }, options || {});
+  const own = !activityIsActive();
+  if (own) beginActivity('sync-http', 'Contacting the sync server…', { source: 'server' });
+  try{
   let res;
   try{
     res = await fetch(url, opts);
@@ -16159,6 +16457,9 @@ async function fetchSyncJson(url, options = {}){
   }
   if (body == null) throw new Error('Empty response from sync server (HTTP ' + res.status + ')');
   return { res, body };
+  } finally {
+    if (own) endActivity('sync-http');
+  }
 }
 
 function markPendingSync(){
@@ -16738,8 +17039,10 @@ function renderSyncUi(){
       statusClass = navigator.onLine ? 'online' : '';
     }
   }
-  status.textContent = statusText;
-  status.className = statusClass;
+  if (!activityHasSource('server')){
+    status.textContent = statusText;
+    status.className = statusClass;
+  }
 
   if (banner){
     if (!configured){
@@ -16870,13 +17173,36 @@ function rememberDeleted(store, id){
 }
 
 async function persistAllToDb(){
-  await saveSetup();
-  for (const e of state.entries) await dbPut('entries', tagVesselId(e));
-  for (const r of state.receipts) await dbPut('receipts', tagVesselId(r));
-  for (const d of state.documents) await dbPut('documents', tagVesselId(d));
-  for (const a of state.abstracts) await dbPut('abstracts', tagVesselId(a));
-  for (const p of state.printHistory) await dbPut('printHistory', tagVesselId(p));
-  for (const o of state.orbEntries) await dbPut('orbEntries', tagVesselId(o));
+  const groups = [
+    ['entries', state.entries],
+    ['receipts', state.receipts],
+    ['documents', state.documents],
+    ['abstracts', state.abstracts],
+    ['printHistory', state.printHistory],
+    ['orbEntries', state.orbEntries]
+  ];
+  const total = groups.reduce((n, [, arr]) => n + (arr || []).length, 0) + 1;
+  const own = !activityFind('persist');
+  if (own) beginActivity('persist', 'Saving on this device…', { source: 'program', current: 0, total });
+  try{
+    updateActivity('persist', { label: 'Saving setup on this device…', current: 1, total, source: 'program' });
+    await saveSetup();
+    let done = 1;
+    for (const [store, items] of groups){
+      for (const rec of (items || [])){
+        done++;
+        updateActivity('persist', {
+          label: `Saving ${store} on this device…`,
+          current: done,
+          total,
+          source: 'program'
+        });
+        await dbPut(store, tagVesselId(rec));
+      }
+    }
+  } finally {
+    if (own) endActivity('persist');
+  }
 }
 
 let syncInFlight = null;
@@ -16890,15 +17216,18 @@ async function syncNow(options = {}){
   if (syncInFlight) return syncInFlight;
 
   syncInFlight = (async ()=>{
+    return withActivity('sync', pullOnly ? `Pulling ${voyageSyncKey()} ${voyageConditionKey()} from the server…` : `Syncing ${voyageSyncKey()} ${voyageConditionKey()}…`, async ({ update })=>{
     const syncBefore = ensureSyncConfig();
     const vessel = vesselSyncSlug();
     const voyage = voyageSyncKey();
     const condition = voyageConditionKey();
     const headers = syncRequestHeaders({ 'Content-Type': 'application/json' });
     const legUrl = `${base}/api/voyage/${encodeURIComponent(vessel)}/${encodeURIComponent(voyage)}/${encodeURIComponent(condition)}`;
+    const legLabel = `${voyage} ${condition}`;
 
     let remote = null;
     try {
+      update({ label: `Pulling voyage ${legLabel} from the server…`, source: 'server' });
       const { body } = await fetchSyncJson(legUrl, { headers });
       remote = body;
     } catch (e){
@@ -16913,10 +17242,12 @@ async function syncNow(options = {}){
     /* Always merge remote peers before push so multi-device offline edits are not lost. */
     if (remote){
       if (pullOnly || policy === 'remote'){
+        update({ label: 'Applying server data on this device…' });
         applyRemoteSnapshot(remote, 'remote');
         await persistAllToDb();
         await persistSyncCredentialsMirror(ensureSyncConfig());
       } else if (policy === 'merge'){
+        update({ label: 'Merging server data with this device…' });
         applyRemoteSnapshot(remote, 'merge');
         await persistAllToDb();
       }
@@ -16924,16 +17255,19 @@ async function syncNow(options = {}){
     }
 
     if (!pullOnly){
+      update({ label: `Uploading voyage ${legLabel} to the server…`, source: 'server' });
       const payload = buildSyncPayload();
       const { body: merged } = await fetchSyncJson(legUrl, {
         method: 'PUT', headers, body: JSON.stringify(payload)
       });
       if (policy !== 'local'){
+        update({ label: 'Saving the merged copy on this device…' });
         applyRemoteSnapshot(merged, 'merge');
         await persistAllToDb();
       }
     }
 
+    update({ label: 'Refreshing the program…', source: 'program' });
     await archiveActiveVoyageLeg();
     const sync = ensureSyncConfig();
     sync.lastSyncedAt = new Date().toISOString();
@@ -16944,6 +17278,7 @@ async function syncNow(options = {}){
     renderSyncUi();
     await renderVoyageLibrary();
     render();
+    }, { source: 'server' });
   })().catch(err=>{
     const sync = ensureSyncConfig();
     sync.lastSyncError = err.message || String(err);
@@ -17011,6 +17346,7 @@ document.getElementById('btnTestSync')?.addEventListener('click', async ()=>{
       alert('Enter a Sync Server URL first.');
       return;
     }
+    await withActivity('test-sync', 'Testing connection to ' + base + '…', async ()=>{
     setSyncSaveStatus('Testing connection to ' + base + '…', 'saving');
     const { body } = await fetchSyncJson(`${base}/api/health`, { headers: syncRequestHeaders() });
     if (!body || body.ok !== true){
@@ -17038,6 +17374,7 @@ document.getElementById('btnTestSync')?.addEventListener('click', async ()=>{
         : 'Connection OK — the API token was accepted.\n\n') +
       'URL: ' + base + '\nVessel: ' + vessel + '\n' + JSON.stringify(body, null, 2)
     );
+    }, { source: 'server' });
   } catch (e){
     setSyncSaveStatus('Connection failed: ' + e.message, 'err');
     alert('Connection failed: ' + e.message);
@@ -17055,6 +17392,7 @@ document.getElementById('btnListRemoteVoyages')?.addEventListener('click', async
       return;
     }
     const vessel = vesselSyncSlug();
+    await withActivity('list-remote', `Listing voyages on the server for ${vessel}…`, async ()=>{
     const { body } = await fetchSyncJson(
       `${base}/api/voyage/${encodeURIComponent(vessel)}`,
       { headers: syncRequestHeaders() }
@@ -17079,6 +17417,7 @@ document.getElementById('btnListRemoteVoyages')?.addEventListener('click', async
     } else {
       alert(JSON.stringify(body, null, 2));
     }
+    }, { source: 'server' });
   } catch (e){
     if (box){ box.style.display = ''; box.textContent = 'List failed: ' + e.message; }
     else alert('List failed: ' + e.message);
@@ -17212,7 +17551,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v160';
+let androidInstallCacheName = 'noon-report-v161';
 
 /*
  * What the program is called.
@@ -17322,6 +17661,14 @@ function setAndroidInstallProgressVisible(show){
 }
 
 function applyAndroidInstallProgress(pct, label, opts){
+  const n = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+  const indeterminate = !!(opts && opts.indeterminate);
+  if (androidInstallBusy){
+    beginActivity('install', label || 'Installing on this device…', {
+      source: 'program',
+      pct: indeterminate ? null : n
+    });
+  }
   const wrap = document.getElementById('androidInstallProgressWrap');
   const bar = document.getElementById('androidInstallProgressBar');
   const track = document.getElementById('androidInstallProgressTrack');
@@ -17329,8 +17676,6 @@ function applyAndroidInstallProgress(pct, label, opts){
   const labelEl = document.getElementById('androidInstallProgressLabel');
   if (!wrap || !bar) return;
   wrap.style.display = 'block';
-  const n = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
-  const indeterminate = !!(opts && opts.indeterminate);
   if (track){
     track.classList.toggle('indeterminate', indeterminate);
     track.setAttribute('aria-valuenow', String(n));
@@ -17534,6 +17879,7 @@ document.getElementById('btnInstallApp')?.addEventListener('click', async ()=>{
 
   androidInstallBusy = false;
   updateAndroidInstallUi();
+  endActivity('install');
 });
 document.getElementById('btnInstallHelp')?.addEventListener('click', ()=>{
   const steps = document.getElementById('androidInstallSteps');
@@ -17575,11 +17921,15 @@ function setDbBackupStatus(msg){
 }
 
 async function buildFullDatabaseBackup(){
+  return withActivity('db-backup', 'Building a full database backup…', async ({ update })=>{
   await ensureDB();
+  update({ label: 'Saving the active vessel first…' });
   await saveCurrentVesselState();
+  update({ label: 'Reading the local database…' });
   const meta = await dbGetAll('meta');
   const stores = {};
   for (const name of DB_BACKUP_STORES){
+    update({ label: `Reading ${name}…` });
     try{ stores[name] = await dbGetAll(name); }
     catch(_){ stores[name] = []; }
   }
@@ -17593,6 +17943,7 @@ async function buildFullDatabaseBackup(){
     stores,
     counts: Object.fromEntries(Object.entries(stores).map(([k,v])=>[k, (v||[]).length]))
   };
+  }, { source: 'program' });
 }
 
 function isFullDatabaseBackup(payload){
@@ -17633,15 +17984,25 @@ async function writeMetaRows(rows){
 }
 
 async function writeStoreRows(storeName, rows){
-  for (const row of (rows || [])){
+  const list = rows || [];
+  for (let i = 0; i < list.length; i++){
+    const row = list[i];
     if (!row || row.id == null) continue;
+    updateActivity(null, {
+      label: `Writing ${storeName} on this device…`,
+      current: i + 1,
+      total: list.length,
+      source: 'program'
+    });
     await dbPut(storeName, row);
   }
 }
 
 async function restoreFullDatabase(payload){
   if (!isFullDatabaseBackup(payload)) throw new Error('Not a full database backup (expected format noon-report-db-v1).');
+  return withActivity('db-restore', 'Restoring the database on this device…', async ({ update })=>{
   await ensureDB();
+  update({ label: 'Clearing local stores…' });
   for (const name of DB_BACKUP_STORES) await dbClear(name);
   await dbClear('meta');
   await writeMetaRows(payload.meta || []);
@@ -17653,8 +18014,10 @@ async function restoreFullDatabase(payload){
     await dbPut('meta', { key:'activeVesselId', value: payload.activeVesselId });
   }
   for (const name of DB_BACKUP_STORES){
+    update({ label: `Writing ${name}…` });
     await writeStoreRows(name, (payload.stores && payload.stores[name]) || []);
   }
+  update({ label: 'Loading the restored vessel…' });
   const metaAll = await dbGetAll('meta');
   await migrateToMultiVessel(metaAll);
   const vid = state.activeVesselId || payload.activeVesselId || (state.vessels[0] && state.vessels[0].id) || LEGACY_VESSEL_ID;
@@ -17668,11 +18031,14 @@ async function restoreFullDatabase(payload){
   prefillFromLastEntry();
   renderSyncUi();
   try{ if (typeof renderOrbUi === 'function') renderOrbUi(); }catch(_){}
+  }, { source: 'program' });
 }
 
 async function mergeFullDatabase(payload){
   if (!isFullDatabaseBackup(payload)) throw new Error('Not a full database backup (expected format noon-report-db-v1).');
+  return withActivity('db-merge', 'Merging a backup into this device…', async ({ update })=>{
   await ensureDB();
+  update({ label: 'Saving the active vessel first…' });
   await saveCurrentVesselState();
 
   const localMeta = await dbGetAll('meta');
@@ -17689,6 +18055,7 @@ async function mergeFullDatabase(payload){
   }
 
   for (const name of DB_BACKUP_STORES){
+    update({ label: `Merging ${name}…` });
     const localRows = await dbGetAll(name);
     const incoming = (payload.stores && payload.stores[name]) || [];
     const merged = mergeListsById(localRows, incoming);
@@ -17696,6 +18063,7 @@ async function mergeFullDatabase(payload){
     await writeStoreRows(name, merged);
   }
 
+  update({ label: 'Loading the merged vessel…' });
   const metaAll = await dbGetAll('meta');
   await migrateToMultiVessel(metaAll);
   await loadVesselFromDb(state.activeVesselId);
@@ -17708,6 +18076,7 @@ async function mergeFullDatabase(payload){
   prefillFromLastEntry();
   renderSyncUi();
   try{ if (typeof renderOrbUi === 'function') renderOrbUi(); }catch(_){}
+  }, { source: 'program' });
 }
 
 function readJsonFileInput(file){
@@ -19708,6 +20077,9 @@ function loginApiBase(raw){
 }
 
 async function loginApiCall(base, path, { method='GET', body=null, session=null, token=null } = {}){
+  const own = !activityIsActive();
+  if (own) beginActivity('login-api', 'Contacting the server…', { source: 'server' });
+  try{
   const headers = sessionRequestHeaders(session);
   if (token) headers.Authorization = 'Bearer ' + token;
   const res = await fetch(`${base}${path}`, {
@@ -19734,6 +20106,9 @@ async function loginApiCall(base, path, { method='GET', body=null, session=null,
     throw err;
   }
   return parsed || {};
+  } finally {
+    if (own) endActivity('login-api');
+  }
 }
 
 function setLoginStatus(id, message, kind){
@@ -20009,6 +20384,7 @@ async function handleLoginSubmit(){
 
   setLoginStatus('loginStatus', 'Signing in…', 'busy');
   try{
+    await withActivity('login', 'Signing in…', async ({ update })=>{
     const out = await loginApiCall(base, '/api/auth/login', {
       method: 'POST', body: { username, password }
     });
@@ -20027,12 +20403,15 @@ async function handleLoginSubmit(){
        in today should still unlock after it sails — by proving the laptop, not
        by storing a password hash. */
     try{
+      update({ label: 'Enrolling this device…' });
       await enrollThisDevice(session);
       bindOfflineCredsUi();
     }catch(err){
       console.warn('Could not enroll this device for offline unlock:', err.message);
     }
+    update({ label: 'Loading your assignment…' });
     await enterAssignStep(session);
+    }, { source: 'server' });
   }catch(err){
     /* Only a transport failure means "offline". If the server answers — including
        401 — its answer stands, or a revoked login could be resurrected by pulling
@@ -20708,6 +21087,7 @@ document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPa
 
 (async function init(){
   try {
+    beginActivity('boot', 'Opening the local database…', { source: 'program' });
     if (penInputLikely()) enablePenInputMode();
     await openDB();
     /* Restore sync credentials immediately — before fleet seed — so Setup tab Save/Pull work on fresh tablets. */
@@ -20716,6 +21096,7 @@ document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPa
       await applyMirroredSyncCredentials();
       renderSyncUi();
     }catch(_){}
+    updateActivity('boot', { label: 'Loading this vessel…' });
     const metaAll = await dbGetAll('meta');
     await migrateToMultiVessel(metaAll);
     await loadVesselFromDb(state.activeVesselId);
@@ -20755,13 +21136,14 @@ document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPa
     const needRecalc = !recalcMeta || Number(recalcMeta.value) < DATA_RECALC_VERSION;
     if (needRecalc){
       try{
-        document.getElementById('dbStatus').textContent = '● recalculating voyage data…';
+        updateActivity('boot', { label: 'Recalculating voyage data…' });
         await recalculateAllProgramData({ interactive: false });
       } catch(recalcErr){
         console.error('Auto recalculation failed:', recalcErr);
       }
     }
 
+    updateActivity('boot', { label: 'Refreshing the program…' });
     render();
     prefillFromLastEntry();
     ensureSyncConfig();
@@ -20771,9 +21153,13 @@ document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPa
     /* Last, so a stored session can switch the active vessel over a loaded app. */
     try{ await initLoginGate(); }
     catch(gateErr){ console.error('Login gate failed to start', gateErr); showLoginGate(true); }
+    _programReady = true;
+    endActivity('boot');
     document.getElementById('dbStatus').textContent = '● local database ready';
   } catch(e){
     console.error('Startup error:', e);
+    try{ endActivity('boot'); }catch(_){}
+    _programReady = true;
     try{
       ensureSyncConfig();
       await applyMirroredSyncCredentials();
