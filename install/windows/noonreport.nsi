@@ -1,4 +1,4 @@
-; Noon Report — Windows installer
+; Voyage Report — Windows installer
 ;
 ; Built on Linux with makensis (see scripts/build-windows-installer.sh), so the
 ; release can be produced by CI without a Windows machine.
@@ -29,16 +29,22 @@ ManifestDPIAware true
   !define APP_VERSION "0.0.0"
 !endif
 !ifndef OUT_FILE
-  !define OUT_FILE "NoonReport-Setup.exe"
+  !define OUT_FILE "VoyageReport-Setup.exe"
 !endif
 !ifndef PAYLOAD_DIR
   !define PAYLOAD_DIR "payload"
 !endif
 
-!define APP_NAME     "Noon Report"
+!define APP_NAME     "Voyage Report"
 !define APP_PUBLISHER "ts0gs · Marvin C. Endozo"
+; APP_ID is deliberately still "NoonReport" after the rename. It is not shown to
+; anyone — it is the install folder under %LOCALAPPDATA% and the key this program is
+; registered under in Settings > Apps. Renaming it would make this installer write to
+; a new folder and register a second entry, leaving the copy already on the PC
+; installed, listed and reachable from its shortcuts. The visible name comes from
+; APP_NAME, which every shortcut, page and registry value below is built from.
 !define APP_ID       "NoonReport"
-!define APP_EXE      "Start Noon Report.bat"
+!define APP_EXE      "Start Voyage Report.bat"
 !define UNINST_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}"
 
 Name "${APP_NAME}"
@@ -121,6 +127,16 @@ VIAddVersionKey "LegalCopyright"  "${APP_PUBLISHER}"
   ; shortcut being overwritten and is the most likely way an engineer lands on the
   ; previous version.
   Delete "$DESKTOP\Noon Report.bat"
+
+  ; Left over from when this program was called Noon Report. Nothing above replaces
+  ; these: the installer only overwrites files and shortcuts it creates, and those
+  ; are all named from APP_NAME, which is now different. Without this an engineer
+  ; ends up with two Desktop icons and two Start menu entries for one program.
+  Delete "$INSTDIR\Start Noon Report.bat"
+  Delete "$DESKTOP\Noon Report.lnk"
+  Delete "$SMPROGRAMS\Noon Report\Noon Report.lnk"
+  Delete "$SMPROGRAMS\Noon Report\Uninstall Noon Report.lnk"
+  RMDir  "$SMPROGRAMS\Noon Report"
 !macroend
 
 Section "Application" SEC_APP

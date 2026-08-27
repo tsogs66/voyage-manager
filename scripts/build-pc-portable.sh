@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build a one-folder portable PC zip (double-click Start Noon Report.bat).
+# Build a one-folder portable PC zip (double-click Start Voyage Report.bat).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="${1:-$ROOT/dist/NoonReport-PC}"
-ZIP="${2:-$ROOT/dist/NoonReport-PC.zip}"
+OUT="${1:-$ROOT/dist/VoyageReport-PC}"
+ZIP="${2:-$ROOT/dist/VoyageReport-PC.zip}"
 
 rm -rf "$OUT"
 mkdir -p "$OUT" "$(dirname "$ZIP")"
@@ -23,7 +23,7 @@ while IFS= read -r d; do
 done < <(python3 -c "import json;print('\n'.join(json.load(open('$ROOT/scripts/app-assets.json'))['dirs']))")
 
 cp "$ROOT/install/pc/Start-NoonReport.ps1" "$OUT/"
-cp "$ROOT/install/pc/Start-NoonReport.bat" "$OUT/Start Noon Report.bat"
+cp "$ROOT/install/pc/Start-NoonReport.bat" "$OUT/Start Voyage Report.bat"
 cp "$ROOT/install/pc/Update-NoonReport.ps1" "$OUT/"
 cp "$ROOT/install/pc/Update-NoonReport.bat" "$OUT/"
 cp "$ROOT/install/pc/README.txt" "$OUT/"
@@ -49,4 +49,4 @@ fi
 
 echo "Portable PC package: $OUT"
 echo "Zip: $ZIP"
-echo "Share link (after push/release): download the zip and run Start Noon Report.bat"
+echo "Share link (after push/release): download the zip and run Start Voyage Report.bat"

@@ -1,9 +1,9 @@
-Noon Report — Windows
-=====================
+Voyage Report — Windows
+=======================
 
 WHAT THIS IS
 ------------
-The full Noon Report application, installed on this PC. It runs with no
+The full Voyage Report application, installed on this PC. It runs with no
 internet connection at all: logging watches, the e-ORB, R.O.B., bunker
 surveys, totals and every printout work exactly the same at sea as alongside.
 
@@ -14,7 +14,7 @@ the network on its own.
 
 STARTING IT
 -----------
-Use the "Noon Report" shortcut on the Desktop or in the Start menu.
+Use the "Voyage Report" shortcut on the Desktop or in the Start menu.
 
 A small console window opens and stays open — that is the local server. Your
 browser opens the app at http://127.0.0.1:8765. Leave the console window
@@ -52,8 +52,8 @@ GitHub instead, when this PC has internet access.
 
 REMOVING IT
 -----------
-Settings > Apps > Installed apps > Noon Report > Uninstall, or the
-"Uninstall Noon Report" shortcut in the Start menu.
+Settings > Apps > Installed apps > Voyage Report > Uninstall, or the
+"Uninstall Voyage Report" shortcut in the Start menu.
 
 Uninstalling removes the program files. It does not touch your voyage data,
 which stays in the browser. To clear that as well, use your browser's

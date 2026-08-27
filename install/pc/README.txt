@@ -1,4 +1,4 @@
-Noon Report — PC local install
+Voyage Report — PC local install
 ================================
 
 One-click install (Windows PowerShell):
@@ -8,7 +8,7 @@ One-click install (Windows PowerShell):
 Or download the portable ZIP from GitHub Releases / build with scripts/build-pc-portable.sh,
 unzip, then double-click:
 
-  Start Noon Report.bat
+  Start Voyage Report.bat
 
 How it works
 ------------
