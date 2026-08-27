@@ -218,7 +218,15 @@ This downloads the latest `main` build into `%LOCALAPPDATA%\NoonReport`, creates
 
 Share `dist/VoyageChief-PC.zip`. On the ship PC: unzip → double-click **Start Voyage Chief.bat**.
 
-Details: [`install/pc/README.txt`](install/pc/README.txt).
+### Portable EXE (USB stick)
+
+```bash
+./scripts/build-windows-portable.sh
+```
+
+Copy `dist/VoyageChief-Portable-*.exe` onto a USB stick and double-click it. It unpacks a `VoyageChief` folder next to the `.exe` (on the stick) and starts from there — no install, no administrator rights, no registry. Voyage data stays in the browser on the PC that is running it; take a Database Backup onto the stick if the records have to travel with the files.
+
+Details: [`install/pc/README.txt`](install/pc/README.txt) and [`install/windows/PORTABLE-README.txt`](install/windows/PORTABLE-README.txt).
 
 ## Quick Start (Local / Ship PC)
 

@@ -10,6 +10,7 @@
     "cap:open": "npx cap open android",
     "android:sync": "npm run cap:sync",
     "build:windows": "bash scripts/build-windows-installer.sh",
+    "build:windows-portable": "bash scripts/build-windows-portable.sh",
     "build:portable": "bash scripts/build-pc-portable.sh",
     "fonts:refresh": "bash scripts/fetch-fonts.sh"
   },
