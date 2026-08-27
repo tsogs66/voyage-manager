@@ -103,6 +103,9 @@ const sigSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200"
       ['signatureLine', '.pr-sign-line'],
       ['signerName', '.pr-sign-name'],
       ['printedOn', '.pr-foot'],
+      // The author credit is the last line on the sheet, so it is the first thing
+      // to fall off the paper if the footer ever grows.
+      ['byline', '.pr-byline'],
       ['remarks', '.pr-remarks'],
       ['robTable', '.pr-noon-full table.pr-table']
     ]) {

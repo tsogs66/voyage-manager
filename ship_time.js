@@ -1,3 +1,6 @@
+/* Voyage Manager — ship time / clock change
+ * ts0gs · Marvin C. Endozo
+ */
 /**
  * Ship's clock / zone time for noon-report log entries.
  *

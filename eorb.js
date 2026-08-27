@@ -1,5 +1,7 @@
 /**
  * Electronic Oil Record Book (e-ORB) — MARPOL Annex I
+ *
+ * ts0gs · Marvin C. Endozo
  * Codes/items from MARPOL Annex I Appendix III (as amended, e.g. MEPC.187(59)).
  * Recording examples aligned with MEPC.1/Circ.736/Rev.2.
  *
@@ -13,6 +15,12 @@
  */
 (function (global) {
   'use strict';
+
+  /* This module is loaded on its own, so it carries its own copy of the credit
+     rather than reaching into the app for it; check_assets.js asserts the two
+     agree, the same way it does for the service-worker cache name. */
+  const AUTHOR = { handle: 'ts0gs', name: 'Marvin C. Endozo' };
+  const AUTHOR_LINE = AUTHOR.handle + ' \u00b7 ' + AUTHOR.name;
 
   const FLAGS = [
     {
@@ -1919,7 +1927,8 @@
     '.orb-book-master{margin-top:16px; display:flex; justify-content:space-between; gap:24px;}',
     '.orb-book-master > div{flex:1; border-top:1px solid #16202e; padding-top:4px; min-height:34px; font-size:10px; color:#33415c;}',
     '.orb-book-master img{max-height:24mm; max-width:42mm; object-fit:contain; display:block; margin-top:2px;}',
-    '.orb-book-foot{margin-top:12px; padding-top:6px; border-top:1px solid #b9ae8e; font-size:9px; color:#6b7280; line-height:1.45;}'
+    '.orb-book-foot{margin-top:12px; padding-top:6px; border-top:1px solid #b9ae8e; font-size:9px; color:#6b7280; line-height:1.45;}' +
+    '.orb-book-byline{margin-top:5px; font-size:8px; color:#8b8578; letter-spacing:.04em;}'
   ].join('\n');
 
   /** The part this set of entries belongs to, named as the book names it. */
@@ -1974,7 +1983,8 @@
         '</div>' +
       '</div>' +
       table + master +
-      '<div class="orb-book-foot">' + foot + '</div>' +
+      '<div class="orb-book-foot">' + foot +
+        '<div class="orb-book-byline">' + escapeHtml(AUTHOR_LINE) + '</div></div>' +
     '</div>';
   }
 
