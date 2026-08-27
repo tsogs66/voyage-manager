@@ -4319,12 +4319,13 @@ function updateActivity(id, patch){
   const item = activityFind(id);
   if (!item || !patch) return;
   if (typeof patch === 'string'){ item.label = patch; paintActivity(true); return; }
+  const labelChanged = patch.label != null && patch.label !== item.label;
   if (patch.label != null) item.label = patch.label;
   if (patch.source) item.source = patch.source;
   if ('pct' in patch) item.pct = patch.pct;
   if ('current' in patch) item.current = patch.current;
   if ('total' in patch) item.total = patch.total;
-  paintActivity(false);
+  paintActivity(labelChanged);
 }
 function endActivity(id){
   const i = id
