@@ -135,6 +135,35 @@ for (const rel of precache || []) {
   check('the Windows installer reads the shared list', readsList('scripts/build-windows-installer.sh'), true);
 }
 
+/* The author credit.
+   It is defined twice — once in the app, once in eorb.js, which is a standalone
+   module loaded on its own — so the two have to be held together the same way the
+   service-worker cache name is, or a printed e-ORB page could credit one thing and
+   the app window another. */
+{
+  const eorb = fs.readFileSync(path.join(REPO_ROOT, 'eorb.js'), 'utf8');
+
+  const appAuthor = matchOrDie(html,
+    /const APP_AUTHOR = \{ handle: '([^']+)', name: '([^']+)' \}/, 'APP_AUTHOR in voyage_manager.html');
+  const appName = html.match(/const APP_AUTHOR = \{ handle: '[^']+', name: '([^']+)' \}/)[1];
+  const orbAuthor = matchOrDie(eorb,
+    /const AUTHOR = \{ handle: '([^']+)', name: '([^']+)' \}/, 'AUTHOR in eorb.js');
+  const orbName = eorb.match(/const AUTHOR = \{ handle: '[^']+', name: '([^']+)' \}/)[1];
+
+  check('the app and eorb.js credit the same handle', appAuthor, orbAuthor);
+  check('the app and eorb.js credit the same name', appName, orbName);
+
+  // Every surface that carries it. A credit that only reaches some of them is worse
+  // than none: it reads as an oversight on whichever sheet is missing it.
+  check('the masthead has a byline element', /id="appByline"/.test(html), true);
+  check('the printed sheet footer carries it', /class="pr-foot pr-byline"/.test(html), true);
+  check('the e-ORB book footer carries it', /orb-book-byline/.test(eorb), true);
+  check('the document names its author', /<meta name="author"/.test(html), true);
+
+  const nsi = fs.readFileSync(path.join(REPO_ROOT, 'install', 'windows', 'noonreport.nsi'), 'utf8');
+  check('the installer names its publisher', nsi.includes(appName), true);
+}
+
 console.log();
 if (failures.length) {
   console.log(`FAILED — ${failures.length} of ${checked} checks`);

@@ -1,4 +1,7 @@
-const CACHE = 'noon-report-v156';
+/* Voyage Manager — service worker (offline cache)
+ * ts0gs · Marvin C. Endozo
+ */
+const CACHE = 'noon-report-v157';
 const PRECACHE = [
   './voyage_manager.html',
   './eorb.js',

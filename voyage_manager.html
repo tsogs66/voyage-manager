@@ -1,8 +1,13 @@
 <!DOCTYPE html>
+<!--
+  Voyage Manager — Noon Report / Engine Log
+  ts0gs · Marvin C. Endozo
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Noon Report — Engine Log</title>
+<meta name="author" content="Marvin C. Endozo (ts0gs)">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a1420">
 <meta name="mobile-web-app-capable" content="yes">
@@ -85,6 +90,10 @@
   .subtitle{font-size:11px; color:var(--paper-dim); letter-spacing:0.08em; text-transform:uppercase; margin-top:2px;}
   #dbStatus{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--teal);}
   #appVersion{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted);}
+  /* Quieter than the vessel subtitle above it: a credit to find, not a line to read
+     every time you open the app. */
+  .byline{font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.04em;
+          color:var(--muted); margin-top:3px;}
 
   .tabs{display:flex; gap:2px; margin:18px 0 20px; border-bottom:1px solid var(--line); flex-wrap:wrap;}
   .tab{
@@ -1380,6 +1389,7 @@
   .pr-sign-name{ font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; overflow-wrap:anywhere; }
   .pr-sign-role{ font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:#5a6578; margin-top:0; }
   .pr-foot{ font-size:9px; color:#8a95a8; margin-top:0.6mm; text-align:center; letter-spacing:0.02em; }
+  .pr-byline{ margin-top:0.2mm; font-size:8px; color:#a2abbb; }
   /* legacy aliases */
   .pr-box{ border:1px solid #d4dce8; overflow:hidden; break-inside:avoid; margin-bottom:1.5mm; }
   .pr-box h4{
@@ -1529,6 +1539,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
       <div>
         <h1>Noon Report</h1>
         <div class="subtitle" id="activeVesselLabel">Engine Department — Voyage Log &amp; Performance</div>
+        <div class="byline" id="appByline"></div>
       </div>
     </div>
     <div class="status-row">
@@ -11814,6 +11825,7 @@ function printSignatory(entry){
       </div>
     </div>
     <div class="pr-foot">Printed ${now} · ${escPrint(state.setup.vesselName||'')} · ${escPrint(state.setup.voyageNumber||'')}</div>
+    <div class="pr-foot pr-byline">${escPrint(APP_AUTHOR_LINE)}</div>
   </footer>`;
 }
 
@@ -17200,7 +17212,16 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v156';
+let androidInstallCacheName = 'noon-report-v157';
+
+/*
+ * Who wrote this. One definition, used by the masthead byline, every printed
+ * sheet and the e-ORB book, so the credit cannot end up saying different things
+ * in different places. eorb.js carries its own copy because it is a standalone
+ * module loaded before this script; check_assets.js asserts the two agree.
+ */
+const APP_AUTHOR = { handle: 'ts0gs', name: 'Marvin C. Endozo' };
+const APP_AUTHOR_LINE = APP_AUTHOR.handle + ' · ' + APP_AUTHOR.name;
 
 /*
  * Show the running build in the header.
@@ -17218,6 +17239,13 @@ function showAppVersion(){
   el.textContent = n ? ('v1.0.' + n) : '';
 }
 showAppVersion();
+
+/* The masthead is outside the page divs, so the byline shows on every tab. */
+function showAppByline(){
+  const el = document.getElementById('appByline');
+  if (el) el.textContent = APP_AUTHOR_LINE;
+}
+showAppByline();
 let androidInstallAssets = [
   './voyage_manager.html',
   './eorb.js',

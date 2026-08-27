@@ -36,7 +36,7 @@ ManifestDPIAware true
 !endif
 
 !define APP_NAME     "Noon Report"
-!define APP_PUBLISHER "Noon Report"
+!define APP_PUBLISHER "ts0gs · Marvin C. Endozo"
 !define APP_ID       "NoonReport"
 !define APP_EXE      "Start Noon Report.bat"
 !define UNINST_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}"
@@ -54,6 +54,7 @@ VIProductVersion "${APP_VERSION}.0"
 VIAddVersionKey "ProductName"     "${APP_NAME}"
 VIAddVersionKey "CompanyName"     "${APP_PUBLISHER}"
 VIAddVersionKey "FileDescription" "${APP_NAME} offline installer"
+VIAddVersionKey "Author"          "Marvin C. Endozo (ts0gs)"
 VIAddVersionKey "FileVersion"     "${APP_VERSION}"
 VIAddVersionKey "ProductVersion"  "${APP_VERSION}"
 VIAddVersionKey "LegalCopyright"  "${APP_PUBLISHER}"
