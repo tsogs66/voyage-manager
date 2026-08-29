@@ -18530,7 +18530,7 @@ document.getElementById('btnExportCSVLog').addEventListener('click', ()=>{
     "CylCons","CylGrade","MELo","GELo","FWMeter","FWProduced","FWRob","FWCons"];
   const lines = rows.map(r=>[r.datetime,r.operation,r.condition,fmtNum(r.hrs,2),fmtNum(r.distanceShip,2),fmtNum(r.rpm,2),fmtNum(r.revCounter,2),fmtNum(r.dailyRevs,2),fmtNum(r.meCons,3),fmtNum(r.geCons,3),fmtNum(r.blrCons,3),
     ...FUEL_CONS_GROUPS.map(g=>fmtNum(sumFuelGroup(r.consByType, g), FUEL_DECIMALS)),
-    fmtNum(r.cylCons,0),r.tbn,fmtNum(r.meLoCons,0),fmtNum(r.geLoCons,0),fmtNum(r.fwProd,0),fmtNum(litresToM3(r.fwProdD),2),fmtNum(litresToM3(r.fwRob),2),fmtNum(litresToM3(r.fwConsD),2)]);
+    fmtNum(r.cylCons,0),r.tbn,fmtNum(r.meLoCons,0),fmtNum(r.geLoCons,0),fmtNum(r.fwProd,2),fmtNum(litresToM3(r.fwProdD),2),fmtNum(litresToM3(r.fwRob),2),fmtNum(litresToM3(r.fwConsD),2)]);
   downloadCSV('voyage-log.csv', header, lines);
 });
 document.getElementById('btnExportCSVCons').addEventListener('click', ()=>{
