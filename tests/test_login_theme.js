@@ -83,7 +83,12 @@ check('status error uses --alert', loginCss.includes('.login-status.err{color:va
 check('status ok uses --good', loginCss.includes('.login-status.ok{color:var(--good);}'), true);
 
 console.log('\nprimary brass stays readable in both themes');
-check('bright class applied in head before paint', HTML.includes("if (localStorage.getItem('vm_bright') === '1') document.documentElement.classList.add('bright');"), true);
+const earlyBright =
+  HTML.includes("if (localStorage.getItem('vm_bright') === '1') document.documentElement.classList.add('bright');")
+  || (HTML.includes("localStorage.getItem('marine_bright')")
+    && HTML.includes("localStorage.getItem('vm_bright')")
+    && HTML.includes("document.documentElement.classList.add('bright')"));
+check('bright class applied in head before paint', earlyBright, true);
 check('login buttons do not transition colour', loginCss.includes('transition:background .15s ease, border-color .15s ease;'), true);
 
 console.log('\ncontrast of ghost label vs card');
