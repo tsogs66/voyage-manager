@@ -14,7 +14,9 @@ How it works
 ------------
 - App files are stored on this PC (%LOCALAPPDATA%\NoonReport\app or the portable folder).
 - Start-NoonReport opens http://127.0.0.1:8765/voyage_manager.html (local server).
-- Voyage data stays in this browser's IndexedDB — same as running locally, not online.
+- Installed copy: voyage data stays in this browser's IndexedDB on the PC.
+- Portable / USB folder: data lives in VoyageChief-data\browser-profile beside the app
+  (Edge or Chrome --user-data-dir) so the stick is fully standalone.
 - Optional server sync under Setup tab is separate; the app itself always runs local.
 
 Update (keeps local data)

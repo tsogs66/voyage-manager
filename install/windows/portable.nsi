@@ -7,9 +7,8 @@
 ; sits — a USB stick, a shared folder, a laptop that is not yours — and it
 ; unpacks a VoyageChief folder next to itself and starts from there.
 ;
-; Voyage data still lives in the browser on the PC that is running it
-; (IndexedDB for http://127.0.0.1:8765), not on the stick. Take a Database
-; Backup onto the USB if the copy has to travel with the files.
+; Voyage IndexedDB lives under VoyageChief\VoyageChief-data\browser-profile
+; (Edge/Chrome --user-data-dir) so the USB stick is fully standalone.
 
 Unicode true
 ManifestDPIAware true
@@ -51,7 +50,7 @@ VIAddVersionKey "LegalCopyright"  "${APP_PUBLISHER}"
 !define MUI_ABORTWARNING
 
 !define MUI_WELCOMEPAGE_TITLE "${APP_NAME} — portable"
-!define MUI_WELCOMEPAGE_TEXT  "This copy runs without installing anything on the PC.$\r$\n$\r$\nPut this file on a USB stick (or any folder you can write to) and continue. It unpacks a VoyageChief folder next to the .exe and starts from there.$\r$\n$\r$\nNo administrator rights. No Start-menu shortcut. No registry entries.$\r$\n$\r$\nVoyage data is stored by the browser on this PC, not on the stick — use Setup → Database Backup if the records have to travel with the USB."
+!define MUI_WELCOMEPAGE_TEXT  "This copy runs without installing anything on the PC.$\r$\n$\r$\nPut this file on a USB stick (or any folder you can write to) and continue. It unpacks a VoyageChief folder next to the .exe and starts from there.$\r$\n$\r$\nNo administrator rights. No Start-menu shortcut. No registry entries.$\r$\n$\r$\nVoyage data is kept in VoyageChief-data beside the program (Edge/Chrome profile on the stick), so the USB travels whole."
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_INSTFILES
