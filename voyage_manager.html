@@ -36,11 +36,17 @@
       document.documentElement.classList.add('use-bottom-nav');
     }
     /* Apply before first paint so the login card is not white with dark-theme
-       ghost labels for a frame while bindBrightMode runs later in the file. */
-    if (localStorage.getItem('vm_bright') === '1') document.documentElement.classList.add('bright');
+       ghost labels for a frame while MarineTheme runs later. */
+    var k = null;
+    try { k = localStorage.getItem('marine_bright'); } catch (_e) {}
+    if (k === null) {
+      try { k = localStorage.getItem('vm_bright'); } catch (_e2) {}
+    }
+    if (k === '1') document.documentElement.classList.add('bright');
   }catch(_e){}
 })();
 </script>
+<script src="theme.js"></script>
 <style>
   :root{
     --ink:#0a1420; --panel:#122238; --panel2:#0e1c30;
@@ -58,6 +64,7 @@
     --nav-active-bg:rgba(201,154,83,0.12);
     /* Read-only / calculated field treatment */
     --calc-bg:rgba(0,0,0,0.22);
+    --muted:#a9a292;
   }
   html.bright{
     --ink:#f4f1ea; --panel:#ffffff; --panel2:#f7f5ef;
@@ -72,6 +79,7 @@
     --nav-item-bg:rgba(18,34,56,0.04);
     --nav-active-bg:rgba(138,90,26,0.14);
     --calc-bg:rgba(18,34,56,0.05);
+    --muted:#4a5568;
   }
   html.bright body{
     background:linear-gradient(180deg, #efebe3 0%, #f7f5ef 40%, #ffffff 100%);
@@ -128,6 +136,24 @@
      every time you open the app. */
   .byline{font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.04em;
           color:var(--muted); margin-top:3px;}
+  /* Theme control: masthead on desktop; fixed bottom-left on phone so it never
+     overlaps ChEng AIO / system chrome at the top-right. */
+  .theme-toggle{
+    border:1px solid var(--line-strong); background:rgba(0,0,0,0.18); color:var(--brass);
+    border-radius:999px; padding:6px 12px; font-size:12px; font-weight:600;
+    letter-spacing:0.04em; text-transform:uppercase; cursor:pointer; white-space:nowrap;
+  }
+  html.bright .theme-toggle{background:rgba(18,34,56,0.06);}
+  .theme-toggle:hover{border-color:var(--brass); color:var(--paper);}
+  .theme-fab{
+    position:fixed; left:max(12px, env(safe-area-inset-left));
+    bottom:max(72px, calc(14px + env(safe-area-inset-bottom)));
+    z-index:90; box-shadow:0 8px 24px rgba(0,0,0,0.35); display:none;
+  }
+  @media (max-width:900px){
+    .status-row .theme-toggle{display:none;}
+    .theme-fab{display:inline-flex;}
+  }
 
   .tabs{display:flex; gap:2px; margin:18px 0 20px; border-bottom:1px solid var(--line); flex-wrap:wrap;}
   .tab{
@@ -158,6 +184,7 @@
   .field label{font-size:11px; letter-spacing:0.07em; text-transform:uppercase; color:var(--paper-dim);}
   .field input, .field select{background:var(--ink); border:1px solid var(--line-strong); border-radius:3px; color:var(--paper); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:7px 8px; width:100%;}
   .field input:focus, .field select:focus{outline:none; border-color:var(--teal); box-shadow:0 0 0 2px rgba(87,179,171,0.28);}
+  .field input::placeholder, .login-field input::placeholder{color:var(--muted); opacity:0.85;}
   button:focus-visible, .tab:focus-visible, .bn-item:focus-visible{outline:2px solid var(--teal); outline-offset:2px;}
 
   /* ---- Editable vs calculated fields ----
@@ -1587,12 +1614,13 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
       </div>
     </div>
     <div class="status-row">
-      <button type="button" class="ghost small" id="btnToggleBright" title="Day / bright mode for sunlight">Bright</button>
+      <button type="button" class="theme-toggle" data-theme-toggle id="btnToggleBright" title="Day / bright mode for sunlight">Bright</button>
       <div id="dbStatus">● local database ready</div>
       <div id="syncStatus">○ sync not configured</div>
       <div id="appVersion" title="The build this device is running. Quote it when reporting a problem."></div>
     </div>
   </div>
+  <button type="button" class="theme-toggle theme-fab" data-theme-toggle title="Day / bright mode for sunlight">Bright</button>
 
   <div class="tabs" id="tabs">
     <div class="tab active" data-page="summary">Summary</div>
@@ -12449,13 +12477,25 @@ document.getElementById('btnPullVesselRemote').addEventListener('click', async (
   await pullVesselFromServer(vesselId);
 });
 
-(function bindBrightMode(){
+/* Theme toggle: MarineTheme (theme.js) binds [data-theme-toggle] and dual-writes
+   marine_bright + legacy vm_bright. Left here only as a no-op safety if theme.js
+   failed to load. */
+(function bindBrightModeFallback(){
+  if (window.MarineTheme) return;
   const btn = document.getElementById('btnToggleBright');
   if (!btn) return;
-  if (localStorage.getItem('vm_bright') === '1') document.documentElement.classList.add('bright');
+  try {
+    const k = localStorage.getItem('marine_bright') ?? localStorage.getItem('vm_bright');
+    if (k === '1') document.documentElement.classList.add('bright');
+  } catch (_e) {}
   btn.addEventListener('click', ()=>{
     document.documentElement.classList.toggle('bright');
-    localStorage.setItem('vm_bright', document.documentElement.classList.contains('bright') ? '1' : '0');
+    const on = document.documentElement.classList.contains('bright');
+    try {
+      localStorage.setItem('marine_bright', on ? '1' : '0');
+      localStorage.setItem('vm_bright', on ? '1' : '0');
+    } catch (_e) {}
+    btn.textContent = on ? 'Night' : 'Bright';
   });
 })();
 
