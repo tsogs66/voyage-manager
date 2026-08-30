@@ -4,7 +4,11 @@
   Start Voyage Chief on this PC via a local http://127.0.0.1 server (offline-capable).
 .DESCRIPTION
   Serves the app files from this folder (or the installed App folder) and opens the browser.
-  Voyage data stays in the browser IndexedDB on this PC - same behavior every launch.
+
+  Portable / USB copy: voyage IndexedDB is kept beside the program under
+  VoyageChief-data\browser-profile (Chromium --user-data-dir), so the stick travels whole.
+
+  Installed copy (%LOCALAPPDATA%\NoonReport): uses the normal browser profile (unchanged).
 #>
 param(
   [int]$Port = 8765,
@@ -33,6 +37,19 @@ function Get-AppRoot {
     return $installed
   }
   throw "Could not find voyage_manager.html. Run install-pc.ps1 first, or place this script next to the app files."
+}
+
+function Test-IsPortable([string]$appRoot) {
+  $installed = Join-Path $env:LOCALAPPDATA "NoonReport\app"
+  try {
+    $a = (Resolve-Path -LiteralPath $appRoot).Path.TrimEnd('\')
+    $b = (Resolve-Path -LiteralPath $installed -ErrorAction SilentlyContinue)
+    if ($b) {
+      return -not $a.Equals($b.Path.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)
+    }
+  } catch { }
+  # No installed copy — treat as portable whenever files live beside the launcher.
+  return $true
 }
 
 function Get-ContentType([string]$path) {
@@ -70,12 +87,52 @@ function Test-PortFree([int]$p) {
   }
 }
 
+function Find-Chromium {
+  $candidates = @(
+    @{ Name = "msedge"; Path = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe" },
+    @{ Name = "msedge"; Path = "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe" },
+    @{ Name = "chrome"; Path = "$env:ProgramFiles\Google\Chrome\Application\chrome.exe" },
+    @{ Name = "chrome"; Path = "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe" },
+    @{ Name = "chrome"; Path = "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe" }
+  )
+  foreach ($c in $candidates) {
+    if ($c.Path -and (Test-Path -LiteralPath $c.Path)) {
+      return $c
+    }
+  }
+  return $null
+}
+
+function Start-PortableBrowser([string]$url, [string]$profileDir) {
+  New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
+  $browser = Find-Chromium
+  if (-not $browser) {
+    Write-Host "Edge/Chrome not found — opening default browser." -ForegroundColor Yellow
+    Write-Host "Voyage data may stay on this PC instead of the USB folder." -ForegroundColor Yellow
+    Write-Host "Install Edge or Chrome, or use Setup → Database Backup onto the stick." -ForegroundColor Yellow
+    Start-Process $url | Out-Null
+    return
+  }
+  # Dedicated profile keeps IndexedDB under VoyageChief-data on the stick.
+  $args = @(
+    "--user-data-dir=$profileDir",
+    "--no-first-run",
+    "--no-default-browser-check",
+    $url
+  )
+  Start-Process -FilePath $browser.Path -ArgumentList $args | Out-Null
+}
+
 $root = Get-AppRoot
 $root = $root.TrimEnd('\', '/')
 $htmlPath = Join-Path $root "voyage_manager.html"
 if (-not (Test-Path -LiteralPath $htmlPath)) {
   throw "voyage_manager.html missing in $root"
 }
+
+$portable = Test-IsPortable -appRoot $root
+$dataRoot = Join-Path $root "VoyageChief-data"
+$profileDir = Join-Path $dataRoot "browser-profile"
 
 if (-not (Test-PortFree -p $Port)) {
   $found = $false
@@ -107,10 +164,19 @@ Write-Host ""
 Write-Host "  Voyage Chief - local PC server" -ForegroundColor Yellow
 Write-Host ("  Folder : {0}" -f $root)
 Write-Host ("  URL    : {0}" -f $homeUrl)
+if ($portable) {
+  Write-Host ("  Data   : {0} (travels with this folder / USB)" -f $dataRoot) -ForegroundColor Green
+} else {
+  Write-Host "  Data   : browser IndexedDB on this PC (installed copy)" -ForegroundColor DarkGray
+}
 Write-Host "  Press Ctrl+C to stop." -ForegroundColor DarkGray
 Write-Host ""
 
-Start-Process $homeUrl | Out-Null
+if ($portable) {
+  Start-PortableBrowser -url $homeUrl -profileDir $profileDir
+} else {
+  Start-Process $homeUrl | Out-Null
+}
 
 try {
   while ($http.IsListening) {
