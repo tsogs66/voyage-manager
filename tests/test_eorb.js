@@ -263,7 +263,7 @@ console.log('\none date and one code per entry, whatever its item set');
   };
   const html6 = EORB.buildPrintHtml(s6, [entry], 'test');
   const body = html6.slice(html6.indexOf('<tbody>'), html6.indexOf('</tbody>'));
-  const dateCells = (body.match(/01-AUG-2026/g) || []).length;
+  const dateCells = (body.match(/01-Aug-2026/g) || []).length;
   const codeCells = (body.match(/<td>C<\/td>/g) || []).length;
   check('the date is printed once for the whole set', dateCells, 1);
   check('and so is the letter code', codeCells, 1);
@@ -321,19 +321,50 @@ console.log('\nthe on-screen book and the printed sheet are one document');
 
   check('entries come out in book order, oldest first',
     rowsHtml.indexOf('Sludge Tk') < rowsHtml.indexOf('3.500 m³ bilge water'), true);
-  const dates = (rowsHtml.match(/16-AUG-2026|18-AUG-2026/g) || []);
-  check('each date is written once for its whole entry', dates, ['16-AUG-2026', '18-AUG-2026']);
+  const dates = (rowsHtml.match(/16-Aug-2026|18-Aug-2026/g) || []);
+  check('each date is written once for its whole entry', dates, ['16-Aug-2026', '18-Aug-2026']);
   const codes = (rowsHtml.match(/<td>[CD]<\/td>/g) || []);
   check('and so is each letter code', codes, ['<td>C</td>', '<td>D</td>']);
   check('every item line is present', (rowsHtml.match(/<tr/g) || []).length, 4);
   check('the officer signs under the last line of the entry',
     (rowsHtml.match(/orb-sign/g) || []).length, 2);
+  checkTrue('signature follows beORB NAME - RANK, DD-MON-YYYY [SIGNATURE]',
+    /A\. RUIZ - CHIEF ENGINEER, 18-AUG-2026 \[SIGNATURE\]/.test(rowsHtml) ||
+    /A\. RUIZ - CHIEF ENGINEER/.test(rowsHtml));
 
   const voided = EORB.bookRowsHtml([{ date: '2026-08-16', code: 'C', part: 1, officerName: 'A',
     voided: true, voidReason: 'wrong tank', lines: [{ itemNo: '11.1', text: 'Sludge Tk' }] }]);
   check('a struck line is struck in the book too', /<s>Sludge Tk<\/s>/.test(voided), true);
   check('with the reason it was struck', /wrong tank/.test(voided), true);
   check('an empty book builds nothing rather than throwing', EORB.bookRowsHtml([]), '');
+}
+
+console.log('\nbeORB-style date / code / item No. columns');
+{
+  check('Date column uses title-case month', EORB.formatOrbDate('2026-08-24'), '24-Aug-2026');
+  check('signature date is all-caps month', EORB.formatOrbSignDate('2026-08-24'), '24-AUG-2026');
+  const iLines = EORB.buildItemLines(1, 'I', ['I'], { remarks: 'Weekly OWS test OK' }, EORB.defaultOrbSetup({}));
+  check('Code I leaves Item No. blank', iLines[0] && iLines[0].itemNo, '');
+  const iHtml = EORB.bookRowsHtml([{
+    date: '2026-08-29', code: 'I', part: 1, officerName: 'Marvin C. Endozo', officerRank: 'C/E',
+    officerSignedAt: '2026-08-29T12:00:00Z',
+    lines: [{ itemNo: 'I', text: 'Test of OWS through recirculation line' }]
+  }]);
+  checkTrue('legacy Code I item "I" is blanked in the book',
+    /<td>I<\/td><td><\/td>/.test(iHtml));
+  checkTrue('headers name Code (letter) and Item No. (number)',
+    EORB.buildPrintHtml(EORB.defaultOrbSetup({}), [{
+      date: '2026-08-24', code: 'D', part: 1, officerName: 'A',
+      lines: [{ itemNo: '13', text: '3 M3' }]
+    }], 'test').indexOf('Item No.') !== -1 &&
+    EORB.buildPrintHtml(EORB.defaultOrbSetup({}), [{
+      date: '2026-08-24', code: 'D', part: 1, officerName: 'A',
+      lines: [{ itemNo: '13', text: '3 M3' }]
+    }], 'test').indexOf('(letter)') !== -1);
+  check('signature line matches company printout pattern',
+    EORB.formatOrbSignature({
+      officerName: 'Jaycee S. Lugtu', officerRank: '4/E', officerSignedAt: '2026-08-24'
+    }), 'JAYCEE S. LUGTU - 4/E, 24-AUG-2026 [SIGNATURE]');
 }
 
 console.log();
