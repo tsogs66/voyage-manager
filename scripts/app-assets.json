@@ -11,6 +11,9 @@
     "voyage_manager.html",
     "eorb.js",
     "ship_time.js",
+    "theme.js",
+    "license-config.js",
+    "license.js",
     "sw.js",
     "manifest.webmanifest"
   ],
