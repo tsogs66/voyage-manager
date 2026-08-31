@@ -69,8 +69,9 @@ def request(url: str, token: str | None = None, method: str = "GET", payload: di
 class Server:
     """server.py in a subprocess, torn down on exit."""
 
-    def __init__(self, token: str | None):
+    def __init__(self, token: str | None, allow_open: bool = False):
         self.token = token
+        self.allow_open = allow_open
         self.port = free_port()
         self.base = f"http://127.0.0.1:{self.port}"
         self._tmp = tempfile.TemporaryDirectory()
@@ -79,6 +80,7 @@ class Server:
     def __enter__(self) -> "Server":
         env = dict(os.environ)
         env.pop("SYNC_API_TOKEN", None)
+        env.pop("SYNC_ALLOW_OPEN", None)
         env.update(
             SYNC_HOST="127.0.0.1",
             SYNC_PORT=str(self.port),
@@ -87,6 +89,8 @@ class Server:
         )
         if self.token is not None:
             env["SYNC_API_TOKEN"] = self.token
+        if self.allow_open:
+            env["SYNC_ALLOW_OPEN"] = "1"
         self._proc = subprocess.Popen(
             [sys.executable, str(SERVER)],
             env=env,
@@ -117,19 +121,37 @@ class Server:
 
 
 def test_server_without_a_token() -> None:
-    """No SYNC_API_TOKEN: nothing to check against, so every request is accepted — and said so."""
+    """No SYNC_API_TOKEN: closed by default (set SYNC_ALLOW_OPEN=1 for lab-only open sync)."""
     print("\nserver started with no SYNC_API_TOKEN")
     with Server(token=None) as srv:
         _, health = request(f"{srv.base}/api/health")
         check("health reports tokenConfigured false", health.get("tokenConfigured"), False)
-        check("health reports authRequired false", health.get("authRequired"), False)
+        check("health reports authRequired true (closed by default)", health.get("authRequired"), True)
+        check("health reports openSync false", health.get("openSync"), False)
+
+        status, body = request(f"{srv.base}/api/voyage/testship")
+        check("anonymous read is rejected when closed", status, 401)
+        check("rejection names token_required", body.get("reason"), "token_required")
+
+        status, body = request(f"{srv.base}/api/voyage/testship", token="any-token-at-all")
+        check("random bearer is rejected when closed", status, 401)
+        check("random bearer names token_required", body.get("reason"), "token_required")
+
+
+def test_server_open_sync_opt_in() -> None:
+    """SYNC_ALLOW_OPEN=1 with no token: every request is accepted (lab / single-ship LAN)."""
+    print("\nserver started with SYNC_ALLOW_OPEN=1 and no SYNC_API_TOKEN")
+    with Server(token=None, allow_open=True) as srv:
+        _, health = request(f"{srv.base}/api/health")
+        check("open health reports tokenConfigured false", health.get("tokenConfigured"), False)
+        check("open health reports authRequired false", health.get("authRequired"), False)
+        check("open health reports openSync true", health.get("openSync"), True)
 
         status, _ = request(f"{srv.base}/api/voyage/testship")
-        check("anonymous read is accepted", status, 200)
+        check("open anonymous read is accepted", status, 200)
 
-        # The regression: this used to be 401, so a correctly configured app broke.
         status, _ = request(f"{srv.base}/api/voyage/testship", token="any-token-at-all")
-        check("authenticated read is accepted", status, 200)
+        check("open authenticated read is accepted", status, 200)
 
         status, _ = request(
             f"{srv.base}/api/voyage/testship/22/B",
@@ -137,7 +159,7 @@ def test_server_without_a_token() -> None:
             method="PUT",
             payload={"entries": []},
         )
-        check("authenticated push is accepted", status, 200)
+        check("open authenticated push is accepted", status, 200)
 
 
 def test_server_with_a_token() -> None:
@@ -197,6 +219,7 @@ def main() -> int:
         print(f"ERROR: {SERVER} not found")
         return 1
     test_server_without_a_token()
+    test_server_open_sync_opt_in()
     test_server_with_a_token()
     test_non_ascii_token()
     print()
