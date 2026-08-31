@@ -147,19 +147,16 @@ jobs:
           npm run www:sync
           npx cap sync android
 
-      - name: Build APK
-        # Debug signing: the APK is sideloaded onto the fleet's own tablets, not
-        # published to Play, and a debug-signed build installs on any device with
-        # no keystore to manage. To ship a release-signed build instead, add a
-        # keystore to the repository secrets and swap this for assembleRelease
-        # with a signingConfig.
-        run: cd android && ./gradlew --no-daemon assembleDebug
+      - name: Build signed APK (stable sideload key — installs over previous APK)
+        # Same applicationId + same keystore + higher versionCode = in-place update.
+        # Do not use assembleDebug (ephemeral CI debug keys force uninstall).
+        run: cd android && ./gradlew --no-daemon assembleRelease
 
       - name: Name it after the build it carries
         run: |
           V="$(sed -n "s/^const CACHE = 'noon-report-v\([0-9]\+\)';.*/\1/p" sw.js)"
           mkdir -p dist
-          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/VoyageChief-1.0.${V}.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/VoyageChief-1.0.${V}.apk"
           ls -la dist/
 
       - uses: actions/upload-artifact@v4

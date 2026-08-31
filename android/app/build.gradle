@@ -2,12 +2,8 @@ apply plugin: 'com.android.application'
 
 /*
  * Version the APK from the service-worker cache in sw.js, the one number already
- * bumped on every release. It used to be pinned at versionCode 1 / versionName
- * "1.0", so every build a ship received looked like the same version as the one it
- * replaced: nothing on the About screen or in Android's app info could tell an
- * engineer which build was actually installed, and a sideloaded update gave no
- * signal it had changed anything. The Windows installer names itself from the same
- * number, so a PC and a tablet reporting "1.0.156" are genuinely the same build.
+ * bumped on every release. Sideload builds use signing/voyage-sideload.keystore
+ * so each new APK can install over the previous one without uninstalling.
  */
 def appCacheVersion = {
     def sw = file("$rootDir/../sw.js")
@@ -32,10 +28,23 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        sideload {
+            def ks = file("$rootDir/../signing/voyage-sideload.keystore")
+            storeFile ks
+            storePassword System.getenv("VOYAGE_KEYSTORE_PASS") ?: "voyagechief"
+            keyAlias "voyagechief"
+            keyPassword System.getenv("VOYAGE_KEYSTORE_PASS") ?: "voyagechief"
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.sideload
+        }
+        debug {
+            signingConfig signingConfigs.sideload
         }
     }
 }
