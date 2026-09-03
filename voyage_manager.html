@@ -22102,6 +22102,12 @@ document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPa
           document.body.style.paddingBottom = '0';
         }
       }
+      /* Hide bunker plan tab from Voyage when inside AIO (AIO has its own menu entry) */
+      if (isChengAioEmbedded() && qsPage !== 'bunkerplan'){
+        document.querySelectorAll('.tab[data-page="bunkerplan"], .bn-item[data-page="bunkerplan"]').forEach(el=>{
+          if (el) el.style.display = 'none';
+        });
+      }
       else if (qsPage === 'data') switchTab('data');
       else if (qsPage === 'setup') switchTab('setup');
       if (isChengAioEmbedded()) {
