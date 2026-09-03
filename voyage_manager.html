@@ -2648,13 +2648,27 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
         <div class="field"><label>Voyage No.</label><input id="bp_voyageNo"></div>
         <div class="field"><label>Date</label><input type="date" id="bp_date"></div>
         <div class="btn-row" style="margin:0;">
-          <button type="button" class="ghost small" id="btnBpLoadRob">Load Current ROB</button>
+          <button type="button" class="ghost small" id="btnBpLoadRob">Load Voyage ROB</button>
+          <button type="button" class="ghost small" id="btnBpLoadTankRob" style="display:none;">Load Tank ROB</button>
           <button type="button" class="ghost small" id="btnBpClear">Clear</button>
+        </div>
+        <div class="btn-row" style="margin:4px 0 0;">
+          <button type="button" class="ghost small" id="btnBpPrintOnly">Print</button>
+          <button type="button" class="ghost small" id="btnBpSaveOnly">Save</button>
           <button type="button" class="primary small" id="btnBpPrint">Print &amp; Save</button>
         </div>
       </div>
       <div class="bunker-plan-grid" id="bunkerPlanGrid"></div>
       <div class="hint" style="margin-top:12px;">Industry practice: sea days ≈ distance (nm) ÷ (speed kn × 24); port/anchor days are entered directly; a percentage safety margin (often 10–20%) is added to voyage consumption when sizing stems (many operators also keep a 48–72 h steaming reserve).</div>
+    </div>
+    <div class="panel" id="bunkerPlanHistory" style="display:none;">
+      <h2>Saved Calculations</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Date</th><th>Voyage</th><th>Residual</th><th>Distillate</th><th></th></tr></thead>
+          <tbody id="bpHistoryBody"><tr class="empty-row"><td colspan="5">No saved calculations yet.</td></tr></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -10400,7 +10414,7 @@ function clearBunkerPlan(){
   scheduleBunkerPlanSave();
 }
 
-function printBunkerPlan(){
+function buildBunkerPlanPrintHtml(){
   readBunkerPlanFromDom();
   const bp = ensureBunkerPlan();
   const voyageNo = bp.voyageNo || state.setup.voyageNumber || '—';
@@ -10456,7 +10470,7 @@ function printBunkerPlan(){
       </section>`;
   }).join('');
 
-  const sheetHtml = `<div class="pr-sheet pr-bunker-sheet">
+  return `<div class="pr-sheet pr-bunker-sheet">
     ${printDocHeader({
       title: 'Bunker Consumption Calculation',
       subtitle: 'Voyage fuel plan — sea / port legs with margin',
@@ -10475,8 +10489,47 @@ function printBunkerPlan(){
     </div>
     ${printSignatory()}
   </div>`;
+}
 
+function saveBunkerPlanToHistory(){
+  readBunkerPlanFromDom();
+  const bp = ensureBunkerPlan();
+  const snapshot = JSON.parse(JSON.stringify(bp));
+  snapshot.savedAt = new Date().toISOString();
+  if (!Array.isArray(state.setup.bunkerPlanHistory)) state.setup.bunkerPlanHistory = [];
+  state.setup.bunkerPlanHistory.unshift(snapshot);
+  if (state.setup.bunkerPlanHistory.length > 50) state.setup.bunkerPlanHistory.length = 50;
   scheduleBunkerPlanSave();
+  renderBunkerPlanHistory();
+}
+
+function renderBunkerPlanHistory(){
+  const panel = document.getElementById('bunkerPlanHistory');
+  const body = document.getElementById('bpHistoryBody');
+  if (!panel || !body) return;
+  const history = state.setup.bunkerPlanHistory || [];
+  if (!history.length){
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = '';
+  body.innerHTML = history.map((h, i)=>{
+    const resSum = summarizeBunkerSide(h.residual || emptyBunkerSide('HFO'));
+    const distSum = summarizeBunkerSide(h.distillate || emptyBunkerSide('MDO/MGO'));
+    const date = h.date || h.savedAt?.slice(0,10) || '—';
+    return `<tr>
+      <td>${escAttr(date)}</td>
+      <td>${escAttr(h.voyageNo || '—')}</td>
+      <td>${fmtFuel(resSum.required)} MT req</td>
+      <td>${fmtFuel(distSum.required)} MT req</td>
+      <td><button class="ghost small" data-bp-load="${i}">Load</button> <button class="ghost small" data-bp-del="${i}">Del</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function printBunkerPlan(){
+  const sheetHtml = buildBunkerPlanPrintHtml();
+  saveBunkerPlanToHistory();
   beginPrintHold();
   try {
     printPortraitSinglePage(sheetHtml);
@@ -10486,13 +10539,65 @@ function printBunkerPlan(){
   }
 }
 
+function printBunkerPlanOnly(){
+  const sheetHtml = buildBunkerPlanPrintHtml();
+  beginPrintHold();
+  try {
+    printPortraitSinglePage(sheetHtml);
+  } catch (err) {
+    endPrintHold();
+    throw err;
+  }
+}
+
+function saveBunkerPlanOnly(){
+  saveBunkerPlanToHistory();
+  try{ showToast('Bunker plan saved'); }catch(_){}
+}
+
+function loadBunkerPlanFromTankRob(){
+  if (!isChengAioEmbedded()) return;
+  try {
+    window.parent.postMessage({ type: 'chengaio-request-tank-rob' }, '*');
+  } catch (_) {}
+}
+
+window.addEventListener('message', (ev)=>{
+  const msg = ev.data || {};
+  if (msg.type === 'tank-rob-response' && msg.rob){
+    const bp = ensureBunkerPlan();
+    const rob = msg.rob;
+    BUNKER_PLAN_SIDES.forEach(meta=>{
+      const side = bp[meta.key];
+      const grade = side.grade;
+      let val = 0;
+      if (rob[grade] != null) val = Number(rob[grade]);
+      else {
+        meta.grades.forEach(g => { if (rob[g] != null) val += Number(rob[g]); });
+      }
+      if (val > 0) side.currentRob = Math.round(val * 1000) / 1000;
+    });
+    if (!bp.date) bp.date = new Date().toISOString().slice(0,10);
+    renderBunkerPlan();
+    scheduleBunkerPlanSave();
+    try{ showToast('Tank ROB loaded'); }catch(_){}
+  }
+});
+
 function bindBunkerPlanUi(){
   const page = document.getElementById('page-bunkerplan');
   if (!page || page.dataset.bound) return;
   page.dataset.bound = '1';
+  if (isChengAioEmbedded()){
+    const tankBtn = document.getElementById('btnBpLoadTankRob');
+    if (tankBtn) tankBtn.style.display = '';
+  }
   document.getElementById('btnBpLoadRob')?.addEventListener('click', loadBunkerPlanRob);
+  document.getElementById('btnBpLoadTankRob')?.addEventListener('click', loadBunkerPlanFromTankRob);
   document.getElementById('btnBpClear')?.addEventListener('click', clearBunkerPlan);
   document.getElementById('btnBpPrint')?.addEventListener('click', printBunkerPlan);
+  document.getElementById('btnBpPrintOnly')?.addEventListener('click', printBunkerPlanOnly);
+  document.getElementById('btnBpSaveOnly')?.addEventListener('click', saveBunkerPlanOnly);
   document.getElementById('bp_voyageNo')?.addEventListener('change', ()=>{
     ensureBunkerPlan().voyageNo = document.getElementById('bp_voyageNo').value.trim();
     scheduleBunkerPlanSave();
@@ -10539,6 +10644,33 @@ function bindBunkerPlanUi(){
     }
     scheduleBunkerPlanSave();
   });
+  const histPanel = document.getElementById('bunkerPlanHistory');
+  if (histPanel) histPanel.addEventListener('click', (e)=>{
+    const loadBtn = e.target.closest('[data-bp-load]');
+    const delBtn = e.target.closest('[data-bp-del]');
+    if (loadBtn){
+      const idx = Number(loadBtn.dataset.bpLoad);
+      const history = state.setup.bunkerPlanHistory || [];
+      if (history[idx]){
+        const snap = JSON.parse(JSON.stringify(history[idx]));
+        delete snap.savedAt;
+        state.setup.bunkerPlan = snap;
+        renderBunkerPlan();
+        scheduleBunkerPlanSave();
+        try{ showToast('Loaded saved calculation'); }catch(_){}
+      }
+    }
+    if (delBtn){
+      const idx = Number(delBtn.dataset.bpDel);
+      const history = state.setup.bunkerPlanHistory || [];
+      if (history[idx] && confirm('Delete this saved calculation?')){
+        history.splice(idx, 1);
+        scheduleBunkerPlanSave();
+        renderBunkerPlanHistory();
+      }
+    }
+  });
+  renderBunkerPlanHistory();
 }
 
 /* ---------------- Reference calculators ---------------- */
@@ -21961,6 +22093,15 @@ document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPa
       const qsPage = new URLSearchParams(location.search).get('page');
       const wantOrb = qsPage === 'orb' || /[?&]page=orb\b/.test(location.search);
       if (wantOrb && (isChengAioEmbedded() || voyageEorbAllowed())) switchTab('orb');
+      else if (qsPage === 'bunkerplan'){
+        switchTab('bunkerplan');
+        if (isChengAioEmbedded()){
+          document.querySelectorAll('.masthead, #tabs, .bottom-nav, #bnMoreSheet, #bnMoreBackdrop').forEach(el=>{
+            if (el) el.style.display = 'none';
+          });
+          document.body.style.paddingBottom = '0';
+        }
+      }
       else if (qsPage === 'data') switchTab('data');
       else if (qsPage === 'setup') switchTab('setup');
       if (isChengAioEmbedded()) {
