@@ -1,4 +1,21 @@
-package com.noonreport.voyagemanager;
+'use strict';
+
+/**
+ * Patch the Capacitor-generated MainActivity with the two bridges the WebView
+ * cannot provide for itself: PrintManager, and writing a file to Downloads.
+ *
+ * android/ is committed in this repository, so the file this writes is the one
+ * under version control. Running it after `npx cap sync` keeps the bridges in
+ * place if the Capacitor tree is ever regenerated, and keeps the activity
+ * identical to Tank Chief's, which is generated.
+ */
+const fs = require('fs');
+const path = require('path');
+
+const root = path.join(__dirname, '..');
+const mainPath = path.join(root, 'android/app/src/main/java/com/noonreport/voyagemanager/MainActivity.java');
+
+const SOURCE = `package com.noonreport.voyagemanager;
 
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -139,7 +156,7 @@ public class MainActivity extends BridgeActivity {
       /* Path separators and the Windows-reserved set; a quote is legal in an
          Android filename and is left alone rather than escaped through two
          layers of template literal on the way into this file. */
-      String name = raw == null ? "" : raw.trim().replaceAll("[\\/:*?<>|]+", "-");
+      String name = raw == null ? "" : raw.trim().replaceAll("[\\\\/:*?<>|]+", "-");
       if (name.isEmpty()) name = "voyagechief-backup.json";
       return name;
     }
@@ -190,3 +207,12 @@ public class MainActivity extends BridgeActivity {
     }
   }
 }
+`;
+
+if (!fs.existsSync(path.dirname(mainPath))) {
+  console.warn('apply-android-bridges: MainActivity path missing — skip (run cap add/sync first)');
+  process.exit(0);
+}
+
+fs.writeFileSync(mainPath, SOURCE);
+console.log('apply-android-bridges: wrote MainActivity with print + file bridges');
