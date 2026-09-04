@@ -124,8 +124,13 @@ const contrast = (fg, bg) => {
   check('titled as the last 7 days', first.title, 'Record Book — Last 7 Days');
   check('even though the filter is pre-filled with a wider range',
     first.filterFrom !== '' && first.filterTo !== '', true);
-  check('the fortnight-old entry is not in it', first.dates.includes('08-AUG-2026'), false);
-  check('the last week of entries is', first.dates, ['16-AUG-2026', '18-AUG-2026', '21-AUG-2026']);
+  /* The book's Date column is title-case — "16-Aug-2026" — since "Match
+     company beORB date / code / Item No. print layout"; only the signature
+     line uppercases it. Asserting the uppercase form here made the
+     fortnight-old check vacuous (it could never match either way) and failed
+     the three that follow. */
+  check('the fortnight-old entry is not in it', first.dates.includes('08-Aug-2026'), false);
+  check('the last week of entries is', first.dates, ['16-Aug-2026', '18-Aug-2026', '21-Aug-2026']);
 
   console.log('\nit reads as the book, not as a data table');
   const book = await pg.evaluate(() => {
@@ -152,8 +157,12 @@ const contrast = (fg, bg) => {
       })()
     };
   });
+  /* The headings carry the paper book's parenthetical qualifiers, as MARPOL
+     and the company beORB print them. */
   check('the four columns of the official book',
-    book.headings, ['Date', 'Code', 'Item', 'Record of operations / signature of officer in charge']);
+    book.headings,
+    ['Date', 'Code(letter)', 'Item No.(number)',
+      'Record of operations / signature of officer in charge']);
   check('the ship is identified at the head', /Name of ship/.test(book.shipLine), true);
   check('and the part is named', book.partTitle, 'Oil Record Book — Part I');
   check('each entry is signed', book.signatures, 3);
@@ -180,8 +189,8 @@ const contrast = (fg, bg) => {
   });
   check('the title says it is a chosen period', ranged.title, 'Record Book — Selected Period');
   check('the head carries the dates alongside the part',
-    ranged.range, 'Machinery Space Operations (All Ships) · 16-AUG-2026 to 19-AUG-2026');
-  check('and only that period is in it', ranged.dates, ['16-AUG-2026', '18-AUG-2026']);
+    ranged.range, 'Machinery Space Operations (All Ships) · 16-Aug-2026 to 19-Aug-2026');
+  check('and only that period is in it', ranged.dates, ['16-Aug-2026', '18-Aug-2026']);
 
   console.log('\nclearing the dates goes back to the last 7 days');
   const cleared = await pg.evaluate(async () => {
