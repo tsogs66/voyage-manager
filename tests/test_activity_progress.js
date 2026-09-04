@@ -88,7 +88,11 @@ function check(label, actual, expected) {
   check('syncNow says it is uploading', syncNow.includes('Uploading voyage'), true);
   check('persistAllToDb reports saving on this device', HTML.includes('Saving ${store} on this device'), true);
   check('push names the vessel upload', HTML.includes('Pushing ${vessel.name} to the server'), true);
-  check('pull names the vessel download', HTML.includes('Pulling ${vessel.name} from the server'), true);
+  /* A vessel pull merges newer-of-local-vs-server rather than replacing the
+     local stores, and the progress label says so. The assertion said "Pulling"
+     for two releases after the label was deliberately reworded, which left
+     main red on every push. */
+  check('pull names the vessel merge', HTML.includes('Merging ${vessel.name} from the server'), true);
   check('startup opens the local database', HTML.includes('Opening the local database'), true);
   check('login says signing in', HTML.includes("withActivity('login', 'Signing in…'"), true);
   check('renderSyncUi does not wipe a live server status', HTML.includes("if (!activityHasSource('server'))"), true);
