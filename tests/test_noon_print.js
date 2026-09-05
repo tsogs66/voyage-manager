@@ -538,6 +538,20 @@ console.log('\nsaving a summary you did not edit changes nothing');
 
 console.log('\nthe sheet prints the stamp the period is measured from');
 check('last report cell replaces the duplicated voyage no.', HTML.includes("{label:'Last Report', value:prevReportStr}"), true);
+
+check('route comes before last report on the noon meta strip',
+  HTML.indexOf("{label:'Route', value:`${state.setup.departPort") < HTML.indexOf("{label:'Last Report', value:prevReportStr}"), true);
+check('slip % sits between RPM and speed on the KPI strip',
+  HTML.includes("{label:'Slip %', value:fmt(row.slip,2)}") && HTML.indexOf("{label:'RPM'") < HTML.indexOf("{label:'Slip %'") && HTML.indexOf("{label:'Slip %'") < HTML.indexOf("{label:'Speed (kn)'"), true);
+check('ship dist is omitted when the main engine is not running',
+  HTML.includes("/* Slip % sits between RPM and Speed on the KPI strip. Ship Dist is omitted when"), true);
+check('condition prints as Laden / Ballasted',
+  HTML.includes("? 'Laden' : 'Ballasted'"), true);
+check('turbo RPM is separate from T/C in/out',
+  HTML.includes('T/C #${i+1} In / Out') && HTML.includes('T/C #${i+1} RPM'), true);
+check('rev counter lives under M/E performance',
+  HTML.includes("printSection('M/E Performance'") && HTML.includes("printRow('Rev. Counter', entry.revCounter==null"), true);
+
 check('top hours are labelled as this report only', HTML.includes("{label:'Run Hrs (This Report)', value:fmt(periodHrs, 2)}"), true);
 
 console.log();
