@@ -40,15 +40,19 @@ console.log('\nlive ROB includes manual distillate');
     /\[\s*'vs_misc_mdomgo'\s*,\s*'vs_misc_lsmgo'\s*,\s*'vs_blrExtra_mdomgo'\s*,\s*'vs_blrExtra_lsmgo'\s*,\s*'vs_incExtra_mdomgo'\s*,\s*'vs_incExtra_lsmgo'\s*\][\s\S]*?updateVsRobLiveFromCons/.test(HTML));
 }
 
-console.log('\nROB survey Received is editable for bunkering');
-check('Received column is an input',
-  HTML.includes('data-survey-recv=') && HTML.includes('data-recv-base='));
-check('Apply syncs Received into receipts',
+console.log('\nReceived on consumption/ROB; survey is sounding only');
+check('Received column is on ROB table',
+  HTML.includes('data-rob-recv=') && HTML.includes('readVsRobReceivedInputs'));
+check('Apply/save syncs Received into receipts',
   HTML.includes('syncRobSurveyReceivedReceipts') && HTML.includes("source: 'rob-survey'"));
-check('Clear removes survey-sourced receipts',
-  /async function clearRobSurvey[\s\S]*?removeRobSurveyReceipts/.test(HTML));
-check('live Difference refreshes while typing Received',
-  HTML.includes('refreshVsSurveyLiveDiffs'));
+check('Clear survey does not wipe ROB bunkers',
+  /async function clearRobSurvey[\s\S]*?must not wipe bunkers/.test(HTML) ||
+  HTML.includes('Bunkers received on the ROB table are kept'));
+check('live ROB uses Previous + Received − Consumption',
+  HTML.includes('prevVal + recvVal - consVal') || HTML.includes('prevVal + recvVal − consVal'));
+check('survey live diffs are sounding only',
+  HTML.includes('sounding correction only') || HTML.includes('Measured − book') ||
+  HTML.includes('Measured - book'));
 
 console.log();
 if (failures) {

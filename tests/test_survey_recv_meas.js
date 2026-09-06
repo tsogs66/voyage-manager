@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /*
- * Bunker survey: typing Received auto-fills Measured as current ROB + Received.
+ * Received lives on Previous / Received / Consumption / R.O.B.
+ * Survey panel is sounding correction only (Calculated / Measured / Difference).
  * Run: node tests/test_survey_recv_meas.js
  */
 'use strict';
@@ -36,28 +37,38 @@ function extract(name) {
 }
 
 console.log('\nsource guards');
-checkTrue('surveyBookWithReceived helper', HTML.includes('function surveyBookWithReceived'));
-checkTrue('formatSurveyMeasuredInput helper', HTML.includes('function formatSurveyMeasuredInput'));
-checkTrue('Received input auto-fills Measured', HTML.includes('measEl.dataset.measAuto = \'1\''));
-checkTrue('prefill when Received already set', HTML.includes('autoFillFromReceived'));
-checkTrue('hint mentions auto Measured', HTML.includes('Measured fills in as current R.O.B. + Received'));
+checkTrue('ROB Received inputs', HTML.includes('data-rob-recv='));
+checkTrue('readVsRobReceivedInputs helper', HTML.includes('function readVsRobReceivedInputs'));
+checkTrue('ROB table has Received column', HTML.includes('Previous / Received / Consumption / R.O.B.'));
+checkTrue('survey is sounding-only hint', HTML.includes('Sounding correction only'));
+checkTrue('survey table has no Received header',
+  /<thead><tr><th>Tank<\/th><th>Calculated<\/th><th>Measured \(survey\)<\/th><th>Difference<\/th><\/tr><\/thead>/.test(HTML));
+checkTrue('no survey Received auto-fill', !HTML.includes('autoFillFromReceived') && !HTML.includes('measEl.dataset.measAuto'));
+checkTrue('clear survey keeps ROB bunkers', HTML.includes('Bunkers received on the ROB table are kept'));
+checkTrue('save syncs ROB Received receipts', HTML.includes('readVsRobReceivedInputs()'));
 
-const sandbox = { console };
-vm.createContext(sandbox);
-vm.runInContext(
-  extract('surveyBookWithReceived') + '\n' + extract('formatSurveyMeasuredInput'),
-  sandbox
-);
+/* Balance identity: Received = R.O.B. − Previous + Consumption */
+function recvFromBalance(prev, cons, rob) {
+  return (Number(rob) || 0) - (Number(prev) || 0) + (Number(cons) || 0);
+}
+function robFromBalance(prev, recv, cons) {
+  return (Number(prev) || 0) + (Number(recv) || 0) - (Number(cons) || 0);
+}
 
-console.log('\nMeasured = current ROB + Received');
-check('100 ROB + 50 received → 150', sandbox.surveyBookWithReceived(100, 0, 50), 150);
-check('book already included 40 receipt; typed 50 → 150', sandbox.surveyBookWithReceived(140, 40, 50), 150);
-check('clear received (typed 0, base 40) → 100', sandbox.surveyBookWithReceived(140, 40, 0), 100);
-check('no typed amount keeps base-minus-prefill', sandbox.surveyBookWithReceived(140, 40, NaN), 100);
+console.log('\nReceived from consumption/ROB balance');
+check('100 prev, 20 cons, 130 rob → 50 recv', recvFromBalance(100, 20, 130), 50);
+check('100 prev, 20 cons, 80 rob → 0 recv', recvFromBalance(100, 20, 80), 0);
+check('ROB = prev + recv − cons', robFromBalance(100, 50, 20), 130);
 
-console.log('\nformat measured input');
-check('fuel rounded', sandbox.formatSurveyMeasuredInput(150.1234, 'fuel'), '150.123');
-check('null is blank', sandbox.formatSurveyMeasuredInput(null, 'fuel'), '');
+/* Keep legacy helper available for book arithmetic if still present */
+if (HTML.includes('function surveyBookWithReceived')) {
+  const sandbox = { console };
+  vm.createContext(sandbox);
+  vm.runInContext(extract('surveyBookWithReceived') + '\n' + extract('formatSurveyMeasuredInput'), sandbox);
+  console.log('\nlegacy surveyBookWithReceived still parses');
+  check('100 + 50 recv', sandbox.surveyBookWithReceived(100, 0, 50), 150);
+  check('format measured', sandbox.formatSurveyMeasuredInput(150.1234, 'fuel'), '150.123');
+}
 
 console.log();
 if (failures.length) {
