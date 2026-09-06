@@ -53,8 +53,81 @@ checkTrue('voyage summary uses as-of averages',
 checkTrue('tagged voyage excludes untagged inflation', HTML.includes('hasTaggedForActive'));
 checkTrue('avg ship speed uses distance/hours', HTML.includes('totalDistShip/totalHrs'));
 checkTrue('RPM averages are hour-weighted', HTML.includes('sumRpm += rpmEff * wHrs'));
+checkTrue('departure/anchorage skip invented RPM on recalc',
+  /if\s*\(\s*!operationNeedsMeData\(\s*e\.operation\s*\)\s*\)/.test(HTML));
+checkTrue('ME perf gate helper exists', HTML.includes('function shouldDeriveMePerfFromRevs'));
+checkTrue('DATA_RECALC_VERSION bumped for RPM gate', /DATA_RECALC_VERSION\s*=\s*59/.test(HTML));
 
-/* ---- entryMatchesActiveLeg: untagged rows must not inflate a tagged voyage ---- */
+/* ---- Departure / anchorage: Δrevs alone must not invent ME average RPM ---- */
+console.log('\ndeparture/anchorage do not invent RPM from rev-counter Δ');
+{
+  const sandbox = {
+    LEGACY_OPERATION_ALIASES: {
+      'AT SEA - NOON': 'NOON - AT SEA',
+      'IN PORT - NOON': 'NOON - AT PORT',
+      'AT ANCHOR - NOON': 'NOON - ANCHORAGE',
+      'SHIFTING': 'SHIFTING STATIONS'
+    },
+    NO_ME_DATA_OPS: new Set([
+      'NOON - AT PORT', 'NOON - ANCHORAGE',
+      'DEPARTURE - STANDBY', 'DEPARTURE - LAST LINE', 'DEPARTURE - PORT',
+      'DEPARTURE - ANCHORAGE', 'DEPARTURE - PILOT ONBOARD',
+      'BUNKERING', 'BUNKER SURVEY'
+    ]),
+    console
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(
+    extract('canonicalOperation') + '\n' +
+    extract('operationNeedsMeData') + '\n' +
+    extract('shouldDeriveMePerfFromRevs') + '\n' +
+    extract('rpmFromRevs') + '\n' +
+    extract('effectiveRpm'),
+    sandbox
+  );
+
+  checkTrue('sea noon may derive ME perf from revs',
+    sandbox.shouldDeriveMePerfFromRevs('NOON - AT SEA', null));
+  check('departure anchorage without RPM skips ME perf',
+    sandbox.shouldDeriveMePerfFromRevs('DEPARTURE - ANCHORAGE', null), false);
+  check('noon anchorage without RPM skips ME perf',
+    sandbox.shouldDeriveMePerfFromRevs('NOON - ANCHORAGE', null), false);
+  check('departure port without RPM skips ME perf',
+    sandbox.shouldDeriveMePerfFromRevs('DEPARTURE - PORT', null), false);
+  checkTrue('departure with recorded RPM may contribute',
+    sandbox.shouldDeriveMePerfFromRevs('DEPARTURE - ANCHORAGE', 55));
+  check('rev Δ alone would invent bogus RPM — gate prevents it',
+    sandbox.shouldDeriveMePerfFromRevs('DEPARTURE - ANCHORAGE', null)
+      ? sandbox.rpmFromRevs(12000, 24)
+      : null,
+    null);
+
+  /* Voyage avg RPM uses only ME-running periods' own revs → RPM. */
+  function avgRpmFromPeriods(periods) {
+    let sum = 0, hrs = 0;
+    for (const p of periods) {
+      if (!sandbox.shouldDeriveMePerfFromRevs(p.operation, p.rpmEntered)) continue;
+      const rpm = sandbox.operationNeedsMeData(p.operation)
+        ? sandbox.effectiveRpm(p.rpmEntered, p.dailyRevs, p.meHrs)
+        : p.rpmEntered;
+      if (rpm == null || !(p.meHrs > 0)) continue;
+      sum += rpm * p.meHrs;
+      hrs += p.meHrs;
+    }
+    return hrs > 0 ? sum / hrs : null;
+  }
+
+  const seaThenDepart = [
+    { operation: 'NOON - AT SEA', dailyRevs: 86400, meHrs: 24, rpmEntered: null },
+    { operation: 'DEPARTURE - ANCHORAGE', dailyRevs: 5000, meHrs: 6, rpmEntered: null }
+  ];
+  check('avg RPM ignores departure counter adjustment',
+    avgRpmFromPeriods(seaThenDepart),
+    86400 / (24 * 60));
+  check('avg RPM stays sea-only after deleting departure',
+    avgRpmFromPeriods(seaThenDepart.slice(0, 1)),
+    86400 / (24 * 60));
+}
 console.log('\nactive-leg filter');
 {
   const sandbox = {
