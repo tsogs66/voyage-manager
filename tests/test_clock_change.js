@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
- * Ship's clock / zone-time: changing zone adjusts the log time by 30 min or 1 h
- * (or any 30-min step) and period hours subtract clocks advanced.
+ * Ship's clock / zone-time: changing zone records clocks advanced/retarded (log stamp stays put)
+ * and period hours subtract clocks advanced.
  * Run: node tests/test_clock_change.js
  */
 
@@ -35,20 +35,20 @@ checkTrue('options include +30 min steps', ShipTime.tzOffsetOptions().indexOf(30
 
 console.log('\nadjust time when the zone changes');
 const plusHour = ShipTime.applyTimezoneChange('2026-08-15T12:00', 0, 60, 0);
-check('UTC+0 → UTC+1 advances the clock 1 hour', plusHour.datetime, '2026-08-15T13:00');
+check('UTC+0 → UTC+1 keeps the log stamp (noon stays noon)', plusHour.datetime, '2026-08-15T12:00');
 check('logged clock change +60', plusHour.clockChangeMin, 60);
 check('delta +60', plusHour.deltaMin, 60);
 
 const minus30 = ShipTime.applyTimezoneChange('2026-08-15T12:00', 480, 450, 0);
-check('UTC+8 → UTC+7:30 retards 30 min', minus30.datetime, '2026-08-15T11:30');
+check('UTC+8 → UTC+7:30 keeps the log stamp', minus30.datetime, '2026-08-15T12:00');
 check('logged clock change −30', minus30.clockChangeMin, -30);
 
 const stacked = ShipTime.applyTimezoneChange(plusHour.datetime, plusHour.tzOffsetMin, 90, plusHour.clockChangeMin);
 check('second +30 stacks on the log', stacked.clockChangeMin, 90);
-check('time is 13:30 after +1 h then +30 min', stacked.datetime, '2026-08-15T13:30');
+check('stacked zone steps keep the log stamp', stacked.datetime, '2026-08-15T12:00');
 
 const undo = ShipTime.applyTimezoneChange(plusHour.datetime, 60, 0, 60);
-check('changing back undoes the time', undo.datetime, '2026-08-15T12:00');
+check('changing back keeps the log stamp', undo.datetime, '2026-08-15T12:00');
 check('changing back clears the log', undo.clockChangeMin, 0);
 
 console.log('\nperiod hours account for the clock change');
@@ -60,7 +60,9 @@ check('noon-to-noon after clocks −1 h is 25 h',
   ShipTime.elapsedShipHours('2026-08-14T12:00', '2026-08-15T12:00', -60), 25);
 check('noon-to-noon after clocks +30 min is 23.5 h',
   ShipTime.elapsedShipHours('2026-08-14T12:00', '2026-08-15T12:00', 30), 23.5);
-check('time also moved +1 h and logged +1 h stays 24 h',
+check('Change clocks +1 h (stamp unchanged) makes noon-to-noon 23 h',
+  ShipTime.elapsedShipHours('2026-08-14T12:00', plusHour.datetime, plusHour.clockChangeMin), 23);
+check('manual stamp shift with matching clock log still cancels to 24 h',
   ShipTime.elapsedShipHours('2026-08-14T12:00', '2026-08-15T13:00', 60), 24);
 check('15 Aug noon → 16 Aug noon is 24 h',
   ShipTime.elapsedShipHours('2026-08-15T12:00', '2026-08-16T12:00', 0), 24);
