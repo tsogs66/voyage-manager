@@ -71,8 +71,16 @@ function makeSandbox(state) {
     console,
   };
   vm.createContext(sandbox);
+  /* robAsOfComputedRow now folds stamped summary Received (with rob-survey
+     receipt mirrors only as a no-stamp fallback) — extract those helpers too. */
   vm.runInContext(
-    [extract('latestRobSurveyAtOrBefore'), extract('receiptDayAfter'), extract('robAsOfComputedRow')].join('\n'),
+    [
+      extract('latestRobSurveyAtOrBefore'),
+      extract('receiptDayAfter'),
+      extract('entryHasStampedReceived'),
+      extract('stampedReceivedAsOf'),
+      extract('robAsOfComputedRow'),
+    ].join('\n'),
     sandbox
   );
   return sandbox;
