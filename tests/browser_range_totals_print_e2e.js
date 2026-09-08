@@ -166,15 +166,19 @@ const SCRAPE = `(html) => {
   check('all fuel', s.rows['Totals/All fuel'], `${tab.fuelTotal} MT`);
   tab.groups.forEach(([label, v]) =>
     check(`${label} burned`, s.rows[`Totals/${label} burned`], `${v} MT`));
-  check('ship speed', s.rows['Averages/Ship speed'], `${tab.avgSpeed} kn`);
+  check('ship speed', s.rows['Averages/Ship Speed'], `${tab.avgSpeed} kn`);
   check('total revolutions', s.rows['Totals/Total revolutions'], tab.revs);
   /* A count, not a rate: revolutions turned over the range is what an environmental
      return is worked from, and it must agree with the average rate reported beside it. */
   check('and it is a whole count, not the rate', /^\d+$/.test(tab.revs), true);
   check('revolutions reconcile with the average RPM',
     Math.round(tab.revsRaw / (Number(tab.hrs) * 60) * 100) / 100, Number(tab.avgRpm));
-  check('M/E revolutions', s.rows['Averages/M/E revolutions'], `${tab.avgRpm} rpm`);
-  check('shaft power', s.rows['Averages/Shaft power'], `${tab.avgKw} kW`);
+  check('RPM', s.rows['Averages/RPM'], `${tab.avgRpm} rpm`);
+  check('Load (kW)', s.rows['Averages/Load (kW)'], `${tab.avgKw} kW`);
+  check('Load % (MCR)', !!s.rows['Averages/Load % (MCR)'], true);
+  check('Engine Distance', /nm$/.test(s.rows['Averages/Engine Distance'] || ''), true);
+  check('Engine Speed', /kn$/.test(s.rows['Averages/Engine Speed'] || ''), true);
+  check('Ship Distance', /nm$/.test(s.rows['Averages/Ship Distance'] || ''), true);
 
   console.log('\na range too long for the page says so');
   const reports = Number(tab.reports);
