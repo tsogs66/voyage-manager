@@ -12887,11 +12887,14 @@ html, body{
 .pr-led-page-inner{
   width:100%;
   max-width:142mm;
+  height:100%;
   transform-origin:top left;
   box-sizing:border-box;
 }
 .pr-led-inner{
   width:100%;
+  height:100%;
+  min-height:100%;
   display:flex;
   flex-direction:column;
   font-family: Calibri, 'Segoe UI', Candara, sans-serif;
@@ -20524,7 +20527,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v211';
+let androidInstallCacheName = 'noon-report-v210';
 
 /*
  * What the program is called.
