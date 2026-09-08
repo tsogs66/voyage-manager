@@ -1,6 +1,6 @@
 {
   "name": "voyage-manager",
-"version": "1.0.208",
+  "version": "1.0.209",
   "description": "Voyage Chief \u2014 engine log and voyage reporting (PWA + Android)",
   "private": true,
   "scripts": {
