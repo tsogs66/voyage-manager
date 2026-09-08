@@ -127,7 +127,7 @@ const SCRAPE = `(html) => {
     s.meta, ['Vessel', 'Voyage No.', 'From Report', 'To Report']);
   check('a KPI strip leads', s.kpis, ['Reports', 'Period Hrs', 'Distance (nm)', 'Avg Speed (kn)', 'All Fuel (MT)']);
   check('totals, averages, the consumer split and the reports behind them',
-    s.sections, ['Totals', 'Averages', 'Fuel Consumption By Consumer', 'Reports In Range']);
+    s.sections, ['Totals', 'Averages', 'Fuel Consumption By Consumer', 'Remaining On Board — Start → End', 'Reports In Range']);
   check('it is signed', s.hasSignature, true);
 
   /* Fuel split by what burned it. The four consumers have to account for the whole
