@@ -292,6 +292,7 @@ async function loadFleet(page) {
   const prints = await page.evaluate(() => ({
     voyageSummary: typeof printVoyageSummary === 'function',
     robSnapshot: typeof printRobSnapshot === 'function',
+    landscapeFull: typeof printLandscapeFullPages === 'function',
     rangeTotals: typeof printRangeTotalsSheet === 'function',
     bunkerPlan: typeof printBunkerPlan === 'function',
     depArr: typeof printDepArrRobSheet === 'function',
@@ -299,9 +300,10 @@ async function loadFleet(page) {
   }));
   ok('printVoyageSummary exists', prints.voyageSummary);
   ok('printRobSnapshot exists', prints.robSnapshot);
+  ok('printLandscapeFullPages exists', prints.landscapeFull);
   ok('printRangeTotalsSheet exists', prints.rangeTotals);
   ok('printBunkerPlan exists', prints.bunkerPlan);
-  ok('print helpers available', prints.voyageSummary && prints.robSnapshot);
+  ok('print helpers available', prints.voyageSummary && prints.robSnapshot && prints.landscapeFull);
 
   console.log('\n=== Effective carryover / first-entry meters ===');
   const meters = await page.evaluate(() => {
