@@ -10,6 +10,7 @@ const PRECACHE = [
   './license-config.js',
   './license.js',
   './save-file.js',
+  './camera-capture.js',
   './sw.js',
   './manifest.webmanifest',
   './icons/logoBG.png',
