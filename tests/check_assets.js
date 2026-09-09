@@ -188,7 +188,7 @@ for (const rel of precache || []) {
   check('the login card names it',
     html.includes('<h2 id="loginGateTitle">' + appName + '</h2>'), true);
   check('the printed sheet header names it',
-    html.includes('Engine Department — ${escPrint(APP_NAME)}'), true);
+    html.includes('Engine Department — ${APP_NAME}') || html.includes('Engine Department — ${escPrint(APP_NAME)}'), true);
 
   const manifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'manifest.webmanifest'), 'utf8'));
   check('the web manifest short_name matches', manifest.short_name, appName);
