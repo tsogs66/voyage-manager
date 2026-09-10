@@ -1,14 +1,24 @@
 'use strict';
+/**
+ * Dep/Arr ROB: recalculate control + Received must not balloon (no stamp+receipt
+ * double-count, no grade broadcast across tanks).
+ *
+ * Run: node tests/test_dep_arr_rob_recalc.js
+ */
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
+
 const HTML = fs.readFileSync(path.join(__dirname, '..', 'voyage_manager.html'), 'utf8');
+
 let fails = 0, checks = 0;
 function check(label, actual, expected) {
   checks += 1;
-  const ok = actual === expected;
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
   console.log(ok ? `  ok   ${label}` : `  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
   if (!ok) fails += 1;
 }
+
 console.log('Dep/Arr ROB recalculate control');
 check('recalculate button present', HTML.includes('id="btnRecalcDepArrRob"'), true);
 check('undo button present', HTML.includes('id="btnUndoDepArrRobRecalc"'), true);
@@ -17,5 +27,110 @@ check('commits Opening ROB from vessel management', HTML.includes('readFuelTypeM
 check('rebuilds current entries', HTML.includes('recalculateCurrentEntries({ persist: true, clearOverrides })'), true);
 check('undo button wired into shared undo UI', HTML.includes("'btnUndoDepArrRobRecalc'"), true);
 check('status line present', HTML.includes('id="depArrRobRecalcStatus"'), true);
-if (fails) { console.log(`\nFAILED — ${fails} of ${checks} checks`); process.exit(1); }
+check('strict receipt match helper', HTML.includes('function receiptMatchesTankStrict'), true);
+check('consumed from log overrides path', HTML.includes('function voyageConsumedFromLog'), true);
+check('present prefers saved log ROB', HTML.includes('function depArrPresentRob'), true);
+check('hint says receipts only', HTML.includes('Received = Receipts / bunkering entries only'), true);
+
+function extract(name) {
+  const start = HTML.indexOf(`function ${name}(`);
+  if (start < 0) throw new Error(name + ' not found');
+  let depth = 0;
+  let i = HTML.indexOf('{', start);
+  for (; i < HTML.length; i++) {
+    if (HTML[i] === '{') depth++;
+    else if (HTML[i] === '}') {
+      depth--;
+      if (depth === 0) break;
+    }
+  }
+  return HTML.slice(start, i + 1);
+}
+
+const sandbox = {
+  state: { receipts: [], entries: [], setup: { rob: {}, robLube: {} } },
+  console,
+  tankRobValue: (store, t) => (store && t ? (store[t.id] ?? 0) : 0),
+  lubeKindToLabel: (k) => ({ cylHigh: 'CYL HIGH', cylLow: 'CYL LOW', meSys: 'ME SYS OIL', geSys: 'GE SYS OIL' }[k] || k),
+  fuelTankList: () => sandbox._fuel,
+  lubeTankList: () => sandbox._lube,
+  fwTankList: () => sandbox._fw,
+  _fuel: [],
+  _lube: [],
+  _fw: []
+};
+
+vm.runInNewContext(
+  [
+    extract('receiptMatchesTankStrict'),
+    extract('voyageReceivedQty'),
+    extract('depArrOpenShare'),
+    extract('voyageConsumedFromLog'),
+    extract('depArrPresentRob')
+  ].join('\n'),
+  sandbox
+);
+
+console.log('\nReceived must not balloon');
+{
+  const t1 = { id: 't1', name: 'HFO TK1', grade: 'HFO' };
+  const t2 = { id: 't2', name: 'HFO TK2', grade: 'HFO' };
+  sandbox._fuel = [t1, t2, { id: 't3', name: 'HFO TK3', grade: 'HFO' }];
+
+  /* Stamp + hand receipt for the same 238 bunker must stay 238 (prefer hand). */
+  sandbox.state.receipts = [
+    { id: 'r1', category: 'fuel', type: 'HFO TK1', tankId: 't1', qty: 238 },
+    { id: 'r2', category: 'fuel', type: 'HFO TK1', tankId: 't1', qty: 238, source: 'rob-survey', surveyEntryId: 'e1' }
+  ];
+  sandbox.state.entries = [{ id: 'e1', robReceived: { t1: 238 }, robReceivedLube: {} }];
+  check('hand preferred over survey mirror: 238 not 476', sandbox.voyageReceivedQty(t1, 'fuel'), 238);
+  /* With only the survey mirror (typical after summary save with stamp): */
+  sandbox.state.receipts = [
+    { id: 'r2', category: 'fuel', type: 'HFO TK1', tankId: 't1', qty: 238, source: 'rob-survey', surveyEntryId: 'e1' }
+  ];
+  check('survey mirror alone is 238 (stamp not added again)', sandbox.voyageReceivedQty(t1, 'fuel'), 238);
+
+  /* Grade-only legacy receipt must NOT hit every HFO tank. */
+  sandbox.state.receipts = [{ id: 'rg', category: 'fuel', type: 'HFO', qty: 238 }];
+  check('grade-only receipt does not match TK1 by name', sandbox.voyageReceivedQty(t1, 'fuel'), 0);
+  check('grade-only receipt does not match TK2', sandbox.voyageReceivedQty(t2, 'fuel'), 0);
+
+  sandbox.state.receipts = [{ id: 'rn', category: 'fuel', type: 'HFO TK1', qty: 238 }];
+  check('name-only receipt matches TK1', sandbox.voyageReceivedQty(t1, 'fuel'), 238);
+  check('name-only receipt does not match TK2', sandbox.voyageReceivedQty(t2, 'fuel'), 0);
+}
+
+console.log('\nPresent prefers saved survey / identity');
+{
+  const t1 = { id: 't1', name: 'HFO TK1', grade: 'HFO' };
+  check(
+    'identity when no survey',
+    sandbox.depArrPresentRob(t1, 'fuel', 100, 50, 20, null),
+    130
+  );
+  check(
+    'survey measured wins',
+    sandbox.depArrPresentRob(t1, 'fuel', 100, 50, 20, {
+      robSurvey: { measured: { t1: 111 } }
+    }),
+    111
+  );
+}
+
+console.log('\nConsumed uses log cumFuel share');
+{
+  sandbox._fuel = [
+    { id: 't1', name: 'HFO TK1', grade: 'HFO' },
+    { id: 't2', name: 'HFO TK2', grade: 'HFO' }
+  ];
+  sandbox.state.setup.rob = { t1: 75, t2: 25 };
+  const rows = [{ cumFuel: { HFO: 40 }, cumLube: {} }];
+  check('opening share 75%', Math.round(sandbox.voyageConsumedFromLog(sandbox._fuel[0], 'fuel', rows) * 1000) / 1000, 30);
+  check('opening share 25%', Math.round(sandbox.voyageConsumedFromLog(sandbox._fuel[1], 'fuel', rows) * 1000) / 1000, 10);
+}
+
+if (fails) {
+  console.log(`\nFAILED — ${fails} of ${checks} checks`);
+  process.exit(1);
+}
 console.log(`\nPASSED — ${checks} checks`);
