@@ -97,15 +97,15 @@ console.log('\nprint title is the operation');
 {
   const port = sandbox.noonSheetTitles('NOON - AT PORT');
   check('in-port title', port.title, 'NOON - AT PORT');
-  check('in-port subtitle is the document kind', port.subtitle, 'Noon Report — Voyage Summary');
+  check('in-port subtitle is Voyage Chief summary', port.subtitle, 'Voyage Chief — Voyage Summary');
   const sea = sandbox.noonSheetTitles('NOON - AT SEA');
   check('at-sea title', sea.title, 'NOON - AT SEA');
-  check('at-sea is still a noon report', sea.subtitle, 'Noon Report — Voyage Summary');
+  check('at-sea subtitle is Voyage Chief summary', sea.subtitle, 'Voyage Chief — Voyage Summary');
   const bunker = sandbox.noonSheetTitles('BUNKERING');
   check('non-noon title', bunker.title, 'BUNKERING');
-  check('non-noon subtitle', bunker.subtitle, 'Voyage Summary');
+  check('non-noon subtitle', bunker.subtitle, 'Voyage Chief — Voyage Summary');
   const empty = sandbox.noonSheetTitles('');
-  check('empty operation falls back', empty.title, 'Voyage Summary');
+  check('empty operation falls back', empty.title, 'Voyage Chief — Voyage Summary');
 }
 
 console.log('\nflag registry name');
@@ -539,8 +539,20 @@ console.log('\nsaving a summary you did not edit changes nothing');
 console.log('\nthe sheet prints the stamp the period is measured from');
 check('last report cell replaces the duplicated voyage no.', HTML.includes("{label:'Last Report', value:prevReportStr}"), true);
 
-check('route comes before last report on the noon meta strip',
-  HTML.indexOf("{label:'Route', value:`${state.setup.departPort") < HTML.indexOf("{label:'Last Report', value:prevReportStr}"), true);
+{
+  const noonMetaStart = HTML.indexOf('function buildVoyageNoonSheetHTML');
+  const noonChunk = noonMetaStart >= 0 ? HTML.slice(noonMetaStart, noonMetaStart + 80000) : HTML;
+  check('last report sits beside date, then route on the noon meta strip',
+    noonChunk.indexOf("{label:'Date & Time', value:dtStr}") < noonChunk.indexOf("{label:'Last Report', value:prevReportStr}") &&
+    noonChunk.indexOf("{label:'Last Report', value:prevReportStr}") < noonChunk.indexOf("{label:'Route', value:`${state.setup.departPort"), true);
+  check('noon meta no longer repeats condition / flag / IMO in the top strip',
+    !noonChunk.includes("{label:'Condition', value:conditionLabel(entry.condition)}") &&
+    !noonChunk.includes("{label:'IMO No.', value:state.setup.imoNo||'—'}") &&
+    !noonChunk.includes("{label:'Flag', value:flagName||'—'}"), true);
+  check('noon header uses flag registry and IMO under vessel name',
+    noonChunk.includes('const deptLine = `${flagName || \'—\'} — ${state.setup.imoNo || \'—\'}`') ||
+    noonChunk.includes('deptLine }'), true);
+}
 check('slip % sits between RPM and speed on the KPI strip',
   HTML.includes("{label:'Slip %', value:fmt(row.slip,2)}") && HTML.indexOf("{label:'RPM'") < HTML.indexOf("{label:'Slip %'") && HTML.indexOf("{label:'Slip %'") < HTML.indexOf("{label:'Speed (kn)'"), true);
 check('ship dist is omitted when the main engine is not running',
