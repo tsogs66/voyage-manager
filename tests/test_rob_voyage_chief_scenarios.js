@@ -48,7 +48,9 @@ check('Received not derived from balance', HTML.includes('Received is user/stamp
 check('FW live update does not invent Received', HTML.includes('Do not auto-fill Received from the FW balance'));
 check('Create New Voyage syncs flowmeters', HTML.includes('Keep Vessel Setup flowmeters in step with the carryover'));
 check('empty log prefers setup meters', HTML.includes('const logEmpty = !sortedEntries().length'));
-check('rob-survey mirror is stamp fallback only', HTML.includes('ONLY a fallback when an old entry has no'));
+check('rob-survey mirror is stamp fallback only', HTML.includes('ONLY a fallback when an old entry has no') || HTML.includes('prefer-once'));
+check('bookReceivedPreferOnce present', HTML.includes('function bookReceivedPreferOnce'));
+check('hand+stamp never double in robAsOf', HTML.includes('Never hand+stamp'));
 
 const FUEL = [
   { id: 'hfo1', name: 'HFO TK1', grade: 'HFO' },
@@ -103,6 +105,8 @@ function makeSandbox(state) {
   vm.runInContext([
     'entryHasStampedReceived',
     'stampedReceivedAsOf',
+    'receiptMatchesTankStrict',
+    'bookReceivedPreferOnce',
     'robAsOfComputedRow',
     'entryRobReceivedQty',
     'robBalanceRows',
@@ -245,6 +249,28 @@ console.log('\n5) multi-tank grade cons must not invent Received in the balance 
     return Math.abs(derived - 15) < 1e-6;
   });
   check('old derived formula would have shown ~15 phantom (sanity)', wouldHavePhantom);
+}
+
+console.log('\n6) hand Receipt + stamped Summary Received for same LSFO bunker counts once');
+{
+  const state = {
+    setup: { rob: { hfo1: 500, hfo2: 0, mdo: 0 }, robLube: {} },
+    entries: [{ id: 'e1', datetime: '2026-09-01T12:00', robReceived: { hfo1: 120 }, robReceivedLube: {} }],
+    receipts: [
+      { id: 'hand', date: '2026-09-01T12:00', category: 'fuel', tankId: 'hfo1', qty: 120 },
+      { id: 'mir', date: '2026-09-01T12:00', category: 'fuel', tankId: 'hfo1', qty: 120, source: 'rob-survey', surveyEntryId: 'e1' },
+    ],
+    _rows: [makeRow('e1', '2026-09-01T12:00', 30, 0, { consByType: { HFO: 30 } })],
+  };
+  const sb = makeSandbox(state);
+  const asOf = sb.robAsOfComputedRow(state._rows[0], state._rows);
+  /* Open 500 + recv 120 − burn 30 = 590 (not 710 from double 120). */
+  checkEq('hand+stamp+mirror Present is 590 not 710', asOf.rob.hfo1, 590);
+  checkEq('bookReceivedPreferOnce is 120', sb.bookReceivedPreferOnce(
+    { id: 'hfo1', name: 'HFO TK1', grade: 'HFO' },
+    'fuel',
+    { cutoff: new Date('2026-09-01T12:00'), cutoffDay: '2026-09-01', survey: null }
+  ), 120);
 }
 
 console.log();
