@@ -100,8 +100,8 @@ check('the ROB page has a water total strip', HTML.includes('id="fwTotalStrip"')
 check('the summary page has a water total strip', HTML.includes('id="fwTotalSummaryStrip"'), true);
 check('summary consumption vs ROB splits water from lube', HTML.includes('id="fwDualGauges"'), true);
 {
-  const consRob = HTML.slice(HTML.indexOf('CONSUMPTION VS ROB'), HTML.indexOf('id="page-reports"'));
-  check('fw gauges stay in the consumption vs ROB panel', consRob.includes('id="fwDualGauges"'), true);
+  const consRob = HTML.slice(HTML.indexOf('CALCULATED ROB'), HTML.indexOf('id="page-reports"'));
+  check('fw gauges stay in the calculated ROB panel', consRob.includes('id="fwDualGauges"'), true);
   check('fw gauges sit on rows below total lube oil', consRob.indexOf('lubeTotalSummaryStrip') < consRob.indexOf('fwDualGauges'), true);
   check('fw is a sub-heading in that panel, not a fifth lube gauge', consRob.includes('<h3 class="sub">Fresh Water</h3>'), true);
 }
