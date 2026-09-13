@@ -3455,6 +3455,17 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
       <div class="hint"><strong>Push Active Leg</strong> uploads this device’s active voyage+condition and <em>overwrites</em> the same leg on the server if it already exists. <strong>Pull Active Leg</strong> downloads that leg from the server and <em>overwrites</em> the local active leg. <strong>Keep Data Persistent</strong> merges local and server entries for the same leg in chronological order (union both ways — missing entries are filled from the other side), then saves the merged result on both sides. Every action asks for confirmation first.</div>
       <div class="hint">Server folders: <code>data/&lt;vessel&gt;/&lt;voyageNo&gt;/B.json</code> and <code>…/L.json</code> (B = ballast, L = laden).</div>
     </div>
+
+    <div class="panel" id="vesselLibraryPanel">
+      <h2>Server vessel library</h2>
+      <div class="hint">Vessels stored on this Voyage Chief sync server (name + IMO), across every license user’s database. Import ship particulars only, plus the latest voyage leg when one exists, into <strong>your</strong> server folder and this device.</div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button type="button" class="ghost small" id="btnVesselLibraryRefresh">Refresh list</button>
+      </div>
+      <div id="vesselLibraryList" class="hint" style="margin-top:10px;">Open Setup with a sync URL configured, then refresh.</div>
+      <div class="hint" id="vesselLibraryStatus" style="margin-top:8px;" role="status" aria-live="polite">Ready.</div>
+    </div>
+
     <!-- ARCHIVED (APP_FEATURES.installAndroid): install panels kept for future use -->
     <div class="panel" id="androidInstallPanel" hidden>
       <h2>Install on Android / tablet</h2>
@@ -21231,7 +21242,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v237';
+let androidInstallCacheName = 'noon-report-v238';
 
 /*
  * What the program is called.
@@ -21282,6 +21293,167 @@ function showAppVersion(){
   const setup = document.getElementById('setupAppVersionLabel');
   if (setup) setup.textContent = ver ? ('v' + ver) : 'unknown';
 }
+
+/* ---------- Server vessel library (per-user DB copy) ---------- */
+function setVesselLibraryStatus(msg){
+  const el = document.getElementById('vesselLibraryStatus');
+  if (el) el.textContent = msg || '';
+}
+
+async function fetchVesselLibrary(){
+  const base = syncApiBase();
+  if (!base) throw new Error('Configure the Sync Server URL first.');
+  const { body } = await fetchSyncJson(base + '/api/vessel-library', {
+    headers: syncRequestHeaders()
+  });
+  return (body && body.vessels) || [];
+}
+
+async function importVesselLibraryEntry(ownerSlug, vesselId){
+  const base = syncApiBase();
+  if (!base) throw new Error('Configure the Sync Server URL first.');
+  const { body } = await fetchSyncJson(base + '/api/vessel-library/import', {
+    method: 'POST',
+    headers: syncRequestHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ ownerSlug: ownerSlug || null, vesselId })
+  });
+  return body;
+}
+
+function applyParticularsToSetup(setup, particulars){
+  const s = setup || defaultSetupTemplate();
+  const p = particulars || {};
+  const map = [
+    ['vesselName','vesselName'], ['imoNo','imoNo'], ['callSign','callSign'],
+    ['flag','flag'], ['company','company'], ['dwt','dwt'], ['chEng','chEng'],
+    ['pitch','pitch'], ['mcrRpm','mcrRpm'], ['mcrKw','mcrKw'],
+    ['csrRpm','csrRpm'], ['csrKw','csrKw'], ['sfoc100','sfoc100'], ['sfoc85','sfoc85'],
+    ['lcvRef','lcvRef'], ['lcvActual','lcvActual'], ['geArrangement','geArrangement'],
+    ['generatorCount','generatorCount'], ['meCylinderCount','meCylinderCount'],
+    ['turboCount','turboCount']
+  ];
+  for (const [from, to] of map){
+    if (p[from] != null && p[from] !== '') s[to] = p[from];
+  }
+  if (p.imo != null && p.imo !== '' && !s.imoNo) s.imoNo = p.imo;
+  if (p.callSign != null && p.callSign !== '' && !s.callSign) s.callSign = p.callSign;
+  if (p.capacity && typeof p.capacity === 'object') s.capacity = { ...(s.capacity||{}), ...p.capacity };
+  if (p.capacityLube && typeof p.capacityLube === 'object') s.capacityLube = { ...(s.capacityLube||{}), ...p.capacityLube };
+  if (Array.isArray(p.fuelTanks) && p.fuelTanks.length) s.fuelTanks = JSON.parse(JSON.stringify(p.fuelTanks));
+  if (Array.isArray(p.lubeTanks) && p.lubeTanks.length) s.lubeTanks = JSON.parse(JSON.stringify(p.lubeTanks));
+  if (Array.isArray(p.fwTanks) && p.fwTanks.length) s.fwTanks = JSON.parse(JSON.stringify(p.fwTanks));
+  if (Array.isArray(p.generators) && p.generators.length) s.generators = JSON.parse(JSON.stringify(p.generators));
+  if (p.flowmeters && typeof p.flowmeters === 'object') s.flowmeters = JSON.parse(JSON.stringify(p.flowmeters));
+  if (p.defaults && typeof p.defaults === 'object') s.defaults = { ...(s.defaults||{}), ...p.defaults };
+  return s;
+}
+
+async function mirrorVesselLibraryImportLocally(result){
+  if (!result || !result.vessel) return null;
+  const name = result.vessel.name || result.particulars?.vesselName || result.vessel.slug || 'Imported vessel';
+  const slug = result.vessel.slug || result.vessel.id || vesselSlugFromName(name);
+  let vessel = (state.vessels || []).find(v => v.slug === slug || v.name === name);
+  if (!vessel){
+    vessel = await createNewVessel(name);
+  }
+  if (!vessel) throw new Error('Could not create local vessel');
+  vessel.slug = slug;
+  vessel.name = name;
+  await saveVesselRegistry();
+
+  const metaAll = await dbGetAll('meta');
+  const setupRow = metaAll.find(m => m.key === `setup:${vessel.id}`);
+  let setup = migrateSetup(setupRow ? setupRow.value : defaultSetupTemplate({ vesselName: name }));
+  setup = applyParticularsToSetup(setup, result.particulars || {});
+  setup.vesselName = name;
+  setup.sync = { ...(setup.sync || {}), vesselId: slug, apiToken: '', serverUrl: (ensureSyncConfig().serverUrl || '') };
+  await dbPut('meta', { key: `setup:${vessel.id}`, value: setup });
+
+  const leg = result.voyageLeg;
+  if (leg && leg.data){
+    const payload = leg.data;
+    const packSrc = (payload.data && typeof payload.data === 'object') ? payload.data : payload;
+    const pack = {
+      setup: migrateSetup(packSrc.setup || setup),
+      entries: Array.isArray(packSrc.entries) ? packSrc.entries : [],
+      receipts: Array.isArray(packSrc.receipts) ? packSrc.receipts : [],
+      documents: Array.isArray(packSrc.documents) ? packSrc.documents : [],
+      abstracts: Array.isArray(packSrc.abstracts) ? packSrc.abstracts : [],
+      printHistory: Array.isArray(packSrc.printHistory) ? packSrc.printHistory : []
+    };
+    pack.setup.vesselName = pack.setup.vesselName || name;
+    pack.setup.sync = { ...(pack.setup.sync || {}), vesselId: slug, apiToken: '' };
+    await saveVoyageLegToLibrary(vessel.id, leg.voyageNo, leg.condition, pack);
+    try { await activateVoyageLeg(vessel.id, leg.voyageNo, leg.condition); }
+    catch (err) { console.warn('activate imported leg', err); }
+  } else {
+    await dbPut('meta', { key: 'activeVesselId', value: vessel.id });
+    await loadVesselFromDb(vessel.id);
+  }
+  renderVesselSelector();
+  render();
+  renderSyncUi();
+  try { await renderVoyageLibrary(); } catch (_) {}
+  return vessel;
+}
+
+async function refreshVesselLibraryPanel(){
+  const list = document.getElementById('vesselLibraryList');
+  if (!list) return;
+  list.textContent = 'Loading vessel list from sync server…';
+  setVesselLibraryStatus('Loading…');
+  try {
+    const vessels = await fetchVesselLibrary();
+    if (!vessels.length){
+      list.innerHTML = '<p class="hint">No vessels on the sync server yet.</p>';
+      setVesselLibraryStatus('No vessels found.');
+      return;
+    }
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    list.innerHTML = `<div style="overflow:auto"><table class="data-table" style="width:100%;font-size:13px">
+      <thead><tr><th>Vessel</th><th>IMO</th><th>Owner</th><th></th></tr></thead>
+      <tbody>${vessels.map(v => {
+        const name = esc(v.name || v.vesselId || '—');
+        const imo = esc(v.imo || '—');
+        const owner = esc(v.ownerSlug || 'server');
+        const vid = esc(v.vesselId || '');
+        const own = esc(v.ownerSlug || '');
+        return `<tr>
+          <td>${name}</td><td>${imo}</td><td>${owner}</td>
+          <td><button type="button" class="ghost small" data-vlib-import="${vid}" data-vlib-owner="${own}">Import particulars + latest leg</button></td>
+        </tr>`;
+      }).join('')}</tbody></table></div>`;
+    list.querySelectorAll('[data-vlib-import]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const vesselId = btn.getAttribute('data-vlib-import');
+        const ownerSlug = btn.getAttribute('data-vlib-owner') || null;
+        if (!confirm(`Import ship particulars for ${vesselId} into your account (server + this device)? Latest voyage leg will be copied when available.`)) return;
+        setVesselLibraryStatus('Importing…');
+        btn.disabled = true;
+        try {
+          const res = await importVesselLibraryEntry(ownerSlug, vesselId);
+          await mirrorVesselLibraryImportLocally(res);
+          setVesselLibraryStatus(res.message || 'Imported.');
+          refreshVesselLibraryPanel();
+        } catch (err) {
+          setVesselLibraryStatus(err.message || 'Import failed');
+          alert(err.message || 'Import failed');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+    setVesselLibraryStatus(`${vessels.length} vessel(s) on server.`);
+  } catch (err) {
+    list.textContent = err.message || 'Could not load vessel library.';
+    setVesselLibraryStatus(err.message || 'Failed');
+  }
+}
+
+document.getElementById('btnVesselLibraryRefresh')?.addEventListener('click', () => {
+  refreshVesselLibraryPanel();
+});
+
 showAppVersion();
 
 function parseSemverParts(v){
