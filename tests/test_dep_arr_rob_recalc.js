@@ -32,7 +32,7 @@ check('stock share matches robAsOf deduct', HTML.includes('function depArrStockS
 check('strict receipt match helper', HTML.includes('function receiptMatchesTankStrict'), true);
 check('consumed from log overrides path', HTML.includes('function voyageConsumedFromLog'), true);
 check('present prefers saved log ROB', HTML.includes('function depArrPresentRob'), true);
-check('hint says receipts only', HTML.includes('Received = Receipts / bunkering entries only'), true);
+check('hint says bunkers once (prefer-once)', HTML.includes('Received = bunkers once'), true);
 
 function extract(name) {
   const start = HTML.indexOf(`function ${name}(`);

@@ -41,7 +41,7 @@ function extract(name) {
 console.log('\nsource guards');
 check('stampedReceivedAsOf helper', HTML.includes('function stampedReceivedAsOf'));
 check('entryHasStampedReceived helper', HTML.includes('function entryHasStampedReceived'));
-check('robAsOf uses stamped Received', HTML.includes('stampedReceivedAsOf(t.id, \'fuel\''));
+check('robAsOf uses stamped Received', HTML.includes('bookReceivedPreferOnce(t, \'fuel\''));
 check('day-based receipt cutoff', HTML.includes('rDay > cutoffDay'));
 check('sync stores entry.datetime on receipt', HTML.includes('Use the entry datetime'));
 

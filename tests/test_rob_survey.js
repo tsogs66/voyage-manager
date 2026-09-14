@@ -77,8 +77,10 @@ function makeSandbox(state) {
     [
       extract('latestRobSurveyAtOrBefore'),
       extract('receiptDayAfter'),
+      extract('receiptMatchesTankStrict'),
       extract('entryHasStampedReceived'),
       extract('stampedReceivedAsOf'),
+      extract('bookReceivedPreferOnce'),
       extract('robAsOfComputedRow'),
     ].join('\n'),
     sandbox
