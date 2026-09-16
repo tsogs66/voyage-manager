@@ -119,7 +119,17 @@ check('voyage summary S/T is stern tube', HTML.includes('S/T Temp — Stern Tube
 check('supplementary report S/T is stern tube', HTML.includes('id="rep_stTemp"') && HTML.includes('S/T Temp — Stern Tube (°C)'), true);
 check('settling tank label is gone', HTML.includes('Settling Tank'), false);
 check('sea temp field on report card', HTML.includes('id="rep_swTemp"') && HTML.includes('Sea Temp (°C)'), true);
-check('sea temp field on weather & sea state', HTML.includes('id="vs_seaTemp"') && HTML.includes('Weather &amp; Sea State'), true);
+check('sea temp under E/R Temp in Others', (()=>{
+  const er = HTML.indexOf('id="vs_erTemp"');
+  const sea = HTML.indexOf('id="vs_seaTemp"');
+  return er >= 0 && sea > er && HTML.includes('Engine Room &amp; Tanks');
+})(), true);
+check('weather block no longer holds sea temp', (()=>{
+  const weather = HTML.indexOf('Weather &amp; Sea State');
+  const others = HTML.indexOf('Engine Room &amp; Tanks');
+  const sea = HTML.indexOf('id="vs_seaTemp"');
+  return weather >= 0 && others > weather && sea > others;
+})(), true);
 check('ER section no longer duplicates S/W temp', HTML.includes('id="vs_erSeaTemp"'), false);
 check('print names the stern tube', HTML.includes('S/T Temperature (Stern Tube)'), true);
 check('print names sea water', HTML.includes('S/W Temperature (Sea Water)'), true);
