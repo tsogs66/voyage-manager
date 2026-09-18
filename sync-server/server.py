@@ -130,6 +130,60 @@ def safe_slug(value: str) -> str:
     return value
 
 
+def slug_core(value: str) -> str:
+    """Canonical ship key for matching: m-v-flag-evi, mv-flag-evi, and flag-evi
+    are the same vessel. Account registration often keeps the MV as an m-v-
+    prefix in the folder name; Voyage Chief's Setup field may use the bare
+    name — treat them as one ship when reading/writing voyage data.
+    """
+    raw = unquote(value or "").strip().lower()
+    s = re.sub(r"[^a-z0-9._-]+", "-", raw).strip("-.")
+    prev = None
+    while s != prev:
+        prev = s
+        s = re.sub(r"^m[._-]?v[._-]+", "", s)
+        s = s.lstrip("-._")
+    return s or "vessel"
+
+
+_RESERVED_ROOT_DIRS = frozenset({"users"})
+
+
+def resolve_vessel_slug(vessel: str, email: str | None = None) -> str:
+    """Map a requested vessel id onto an existing data folder with the same core.
+
+    Exact match wins. Otherwise any sibling folder whose slug_core matches
+    (e.g. request flag-evi → folder m-v-flag-evi). If nothing matches, return
+    the asked slug so a first push still creates a new folder under that name.
+    """
+    asked = safe_slug(vessel)
+    if email is None:
+        email = current_license_email()
+    root = DATA_DIR / "users" / email_slug(email) if email else DATA_DIR
+    if (root / asked).is_dir():
+        return asked
+    if not root.is_dir():
+        return asked
+    core = slug_core(asked)
+    matches: list[str] = []
+    for child in root.iterdir():
+        if not child.is_dir():
+            continue
+        if not email and child.name.lower() in _RESERVED_ROOT_DIRS:
+            continue
+        if not SLUG_RE.match(child.name):
+            continue
+        if slug_core(child.name) == core:
+            matches.append(child.name)
+    if not matches:
+        return asked
+    if asked in matches:
+        return asked
+    # Prefer the m-v- form account registration historically wrote.
+    matches.sort(key=lambda n: (0 if n.lower().startswith("m-v-") else 1, len(n), n))
+    return matches[0]
+
+
 def safe_condition(value: str) -> str:
     """Canonical voyage condition: B (ballast) or L (laden/loaded) only."""
     value = unquote(value or "").strip().upper()
@@ -147,7 +201,7 @@ def vessel_dir(vessel: str, email: str | None = None) -> Path:
     root = DATA_DIR
     if email:
         root = DATA_DIR / "users" / email_slug(email)
-    return root / safe_slug(vessel)
+    return root / resolve_vessel_slug(vessel, email)
 
 
 def voyage_dir(vessel: str, voyage: str, email: str | None = None) -> Path:
@@ -738,7 +792,8 @@ class SyncHandler(BaseHTTPRequestHandler):
             return principal
 
         if write:
-            if principal.get("writable") != vessel:
+            writable = principal.get("writable")
+            if writable is None or slug_core(writable) != slug_core(vessel):
                 current = principal.get("writable")
                 json_response(
                     self, HTTPStatus.FORBIDDEN,
@@ -753,7 +808,7 @@ class SyncHandler(BaseHTTPRequestHandler):
                 return None
             return principal
 
-        if vessel not in readable:
+        if not any(slug_core(v) == slug_core(vessel) for v in readable):
             json_response(
                 self, HTTPStatus.FORBIDDEN,
                 {"error": "forbidden", "reason": "wrong_vessel",
@@ -1032,15 +1087,22 @@ class SyncHandler(BaseHTTPRequestHandler):
             try:
                 if len(parts) == 3:
                     vessel = safe_slug(parts[2])
+                    resolved = resolve_vessel_slug(vessel)
                     json_response(
                         self,
                         HTTPStatus.OK,
-                        {"ok": True, "vesselId": vessel, "voyages": list_voyages(vessel)},
+                        {
+                            "ok": True,
+                            "vesselId": resolved,
+                            "requestedVesselId": vessel,
+                            "voyages": list_voyages(vessel),
+                        },
                     )
                     return
                 if len(parts) == 4:
                     vessel = safe_slug(parts[2])
                     voyage = safe_slug(parts[3])
+                    resolved = resolve_vessel_slug(vessel)
                     # Could be legacy pull of voyageKey "22-F-BALLAST" OR list conditions
                     legacy = LEGACY_COND_SUFFIX.match(voyage)
                     if legacy:
@@ -1053,7 +1115,8 @@ class SyncHandler(BaseHTTPRequestHandler):
                         HTTPStatus.OK,
                         {
                             "ok": True,
-                            "vesselId": vessel,
+                            "vesselId": resolved,
+                            "requestedVesselId": vessel,
                             "voyageNumber": voyage,
                             "conditions": list_conditions(vessel, voyage),
                         },
