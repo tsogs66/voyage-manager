@@ -26,6 +26,7 @@
 <!-- Non-critical scripts load at end of body so the shell HTML/CSS can paint first.
      ship_time / theme / license stay early (small; boot gate needs them). -->
 <script src="ship_time.js"></script>
+<script src="clock-picker.js"></script>
 <script>
 /* Prefer bottom nav in Capacitor/Android and on touch devices (WebView CSS width is often >720).
    Android/iOS always keep bottom nav in landscape — never restore top tabs for width ≥1101. */
@@ -22432,7 +22433,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v273';
+let androidInstallCacheName = 'noon-report-v275';
 
 /*
  * What the program is called.
@@ -27280,5 +27281,6 @@ document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPa
   }
 })();
 </script>
+<script>try{ if(window.ChengClockPicker) ChengClockPicker.install(); }catch(_e){}</script>
 </body>
 </html>
