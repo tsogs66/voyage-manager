@@ -109,7 +109,12 @@ check('summary has no standalone fresh-water panel', HTML.includes('<h2>Fresh Wa
 check('summary per-day splits water from lube', HTML.includes('id="fwPerDayStrip"'), true);
 check('lube per-day no longer lists fresh water', /lubePerDayStrip[\s\S]*FRESH WATER/.test(HTML.slice(HTML.indexOf('lubePerDayStrip'), HTML.indexOf('lubePerDayStrip')+400)), false);
 check('setup opening ROB for water is m³', HTML.includes('Opening ROB (m³)'), true);
-check('gauge total is labelled m³', HTML.includes('Total Fresh Water (m³)'), true);
+check('gauge total is labelled m³',
+  HTML.includes('Total Fresh Water')
+  && (HTML.includes("withUnit(fmtFw(totalFwRob(robLube)), 'm³')")
+    || HTML.includes("withUnit(fmtFw(totalFwRob(calcRobLube)), 'm³')")
+    || HTML.includes('Total Fresh Water (m³)')),
+  true);
 
 console.log('\nwater is shown in cubic metres');
 check('50000 L is 50 m³', sandbox.litresToM3(50000), 50);
