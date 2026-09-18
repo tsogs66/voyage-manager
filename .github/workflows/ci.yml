@@ -63,6 +63,9 @@ jobs:
       - name: Check sync and load progress reporting
         run: node tests/test_activity_progress.js
 
+      - name: Check pull-voyage-leg maps slug to the right local vessel
+        run: node tests/test_pull_leg_vessel_match.js
+
   sync-server:
     name: Sync server (auth matrix)
     runs-on: ubuntu-latest
