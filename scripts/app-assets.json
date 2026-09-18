@@ -16,6 +16,7 @@
     "license.js",
     "save-file.js",
     "camera-capture.js",
+    "clock-picker.js",
     "sw.js",
     "manifest.webmanifest"
   ],
