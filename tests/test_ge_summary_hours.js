@@ -70,7 +70,11 @@ console.log('\nper-generator voyage hours, not a combined total');
 
 console.log('\nsummary UI no longer shows a lumped A/E total');
 checkTrue('old combined label is gone', HTML.indexOf('A/E hrs (voyage)') === -1);
-checkTrue('strip uses A/E #n hrs', HTML.indexOf('A/E #${c.n} hrs') !== -1);
+checkTrue('strip uses A/E #n with hrs unit',
+  HTML.indexOf('A/E #${c.n}') !== -1
+  && (HTML.indexOf("withUnit(c.used ? fmt(c.hours, 2) : '—', 'hrs')") !== -1
+    || HTML.indexOf("stat(c.used ? fmt(c.hours, 1) : '—', `A/E #${c.n}`, 'hrs')") !== -1
+    || HTML.indexOf("A/E #${c.n} hrs") !== -1));
 
 console.log();
 if (failures.length) {
