@@ -49,6 +49,12 @@ check('select-all helper exists and is used on overlay click/focus',
   && HTML.includes('selectAllEditableField(el)'));
 check('reparents overlay to body so Android/AIO containing blocks cannot clip it',
   HTML.includes('if (overlay.parentElement !== document.body) document.body.appendChild(overlay)'));
+check('dialog is a flex column so Accept stays pinned',
+  /\.fm-quick-dialog\{[\s\S]{0,280}flex-direction:\s*column/.test(HTML)
+  && /\.fm-quick-actions\{[\s\S]{0,220}flex:\s*0 0 auto/.test(HTML)
+  && /\.fm-quick-actions\{[\s\S]{0,220}position:\s*sticky/.test(HTML));
+check('landscape tablet uses two columns of flowmeter rows',
+  /html\.landscape-view \.fm-quick-rows,[\s\S]{0,80}html\.vm-land-rows \.fm-quick-rows\{[\s\S]{0,120}grid-template-columns:\s*1fr 1fr/.test(HTML));
 
 if (failures) {
   console.log(`\n${failures}/${checks} failed`);
