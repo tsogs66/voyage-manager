@@ -20,12 +20,19 @@ function check(label, cond, detail) {
 }
 
 console.log('\nFlowmeter popup vs tablet numpad');
-check('pins overlay to --vv-top / --vv-height when keyboard-open',
-  /html\.keyboard-open \.fm-quick-overlay\{[\s\S]{0,280}top:\s*var\(--vv-top/.test(HTML)
-  && /html\.keyboard-open \.fm-quick-overlay\{[\s\S]{0,400}height:\s*var\(--vv-height/.test(HTML));
+check('keeps overlay full-screen when keyboard-open (no visualViewport pin)',
+  /html\.keyboard-open \.fm-quick-overlay\{[\s\S]{0,280}justify-content:\s*center/.test(HTML)
+  && /html\.keyboard-open \.fm-quick-overlay\{[\s\S]{0,280}inset:\s*0/.test(HTML)
+  && !/html\.keyboard-open \.fm-quick-overlay\{[\s\S]{0,280}top:\s*var\(--vv-top/.test(HTML)
+  && !/html\.keyboard-open \.fm-quick-overlay\{[\s\S]{0,400}width:\s*var\(--vv-width/.test(HTML));
 check('dialog max-height uses visual viewport, not 88vh',
   /html\.keyboard-open \.fm-quick-dialog\{[\s\S]{0,180}max-height:\s*calc\(var\(--vv-height/.test(HTML)
   && !/html\.keyboard-open \.fm-quick-dialog\{max-height:min\(88vh/.test(HTML));
+check('landscape tablet dialog fills the overlay instead of a 760px card',
+  /html\.landscape-view \.fm-quick-dialog/.test(HTML)
+  && /width:\s*min\(1180px/.test(HTML)
+  && !/width:min\(760px/.test(HTML)
+  && !/width:\s*min\(760px/.test(HTML));
 check('publishes --vv-* from visualViewport',
   HTML.includes("setProperty('--vv-height'") && HTML.includes("setProperty('--vv-top'"));
 check('scrolls focused flowmeter field into view',
