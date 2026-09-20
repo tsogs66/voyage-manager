@@ -33,6 +33,13 @@ check('scrolls focused flowmeter field into view',
   && HTML.includes("el.closest('#fmQuickOverlay')"));
 check('log-entry input helper includes the popup',
   /function isLogEntryInput\([\s\S]{0,280}#fmQuickOverlay/.test(HTML));
+check('popup numeric fields are text+decimal so select-all works on Android',
+  HTML.includes('inputmode="decimal" autocomplete="off" id="fmq_blr_meter"')
+  && HTML.includes('inputmode="decimal" autocomplete="off" id="fmq_${prefix}_meter"'));
+check('select-all helper exists and is used on overlay click/focus',
+  HTML.includes('function selectAllEditableField')
+  && HTML.includes('function bindFmQuickSelectAll')
+  && HTML.includes('selectAllEditableField(el)'));
 
 if (failures) {
   console.log(`\n${failures}/${checks} failed`);
