@@ -47,6 +47,8 @@ check('select-all helper exists and is used on overlay click/focus',
   HTML.includes('function selectAllEditableField')
   && HTML.includes('function bindFmQuickSelectAll')
   && HTML.includes('selectAllEditableField(el)'));
+check('reparents overlay to body so Android/AIO containing blocks cannot clip it',
+  HTML.includes('if (overlay.parentElement !== document.body) document.body.appendChild(overlay)'));
 
 if (failures) {
   console.log(`\n${failures}/${checks} failed`);
