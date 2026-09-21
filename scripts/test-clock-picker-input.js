@@ -1,6 +1,9 @@
 /**
  * Clock picker must not leave a full-screen overlay that blocks Tank inputs,
- * and HH:MM must accept typing.
+ * HH:MM must accept typing, and datetime-local must expose a Date tab.
+ *
+ * After changing clock-picker.js here, copy the same file to ChEng AIO:
+ * modules/voyage/www/clock-picker.js (plus apps/web and Tank copies).
  *
  * Run: node scripts/test-clock-picker-input.js
  */
@@ -31,5 +34,9 @@ for (const file of candidates) {
     file + ': close() must remove orphan overlays');
   assert(!/user-select:none/.test(src.match(/\.ccp-readout\{[^}]+\}/)?.[0] || ''),
     file + ': readout must not be user-select:none (blocks typing)');
+  assert(/data-ccp-tab="date"/.test(src),
+    file + ': datetime-local fields need a Date tab in the clock picker');
+  assert(/data-ccp-date-grid/.test(src),
+    file + ': clock picker must render a date grid for missed-report dates');
   console.log('ok —', path.relative(process.cwd(), file));
 }
