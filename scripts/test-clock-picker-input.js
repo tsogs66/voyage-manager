@@ -1,6 +1,9 @@
 /**
  * Clock picker must not leave a full-screen overlay that blocks Tank inputs,
- * and HH:MM must accept typing.
+ * HH:MM must accept typing, and datetime-local must expose a Date tab.
+ *
+ * After changing clock-picker.js here, copy the same file to ChEng AIO:
+ * modules/voyage/www/clock-picker.js (plus apps/web and Tank copies).
  *
  * Run: node scripts/test-clock-picker-input.js
  */
