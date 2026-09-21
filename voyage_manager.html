@@ -27,6 +27,9 @@
      ship_time / theme / license stay early (small; boot gate needs them). -->
 <script src="ship_time.js"></script>
 <script src="clock-picker.js"></script>
+<link rel="stylesheet" href="loading-splash.css">
+<script>window.LOADING_SPLASH_BOOT_LABEL = 'Starting Voyage Chief…';</script>
+<script src="loading-splash.js"></script>
 <script>
 /* Prefer bottom nav in Capacitor/Android and on touch devices (WebView CSS width is often >720).
    Android/iOS always keep bottom nav in landscape — never restore top tabs for width ≥1101. */
@@ -5665,6 +5668,7 @@ function paintActivity(force){
   if (!top){
     const hide = ()=>{
       if (_activityStack.length) return;
+      if (typeof LoadingSplash !== 'undefined' && LoadingSplash) LoadingSplash.hide('activity');
       if (banner) banner.hidden = true;
       setActivityButtonsBusy(false);
       if (syncEl && typeof renderSyncUi === 'function'){
@@ -5707,6 +5711,13 @@ function paintActivity(force){
     track.setAttribute('aria-valuenow', String(pct == null ? 0 : pct));
   }
   if (bar) bar.style.width = pct == null ? '38%' : (pct + '%');
+
+  if (typeof LoadingSplash !== 'undefined' && LoadingSplash){
+    LoadingSplash.show('activity', label, {
+      kicker: kicker,
+      pct: pct,
+    });
+  }
 
   const serverItem = [..._activityStack].reverse().find(item => item.source === 'server');
   if (serverItem && syncEl){
@@ -27752,6 +27763,7 @@ document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPa
     catch(gateErr){ console.error('Login gate failed to start', gateErr); showLoginGate(true); }
     _programReady = true;
     endActivity('boot');
+    if (typeof LoadingSplash !== 'undefined' && LoadingSplash) LoadingSplash.endBoot();
     document.getElementById('dbStatus').textContent = '● local database ready';
     try {
       applyEorbLicenseVisibility();
@@ -27803,6 +27815,7 @@ document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPa
   } catch(e){
     console.error('Startup error:', e);
     try{ endActivity('boot'); }catch(_){}
+    if (typeof LoadingSplash !== 'undefined' && LoadingSplash) LoadingSplash.endBoot();
     _programReady = true;
     try{
       ensureSyncConfig();
