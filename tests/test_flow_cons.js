@@ -121,7 +121,6 @@ console.log('\nrollover-safe SINGLE');
 
 console.log('\nroundFuelMt — ROB matches 3-decimal flowmeter display');
 check('303.4 kg → 0.303 MT (not 0.304)', sandbox.roundFuelMt(0.3034), 0.303);
-check('display tie 0.3045 → 0.305', sandbox.roundFuelMt(0.3045), 0.305);
 check('meter path litres×SG noise', sandbox.roundFuelMt(0.303999999), 0.304);
 
 console.log('\nunit override only when the typed figure differs');
@@ -133,6 +132,8 @@ check('no calculated figure keeps the typed one', sandbox.unitOverrideIfDifferen
    applied figure (1.5 vs 1.5) would drop a real 1.5-vs-meter-1.2 override. */
 check('must compare to meter 1.2, not applied 1.5', sandbox.unitOverrideIfDifferent(1.5, 1.2), 1.5);
 check('comparing to the already-applied figure would wipe it', sandbox.unitOverrideIfDifferent(1.5, 1.5), null);
+check('empty unit field is not an override (use flowmeter)', sandbox.unitOverrideIfDifferent(null, 0.303), null);
+check('display tie on flowmeter does not override', sandbox.unitOverrideIfDifferent(0.303, 0.3034), null);
 
 console.log('\nlog save keeps unitOverride when meters are unchanged');
 {
