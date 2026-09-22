@@ -46,6 +46,7 @@ const sandbox = { console, FUEL_DECIMALS: 3 };
 vm.createContext(sandbox);
 vm.runInContext(
   [
+    'function roundFuelMt(n){ if(n==null||n===\'\') return null; const x=Number(n); if(!isFinite(x)) return null; return Number(x.toFixed(FUEL_DECIMALS)); }',
     extract('meterDelta'),
     extract('dualDelta'),
     extract('meGeRawLitres'),
@@ -118,6 +119,10 @@ console.log('\nrollover-safe SINGLE');
   check('D/G ordinary', geRaw, 30);
 }
 
+console.log('\nroundFuelMt — ROB matches 3-decimal flowmeter display');
+check('303.4 kg → 0.303 MT (not 0.304)', sandbox.roundFuelMt(0.3034), 0.303);
+check('meter path litres×SG noise', sandbox.roundFuelMt(0.303999999), 0.304);
+
 console.log('\nunit override only when the typed figure differs');
 check('match within 0.0005 is not an override', sandbox.unitOverrideIfDifferent(1.234, 1.2342), null);
 check('blank is not an override', sandbox.unitOverrideIfDifferent(null, 1.2), null);
@@ -127,6 +132,10 @@ check('no calculated figure keeps the typed one', sandbox.unitOverrideIfDifferen
    applied figure (1.5 vs 1.5) would drop a real 1.5-vs-meter-1.2 override. */
 check('must compare to meter 1.2, not applied 1.5', sandbox.unitOverrideIfDifferent(1.5, 1.2), 1.5);
 check('comparing to the already-applied figure would wipe it', sandbox.unitOverrideIfDifferent(1.5, 1.5), null);
+check('empty unit field is not an override (use flowmeter)', sandbox.unitOverrideIfDifferent(null, 0.303), null);
+check('display tie on flowmeter does not override', sandbox.unitOverrideIfDifferent(0.303, 0.3034), null);
+check('prefilled box matches 3dp flowmeter display', sandbox.unitOverrideIfDifferent(
+  Number(sandbox.roundFuelMt(0.3034).toFixed(3)), 0.3034), null);
 
 console.log('\nlog save keeps unitOverride when meters are unchanged');
 {
