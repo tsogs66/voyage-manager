@@ -46,6 +46,7 @@ const sandbox = { console, FUEL_DECIMALS: 3 };
 vm.createContext(sandbox);
 vm.runInContext(
   [
+    'function roundFuelMt(n){ if(n==null||n===\'\') return null; const x=Number(n); if(!isFinite(x)) return null; return Number(x.toFixed(FUEL_DECIMALS)); }',
     extract('meterDelta'),
     extract('dualDelta'),
     extract('meGeRawLitres'),
@@ -117,6 +118,11 @@ console.log('\nrollover-safe SINGLE');
   check('M/E rolled past 1e8', meRaw, 25);
   check('D/G ordinary', geRaw, 30);
 }
+
+console.log('\nroundFuelMt — ROB matches 3-decimal flowmeter display');
+check('303.4 kg → 0.303 MT (not 0.304)', sandbox.roundFuelMt(0.3034), 0.303);
+check('display tie 0.3045 → 0.305', sandbox.roundFuelMt(0.3045), 0.305);
+check('meter path litres×SG noise', sandbox.roundFuelMt(0.303999999), 0.304);
 
 console.log('\nunit override only when the typed figure differs');
 check('match within 0.0005 is not an override', sandbox.unitOverrideIfDifferent(1.234, 1.2342), null);
