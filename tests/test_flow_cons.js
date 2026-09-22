@@ -134,6 +134,8 @@ check('must compare to meter 1.2, not applied 1.5', sandbox.unitOverrideIfDiffer
 check('comparing to the already-applied figure would wipe it', sandbox.unitOverrideIfDifferent(1.5, 1.5), null);
 check('empty unit field is not an override (use flowmeter)', sandbox.unitOverrideIfDifferent(null, 0.303), null);
 check('display tie on flowmeter does not override', sandbox.unitOverrideIfDifferent(0.303, 0.3034), null);
+check('prefilled box matches 3dp flowmeter display', sandbox.unitOverrideIfDifferent(
+  Number(sandbox.roundFuelMt(0.3034).toFixed(3)), 0.3034), null);
 
 console.log('\nlog save keeps unitOverride when meters are unchanged');
 {
