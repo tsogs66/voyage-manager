@@ -29,6 +29,8 @@ const sandbox = {
 vm.createContext(sandbox);
 vm.runInContext(
   [
+    extract('isSurveyCorrectionInput'),
+    extract('coerceSurveyCorrectionInput'),
     extract('parseSurveySignedNumber'),
     extract('formatSurveyCorrectionInput'),
     extract('formatSurveyCorrectionParen'),
@@ -41,6 +43,19 @@ function check(label, actual, expected) {
   const ok = actual === expected || (typeof expected === 'number' && Math.abs(actual - expected) < 1e-9);
   console.log(ok ? `  ok   ${label}` : `  FAIL ${label}: expected ${expected}, got ${actual}`);
   if (!ok) failures++;
+}
+
+console.log('\ncoerceSurveyCorrectionInput (via DOM stub)');
+{
+  const el = { value: '+4.5', selectionStart: 4, setSelectionRange() {} };
+  sandbox.coerceSurveyCorrectionInput(el);
+  check('keeps plus', el.value, '+4.5');
+  el.value = '-';
+  sandbox.coerceSurveyCorrectionInput(el);
+  check('lone minus kept', el.value, '-');
+  el.value = '+';
+  sandbox.coerceSurveyCorrectionInput(el);
+  check('lone plus kept', el.value, '+');
 }
 
 console.log('\nparseSurveySignedNumber');
