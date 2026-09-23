@@ -127,7 +127,9 @@ console.log('\nconsumption with nothing drawn stays blank');
    none used" rather than "not recorded". The row filters nulls and only totals
    what is there. */
 check('nulls are filtered before summing', HTML.includes('v=>v!=null && !isNaN(v)'), true);
-check('an empty list yields null, not zero', HTML.includes('vals.length ? vals.reduce'), true);
+check('an empty list yields null, not zero',
+  HTML.includes('vals.length ? roundFuelMt(vals.reduce') || HTML.includes('vals.length ? vals.reduce'),
+  true);
 
 console.log(failures ? `\nFAILED — ${failures} of ${checks} checks` : `\nPASSED — ${checks} checks`);
 process.exit(failures ? 1 : 0);

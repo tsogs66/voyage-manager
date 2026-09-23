@@ -46,7 +46,9 @@ function extract(name) {
 console.log('\nsource guards');
 check('Received not derived from balance', HTML.includes('Received is user/stamped input only'));
 check('FW live update does not invent Received', HTML.includes('Do not auto-fill Received from the FW balance'));
-check('Create New Voyage syncs flowmeters', HTML.includes('Keep Vessel Setup flowmeters in step with the carryover'));
+check('Create New Voyage syncs flowmeters',
+  HTML.includes('Keep Vessel Setup flowmeters in step with the carryover')
+  || (HTML.includes('async function createNewVoyageLeg') && HTML.includes('state.setup.flowmeters = {')));
 check('empty log prefers setup meters', HTML.includes('const logEmpty = !sortedEntries().length'));
 check('rob-survey mirror is stamp fallback only', HTML.includes('ONLY a fallback when an old entry has no') || HTML.includes('prefer-once'));
 check('bookReceivedPreferOnce present', HTML.includes('function bookReceivedPreferOnce'));
