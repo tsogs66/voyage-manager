@@ -17,6 +17,7 @@
     "save-file.js",
     "camera-capture.js",
     "clock-picker.js",
+    "signed-numeric-input.js",
     "loading-splash.css",
     "loading-splash.js",
     "sw.js",
