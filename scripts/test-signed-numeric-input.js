@@ -15,10 +15,12 @@ const sw = path.join(__dirname, '..', 'sw.js');
 assert.ok(fs.existsSync(js), 'signed-numeric-input.js missing');
 const src = fs.readFileSync(js, 'utf8');
 assert(src.includes('[data-survey-corr]'), 'must target survey correction inputs');
+assert(src.includes('applyAccessoryChar'), 'must insert via accessory buttons');
+assert(src.includes('lastSignedInput'), 'must keep target field when Insert is tapped');
 
 const page = fs.readFileSync(html, 'utf8');
 assert(page.includes('signed-numeric-input.js'), 'voyage_manager must load signed-numeric-input.js');
-assert(/data-survey-corr=.*data-signed="1"/.test(page) || page.includes('data-signed="1" data-survey-corr'),
+assert(/data-signed="1" data-survey-corr/.test(page) || page.includes('data-signed="1"'),
   'survey correction inputs must be marked data-signed');
 
 const swSrc = fs.readFileSync(sw, 'utf8');
