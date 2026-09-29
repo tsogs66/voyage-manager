@@ -143,7 +143,7 @@ const html = EORB.buildPrintHtml(setup, [
   { date: '2026-08-01', code: 'C', part: 1, lines: [{ itemNo: '11.1', text: 'Sludge Tank' }], officerName: 'A. Ruiz', voided: true, voidReason: 'wrong tank' }
 ], 'test');
 checkTrue('voided row is marked', html.indexOf('orb-voided') !== -1);
-checkTrue('voided text is struck', html.indexOf('<s>Sludge Tank</s>') !== -1);
+checkTrue('voided text is struck', html.indexOf('<s>SLUDGE TANK</s>') !== -1);
 checkTrue('void reason is printed', html.indexOf('VOID') !== -1 && html.indexOf('wrong tank') !== -1);
 
 console.log('\nthe operation list covers what the flag e-ORB offers');
@@ -249,6 +249,7 @@ console.log('\nPart III — fuel changeover (Annex VI Reg. 14.6)');
   check('no Annex I tank R.O.B. effect', EORB.applyOperationRob(s5, 3, 'C', ['2'], v), []);
   const html3 = EORB.buildPrintHtml(s5, [{ date: '2026-08-01', code: 'C', part: 3, lines: [done], officerName: 'A. Ruiz' }], 'test');
   checkTrue('prints under its own heading', html3.indexOf('Fuel Oil Changeover Record — Part III') !== -1);
+  checkTrue('Part III code reads PART III C on the sheet', html3.indexOf('PART III C') !== -1);
 }
 
 console.log('\none date and one code per entry, whatever its item set');
@@ -264,7 +265,7 @@ console.log('\none date and one code per entry, whatever its item set');
   const html6 = EORB.buildPrintHtml(s6, [entry], 'test');
   const body = html6.slice(html6.indexOf('<tbody>'), html6.indexOf('</tbody>'));
   const dateCells = (body.match(/01-Aug-2026/g) || []).length;
-  const codeCells = (body.match(/<td>C<\/td>/g) || []).length;
+  const codeCells = (body.match(/orb-code">C</g) || []).length;
   check('the date is printed once for the whole set', dateCells, 1);
   check('and so is the letter code', codeCells, 1);
   checkTrue('while every item line is still there', (body.match(/<tr/g) || []).length === 6);
@@ -320,11 +321,11 @@ console.log('\nthe on-screen book and the printed sheet are one document');
   check('the printed sheet contains exactly the shared rows', printed.indexOf(rowsHtml) !== -1, true);
 
   check('entries come out in book order, oldest first',
-    rowsHtml.indexOf('Sludge Tk') < rowsHtml.indexOf('3.500 m³ bilge water'), true);
+    rowsHtml.indexOf('SLUDGE TK') < rowsHtml.indexOf('3.500 M³ BILGE WATER'), true);
   const dates = (rowsHtml.match(/16-Aug-2026|18-Aug-2026/g) || []);
   check('each date is written once for its whole entry', dates, ['16-Aug-2026', '18-Aug-2026']);
-  const codes = (rowsHtml.match(/<td>[CD]<\/td>/g) || []);
-  check('and so is each letter code', codes, ['<td>C</td>', '<td>D</td>']);
+  const codes = (rowsHtml.match(/orb-code">[CD]</g) || []);
+  check('and so is each letter code', codes.length, 2);
   check('every item line is present', (rowsHtml.match(/<tr/g) || []).length, 4);
   check('the officer signs under the last line of the entry',
     (rowsHtml.match(/orb-sign/g) || []).length, 2);
@@ -334,7 +335,7 @@ console.log('\nthe on-screen book and the printed sheet are one document');
 
   const voided = EORB.bookRowsHtml([{ date: '2026-08-16', code: 'C', part: 1, officerName: 'A',
     voided: true, voidReason: 'wrong tank', lines: [{ itemNo: '11.1', text: 'Sludge Tk' }] }]);
-  check('a struck line is struck in the book too', /<s>Sludge Tk<\/s>/.test(voided), true);
+  check('a struck line is struck in the book too', /<s>SLUDGE TK<\/s>/.test(voided), true);
   check('with the reason it was struck', /wrong tank/.test(voided), true);
   check('an empty book builds nothing rather than throwing', EORB.bookRowsHtml([]), '');
 }
@@ -351,7 +352,7 @@ console.log('\nbeORB-style date / code / item No. columns');
     lines: [{ itemNo: 'I', text: 'Test of OWS through recirculation line' }]
   }]);
   checkTrue('legacy Code I item "I" is blanked in the book',
-    /<td>I<\/td><td><\/td>/.test(iHtml));
+    /orb-code">I<\/td><td><\/td>/.test(iHtml));
   checkTrue('headers name Code (letter) and Item No. (number)',
     EORB.buildPrintHtml(EORB.defaultOrbSetup({}), [{
       date: '2026-08-24', code: 'D', part: 1, officerName: 'A',
@@ -365,6 +366,14 @@ console.log('\nbeORB-style date / code / item No. columns');
     EORB.formatOrbSignature({
       officerName: 'Jaycee S. Lugtu', officerRank: '4/E', officerSignedAt: '2026-08-24'
     }), 'JAYCEE S. LUGTU - 4/E, 24-AUG-2026 [SIGNATURE]');
+  check('Part III book code label', EORB.formatOrbBookCode({ part: 3, code: 'C' }), 'PART III C');
+  const sheet = EORB.buildPrintHtml(EORB.defaultOrbSetup({ shipName: 'FLAG EVI', imo: '9619799', callSign: '3FQU7' }), [{
+    date: '2026-09-05', code: 'H', part: 1, officerName: 'Test', lines: [{ itemNo: '26.1', text: 'Port sample' }]
+  }], 'Sep 2026');
+  checkTrue('beORB-style ship header fields', sheet.indexOf('Name of Ship:') !== -1 &&
+    sheet.indexOf('Official Number:') !== -1 && sheet.indexOf('IMO Number:') !== -1);
+  checkTrue('rendered timestamp footer', sheet.indexOf('e-ORB Report Rendered:') !== -1);
+  checkTrue('zebra and grey header styles', sheet.indexOf('nth-child(even)') !== -1);
 }
 
 console.log();
