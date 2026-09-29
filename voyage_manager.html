@@ -999,6 +999,31 @@
     color:var(--brass); border:1px solid var(--brass-dim); border-radius:10px; padding:1px 7px;
   }
   .orb-scenario-card.routine{border-color:var(--brass) !important;}
+  /* Entry wizard — beORB-style table form (matches printed ORB columns) */
+  .orb-form-sheet{width:100%; border-collapse:collapse; margin:10px 0 0; font-size:12px;}
+  .orb-form-sheet th,.orb-form-sheet td{border:1px solid var(--line); padding:6px 8px; vertical-align:top;}
+  .orb-form-sheet thead th{background:rgba(201,154,83,0.18); font-size:10px; font-weight:700; text-align:left;}
+  .orb-form-sheet .orb-form-date{width:96px; white-space:nowrap;}
+  .orb-form-sheet .orb-form-code{width:72px; text-align:center; font-weight:700; font-size:11px;}
+  .orb-form-sheet .orb-form-item{width:56px; text-align:center;}
+  .orb-form-sheet .orb-form-record{line-height:1.45;}
+  .orb-form-input{
+    background:rgba(201,154,83,0.22); border:1px solid var(--brass-dim); border-radius:3px;
+    color:var(--paper); padding:4px 6px; font-size:12px; max-width:100%; min-width:4em;
+  }
+  .orb-form-input:focus{outline:none; border-color:var(--teal); box-shadow:0 0 0 2px rgba(87,179,171,0.25);}
+  .orb-form-input[type=number]{width:5em;}
+  .orb-form-input[type=time]{width:7em;}
+  select.orb-form-input{min-width:10em;}
+  textarea.orb-form-input{width:100%; min-height:2.4em; resize:vertical;}
+  .orb-form-extra-row{margin-top:8px; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--nav-item-bg);}
+  .orb-form-notes{
+    margin:10px 0; padding:10px 12px; border-radius:6px; border:1px solid var(--brass-dim);
+    background:rgba(201,154,83,0.12); font-size:12px; line-height:1.45; color:var(--paper);
+  }
+  .orb-form-notes p{margin:0 0 6px;}
+  .orb-form-notes p:last-child{margin-bottom:0;}
+  .orb-form-prereq ul{margin:6px 0 0 18px; padding:0;}
   .orb-weekly-due{margin-top:10px;}
   .orb-weekly-due.warn{border-left-color:var(--brass);}
   .orb-weekly-due.err{border-left-color:var(--alert);}
@@ -4142,9 +4167,13 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
       <div class="panel" id="orbEntryWizard" style="display:none;">
         <h2 id="orbWizardTitle">Operation</h2>
         <div class="hint" id="orbWizardGuide"></div>
+        <div id="orbWizardNotes" class="orb-form-notes" hidden></div>
+        <div id="orbWizardPrereq" class="orb-form-notes orb-form-prereq" hidden></div>
         <div class="field" style="margin-top:10px;"><label>Items to record (tick all that apply for this operation)</label></div>
         <div id="orbItemChips"></div>
-        <div class="form-grid cols2" id="orbFieldGrid" style="margin-top:10px;"></div>
+        <div id="orbFormSheetWrap" style="margin-top:10px;"></div>
+        <div id="orbFormExtraWrap"></div>
+        <div class="form-grid cols2" id="orbFieldGrid" style="display:none;margin-top:10px;"></div>
         <div class="form-grid cols2" style="margin-top:10px;">
           <div class="field"><label>Date of operation</label><input type="date" id="orb_wizardEntryDate"></div>
           <div class="field"><label>Officer in charge</label><select id="orb_officerSelect"></select></div>
@@ -4157,6 +4186,7 @@ html.bright .login-gate{background:rgba(18,34,56,.55);}
           <div class="field"><label>Signature date</label><input type="date" id="orb_officerSignDate"></div>
         </div>
         <div class="hint" id="orbAutoRobNotes" style="margin-top:10px;"></div>
+        <div id="orbOperationHelpers" style="margin-top:8px;"></div>
         <div id="orbCapacityWarnings" style="margin-top:8px;"></div>
         <div class="field" style="margin-top:10px;"><label>Preview (as recorded in ORB)</label></div>
         <div class="orb-preview" id="orbPreview"></div>
@@ -25485,7 +25515,7 @@ function openWeeklyInventoryWizard(){
 
 function orbCollectValues(){
   const values = {};
-  document.querySelectorAll('#orbFieldGrid [data-orb-field]').forEach(el=>{
+  document.querySelectorAll('#orbEntryWizard [data-orb-field]').forEach(el=>{
     const name = el.getAttribute('data-orb-field');
     if (el.multiple){
       values[name] = [...el.selectedOptions].map(o=>o.value);
@@ -25513,6 +25543,41 @@ function renderOrbCapacityWarnings(warnings){
   }).join('');
 }
 
+function renderOrbOperationHelpers(hints){
+  const box = document.getElementById('orbOperationHelpers');
+  if (!box) return;
+  if (!hints || !hints.length){
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = hints.map(h=>{
+    const color = h.level === 'error' ? 'var(--alert)' : (h.level === 'info' ? 'var(--teal)' : 'var(--brass)');
+    return `<div class="orb-flag-box" style="border-left-color:${color};margin-top:6px;opacity:0.95;"><strong style="color:${color};text-transform:uppercase;font-size:10px;letter-spacing:0.06em;">Helper</strong><div style="margin-top:4px;">${escHtml(h.message)}</div></div>`;
+  }).join('');
+}
+
+function updateOrbFuelApiCalc(){
+  if (!window.EORB) return;
+  const densEl = document.getElementById('orbFuelCalcDensity');
+  const sgEl = document.getElementById('orbFuelCalcSg');
+  const out = document.getElementById('orbFuelCalcApiOut');
+  if (!out) return;
+  const d = densEl && densEl.value !== '' ? Number(densEl.value) : null;
+  const sg = sgEl && sgEl.value !== '' ? Number(sgEl.value) : null;
+  let api = null;
+  if (sg != null && isFinite(sg) && sg > 0) api = EORB.apiFromSpecificGravity(sg);
+  else if (d != null && isFinite(d) && d > 0) api = EORB.apiFromDensityKgM3(d);
+  out.textContent = api != null ? String(api) : '—';
+}
+
+function applyOrbFuelApiCalc(){
+  const out = document.getElementById('orbFuelCalcApiOut');
+  const target = document.querySelector('#orbEntryWizard [data-orb-field="fuelApi"]');
+  if (!out || !target || out.textContent === '—') return;
+  target.value = out.textContent;
+  renderOrbPreview();
+}
+
 function renderOrbPreview(){
   if (!window.EORB || !_orbWizard.code) return;
   const setup = orbSetup();
@@ -25524,7 +25589,7 @@ function renderOrbPreview(){
   values = filled.values;
   /* Write auto-filled blanks back into empty inputs (do not overwrite user edits). */
   Object.keys(values).forEach(name=>{
-    const el = document.querySelector(`#orbFieldGrid [data-orb-field="${name}"]`);
+    const el = document.querySelector(`#orbEntryWizard [data-orb-field="${name}"]`);
     if (!el || el.multiple) return;
     if (el.value !== '' && el.value != null) return;
     if (values[name] == null || values[name] === '') return;
@@ -25536,8 +25601,11 @@ function renderOrbPreview(){
       ? ('Auto-ROB: ' + filled.notes.join(' '))
       : 'Auto-ROB: retained / receiving totals fill from tank ROB when you pick tanks and quantities.';
   }
+  const helpers = EORB.operationFieldHelpers(setup, part, code, selected, values);
+  renderOrbOperationHelpers(helpers);
   const warnings = EORB.capacityWarnings(setup, part, code, selected, values);
   renderOrbCapacityWarnings(warnings);
+  updateOrbFuelApiCalc();
   const lines = EORB.buildItemLines(part, code, selected, values, setup);
   const date = document.getElementById('orb_wizardEntryDate')?.value
     || document.getElementById('orb_entryDate')?.value || '';
@@ -25552,6 +25620,58 @@ function renderOrbPreview(){
      and the preview has to show the engineer what will actually be printed. */
   prev.textContent = lines.map((l, i) =>
     `${i === 0 ? EORB.formatOrbDate(date) : ''}\t${i === 0 ? code : ''}\t${l.itemNo}\t${l.text}`).join('\n');
+}
+
+function syncOrbFormDateOut(){
+  const d = document.getElementById('orb_wizardEntryDate')?.value || document.getElementById('orb_entryDate')?.value;
+  const out = document.getElementById('orbFormDateOut');
+  if (out && window.EORB && d) out.textContent = EORB.formatOrbDate(d);
+}
+
+function renderOrbWizardPrereq(){
+  const box = document.getElementById('orbWizardPrereq');
+  if (!box || !window.EORB || !_orbWizard) return;
+  if (_orbWizard.scenarioId !== 'bilge-ows-sea'){
+    box.hidden = true;
+    return;
+  }
+  const date = document.getElementById('orb_wizardEntryDate')?.value || document.getElementById('orb_entryDate')?.value;
+  const ck = EORB.owsDischargePrereqChecklist(state.orbEntries || [], date);
+  box.hidden = false;
+  box.innerHTML = '<strong>Same-day sequence before overboard discharge</strong><ul>' +
+    `<li>${ck.ocm ? '✓' : '○'} OWS / OCM test (Code I)</li>` +
+    `<li>${ck.unseal ? '✓' : '○'} Overboard valve unsealed (Code I — seal broken)</li>` +
+    '<li>→ this discharge (D.15.1), then re-seal when finished</li></ul>' +
+    (!ck.ocm || !ck.unseal
+      ? '<p class="hint">Complete the missing step(s) for this date using the scenario cards above, then return here.</p>'
+      : '<p class="hint">Prerequisites for this date are logged — fill the discharge details below.</p>');
+}
+
+function renderOrbWizardFormSheet(){
+  if (!window.EORB || !_orbWizard || !_orbWizard.code) return;
+  const setup = orbSetup();
+  const op = EORB.getOperation(_orbWizard.part, _orbWizard.code);
+  const sc = EORB.getScenario(_orbWizard.scenarioId) || _orbWizard.scenarioOpts || {};
+  const opts = {
+    presets: sc.presets || (_orbWizard.scenarioOpts && _orbWizard.scenarioOpts.presets),
+    fieldTankGroups: sc.fieldTankGroups || (_orbWizard.scenarioOpts && _orbWizard.scenarioOpts.fieldTankGroups),
+    extraFields: sc.extraFields || (_orbWizard.scenarioOpts && _orbWizard.scenarioOpts.extraFields),
+    scenarioId: _orbWizard.scenarioId
+  };
+  const selected = orbSelectedItems();
+  const built = EORB.buildWizardFormSheet(_orbWizard.part, _orbWizard.code, op, setup, opts, selected);
+  const wrap = document.getElementById('orbFormSheetWrap');
+  const extra = document.getElementById('orbFormExtraWrap');
+  if (wrap) wrap.innerHTML = built.html || '';
+  if (extra) extra.innerHTML = built.extraHtml || '';
+  const notes = document.getElementById('orbWizardNotes');
+  const formNotes = sc.formNotes || (_orbWizard.scenarioOpts && _orbWizard.scenarioOpts.formNotes) || [];
+  if (notes){
+    notes.hidden = !formNotes.length;
+    notes.innerHTML = formNotes.map(t => `<p>${escHtml(t)}</p>`).join('');
+  }
+  syncOrbFormDateOut();
+  renderOrbWizardPrereq();
 }
 
 function openOrbWizard(code, opts){
@@ -25570,7 +25690,7 @@ function openOrbWizard(code, opts){
     : (part === 1 && code === 'C')
       ? op.items.map(i => i.no).filter(n => String(n).startsWith('11'))
       : op.items.map(i => i.no);
-  _orbWizard = { part, code, selected: defaultSelected, scenarioId: opts.scenarioId || null };
+  _orbWizard = { part, code, selected: defaultSelected, scenarioId: opts.scenarioId || null, scenarioOpts: opts };
   document.getElementById('orbWeeklyWizard').style.display = 'none';
   const wiz = document.getElementById('orbEntryWizard');
   if (wiz) wiz.style.display = '';
@@ -25583,64 +25703,7 @@ function openOrbWizard(code, opts){
   const selectedSet = new Set(defaultSelected);
   chips.innerHTML = op.items.map(it => `
     <label class="orb-item-chip"><input type="checkbox" value="${it.no}" ${selectedSet.has(it.no)?'checked':''}> <strong>${it.no}</strong> ${it.label}</label>`).join('');
-  const defaultPos = document.getElementById('orb_defaultPos')?.value || '';
-  const fieldGrid = document.getElementById('orbFieldGrid');
-  const seen = new Set();
-  let html = '';
-  op.items.forEach(it => {
-    (it.fields || []).forEach(f => {
-      if (seen.has(f.name)) return;
-      seen.add(f.name);
-      let control = '';
-      if (f.type === 'select'){
-        control = `<select data-orb-field="${f.name}">${(f.options||[]).map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`;
-      } else if (f.type === 'textarea'){
-        const preset = opts.presets && opts.presets[f.name] != null ? String(opts.presets[f.name]) : '';
-        control = `<textarea data-orb-field="${f.name}" rows="3">${escHtml(preset)}</textarea>`;
-      } else if (f.type === 'tank' || f.type === 'tankMulti'){
-        const group = (opts.fieldTankGroups && opts.fieldTankGroups[f.name]) || f.tankGroup || 'any';
-        const tanks = EORB.tanksForGroup(setup, group);
-        /* Frame position in the option text — matches the IOPP Supplement tank list.
-           Named tankOpts, not opts: the scenario options this block reads on its first
-           line are also called opts, and a same-block const shadowed them into the
-           temporal dead zone, so every operation with a tank field threw here and left
-           the field grid empty. */
-        const tankOpts = tanks.map(t => `<option value="${escAttr(t.id)}">${escHtml(EORB.tankLabel(setup, t.id))}</option>`).join('');
-        const empty = tanks.length ? '' : `<option value="" disabled>No tanks configured — add them in Vessel Setup</option>`;
-        control = `<select data-orb-field="${f.name}" ${f.type==='tankMulti'?'multiple size="4"':''}><option value="">—</option>${empty}${tankOpts}</select>`;
-      } else {
-        const t = f.type === 'number' ? 'number' : (f.type === 'time' ? 'time' : 'text');
-        const preset = opts.presets && opts.presets[f.name] != null ? String(opts.presets[f.name]) : '';
-        const ph = preset || ((f.name.toLowerCase().includes('pos') || f.name === 'place' || f.name === 'position') ? defaultPos : '');
-        control = `<input type="${t}" data-orb-field="${f.name}" step="any" value="${escAttr(ph)}">`;
-      }
-      html += `<div class="field ${f.type==='textarea'||f.type==='tankMulti'?'span2':''}"><label>${f.label}${f.required?' *':''}</label>${control}`
-        + (f.hint ? `<div class="hint" style="margin:2px 0 0;">${escHtml(f.hint)}</div>` : '')
-        + `</div>`;
-    });
-  });
-  /* A scenario's own fields — the tank, quantity or duration Code I has no item field
-     for. Rendered with the same data-orb-field hook, so they are collected, previewed
-     and applied to R.O.B. exactly like the item fields above. */
-  (opts.extraFields || []).forEach(f => {
-    if (seen.has(f.name)) return;
-    seen.add(f.name);
-    let control = '';
-    if (f.type === 'tank' || f.type === 'tankMulti'){
-      const group = (opts.fieldTankGroups && opts.fieldTankGroups[f.name]) || f.tankGroup || 'any';
-      const tanks = EORB.tanksForGroup(setup, group);
-      const tankOpts = tanks.map(t => `<option value="${escAttr(t.id)}">${escHtml(EORB.tankLabel(setup, t.id))}</option>`).join('');
-      const empty = tanks.length ? '' : `<option value="" disabled>No tanks configured — add them in Vessel Setup</option>`;
-      control = `<select data-orb-field="${f.name}" ${f.type==='tankMulti'?'multiple size="4"':''}><option value="">—</option>${empty}${tankOpts}</select>`;
-    } else {
-      const t = f.type === 'number' ? 'number' : (f.type === 'time' ? 'time' : (f.type === 'date' ? 'date' : 'text'));
-      control = `<input type="${t}" data-orb-field="${f.name}" step="any">`;
-    }
-    html += `<div class="field"><label>${escHtml(f.label)}${f.required?' *':''}</label>${control}`
-      + (f.hint ? `<div class="hint" style="margin:2px 0 0;">${escHtml(f.hint)}</div>` : '')
-      + `</div>`;
-  });
-  fieldGrid.innerHTML = html || '<div class="hint">No fields for selected items.</div>';
+  renderOrbWizardFormSheet();
   const iso = orbTodayIso();
   const lastDate = orbLastEntryDate();
   /* Default to today, but never earlier than the last entry already in the book. */
@@ -26000,7 +26063,8 @@ document.getElementById('orbScenarioGroups')?.addEventListener('click', (e)=>{
     title: sc.title,
     blurb: sc.blurb,
     fieldTankGroups: sc.fieldTankGroups,
-    extraFields: sc.extraFields
+    extraFields: sc.extraFields,
+    formNotes: sc.formNotes
   });
   document.getElementById('orbEntryWizard')?.scrollIntoView({ behavior:'smooth', block:'start' });
 });
@@ -26124,9 +26188,25 @@ document.getElementById('btnOrbSaveWeekly')?.addEventListener('click', async ()=
     (includeBilge && entriesToSave.some(e => e.code === 'I') ? '• Code I — oily bilge / bilge tanks\n' : '') +
     '\nOpen Browse / Print to review.');
 });
-document.getElementById('orbItemChips')?.addEventListener('change', renderOrbPreview);
-document.getElementById('orbFieldGrid')?.addEventListener('input', renderOrbPreview);
-document.getElementById('orbFieldGrid')?.addEventListener('change', renderOrbPreview);
+document.getElementById('orbItemChips')?.addEventListener('change', ()=>{
+  renderOrbWizardFormSheet();
+  renderOrbPreview();
+});
+document.getElementById('orbFormSheetWrap')?.addEventListener('input', renderOrbPreview);
+document.getElementById('orbFormSheetWrap')?.addEventListener('change', renderOrbPreview);
+document.getElementById('orbFormExtraWrap')?.addEventListener('input', (e)=>{
+  if (e.target && (e.target.id === 'orbFuelCalcDensity' || e.target.id === 'orbFuelCalcSg')) updateOrbFuelApiCalc();
+  renderOrbPreview();
+});
+document.getElementById('orbFormExtraWrap')?.addEventListener('change', renderOrbPreview);
+document.getElementById('orbFormExtraWrap')?.addEventListener('click', (e)=>{
+  if (e.target && e.target.id === 'orbFuelCalcApply') applyOrbFuelApiCalc();
+});
+document.getElementById('orb_wizardEntryDate')?.addEventListener('change', ()=>{
+  syncOrbFormDateOut();
+  renderOrbWizardPrereq();
+  renderOrbPreview();
+});
 document.getElementById('btnOrbPreviewEntry')?.addEventListener('click', renderOrbPreview);
 document.getElementById('btnOrbCancelEntry')?.addEventListener('click', ()=>{
   document.getElementById('orbEntryWizard').style.display = 'none';
@@ -26142,7 +26222,7 @@ document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>
   const filled = EORB.autofillOperationValues(setup, part, code, selected, values);
   values = filled.values;
   Object.keys(values).forEach(name=>{
-    const el = document.querySelector(`#orbFieldGrid [data-orb-field="${name}"]`);
+    const el = document.querySelector(`#orbEntryWizard [data-orb-field="${name}"]`);
     if (!el || el.multiple) return;
     if (values[name] == null || values[name] === '') return;
     if (el.value === '' || el.value == null) el.value = values[name];
@@ -26172,6 +26252,10 @@ document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>
     || document.getElementById('orb_entryDate')?.value;
   const dateErr = orbDateError(date);
   if (dateErr){ alert('Cannot save this ORB entry:\n\n' + dateErr); return; }
+  const dischargePrereq = EORB.owsDischargePrereqErrors(state.orbEntries || [], {
+    date, scenarioId: _orbWizard.scenarioId
+  });
+  if (dischargePrereq.length){ alert('Cannot save overboard discharge:\n\n• ' + dischargePrereq.join('\n• ')); return; }
   if (_orbWizard.scenarioId === 'ows-weekly-test'){
     values.weeklyOwsTest = true;
     const owsErr = EORB.weeklyInventoryDateError(date, orbLastWeeklyOwsDate(), 'Weekly 15 ppm / OWS test');
