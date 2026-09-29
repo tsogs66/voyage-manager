@@ -25647,11 +25647,12 @@ function renderOrbPreview(){
     prev.textContent = 'Select item numbers and fill fields to preview the ORB wording.';
     return;
   }
-  /* One date and one code per entry, on its first line — the item numbers underneath
-     belong to that same set. Repeating them down every line is not how the book reads,
-     and the preview has to show the engineer what will actually be printed. */
-  prev.textContent = lines.map((l, i) =>
-    `${i === 0 ? EORB.formatOrbDate(date) : ''}\t${i === 0 ? code : ''}\t${l.itemNo}\t${l.text}`).join('\n');
+  const officer = document.getElementById('orb_officerName')?.value?.trim() || '';
+  const rank = document.getElementById('orb_officerRank')?.value?.trim() || '';
+  const signDate = document.getElementById('orb_officerSignDate')?.value || date;
+  const signStub = officer ? ('\t[' + (officer + (rank ? (' - ' + rank) : '') + ', ' + (EORB.formatOrbSignDate(signDate) || '') + ' SIGNATURE]') : '';
+  prev.textContent = lines.map(l =>
+    `${EORB.formatOrbDate(date)}\t${code}\t${l.itemNo}\t${l.text}${signStub}`).join('\n');
 }
 
 function syncOrbFormDateOut(){
@@ -26185,8 +26186,9 @@ document.getElementById('btnOrbSaveWeekly')?.addEventListener('click', async ()=
   const now = new Date().toISOString();
   let saved = 0;
   for (const draft of entriesToSave){
-    const entry = {
-      id: 'orb_' + uid() + '_' + Date.now().toString(36) + '_' + saved,
+    const baseId = 'orb_' + uid() + '_' + Date.now().toString(36) + '_' + saved;
+    const draftEntry = {
+      id: baseId,
       vesselId: state.activeVesselId,
       part: draft.part,
       code: draft.code,
@@ -26204,9 +26206,12 @@ document.getElementById('btnOrbSaveWeekly')?.addEventListener('click', async ()=
       weeklyInventory: true,
       scenarioId: 'weekly-sludge-bilge'
     };
-    state.orbEntries.push(entry);
-    await dbPut('orbEntries', entry);
-    saved += 1;
+    const records = EORB.materializeOrbSaveRecords(draftEntry, setup);
+    for (const entry of records){
+      state.orbEntries.push(entry);
+      await dbPut('orbEntries', entry);
+      saved += 1;
+    }
   }
   await saveSetup();
   document.getElementById('orbWeeklyWizard').style.display = 'none';
@@ -26304,8 +26309,9 @@ document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>
   const robNotes = EORB.applyOperationRob(setup, part, code, selected, values);
   state.setup.orb = setup;
 
-  const entry = {
-    id: 'orb_' + uid() + '_' + Date.now().toString(36),
+  const baseId = 'orb_' + uid() + '_' + Date.now().toString(36);
+  const draftEntry = {
+    id: baseId,
     vesselId: state.activeVesselId,
     part, code, date,
     selectedItems: selected,
@@ -26322,8 +26328,11 @@ document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>
     updatedAt: new Date().toISOString(),
     voided: false
   };
-  state.orbEntries.push(entry);
-  await dbPut('orbEntries', entry);
+  const records = EORB.materializeOrbSaveRecords(draftEntry, setup);
+  for (const entry of records){
+    state.orbEntries.push(entry);
+    await dbPut('orbEntries', entry);
+  }
   await saveSetup();
   document.getElementById('orbEntryWizard').style.display = 'none';
   _orbWizard.code = null;
@@ -26333,7 +26342,8 @@ document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>
   renderOrbBook();
   fillOrbSetupForm();
   applyOrbDateBounds();
-  alert('ORB entry saved: ' + EORB.formatOrbDate(date) + ' code ' + code + ' (' + lines.length + ' item line(s)).' +
+  alert('ORB saved: ' + EORB.formatOrbDate(date) + ' code ' + code + ' — ' + records.length +
+    ' signed item line(s) (one signatory per item).' +
     (robNotes.length ? ('\n\nTank ROB updated:\n• ' + robNotes.join('\n• ')) : ''));
 });
 document.getElementById('btnOrbFilter')?.addEventListener('click', ()=>{
