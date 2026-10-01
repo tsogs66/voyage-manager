@@ -101,9 +101,9 @@ const check = (l, a, e) => {
     'ows-ocm-test', 'aircooler-condensate'];
   check('every newly added Part I operation has a card',
     wanted.filter(id => !scen[1].includes(id)), []);
-  check('and the four changeover events are on Part III', scen[3], [
+  check('changeover events and incinerator garbage are on Part III', scen[3], [
     'changeover-to-ls-start', 'changeover-to-ls-complete',
-    'changeover-to-hs-start', 'changeover-to-hs-complete']);
+    'changeover-to-hs-start', 'changeover-to-hs-complete', 'incinerator-garbage']);
 
   console.log('\na Code I operation that moves oil moves the R.O.B. with it');
   const moved = await pg.evaluate(async () => {
