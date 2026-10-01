@@ -25841,9 +25841,9 @@ function renderOrbPreview(){
       showCode = l.showCode === true || (l.showCode !== false && showDate);
     }
     const codeCol = showCode
-      ? (l.recordPart != null
-        ? EORB.formatOrbBookCode({ part: l.recordPart, code: l.recordCode || 'C' })
-        : code)
+      ? EORB.formatOrbBookCode(l.recordPart != null
+        ? { part: l.recordPart, code: l.recordCode || 'C' }
+        : { part, code })
       : '';
     return `${showDate ? EORB.formatOrbDate(date) : ''}\t${codeCol}\t${l.itemNo}\t${l.text}`;
   }).join('\n');
