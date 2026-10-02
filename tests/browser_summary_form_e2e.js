@@ -144,7 +144,7 @@ const check = (l, a, e) => { c++; const ok = JSON.stringify(a) === JSON.stringif
   console.log('\nthe report summary buttons');
   await open();
   const btns = await pg.evaluate(async () => {
-    const labels = [...document.querySelectorAll('#voyageSummaryPanel .btn-row button')]
+    const labels = [...document.querySelectorAll('#vsBottomActions button')]
       .map(x => x.textContent.trim()).filter(x => /save|print|close/i.test(x));
     const e = sortedEntries().slice(-1)[0];
     const box = document.getElementById('vs_unit_blr');
@@ -166,7 +166,7 @@ const check = (l, a, e) => { c++; const ok = JSON.stringify(a) === JSON.stringif
       sheetHasFigure: !!printed && printed.includes('4.25')
     };
   });
-  check('the three buttons, named as asked', btns.labels, ['Save Report', 'Print & Save (A4 Portrait)', 'Close']);
+  check('the three buttons, named as asked', btns.labels, ['Save only', 'Print & Save (A4 Portrait)', 'Close']);
   // Print used to leave the report unsaved: a sheet could be signed and filed while
   // its figures existed nowhere but the open form.
   check('Print & Save commits the typed figure', btns.committed, 4.25);
