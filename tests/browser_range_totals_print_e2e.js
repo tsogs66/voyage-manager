@@ -10,8 +10,9 @@
  * past the bottom is silently cut, and the signature and footer are the last things on
  * it — exactly how the noon sheet once printed with its stamp off the paper.
  *
- * Seeds a voyage long enough to overrun the printed list, then checks the totals, the
- * truncation note, and that the footer still lands on the page. Not in CI, no browser.
+ * Seeds a voyage long enough to overrun one page, then checks the totals, that every
+ * report in the range is printed, and that each page still holds its own signature
+ * or footer. Not in CI, no browser.
  */
 const { chromium } = require('playwright-core');
 const BASE = process.env.APP_BASE || 'http://127.0.0.1:8867';
@@ -25,10 +26,10 @@ const check = (l, a, e) => {
 
 /* Build the sheet without opening a print dialog. */
 const CAPTURE = `() => {
-  const real = window.printPortraitSinglePage;
+  const real = window.printPortraitPages;
   let out = null;
-  window.printPortraitSinglePage = (html) => { out = real(html); return out; };
-  try { printRangeTotalsSheet(); } finally { window.printPortraitSinglePage = real; }
+  window.printPortraitPages = (html) => { out = real(html); return out; };
+  try { printRangeTotalsSheet(); } finally { window.printPortraitPages = real; }
   return out;
 }`;
 
@@ -49,22 +50,38 @@ const SCRAPE = `(html) => {
       rows[t + '/' + r.querySelector('.pr-row-lbl').textContent.trim()] = r.querySelector('.pr-row-val').textContent.trim();
     });
   });
+  const pages = [...d.querySelectorAll('.pr-page-portrait')];
+  const root = pages[0] || d;
+  const reportSections = [...d.querySelectorAll('.pr-section')]
+    .filter(s => (s.querySelector('.pr-section-title')?.textContent || '').includes('Reports In Range'));
+  const reportNotes = reportSections.flatMap(s => [...s.querySelectorAll('.pr-note')].map(n => n.textContent.trim()));
+  const listed = reportSections.reduce((sum, s) => {
+    const table = s.querySelector('table');
+    if (!table) return sum;
+    return sum + [...table.querySelectorAll('tr')].filter(tr =>
+      tr.querySelector('th') == null && !tr.classList.contains('pr-total')).length;
+  }, 0);
   return {
-    title: d.querySelector('.pr-doc-title')?.textContent.trim(),
-    subtitle: d.querySelector('.pr-doc-subtitle')?.textContent.trim(),
-    meta: [...d.querySelectorAll('.pr-meta-lbl')].map(m => m.textContent.trim()),
-    kpis: [...d.querySelectorAll('.pr-kpi-lbl')].map(k => k.textContent.trim()),
-    sections: [...d.querySelectorAll('.pr-section-title')].map(s => s.textContent.trim().split(' —')[0]),
+    title: root.querySelector('.pr-doc-title')?.textContent.trim(),
+    subtitle: root.querySelector('.pr-doc-subtitle')?.textContent.trim(),
+    meta: [...root.querySelectorAll('.pr-meta-lbl')].map(m => m.textContent.trim()),
+    kpis: [...root.querySelectorAll('.pr-kpi-lbl')].map(k => k.textContent.trim()),
+    sections: [...root.querySelectorAll('.pr-section-title')].map(s => s.textContent.trim().split(' —')[0]),
     rows,
-    listRows: listTable(d) ? listTable(d).querySelectorAll('tr').length : 0,
-    totalRowLabel: listTable(d)?.querySelector('tr.pr-total .row-lbl')?.textContent.trim(),
-    consumerRows: consumerTable(d)
-      ? [...consumerTable(d).querySelectorAll('tr')].slice(1).map(tr =>
+    pages: pages.length || 1,
+    listed,
+    listRows: listTable(root) ? listTable(root).querySelectorAll('tr').length : 0,
+    totalRowLabel: [...d.querySelectorAll('tr.pr-total .row-lbl')].map(el => el.textContent.trim()).pop() || '',
+    consumerRows: consumerTable(root)
+      ? [...consumerTable(root).querySelectorAll('tr')].slice(1).map(tr =>
           [...tr.querySelectorAll('td')].map(td => td.textContent.trim()))
       : null,
-    note: d.querySelector('.pr-note')?.textContent.trim() || null,
+    notes: reportNotes,
     hasSignature: !!d.querySelector('.pr-sign'),
-    hasFooter: !!d.querySelector('.pr-foot')
+    hasFooter: !!d.querySelector('.pr-foot'),
+    signatureOnLast: pages.length
+      ? !!pages[pages.length - 1].querySelector('.pr-sign')
+      : !!d.querySelector('.pr-sign')
   };
 }`;
 
@@ -93,7 +110,7 @@ const SCRAPE = `(html) => {
     const base = sortedEntries().slice(-1)[0];
     const start = new Date(base.datetime).getTime();
     let me = base.me.meter, ge = base.ge.meter, blr = base.blr.meter, rc = base.revCounter || 0, cyl = base.cylMeter || 0;
-    for (let i = 1; i <= 25; i++){
+    for (let i = 1; i <= 80; i++){
       const rpm = 78 + (i % 5);
       rc += rpm * 60 * 24;
       me += 41000; ge += 1400; blr += 300; cyl += 380;
@@ -122,12 +139,12 @@ const SCRAPE = `(html) => {
 
   console.log('\nit is the same document as the other printouts');
   check('title', s.title, 'Totals & Averages');
-  check('subtitle', s.subtitle, 'Report Range Summary');
+  check('subtitle names the range summary', String(s.subtitle || '').startsWith('Report Range Summary'), true);
   check('meta names the vessel, voyage and both ends of the range',
     s.meta, ['Vessel', 'Voyage No.', 'From Report', 'To Report']);
   check('a KPI strip leads', s.kpis, ['Reports', 'Period Hrs', 'Distance (nm)', 'Avg Speed (kn)', 'All Fuel (MT)']);
   check('totals, averages, the consumer split and the reports behind them',
-    s.sections, ['Totals', 'Averages', 'Fuel Consumption By Consumer', 'Remaining On Board — Start → End', 'Reports In Range']);
+    s.sections, ['Totals', 'Averages', 'Fuel Consumption By Consumer', 'Remaining On Board', 'Reports In Range']);
   check('it is signed', s.hasSignature, true);
 
   /* Fuel split by what burned it. The four consumers have to account for the whole
@@ -144,7 +161,8 @@ const SCRAPE = `(html) => {
     mt(s.rows['Totals/All fuel']).toFixed(3));
   const shareSum = consumers.slice(0, 4).reduce((a, r) => a + mt(r[3]), 0);
   check('the shares come to 100%', Math.round(shareSum), 100);
-  check('each consumer carries a per-day rate', consumers.slice(0, 4).every(r => /^[\d.]+$/.test(r[2])), true);
+  check('each consumer carries a per-day rate, or a dash when it did not run',
+    consumers.slice(0, 4).every(r => /^[\d.]+$/.test(r[2]) || r[2] === '—'), true);
   check('and carries the printed-on footer', s.hasFooter, true);
 
   console.log('\nthe figures are the ones the tab shows');
@@ -180,36 +198,42 @@ const SCRAPE = `(html) => {
   check('Engine Speed', /kn$/.test(s.rows['Averages/Engine Speed'] || ''), true);
   check('Ship Distance', /nm$/.test(s.rows['Averages/Ship Distance'] || ''), true);
 
-  console.log('\na range too long for the page says so');
+  console.log('\na long range prints every report, on as many pages as that takes');
   const reports = Number(tab.reports);
-  check('more reports than the sheet lists', reports > 20, true);
-  /* header + capped list + total row */
-  check('the list is capped', s.listRows, 22);
-  check('and the sheet says what it cut', /Listing the first 20 of \d+ reports/.test(s.note || ''), true);
-  check('the note gives the true count', s.note.includes(`of ${reports} reports`), true);
+  check('more reports than the old 20-line cap', reports > 20, true);
+  check('every report in the range is on the sheet', s.listed, reports);
+  check('the list is not cut at 20 lines', s.notes.some(t => /Listing the first/.test(t)), false);
+  check('a long range uses more than one page', s.pages > 1, true);
+  console.log(`  ${s.listed} reports on ${s.pages} pages`);
+  check('later pages say the list continues', s.notes.some(t => /Continued on the next page/.test(t)), true);
+  check('the last page says the total covers the whole range',
+    s.notes.some(t => t.includes(`all ${reports} reports`)), true);
   check('the summed row is not called a total alone', s.totalRowLabel, 'Total / Avg');
+  check('the signature is on the last page', s.signatureOnLast, true);
 
   console.log('\nnothing falls off the paper');
-  const css = await pg.evaluate(() => buildPrintDocumentHtmlPortrait('').match(/<style>([\s\S]*?)<\/style>/)[1]);
+  const css = await pg.evaluate((multi) => buildPrintDocumentHtmlPortrait('', multi).match(/<style>([\s\S]*?)<\/style>/)[1], s.pages > 1);
   const sheetPg = await b.newPage({ viewport: { width: 794, height: 1123 } });
   await sheetPg.setContent(`<!doctype html><html><head><style>${css}</style></head><body>${html}</body></html>`);
   await sheetPg.waitForTimeout(700);
-  const fit = await sheetPg.evaluate(() => {
-    const page = document.querySelector('.pr-page-portrait').getBoundingClientRect();
-    const inner = document.querySelector('.pr-page-portrait-inner').getBoundingClientRect();
-    const foot = document.querySelector('.pr-foot').getBoundingClientRect();
-    const sign = document.querySelector('.pr-sign-name').getBoundingClientRect();
+  const fit = await sheetPg.evaluate(() => [...document.querySelectorAll('.pr-page-portrait')].map(page => {
+    const inner = page.querySelector('.pr-page-portrait-inner').getBoundingClientRect();
+    const box = page.getBoundingClientRect();
+    const foot = page.querySelector('.pr-foot');
+    const sign = page.querySelector('.pr-sign-name');
     return {
-      overflow: Math.round(inner.bottom - page.bottom),
-      footOnPage: foot.bottom <= page.bottom + 1,
-      signOnPage: sign.bottom <= page.bottom + 1,
-      wide: Math.round(inner.right - page.right)
+      overflow: Math.round(inner.bottom - box.bottom),
+      footOnPage: !foot || foot.getBoundingClientRect().bottom <= box.bottom + 1,
+      signOnPage: !sign || sign.getBoundingClientRect().bottom <= box.bottom + 1,
+      wide: Math.round(inner.right - box.right),
+      hasSign: !!sign
     };
-  });
-  check('the content ends above the bottom edge', fit.overflow <= 1, true);
-  check('the signature is on the page', fit.signOnPage, true);
-  check('so is the footer', fit.footOnPage, true);
-  check('and it does not run off the side', fit.wide <= 1, true);
+  }));
+  console.log('  pages', s.pages, 'fit', JSON.stringify(fit));
+  check('every page ends above its own bottom edge', fit.every(p => p.overflow <= 1), true);
+  check('the signature is on its page', fit.some(p => p.hasSign) && fit.every(p => p.signOnPage), true);
+  check('so is the footer', fit.filter(p => p.hasSign).every(p => p.footOnPage), true);
+  check('and no page runs off the side', fit.every(p => p.wide <= 1), true);
 
   console.log('\na short range prints the whole list, uncut');
   const short = await pg.evaluate(() => {
@@ -217,18 +241,22 @@ const SCRAPE = `(html) => {
     document.getElementById('rangeFrom').value = list[list.length - 4].id;
     document.getElementById('rangeTo').value = list[list.length - 1].id;
     renderRangeTotals();
-    const real = window.printPortraitSinglePage;
+    const real = window.printPortraitPages;
     let out = null;
-    window.printPortraitSinglePage = (h) => { out = real(h); return out; };
-    try { printRangeTotalsSheet(); } finally { window.printPortraitSinglePage = real; }
+    window.printPortraitPages = (h) => { out = real(h); return out; };
+    try { printRangeTotalsSheet(); } finally { window.printPortraitPages = real; }
     const d = document.createElement('div');
     d.innerHTML = out;
     /* Same reason as SCRAPE: find the list by its section, not by pr-table-wide. */
     const list2 = [...d.querySelectorAll('.pr-section')]
       .find(s => s.querySelector('.pr-section-title')?.textContent.trim().startsWith('Reports In Range'))
       ?.querySelector('table');
+    const notes = [...d.querySelectorAll('.pr-section')]
+      .filter(s => (s.querySelector('.pr-section-title')?.textContent || '').includes('Reports In Range'))
+      .flatMap(s => [...s.querySelectorAll('.pr-note')].map(n => n.textContent.trim()));
     return {
-      note: d.querySelector('.pr-note')?.textContent.trim() || null,
+      note: notes.find(t => /Listing the first|Continued on the next page/.test(t)) || null,
+      pages: d.querySelectorAll('.pr-page-portrait').length || 1,
       listRows: list2 ? list2.querySelectorAll('tr').length : 0,
       reports: d.querySelector('.pr-kpi-val')?.textContent.trim()
     };
@@ -236,6 +264,7 @@ const SCRAPE = `(html) => {
   await pg.waitForTimeout(300);
   check('three periods between four reports', short.reports, '3');
   check('header, three reports and the total', short.listRows, 5);
+  check('a short range stays on one page', short.pages, 1);
   check('no truncation note', short.note, null);
 
   console.log('\nnothing went wrong');
