@@ -217,6 +217,19 @@ for (const rel of precache || []) {
   check('that label falls back to the program name',
     /function orbAppLabel\(\)[\s\S]{0,400}?return APP_NAME;/.test(orbJs), true);
 
+  /* CI ran a test that `npm test` did not, so a change could pass locally and
+     fail on push -- which is exactly what happened to the background-sync
+     work. `npm test` has to be a superset of what CI runs, or running it
+     before pushing proves nothing. */
+  {
+    const ci = fs.readFileSync(path.join(REPO_ROOT, '.github', 'workflows', 'ci.yml'), 'utf8');
+    const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
+    const ciTests = [...ci.matchAll(/run: node ((?:tests|scripts)\/\S+)/g)].map(m => m[1]);
+    const npmTests = [...String(pkg.scripts.test).matchAll(/node ((?:tests|scripts)\/\S+)/g)].map(m => m[1]);
+    check('npm test runs every test CI runs',
+      ciTests.filter(t => !npmTests.includes(t)), []);
+  }
+
   const nsiName = fs.readFileSync(path.join(REPO_ROOT, 'install', 'windows', 'noonreport.nsi'), 'utf8');
   check('the Windows installer name matches',
     nsiName.includes('!define APP_NAME     "' + appName + '"'), true);

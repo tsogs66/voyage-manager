@@ -83,7 +83,14 @@ function check(label, actual, expected) {
 
   console.log('\nthe real operations still name the steps');
   const syncNow = HTML.slice(HTML.indexOf('async function syncNow'), HTML.indexOf('function queueBackgroundSync'));
-  check('syncNow starts a sync activity', /withActivity\('sync'/.test(syncNow), true);
+  /* A foreground sync still runs through withActivity under the id 'sync'; it
+     reaches it via `runner`, which is withActivity unless the caller asked for
+     a background run. Assert both halves — that the id is still 'sync', and
+     that the non-background path is still withActivity — so a background run
+     staying silent cannot be confused with the foreground one going quiet. */
+  check('syncNow starts a sync activity', /runner\('sync'/.test(syncNow), true);
+  check('and a foreground sync still uses withActivity', /: withActivity;/.test(syncNow), true);
+  check('only a background run skips it', /const runner = background/.test(syncNow), true);
   check('syncNow says it is pulling', syncNow.includes('Pulling voyage'), true);
   check('syncNow says it is uploading', syncNow.includes('Uploading voyage'), true);
   check('persistAllToDb reports saving on this device', HTML.includes('Saving ${store} on this device'), true);
