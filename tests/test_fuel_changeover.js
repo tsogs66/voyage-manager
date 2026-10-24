@@ -57,6 +57,7 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 vm.runInContext([
+  extract('numOrNull'),
   extract('computeFuelChangeover'),
   extract('changeoverThermalMinutes')
 ].join('\n'), sandbox);
