@@ -198,6 +198,64 @@ function book() {
   check('an absent field and an undefined one hash alike',
     E.orbCanonicalContent({ code: 'C' }), E.orbCanonicalContent({ code: 'C', quantity: undefined }));
 
+  /* ---- a legitimate sync must not read as tampering -------------------- */
+  /* Two devices each seal their own book. A pull or two-way sync interleaves
+     them by date, so an incoming entry dated between two existing ones lands
+     mid-order and every line after it follows a different predecessor. The
+     chain breaks on a book nobody touched.
+
+     Unhandled, that means every multi-device ship is told its record book was
+     tampered with the first time it syncs -- and a warning that fires on
+     normal operation gets ignored, which takes the real warning with it. */
+  const deviceA = [
+    { id: 'a1', date: '2026-03-01', code: 'C', itemNo: '11.3', values: { retention: 5 } },
+    { id: 'a2', date: '2026-03-05', code: 'C', itemNo: '12.3', values: { qtyDisposed: 1 } }
+  ];
+  const deviceB = [{ id: 'b1', date: '2026-03-03', code: 'D', itemNo: '14', values: { qty: 2 } }];
+  const sealedDeviceA = await E.rebuildOrbChain(deviceA, digest);
+  const sealedDeviceB = await E.rebuildOrbChain(deviceB, digest);
+  check('each device verifies on its own',
+    [(await E.verifyOrbChain(sealedDeviceA, digest)).ok,
+     (await E.verifyOrbChain(sealedDeviceB, digest)).ok], [true, true]);
+
+  const justMerged = sealedDeviceA.concat(sealedDeviceB);
+  check('straight after a merge the chain does not verify — this is why a reseal is needed',
+    (await E.verifyOrbChain(justMerged, digest)).ok, false);
+
+  const afterReseal = await E.rebuildOrbChain(justMerged, digest);
+  const resealVerdict = await E.verifyOrbChain(afterReseal, digest);
+  check('resealing makes a legitimately merged book verify',
+    { ok: resealVerdict.ok, checked: resealVerdict.checked }, { ok: true, checked: 3 });
+
+  /* And the whole point must survive the reseal. */
+  const editedAfter = JSON.parse(JSON.stringify(afterReseal));
+  editedAfter[1].values.qty = 999;
+  const stillCaught = await E.verifyOrbChain(editedAfter, digest);
+  check('an edit made after the reseal is still caught', stillCaught.ok, false);
+  check('and still points at the line', stillCaught.brokenAt.id, 'b1');
+
+  check('every path that brings entries in from elsewhere reseals',
+    [/resealOrbChainAfterSync\('a backup was restored'\)/.test(HTML),
+     /resealOrbChainAfterSync\('a backup was merged in'\)/.test(HTML),
+     /await resealOrbChainAfterSync\(why\)/.test(HTML)], [true, true, true]);
+  check('a pull sets the reseal flag',
+    /_orbNeedsReseal = 'the active leg was pulled from the server'/.test(HTML), true);
+  check('a server merge sets it too',
+    /_orbNeedsReseal = 'entries were merged from the server'/.test(HTML), true);
+  check('and it is consumed after the writes, not between them',
+    /if \(_orbNeedsReseal\)\{[\s\S]{0,400}?resealOrbChainAfterSync\(why\)/.test(HTML), true);
+
+  /* Honesty: once a sync has resealed, the claim is "unaltered since then",
+     not "unaltered since written". */
+  check('the reseal is recorded', /ORB_SEAL_MARKER_KEY = 'orbChainSeal'/.test(HTML), true);
+  check('with whether it followed an external merge', /external: !!external/.test(HTML), true);
+  check('and the line on screen narrows the claim',
+    /Unaltered since \$\{seal\.reason\}/.test(HTML), true);
+  check('as does the dialog',
+    /this confirms the book is unaltered SINCE THEN/.test(HTML), true);
+  check('and the reseal goes in the sync log so it is not invisible',
+    /kind: 'e-ORB resealed'/.test(HTML), true);
+
   /* ---- wired into the app --------------------------------------------- */
   check('the app seals the book after an entry is saved',
     (HTML.match(/await resealOrbChain\(\);/g) || []).length >= 3, true);

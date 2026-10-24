@@ -53,6 +53,11 @@ const subtleLike = {
 const sandbox = {
   console,
   TextEncoder,
+  /* The digest yields to the main thread between records, so the sandbox needs
+     a timer as well as a hash. Without it buildBackupIntegrity catches the
+     ReferenceError and writes a header with no checksum -- which is the right
+     behaviour in a browser that cannot hash, and a missing stub here. */
+  setTimeout,
   crypto: { subtle: subtleLike },
   DB_BACKUP_FORMAT: 'noon-report-db-v1',
   BACKUP_INTEGRITY_VERSION: 1,
@@ -67,6 +72,7 @@ vm.runInContext(
     extract('digestText'),
     extract('countBackupRecords'),
     extract('backupIntegrityBody'),
+    extract('digestBackupBody'),
     extract('buildBackupIntegrity'),
     extract('verifyBackupIntegrity')
   ].join('\n'),
@@ -74,8 +80,8 @@ vm.runInContext(
 );
 
 const {
-  canonicalJsonString, fnv1a64Hex, countBackupRecords,
-  buildBackupIntegrity, verifyBackupIntegrity
+  canonicalJsonString, fnv1a64Hex, countBackupRecords, backupIntegrityBody,
+  digestBackupBody, buildBackupIntegrity, verifyBackupIntegrity
 } = sandbox;
 
 function samplePayload() {
@@ -163,6 +169,81 @@ function samplePayload() {
 
   check('the fallback digest is 16 hex characters', /^[0-9a-f]{16}$/.test(fnv1a64Hex('x')), true);
   check('and differs for different text', fnv1a64Hex('a') === fnv1a64Hex('b'), false);
+
+  /* ---- aliased records: the false-alarm that blocked good restores ----- */
+  /* The same record is referenced from two places all over this database --
+     a receipt held in a leg and in the live store, one setup object shared
+     between legs. A cycle guard that remembers every object ever seen calls
+     the second sighting a cycle and nulls it, which dropped real data from
+     the digest AND only while the objects were shared: written to a file and
+     read back there are two separate copies, which hash differently. A
+     perfectly intact backup then came back "damaged" and the restore refused
+     it -- the safety feature blocking the thing it exists to protect. */
+  const shared = { id: 'r-shared', qty: 500, bdnNo: 'BDN-X' };
+  const aliased = {
+    format: 'noon-report-db-v1', vessels: [], meta: [],
+    stores: { receipts: [shared], entries: [{ id: 'e-alias', receipt: shared }] }
+  };
+  check('an aliased record is serialised both times, not nulled',
+    /"receipt":\{"bdnNo":"BDN-X","id":"r-shared","qty":500\}/.test(
+      canonicalJsonString(backupIntegrityBody(aliased))) &&
+    !/null/.test(canonicalJsonString(backupIntegrityBody(aliased))), true);
+
+  aliased.integrity = await buildBackupIntegrity(aliased);
+  const aliasRoundTrip = JSON.parse(JSON.stringify(aliased));
+  check('and an intact backup holding one still verifies after a save and load',
+    (await verifyBackupIntegrity(aliasRoundTrip)).ok, true);
+
+  /* A real cycle must still be handled rather than throwing. */
+  const cyc = { id: 'c' }; cyc.self = cyc;
+  check('a true cycle is still caught', /"self":null/.test(canonicalJsonString(cyc)), true);
+  const mutualA = { id: 'a' }, mutualB = { id: 'b' };
+  mutualA.b = mutualB; mutualB.a = mutualA;
+  check('and so is a mutual one', typeof canonicalJsonString(mutualA), 'string');
+
+  /* ---- the digest must not need the whole database in memory at once --- */
+  check('the digest is taken per record, not over the whole body',
+    /async function digestBackupBody/.test(HTML) &&
+    /await addOne\(name \+ '\/' \+ rid, row\)/.test(HTML), true);
+  check('record ids and store names are rolled in, so a move cannot slip past',
+    /lines\.push\('store:' \+ name \+ ':count=' \+ sorted\.length\)/.test(HTML), true);
+  check('records are sorted by id so two devices agree',
+    /Sorted by id so two devices holding the same records in a different/.test(HTML), true);
+  /* Order of records must not change the digest -- two devices sync the same
+     rows in different orders all the time. */
+  const ordered = {
+    format: 'noon-report-db-v1', vessels: [], meta: [],
+    stores: { entries: [{ id: 'e1', v: 1 }, { id: 'e2', v: 2 }, { id: 'e3', v: 3 }] }
+  };
+  const reversed = {
+    format: 'noon-report-db-v1', vessels: [], meta: [],
+    stores: { entries: [{ id: 'e3', v: 3 }, { id: 'e2', v: 2 }, { id: 'e1', v: 1 }] }
+  };
+  const dOrdered = await buildBackupIntegrity(ordered);
+  const dReversed = await buildBackupIntegrity(reversed);
+  check('record order does not change the digest', dOrdered.digest, dReversed.digest);
+  /* But a changed record still must. */
+  const changed = JSON.parse(JSON.stringify(ordered));
+  changed.stores.entries[1].v = 99;
+  check('a changed record does change it',
+    (await buildBackupIntegrity(changed)).digest === dOrdered.digest, false);
+  /* And a removed one. */
+  const fewer = { format: 'noon-report-db-v1', vessels: [], meta: [],
+    stores: { entries: [{ id: 'e1', v: 1 }, { id: 'e2', v: 2 }] } };
+  check('a removed record changes it too',
+    (await buildBackupIntegrity(fewer)).digest === dOrdered.digest, false);
+
+  /* ---- a device that cannot hash must still be able to back up --------- */
+  /* The backup is the thing being protected. A file with no checksum
+     restores as unverified; no file at all is a lost backup. */
+  const noHash = Object.assign({}, sandbox);
+  check('a header that states no checksum is unverifiable, not damaged',
+    (await verifyBackupIntegrity({
+      format: 'noon-report-db-v1', meta: [], vessels: [], stores: { entries: [{ id: 'x' }] },
+      integrity: { algo: 'none', digest: '', recordCount: 1 }
+    })), { checked: false, ok: true, actualCount: 1,
+      note: 'The device that wrote this backup could not compute a checksum, so its contents cannot be verified.' });
+  void noHash;
 
   /* ---- the guard is actually wired into the destructive paths ---------- */
   check('restore checks the file before clearing anything',
