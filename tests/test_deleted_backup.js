@@ -13,7 +13,8 @@ function check(label, actual, expected) {
   if (!ok) fails += 1;
 }
 console.log('\ndeleted entry backup');
-check('idb version 7', HTML.includes("indexedDB.open('noonReportDB', 7)"), true);
+check('idb version 8', HTML.includes("indexedDB.open('noonReportDB', 8)"), true);
+check('voyage leg parts store', HTML.includes("createObjectStore('voyageLegParts'"), true);
 check('deletedBackup store', HTML.includes("createObjectStore('deletedBackup'"), true);
 check('backup on entry delete', HTML.includes('await backupDeletedRecord(') && HTML.includes("kind: 'entry'"), true);
 check('backup on abstract delete', HTML.includes("kind:'abstract'") || HTML.includes('kind: \'abstract\''), true);
