@@ -30,6 +30,13 @@ jobs:
       - name: Check JavaScript parses
         run: node tests/check_js_syntax.js
 
+      # window.prompt() THROWS in Electron, and these call sites sit in async
+      # handlers, so the throw became a rejected promise nobody saw: the button
+      # did nothing at all. A blob anchor is likewise a no-op in Electron and
+      # the Android WebView, so a compiled CSV was silently dropped.
+      - name: Check no call reaches the native prompt or a bare blob anchor
+        run: node tests/test_no_native_prompt.js
+
       - name: Check e-ORB scenarios and weekly inventory window
         run: node tests/test_eorb.js
 
