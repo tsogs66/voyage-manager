@@ -50,6 +50,16 @@ check('activateVoyageLeg honours persistCurrent:false',
 check('switchVessel honours persistCurrent so a vessel hop cannot silent-save',
   /async function switchVessel\(vesselId, opts\)/.test(HTML)
   && /switchVessel\(scopeVid, \{ persistCurrent: persistSource \}\)/.test(HTML));
+check('vessel switch saves the open log line before leaving the ship',
+  HTML.includes('async function preserveOpenWorkBeforeVesselSave')
+  && HTML.includes('function absorbOpenFlowmeterDialog')
+  && HTML.includes('logFormDirty')
+  && HTML.includes('openWorkDraft:')
+  && HTML.includes('chengaio-flush-unsaved')
+  && /saveCurrentVesselStateBody[\s\S]{0,400}preserveOpenWorkBeforeVesselSave/.test(HTML));
+check('an unfinished line is restored only on the voyage it was typed for',
+  HTML.includes('function openLogDraftMatchesLeg')
+  && HTML.includes('await restoreOpenWorkDraft(vesselId)'));
 check('library hint mentions the unsaved warning',
   /Loading another leg warns if the current one is not yet in this library/.test(HTML));
 
