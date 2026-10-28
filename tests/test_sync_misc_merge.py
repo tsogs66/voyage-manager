@@ -110,5 +110,22 @@ blank = server.merge_snapshots(
 check("a push with no draft does not erase the stored draft",
       blank["data"]["openWorkDraft"]["log"]["fields"]["in_datetime"], "old")
 
+newer_plan = server.merge_snapshots(
+    leg({
+        "sync": {"lastModifiedAt": "2026-10-09T00:00:00Z"},
+        "bunkerPlan": {"voyageNo": "old", "updatedAt": "2026-10-01T00:00:00Z"},
+        "requisitions": [{"id": "rq-old", "updatedAt": "2026-10-01T00:00:00Z"}],
+    }),
+    leg({
+        "sync": {"lastModifiedAt": "2026-10-02T00:00:00Z"},
+        "bunkerPlan": {"voyageNo": "12", "updatedAt": "2026-10-08T00:00:00Z"},
+        "requisitions": [{"id": "rq-new", "updatedAt": "2026-10-08T00:00:00Z", "description": "paint"}],
+    }),
+)
+check("a newer setup stamp does not keep an older consumption plan",
+      newer_plan["data"]["setup"]["bunkerPlan"]["voyageNo"], "12")
+check("a requisition raised on this device still reaches the server",
+      "rq-new" in [r["id"] for r in newer_plan["data"]["setup"]["requisitions"]], True)
+
 print(f"sync misc merge ok ({checks})" if not failures else f"{len(failures)} failed")
 sys.exit(1 if failures else 0)
