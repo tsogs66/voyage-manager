@@ -104,7 +104,13 @@ vm.runInContext([
   extract('finalizeAggregate'),
   extract('dcsYearWindow'),
   extract('buildDcsReport'),
-  extract('dcsReportCsvRows')
+  extract('dcsReportCsvRows'),
+  extract('dcsPdfLiteral'),
+  extract('dcsPdfWrap'),
+  extract('dcsAssemblePdf'),
+  extract('dcsReportPdf'),
+  extract('escPrint'),
+  extract('dcsReportPrintPages')
 ].join('\n'), sandbox);
 
 sandbox._pool = {
@@ -195,6 +201,41 @@ sandbox._pool = {
   check('a missing figure reads NOT RECORDED, not 0',
     /Gross tonnage\|\|GT\|NOT RECORDED/.test(gappyRows), true);
 
+  /* The PDF the office files or prints. Same rows, ASCII so a text save stays a PDF. */
+  const pdf = sandbox.dcsReportPdf(rep);
+  check('the PDF opens as PDF 1.4', pdf.startsWith('%PDF-1.4\n'), true);
+  check('and closes with the end marker', pdf.endsWith('%%EOF\n'), true);
+  check('every byte stays ASCII', [...pdf].every(ch => ch.charCodeAt(0) < 128), true);
+  const xrefAt = pdf.indexOf('startxref\n');
+  const xrefPos = Number(pdf.slice(xrefAt + 'startxref\n'.length).split('\n')[0]);
+  check('startxref points at the xref table', pdf.slice(xrefPos, xrefPos + 5), 'xref\n');
+  const xrefBody = pdf.slice(xrefPos).split('trailer')[0];
+  const offsets = xrefBody.split('\n').slice(2).filter(line => / n $/.test(line))
+    .map(line => Number(line.slice(0, 10)));
+  check('each xref offset lands on its object',
+    offsets.every((off, i) => pdf.slice(off, off + String(i + 1).length + 6) === (i + 1) + ' 0 obj'),
+    true);
+  check('the sheet names hours under way', pdf.includes('(Hours under way)'), true);
+  check('and the figure is the under-way hours', pdf.includes('(72 hrs)'), true);
+  check('period hours stay on the sheet as the other figure', pdf.includes('(96 hrs)'), true);
+  check('fuel by type is on the sheet', pdf.includes('(Fuel consumed - LSFO)'), true);
+  check('the partial year is on the sheet',
+    pdf.includes('(PARTIAL: this device does not hold the whole year)'), true);
+  check('and it says it is a compilation',
+    pdf.includes('(This is a compilation, not a submission.)'), true);
+  const gappyPdf = sandbox.dcsReportPdf(gappy);
+  check('a missing figure reads NOT RECORDED on the PDF',
+    gappyPdf.includes('(NOT RECORDED)'), true);
+  check('a gap is named on the PDF', gappyPdf.includes('(GAP)'), true);
+
+  const sheets = sandbox.dcsReportPrintPages(rep);
+  const sheet = sheets.join('\n');
+  check('a year of this size prints on one sheet', sheets.length, 1);
+  check('the print sheet names the ship and the year',
+    /IMO DCS \/ EU MRV compilation 2026/.test(sheet) && /MV Example/.test(sheet), true);
+  check('the print sheet says the year is partial', /Partial year\./.test(sheet), true);
+  check('and it keeps hours under way', /Hours under way/.test(sheet) && />72</.test(sheet), true);
+
   /* ---- wiring --------------------------------------------------------- */
   check('the compilation reuses the cross-leg machinery',
     /withLegState\(leg\.pack, run\)/.test(HTML), true);
@@ -205,6 +246,10 @@ sandbox._pool = {
     (HTML.match(/state\.setup\.grossTonnage = parseFloat/g) || []).length, 3);
   check('a partial year is said out loud, not only in the file',
     /PARTIAL YEAR\. This device holds/.test(HTML), true);
+  check('the PDF is saved beside the CSV',
+    /downloadNamedFile\(`\$\{fileBase\}\.pdf`, dcsReportPdf\(rep\), 'application\/pdf'\)/.test(HTML), true);
+  check('and the same sheet is offered to the printer',
+    /printPortraitPages\(dcsReportPrintPages\(rep\)\)/.test(HTML), true);
 
   console.log(fails ? `\nFAILED — ${fails} of ${checks} checks` : `\nPASSED — ${checks} checks`);
   process.exit(fails ? 1 : 0);
