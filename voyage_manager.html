@@ -31336,9 +31336,11 @@ async function onVoyageBackupMessage(ev){
       const stamp = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
       reply({ payload, filename: `voyage-chief-db-backup_${stamp}.json` });
     } else if (msg.action === 'restore-db') {
+      await commitOpenWorkBeforeSync();
       await restoreFullDatabase(msg.payload);
       reply({ message: 'Voyage database restored on this device.' });
     } else if (msg.action === 'merge-db') {
+      await commitOpenWorkBeforeSync();
       await mergeFullDatabase(msg.payload);
       reply({ message: 'Voyage database merged on this device.' });
     } else if (msg.action === 'export-vessel') {
@@ -31357,6 +31359,7 @@ async function onVoyageBackupMessage(ev){
       });
     } else if (msg.action === 'import-vessel') {
       if (!msg.payload) throw new Error('No vessel payload');
+      await commitOpenWorkBeforeSync();
       const mode = msg.mode === 'merge' ? 'merge' : 'replace';
       const res = await importVesselExport(msg.payload, { mode });
       reply({ message: `Vessel ${res.vessel.name} imported (${res.written} records, mode ${res.mode}).` });
