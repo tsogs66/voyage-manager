@@ -8275,8 +8275,10 @@ function vesselRegistryId(vesselId){
 function orbEntryMatchesShip(item, vesselId){
   if (!item) return false;
   const vid = vesselId || state.activeVesselId || LEGACY_VESSEL_ID;
-  if (!item.vesselId) return vid === LEGACY_VESSEL_ID;
   const keys = typeof vesselIdentityKeys === 'function' ? vesselIdentityKeys(vid) : new Set([vid]);
+  /* Lines saved before ship tags have no vesselId. They belong to the open
+     book on this device — hiding them on every named ship emptied the ORB. */
+  if (!item.vesselId) return true;
   return keys.has(item.vesselId);
 }
 
@@ -8308,6 +8310,20 @@ function adoptOrbEntries(list){
   });
 }
 
+/** IndexedDB plus the MEPC sealed book on this ship's setup. Untagged lines
+ *  belong to the open book — the generic vessel filter hid them on named ships. */
+function hydrateOrbEntriesFromDevice(allOrb, vesselId, setup){
+  const vid = vesselId || state.activeVesselId || LEGACY_VESSEL_ID;
+  const fromDb = (allOrb || []).filter((item) => orbEntryMatchesShip(item, vid));
+  const fromBook = typeof orbSealedBookEntries === 'function'
+    ? orbSealedBookEntries(setup || state.setup)
+    : [];
+  const merge = typeof mergeListsById === 'function'
+    ? mergeListsById
+    : (a, b) => (a || []).concat(b || []);
+  return adoptOrbEntries(merge(fromBook, fromDb));
+}
+
 async function unionOrbEntriesFromServer(){
   const base = typeof syncApiBase === 'function' ? syncApiBase() : '';
   if (!base || !state.activeVesselId) return 0;
@@ -8317,8 +8333,9 @@ async function unionOrbEntriesFromServer(){
       `${base}/api/voyage-misc/${encodeURIComponent(vessel)}?full=1`,
       { headers: syncRequestHeaders() }
     );
-    const remote = (body && body.misc) || {};
-    const incoming = adoptOrbEntries(remote.orbEntries || []);
+    const incoming = adoptOrbEntries(
+      typeof collectedOrbEntries === 'function' ? collectedOrbEntries(body) : (((body && body.misc) || body || {}).orbEntries || [])
+    );
     if (!incoming.length) return 0;
     const deleted = (typeof ensureSyncConfig === 'function' ? (ensureSyncConfig().deletedIds || {}) : {});
     const merged = typeof filterDeleted === 'function'
@@ -8893,7 +8910,8 @@ async function loadVesselFromDb(vesselId){
   }
   try{
     const allOrb = await dbGetAll('orbEntries');
-    state.orbEntries = adoptOrbEntries((allOrb || []).filter(match));
+    state.orbEntries = hydrateOrbEntriesFromDevice(allOrb, vesselId, state.setup);
+    if (typeof syncOrbEntriesIntoSetup === 'function') syncOrbEntriesIntoSetup();
   }catch(_){ state.orbEntries = []; }
   reportVesselLoad(
     `${ship} · ${state.entries.length} log entries, ${state.receipts.length} receipts, ${state.documents.length} documents`,
@@ -16010,10 +16028,34 @@ function orbSealedBookEntries(setup){
   return [];
 }
 
+function mergeSealedOrbBooks(orbA, orbB){
+  const ea = orbSealedBookEntries({ orb: orbA });
+  const eb = orbSealedBookEntries({ orb: orbB });
+  const entries = typeof mergeListsById === 'function' ? mergeListsById(ea, eb) : ea.concat(eb);
+  if (!entries.length) return (orbA && orbA.sealedBook) || (orbB && orbB.sealedBook) || null;
+  let head = '';
+  for (let i = entries.length - 1; i >= 0; i--){
+    if (entries[i] && entries[i].chainHash){ head = entries[i].chainHash; break; }
+  }
+  return {
+    entries: entries.slice(),
+    head: head,
+    count: entries.length,
+    sealedAt: new Date().toISOString()
+  };
+}
+
 function collectedOrbEntries(data){
-  const top = (data && data.orbEntries) || [];
-  const nested = orbSealedBookEntries(data && data.setup);
-  return typeof mergeListsById === 'function' ? mergeListsById(top, nested) : top.concat(nested);
+  if (!data || typeof data !== 'object') return [];
+  const merge = (a, b) => (typeof mergeListsById === 'function' ? mergeListsById(a, b) : (a || []).concat(b || []));
+  let out = Array.isArray(data.orbEntries) ? data.orbEntries : [];
+  out = merge(out, orbSealedBookEntries(data.setup));
+  /* /api/voyage-misc returns { orb, orbEntries } at the top, not under setup. */
+  out = merge(out, orbSealedBookEntries(data));
+  if (data.misc && typeof data.misc === 'object' && data.misc !== data){
+    out = merge(out, collectedOrbEntries(data.misc));
+  }
+  return out;
 }
 
 function syncOrbEntriesIntoSetup(){
@@ -28345,6 +28387,17 @@ function mergeMiscVesselData(setup, localSetup, remoteSetup, deleted, chosenIsRe
     const other = chosenIsRemote ? (localSetup || {}) : (remoteSetup || {});
     mergeOrbTanks(setup.orb, other.orb, deleted);
   }
+  const localOrb = (localSetup || {}).orb;
+  const remoteOrb = (remoteSetup || {}).orb;
+  if ((localOrb && typeof localOrb === 'object') || (remoteOrb && typeof remoteOrb === 'object')){
+    if (!setup.orb || typeof setup.orb !== 'object'){
+      setup.orb = Object.assign({}, (chosenIsRemote ? remoteOrb : localOrb) || {});
+    }
+    const book = typeof mergeSealedOrbBooks === 'function'
+      ? mergeSealedOrbBooks(localOrb, remoteOrb)
+      : null;
+    if (book && book.count) setup.orb.sealedBook = book;
+  }
   /* The plan being drafted is one object. Keep the copy that was edited later,
      so a newer setup stamp on the other side cannot drop this ship's plan. */
   const plan = newerMiscDoc((localSetup || {}).bunkerPlan, (remoteSetup || {}).bunkerPlan);
@@ -29397,7 +29450,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v348';
+let androidInstallCacheName = 'noon-report-v349';
 
 /*
  * What the program is called.
@@ -30690,10 +30743,6 @@ async function restoreFullDatabase(payload){
   await migrateToMultiVessel(metaAll);
   const vid = state.activeVesselId || payload.activeVesselId || (state.vessels[0] && state.vessels[0].id) || LEGACY_VESSEL_ID;
   await loadVesselFromDb(vid);
-  try{
-    const orbAll = await dbGetAll('orbEntries');
-    state.orbEntries = adoptOrbEntries((orbAll || []).filter(e => orbEntryMatchesShip(e)));
-  }catch(_){ state.orbEntries = []; }
   render();
   applyEntryDefaults();
   prefillFromLastEntry();
@@ -30748,10 +30797,6 @@ async function mergeFullDatabase(payload){
   const metaAll = await dbGetAll('meta');
   await migrateToMultiVessel(metaAll);
   await loadVesselFromDb(state.activeVesselId);
-  try{
-    const orbAll = await dbGetAll('orbEntries');
-    state.orbEntries = adoptOrbEntries((orbAll || []).filter(e => orbEntryMatchesShip(e)));
-  }catch(_){ state.orbEntries = []; }
   render();
   applyEntryDefaults();
   prefillFromLastEntry();
@@ -33769,7 +33814,10 @@ function orbBookEntries(){
   /* No range picked: the last 7 days up to the most recent entry in the book, not up to
      today — a book that was last written a fortnight ago should still show its last week
      of work rather than an empty page. */
-  const all = (state.orbEntries || []).filter(e => orbEntryMatchesShip(e));
+  let all = (state.orbEntries || []).filter(e => orbEntryMatchesShip(e));
+  if (!all.length && typeof orbSealedBookEntries === 'function'){
+    all = adoptOrbEntries(orbSealedBookEntries(state.setup)).filter(e => orbEntryMatchesShip(e));
+  }
   if (!all.length) return { entries: [], ranged: false, from: '', to: '' };
   const latest = all.map(e => toIsoDate(e.date)).filter(Boolean).sort().slice(-1)[0];
   const start = EORB.addDaysIso(latest, -(ORB_BOOK_DAYS - 1));

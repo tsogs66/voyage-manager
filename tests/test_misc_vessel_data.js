@@ -293,6 +293,16 @@ check('an empty pulled book does not wipe this device',
   /pulledOrb.length \? pulledOrb : adoptOrbEntries/.test(HTML), true);
 check('the book matches ship identity by slug or registry id',
   /function orbEntryMatchesShip/.test(HTML), true);
+check('an untagged e-ORB line still shows on a named ship',
+  /if \(!item\.vesselId\) return true;/.test(HTML), true);
+check('the vessel-misc pull reads the sealed book on orb, not only top-level orbEntries',
+  /collectedOrbEntries\(body\)/.test(HTML) && /orbSealedBookEntries\(data\)/.test(HTML), true);
+check('a merge does not let an empty sealed book replace a filled one',
+  /function mergeSealedOrbBooks/.test(HTML), true);
+check('opening a named ship still loads untagged e-ORB lines',
+  /async function loadVesselFromDb[\s\S]{0,4500}hydrateOrbEntriesFromDevice/.test(HTML), true);
+check('opening a ship restores the sealed book from setup',
+  /function hydrateOrbEntriesFromDevice/.test(HTML) && /orbSealedBookEntries\(setup \|\| state\.setup\)/.test(HTML), true);
 check('the sealed MEPC book rides inside setup.orb, not as a misc list',
   /function orbSealedBookEntries/.test(HTML) && /sealedBook/.test(HTML)
   && !/key: 'orbEntries', label: 'e-ORB entries'/.test(HTML), true);
@@ -302,6 +312,32 @@ check('a server check reloads e-ORB entries before it files the leg',
   /async function commitOpenWorkBeforeSync\(\)\{\s*\n\s*if \(!state\.activeVesselId\) return;\s*\n\s*await refreshOrbEntriesFromDb\(\);/.test(HTML), true);
 check('the backup count reloads e-ORB entries from IndexedDB',
   /await refreshOrbEntriesFromDb\(\);\s*\n\s*reply\(\{ counts: miscVesselDataCounts\(\)/.test(HTML), true);
+
+(function testHydrateFromDevice() {
+  const box = {
+    console, Object, String, Array, Set, Map, Number,
+    window: {},
+    state: { activeVesselId: 'harbour-key' },
+    LEGACY_VESSEL_ID: 'legacy',
+    vesselIdentityKeys(id) { return new Set([id]); },
+    tagVesselId(row) { if (row && !row.vesselId) row.vesselId = box.state.activeVesselId; return row; },
+  };
+  vm.createContext(box);
+  vm.runInContext([
+    extract('toIsoDate'),
+    extract('orbEntryMatchesShip'),
+    extract('adoptOrbEntries'),
+    extract('orbSealedBookEntries'),
+    extract('hydrateOrbEntriesFromDevice'),
+  ].join('\n'), box);
+  const rows = box.hydrateOrbEntriesFromDevice(
+    [{ id: 'idb', date: '10/29/2026' }],
+    'harbour-key',
+    { orb: { sealedBook: { entries: [{ id: 'sealed', date: '2026-10-01' }] } } }
+  );
+  check('opening a named ship keeps untagged IndexedDB lines',
+    rows.map((r) => r.id).sort(), ['idb', 'sealed']);
+})();
 
 (async function testRefresh() {
   const box = {
