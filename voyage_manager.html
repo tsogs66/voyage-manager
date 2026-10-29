@@ -28645,6 +28645,26 @@ async function restoreDeletedBackup(trashId){
 }
 
 
+/** IndexedDB is shared across AIO iframes. Reload the book before a sync so
+ *  entries saved in the e-ORB page are the ones that go to the server. */
+async function refreshOrbEntriesFromDb(){
+  if (!state.activeVesselId) return;
+  try {
+    const allOrb = await dbGetAll('orbEntries');
+    const vesselId = state.activeVesselId;
+    const keys = typeof vesselIdentityKeys === 'function'
+      ? vesselIdentityKeys(vesselId)
+      : new Set([vesselId]);
+    const match = (item) => {
+      if (!item) return false;
+      if (item.vesselId) return keys.has(item.vesselId);
+      return vesselId === LEGACY_VESSEL_ID;
+    };
+    const fromDb = (allOrb || []).filter(match);
+    state.orbEntries = mergeListsById(fromDb, state.orbEntries || []);
+  } catch (_) {}
+}
+
 async function persistAllToDb(){
   const groups = [
     ['entries', state.entries],
@@ -28715,7 +28735,9 @@ async function syncNow(options = {}){
     const legUrl = `${base}/api/voyage/${encodeURIComponent(vessel)}/${encodeURIComponent(voyage)}/${encodeURIComponent(condition)}`;
     const legLabel = `${voyage} ${condition}`;
     /* Snapshot this leg before the pull. The merge keeps these records if the
-       server copy would otherwise replace them. */
+       server copy would otherwise replace them. Reload the book first: AIO
+       e-ORB saves into IndexedDB from another iframe. */
+    await refreshOrbEntriesFromDb();
     takeLegSyncHold();
 
     const sessionKey = legUploadSessionKey(vessel, voyage, condition);
@@ -29256,7 +29278,7 @@ function registerServiceWorker(){
 
 let deferredInstallPrompt = null;
 let androidInstallBusy = false;
-let androidInstallCacheName = 'noon-report-v345';
+let androidInstallCacheName = 'noon-report-v346';
 
 /*
  * What the program is called.
@@ -31151,6 +31173,7 @@ function adviseLegPair(local, remote){
 /** Write open forms and the working voyage leg before any server comparison. */
 async function commitOpenWorkBeforeSync(){
   if (!state.activeVesselId) return;
+  await refreshOrbEntriesFromDb();
   await saveCurrentVesselState();
 }
 
@@ -31557,6 +31580,7 @@ async function onVoyageBackupMessage(ev){
          having to take it on trust. Counts only -- the rows themselves carry
          scanned PDFs and are measured in megabytes. */
       if (state.activeVesselId) {
+        await refreshOrbEntriesFromDb();
         reply({ counts: miscVesselDataCounts(), vesselName: state.setup.vesselName || '' });
       } else {
         reply({ counts: null, message: 'No vessel is open in Voyage Chief on this device.' });
@@ -33752,6 +33776,7 @@ document.getElementById('btnOrbPrefillFromVessel')?.addEventListener('click', ()
 document.getElementById('btnOrbSaveSetup')?.addEventListener('click', async ()=>{
   readOrbSetupFromForm();
   await saveSetup();
+  markPendingSync();
   alert('ORB vessel setup saved for ' + (orbSetup().shipName || 'this vessel') + '.\nFlag: ' + EORB.getFlag(orbSetup().flag).name);
 });
 document.getElementById('orb_disclaimer')?.addEventListener('change', ()=>{
@@ -33984,6 +34009,7 @@ document.getElementById('btnOrbSaveWeekly')?.addEventListener('click', async ()=
   await resealOrbChain();
   await refreshOrbIntegrity();
   await saveSetup();
+  markPendingSync();
   document.getElementById('orbWeeklyWizard').style.display = 'none';
   fillOrbBrowseOfficerSelect();
   renderOrbBrowse();
@@ -34106,6 +34132,7 @@ document.getElementById('btnOrbSaveEntry')?.addEventListener('click', async ()=>
   await resealOrbChain();
   await refreshOrbIntegrity();
   await saveSetup();
+  markPendingSync();
   document.getElementById('orbEntryWizard').style.display = 'none';
   _orbWizard.code = null;
   fillOrbBrowseOfficerSelect();
@@ -34406,6 +34433,7 @@ document.getElementById('btnOrbVoid')?.addEventListener('click', async ()=>{
      record -- MARPOL does not allow deleting -- so it is sealed, not excluded. */
   await resealOrbChain();
   await refreshOrbIntegrity();
+  markPendingSync();
   renderOrbBrowse();
   renderOrbBook();
   applyOrbDateBounds();
