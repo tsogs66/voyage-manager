@@ -44,5 +44,9 @@ for (const file of candidates) {
     file + ': the dial must not be a fixed pixel square');
   assert(/state\.step === 'minute' \? \(state\.m \/ 60\) \* 30 : 0/.test(src),
     file + ': the hour hand must sit on the hour numeral, not drift with the minutes');
+  assert(/formatDatePartDisplay/.test(src),
+    file + ': date readout is mm/dd/yyyy');
+  assert(src.includes('\\d{1,2}'),
+    file + ': date parser accepts mm/dd/yyyy');
   console.log('ok —', path.relative(process.cwd(), file));
 }
