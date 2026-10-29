@@ -121,7 +121,7 @@ console.log('\ndelete-then-recreate does not keep the old id after merged tombst
 
 console.log('\nwiring');
 check('pull merge uses merged tombstones', HTML.includes('const deleted = mergeDeletedIds(localSync.deletedIds, remoteData.deletedIds)'), true);
-check('content dedupe runs on merge', HTML.includes('dedupeEntriesByContent(') && HTML.includes('filterDeleted(mergeListsById(remoteData.entries'), true);
+check('content dedupe runs on merge', HTML.includes('dedupeEntriesByContent(') && HTML.includes('filterDeleted(mergeListsById(remoteEntries'), true);
 check('persist purges tombstoned idb rows', HTML.includes('await purgeTombstonedFromDb()'), true);
 check('server dedupes entries by content', fs.readFileSync(path.join(__dirname, '..', 'sync-server', 'server.py'), 'utf8').includes('dedupe_entries_by_content'), true);
 
