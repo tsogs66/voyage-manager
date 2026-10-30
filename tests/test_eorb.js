@@ -718,6 +718,28 @@ console.log('\nOWS overboard discharge sequence (OCM test then valve unseal)');
   check('last save batch is the weekly pair', EORB.lastOrbSaveBatch(weeklyBatch).map(e => e.id).join(','), 'a,b');
   checkTrue('preview lists both weekly lines',
     EORB.formatOrbEntryPreview(EORB.lastOrbSaveBatch(weeklyBatch)).indexOf('Sludge Tk') !== -1);
+
+  checkTrue('restore blocked when no OWS failure exists',
+    EORB.owsRestorePrereqErrors([], { scenarioId: 'ows-restored' }).length > 0);
+  const failed = [{
+    id: 'f1', date: '2026-09-20', scenarioId: 'ows-failure', code: 'F', selectedItems: ['19', '20', '21'],
+    voided: false, createdAt: '2026-09-20T08:00:00Z'
+  }];
+  check('restore allowed while a failure is still open',
+    EORB.owsRestorePrereqErrors(failed, { scenarioId: 'ows-restored' }).length, 0);
+  const closed = failed.concat([{
+    id: 'r1', date: '2026-09-21', scenarioId: 'ows-restored', code: 'F', selectedItems: ['20', '21'],
+    voided: false, createdAt: '2026-09-21T08:00:00Z'
+  }]);
+  checkTrue('restore blocked after the failure is already closed',
+    EORB.owsRestorePrereqErrors(closed, { scenarioId: 'ows-restored' }).length > 0);
+  checkTrue('card popup lists missed OWS steps together',
+    EORB.scenarioOpenErrors([], { date: '2026-09-29', scenarioId: 'bilge-ows-sea' }).length >= 2);
+  const lr = EORB.defaultOrbSetup({ flag: 'LR' });
+  const pa = EORB.defaultOrbSetup({ flag: 'PA' });
+  const co = EORB.getScenario('changeover-to-ls-complete');
+  checkTrue('Part III changeover warns on Liberia', !!EORB.scenarioFlagWarning(lr, co));
+  check('Part III changeover is allowed on Panama', EORB.scenarioFlagWarning(pa, co), '');
 }
 
 console.log('\nbeORB-style date / code / item No. columns');
