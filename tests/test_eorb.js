@@ -707,6 +707,16 @@ console.log('\nOWS overboard discharge sequence (OCM test then valve unseal)');
     EORB.owsResealPrereqErrors(afterDischarge, { date: '2026-09-29', scenarioId: 'ows-overboard-reseal' }).length, 0);
   checkTrue('form sheet builder includes table headers',
     EORB.buildWizardFormSheet(1, 'D', EORB.getOperation(1, 'D'), EORB.defaultOrbSetup({}), { scenarioId: 'bilge-ows-sea' }, ['13']).html.indexOf('orb-wizard-panel') !== -1);
+  const d13 = EORB.buildWizardFormSheet(1, 'D', EORB.getOperation(1, 'D'), EORB.defaultOrbSetup({}), {}, ['13']).html;
+  checkTrue('holding tank capacity is a read-only calc box',
+    /orb-form-readonly" readonly[^>]*data-orb-field="fromCap"/.test(d13));
+  checkTrue('holding tank retained is a read-only calc box',
+    /orb-form-readonly" readonly[^>]*data-orb-field="fromRetained"/.test(d13));
+  const c11 = EORB.buildWizardFormSheet(1, 'C', EORB.getOperation(1, 'C'), EORB.defaultOrbSetup({}), {}, ['11.1', '11.2', '11.3']).html;
+  checkTrue('tank capacity waits for tank select as a read-only calc box',
+    /orb-form-readonly" readonly[^>]*data-orb-field="capacity"/.test(c11));
+  checkTrue('capacity field is marked computed', EORB.isOrbComputedField({ name: 'capacity' }), true);
+  check('quantity remains editable', EORB.isOrbComputedField({ name: 'qty' }), false);
   const weeklyBatch = [
     { id: 'a', createdAt: '2026-10-01T12:00:00Z', voided: false, date: '2026-10-01', code: 'C',
       weeklyInventory: true, lines: [{ itemNo: '11.1', text: 'Sludge Tk' }] },
