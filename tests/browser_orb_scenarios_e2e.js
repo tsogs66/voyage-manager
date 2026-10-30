@@ -98,7 +98,8 @@ const check = (l, a, e) => {
     'bilge-tank-transfer', 'bilge-to-sludge', 'ows-restored', 'bunker-diesel',
     'bilge-unit-maintenance', 'bilge-oily-to-tank', 'missed-entry', 'debunker-fuel',
     'debunker-diesel', 'seal-applied', 'seal-broken', 'bilge-evaporation',
-    'ows-ocm-test', 'aircooler-condensate', 'incinerator-garbage'];
+    'ows-ocm-test', 'ows-overboard-unseal', 'ows-overboard-reseal',
+    'aircooler-condensate', 'incinerator-garbage'];
   check('every newly added Part I operation has a card',
     wanted.filter(id => !scen[1].includes(id)), []);
   check('changeover events are on Part III', scen[3], [
