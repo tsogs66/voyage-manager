@@ -3222,6 +3222,26 @@ html.astrolabe body::before { opacity: 0.26; }
       <div>
         <h1>Voyage Chief</h1>
         <div class="subtitle" id="activeVesselLabel">Engine Department — Voyage Log &amp; Performance</div>
+        <script>
+          (function () {
+            try {
+              var name = '';
+              var parentWin = window.parent && window.parent !== window ? window.parent : null;
+              var active = parentWin && parentWin.ChengPro && parentWin.ChengPro.vessel && parentWin.ChengPro.vessel.getActive
+                ? parentWin.ChengPro.vessel.getActive() : null;
+              if (active && active.name) name = active.name;
+              if (!name) name = new URLSearchParams(location.search).get('aioVessel') || '';
+              if (!name) {
+                var raw = localStorage.getItem('chengProActiveVesselHint');
+                if (raw) name = (JSON.parse(raw) || {}).name || '';
+              }
+              if (name) {
+                var el = document.getElementById('activeVesselLabel');
+                if (el) el.textContent = name + ' — Voyage Log & Performance';
+              }
+            } catch (e) {}
+          })();
+        </script>
         <div class="byline" id="appByline"></div>
       </div>
     </div>
@@ -30876,6 +30896,10 @@ async function restoreFullDatabase(payload){
   await migrateToMultiVessel(metaAll);
   const vid = state.activeVesselId || payload.activeVesselId || (state.vessels[0] && state.vessels[0].id) || LEGACY_VESSEL_ID;
   await loadVesselFromDb(vid);
+  try{
+    const orbAll = await dbGetAll('orbEntries');
+    state.orbEntries = adoptOrbEntries((orbAll || []).filter(e => orbEntryMatchesShip(e)));
+  }catch(_){ state.orbEntries = []; }
   render();
   applyEntryDefaults();
   prefillFromLastEntry();
@@ -30930,6 +30954,10 @@ async function mergeFullDatabase(payload){
   const metaAll = await dbGetAll('meta');
   await migrateToMultiVessel(metaAll);
   await loadVesselFromDb(state.activeVesselId);
+  try{
+    const orbAll = await dbGetAll('orbEntries');
+    state.orbEntries = adoptOrbEntries((orbAll || []).filter(e => orbEntryMatchesShip(e)));
+  }catch(_){ state.orbEntries = []; }
   render();
   applyEntryDefaults();
   prefillFromLastEntry();
@@ -31033,11 +31061,245 @@ function isVesselExport(payload){
   return !!(payload && payload.format === VESSEL_EXPORT_FORMAT && payload.vessel && payload.stores && typeof payload.stores === 'object');
 }
 
+/** Last real log time on an entry. A fresh updatedAt from opening the leg does not count. */
+function voyageLegEntryTime(item){
+  if (!item) return '';
+  return String(item.datetime || item.updatedAt || item.savedAt || '');
+}
+
+/** Newest saved content on a library leg, ignoring a fresh archive timestamp. */
+function voyageLegContentStamp(leg){
+  if (!leg) return '';
+  let best = '';
+  if (Array.isArray(leg.entries) && leg.entries.length){
+    for (const item of leg.entries){
+      const t = voyageLegEntryTime(item);
+      if (t > best) best = t;
+    }
+  }
+  if (best) return best;
+  if (leg.contentAt) return String(leg.contentAt);
+  return String(leg.updatedAt || '');
+}
+
+/**
+ * Choose the current log, or the newest saved voyage leg when the working log
+ * is older or empty. Ranking uses the last entry time, so saving the leg you
+ * are leaving does not make that older voyage look newest.
+ */
+function pickLatestVoyageLeg(index, working){
+  let best = null;
+  let bestStamp = '';
+  for (const row of index || []){
+    for (const cond of ['B', 'L']){
+      const leg = row[cond];
+      if (!leg) continue;
+      const stamp = voyageLegContentStamp(leg);
+      const better = !best
+        || stamp > bestStamp
+        || (stamp === bestStamp && cond === 'L' && best.condition !== 'L');
+      if (better){
+        best = { voyageNumber: row.voyageNumber, condition: cond };
+        bestStamp = stamp;
+      }
+    }
+  }
+  const curVn = String(working && working.voyageNumber || '').trim();
+  const curCond = String(working && working.condition || '').toUpperCase() === 'L' ? 'L' : 'B';
+  const entries = (working && working.entries) || [];
+  let workingStamp = '';
+  for (const entry of entries){
+    const t = voyageLegEntryTime(entry);
+    if (t > workingStamp) workingStamp = t;
+  }
+  const onBest = !!(best && curVn === best.voyageNumber && curCond === best.condition && entries.length);
+  if (onBest || (entries.length && workingStamp && (!bestStamp || workingStamp >= bestStamp))){
+    return { action: 'keep', voyageNumber: curVn, condition: curCond };
+  }
+  /* A leg just created with New Voyage has no log lines. Its updatedAt can sort
+     before the closed leg's last watch, which is often dated later than the
+     moment of the switch. That empty leg stays the working voyage when it is
+     the one most recently saved. */
+  const currentRow = (index || []).find(r => r && r.voyageNumber === curVn);
+  const currentLeg = currentRow && currentRow[curCond];
+  if (currentLeg && !entries.length && !(currentLeg.entries && currentLeg.entries.length)){
+    const savedAt = String(currentLeg.updatedAt || '');
+    if (savedAt){
+      let newer = false;
+      for (const row of index || []){
+        for (const cond of ['B', 'L']){
+          const leg = row && row[cond];
+          if (!leg || (row.voyageNumber === curVn && cond === curCond)) continue;
+          if (String(leg.updatedAt || '') > savedAt) newer = true;
+        }
+      }
+      if (!newer) return { action: 'keep', voyageNumber: curVn, condition: curCond };
+    }
+  }
+  if (!best) return { action: 'empty', voyageNumber: curVn, condition: curCond };
+  return { action: 'open', voyageNumber: best.voyageNumber, condition: best.condition };
+}
+
+function chengAioShellVesselName(){
+  if (typeof isChengAioEmbedded !== 'function' || !isChengAioEmbedded()) return '';
+  try {
+    const parentWin = window.parent && window.parent !== window ? window.parent : null;
+    const active = parentWin && parentWin.ChengPro && parentWin.ChengPro.vessel
+      && typeof parentWin.ChengPro.vessel.getActive === 'function'
+      ? parentWin.ChengPro.vessel.getActive() : null;
+    if (active && active.name) return String(active.name).trim();
+  } catch (_) {}
+  try {
+    const fromUrl = new URLSearchParams(location.search).get('aioVessel');
+    if (fromUrl) return String(fromUrl).trim();
+  } catch (_) {}
+  try {
+    const raw = localStorage.getItem('chengProActiveVesselHint');
+    if (raw) {
+      const hint = JSON.parse(raw);
+      if (hint && hint.name) return String(hint.name).trim();
+    }
+  } catch (_) {}
+  return '';
+}
+
+/** Header follows the ship the suite has open, including while this copy is still switching. */
+function paintActiveVesselLabel(fallback){
+  const lbl = document.getElementById('activeVesselLabel');
+  if (!lbl) return;
+  const shellName = chengAioShellVesselName();
+  const setupName = (state.setup && state.setup.vesselName) ? String(state.setup.vesselName).trim() : '';
+  const name = shellName || (fallback || '') || setupName;
+  if (name) lbl.textContent = name + ' — Voyage Log & Performance';
+}
+
+/**
+ * Open this ship's current log, or the newest saved voyage leg when the
+ * working log is older or empty.
+ */
+async function loadLatestVoyageDataForActiveVessel(){
+  const vid = state.activeVesselId;
+  const curVn = (state.setup && state.setup.voyageNumber || '').trim();
+  const curCond = normalizeCondition(state.setup && state.setup.shipCondition);
+  if (!vid) return { loaded: 'empty', voyageNumber: curVn, condition: curCond, entryCount: 0 };
+  /* An unfinished log line belongs to this leg. Do not replace the leg and
+     hide the line; put the line back on the form. */
+  if (await restoreOpenWorkDraft(vid)){
+    return {
+      loaded: 'working',
+      voyageNumber: curVn,
+      condition: curCond,
+      entryCount: (state.entries || []).length,
+      keptLog: true
+    };
+  }
+  const choice = pickLatestVoyageLeg(await getVoyageLibraryIndex(vid), {
+    voyageNumber: curVn,
+    condition: curCond,
+    entries: state.entries
+  });
+  if (choice.action !== 'open'){
+    return {
+      loaded: choice.action === 'keep' ? 'working' : 'empty',
+      voyageNumber: choice.voyageNumber,
+      condition: choice.condition,
+      entryCount: state.entries.length
+    };
+  }
+  await activateVoyageLeg(vid, choice.voyageNumber, choice.condition);
+  render();
+  applyEntryDefaults();
+  prefillFromLastEntry();
+  renderSyncUi();
+  await renderVoyageLibrary();
+  return {
+    loaded: 'latest',
+    voyageNumber: choice.voyageNumber,
+    condition: choice.condition,
+    entryCount: state.entries.length
+  };
+}
+
+let chengAioLatestLoadBusy = false;
+async function runChengAioLatestLoad(vessel){
+  if (chengAioLatestLoadBusy) return null;
+  chengAioLatestLoadBusy = true;
+  try {
+    const switched = await syncActiveVesselFromChengAio(vessel);
+    if (vessel && switched === false){
+      return { loaded: 'empty', voyageNumber: '', condition: 'B', entryCount: 0 };
+    }
+    return await loadLatestVoyageDataForActiveVessel();
+  } finally {
+    chengAioLatestLoadBusy = false;
+  }
+}
+
 /** The fleet entry this file would land on, or null when it is a new ship. */
-function matchVesselForImport(payload){
+/**
+ * Every vessel's IMO, by vessel id.
+ *
+ * A vessel row is {id, name, slug} -- the IMO lives in its setup row, so
+ * identifying a hull means reading those.
+ */
+async function vesselImoById(){
+  const byId = new Map();
+  let metaAll = [];
+  try{ metaAll = await dbGetAll('meta'); }catch(_){ return byId; }
+  (metaAll || []).forEach(row => {
+    if (!row || typeof row.key !== 'string' || row.key.indexOf('setup:') !== 0) return;
+    const imo = normalizeImoForAio(row.value && row.value.imoNo);
+    if (imo) byId.set(row.key.slice('setup:'.length), imo);
+  });
+  return byId;
+}
+
+/**
+ * The vessel an import belongs to, or null for a genuinely new ship.
+ *
+ * This used to match on id or slug alone, and never looked at the IMO -- so
+ * "Save & connect" on a ship already in the list added a SECOND record of the
+ * same hull whenever the slug differed, which it does whenever the name was
+ * typed differently, or the row came from the other program, or the local
+ * record predates slugs. The engineer was then choosing between two copies of
+ * his own ship on every page.
+ *
+ * The rule is the suite's own, the one ChengVesselKey.sameVessel uses on the
+ * Tank side: the IMO is the hull's identity and decides whenever both sides
+ * have one -- a mismatch is a NO even if the names are identical, because two
+ * ships genuinely do share names. Only where a side has no IMO does the name
+ * or slug get to answer.
+ */
+async function matchVesselForImport(payload){
   const src = (payload && payload.vessel) || {};
-  return state.vessels.find(v => src.id && v.id === src.id)
-      || state.vessels.find(v => src.slug && v.slug === src.slug)
+  const setup = (payload && payload.setup) || {};
+
+  /* An explicit id is this database's own key; nothing beats it. */
+  const byId = state.vessels.find(v => src.id && v.id === src.id);
+  if (byId) return byId;
+
+  const srcImo = normalizeImoForAio(src.imo != null ? src.imo : setup.imoNo);
+  const srcName = normalizeVesselNameForAio(src.name || setup.vesselName);
+  const bySlug = (v) => src.slug && v.slug === src.slug;
+  const byName = (v) => !!srcName && normalizeVesselNameForAio(v.name) === srcName;
+
+  if (srcImo){
+    const imos = await vesselImoById();
+    const sameImo = state.vessels.find(v => imos.get(v.id) === srcImo);
+    if (sameImo) return sameImo;
+    /* The incoming hull is identified and no local record shares it. A local
+       record that carries a DIFFERENT IMO is a different ship, whatever it is
+       called, so only records with no IMO of their own may be matched on
+       slug or name. */
+    const unidentified = (v) => !imos.get(v.id);
+    return state.vessels.find(v => unidentified(v) && bySlug(v))
+        || state.vessels.find(v => unidentified(v) && byName(v))
+        || null;
+  }
+
+  /* No IMO on the incoming record: slug, then the name. */
+  return state.vessels.find(bySlug)
+      || state.vessels.find(byName)
       || null;
 }
 
@@ -31060,7 +31322,7 @@ async function importVesselExport(payload, options = {}){
   const srcName = String(src.name || payload.setup?.vesselName || 'IMPORTED VESSEL').trim();
   const srcSlug = src.slug || vesselSlugFromName(srcName);
 
-  let target = matchVesselForImport(payload);
+  let target = await matchVesselForImport(payload);
   const replacing = !!target;
   if (target){
     if (srcName) target.name = srcName;
@@ -31215,9 +31477,9 @@ function setLocalVesselBackupStatus(msg){
 }
 
 /** Prompt: new vessel / merge legs / overwrite entire vessel. Returns mode or null if cancelled. */
-function promptVesselImportMode(payload, fileName){
+async function promptVesselImportMode(payload, fileName){
   const src = payload.vessel || {};
-  const existing = matchVesselForImport(payload);
+  const existing = await matchVesselForImport(payload);
   const total = Object.values(payload.counts || {}).reduce((a,b)=>a+(b||0),0);
   const summary = vesselExportCountSummary(payload.counts);
   if (!existing){
@@ -31277,7 +31539,7 @@ async function runVesselBackupImport(payload, fileName, statusFn){
   if (!isVesselExport(payload)){
     throw new Error('This file is not a vessel export (format ' + VESSEL_EXPORT_FORMAT + '). Create one with “Export Active Vessel”. Full-database backups go through Restore / Merge on the Setup tab.');
   }
-  const mode = promptVesselImportMode(payload, fileName);
+  const mode = await promptVesselImportMode(payload, fileName);
   if (!mode){ setStatus('Vessel import cancelled.'); return null; }
   setStatus(mode === 'merge' ? 'Merging vessel backup…' : 'Importing vessel (overwrite)…');
   const res = await importVesselExport(payload, { mode });
@@ -31575,6 +31837,11 @@ async function reconcileVoyageLegs(legs, opts){
         total: list.length,
       });
       const fresh = await openLegForReconcile(vn, cond);
+      /* syncNow archives the active leg itself before it returns, so the
+         archive that used to follow this line wrote the whole leg to
+         IndexedDB a second time -- a multi-megabyte chunked write per leg,
+         for nothing, on a leg carrying scanned requisitions. That doubling
+         is a large part of why this took so long over a ship's connection. */
       try {
         /* A leg this device does not have is pulled, never pushed. When the
            server could not hand it over, the upload that followed put an
@@ -31588,7 +31855,6 @@ async function reconcileVoyageLegs(legs, opts){
         state.entries = [];
         continue;
       }
-      await archiveActiveVoyageLeg();
       results.push({ voyage: vn, condition: cond, entryCount: (state.entries || []).length });
     }
   } finally {
@@ -31728,7 +31994,17 @@ async function onVoyageBackupMessage(ev){
       await commitOpenWorkBeforeSync();
       const mode = msg.mode === 'merge' ? 'merge' : 'replace';
       const res = await importVesselExport(msg.payload, { mode });
-      reply({ message: `Vessel ${res.vessel.name} imported (${res.written} records, mode ${res.mode}).` });
+      /* Say which it was. The caller shows this to the engineer, and "imported"
+         for a ship that was already on the list is how a duplicate goes
+         unnoticed -- matched now means matched, by hull. */
+      reply({
+        matched: !!res.replacing,
+        vesselName: res.vessel.name,
+        written: res.written,
+        message: res.replacing
+          ? `Vessel ${res.vessel.name} was already on this device's list — ${res.written} record(s) folded in (mode ${res.mode}).`
+          : `Vessel ${res.vessel.name} added to this device's list (${res.written} records, mode ${res.mode}).`
+      });
     } else if (msg.action === 'get-sync-settings') {
       ensureSyncConfig();
       await applyMirroredSyncCredentials();
@@ -35489,7 +35765,42 @@ async function syncActiveVesselFromChengAio(forceVessel){
       || (nameKey && normalizeVesselNameForAio(v.name) === nameKey)
     ) || null;
   }
-  if (!match) return false;
+  /* No local record for the ship the shell is on.
+     
+     Returning false here is what made "I activated another vessel and the
+     page still shows the old one" happen: a ship added in the shell, or one
+     that only ever existed on the shell side, has no counterpart in this
+     module's own fleet, so the switch silently did nothing and every page
+     here kept naming the previous ship. Silently showing the wrong vessel is
+     the worst of the three options.
+     
+     So the ship is created here from what the shell knows -- its name and
+     IMO -- and made active. It arrives with no tank table and no opening
+     stock, which the engineer fills in; what matters is that the program is
+     on the ship he selected. matchVesselForImport identifies by hull, so a
+     later import of the same vessel folds into this record instead of adding
+     another. */
+  if (!match) {
+    const createName = String(hint.name || hint.vesselName || '').trim();
+    if (!createName) return false;
+    try {
+      const created = await importVesselExport({
+        format: VESSEL_EXPORT_FORMAT,
+        vessel: { name: createName, slug: hint.slug || slug || undefined, imo: hint.imo || '' },
+        setup: { vesselName: createName, imoNo: hint.imo || '' },
+        stores: {}
+      }, { mode: 'merge' });
+      /* importVesselExport writes activeVesselId and calls loadVesselFromDb
+         itself, so the ship is already open; switching again would load it
+         a second time. */
+      const createdOk = !!(created && created.vessel);
+      paintActiveVesselLabel(createName);
+      return createdOk;
+    } catch (err) {
+      console.warn('AIO vessel sync could not add the shell vessel:', err && err.message);
+      return false;
+    }
+  }
   if (match.id !== state.activeVesselId) await switchVessel(match.id);
   applyChengAioIdentityOverlay();
   return true;
@@ -35521,7 +35832,32 @@ function installChengAioVesselSync(){
       applyChengAioIdentityOverlay();
       return;
     }
+    if (msg.type === 'chengaio-load-vessel-data'){
+      runChengAioLatestLoad(msg.vessel).then((result) => {
+        /* null means a load is already in progress and that load reports. */
+        if (!result) return;
+        try {
+          window.parent.postMessage(Object.assign({
+            type: 'chengaio-vessel-data-loaded',
+            program: 'voyage'
+          }, result), '*');
+        } catch (_) {}
+      }).catch((err) => {
+        console.warn('AIO load vessel data:', err && err.message);
+        try {
+          window.parent.postMessage({
+            type: 'chengaio-vessel-data-loaded',
+            program: 'voyage',
+            loaded: 'error',
+            error: err && err.message
+          }, '*');
+        } catch (_) {}
+      });
+      return;
+    }
     if (msg.type !== 'chengaio-vessel-changed') return;
+    /* Load vessel data performs its own switch. A parallel notice would open the ship twice. */
+    try { if (sessionStorage.getItem('chengAioLoadInProgress') === '1') return; } catch (_) {}
     syncActiveVesselFromChengAio(msg.vessel).catch((err) => {
       console.warn('AIO vessel sync:', err && err.message);
     });
@@ -36597,6 +36933,18 @@ document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPa
       }
     }catch(orbErr){ console.warn('e-ORB init', orbErr); }
 
+    /* Switch to the suite's ship before the first paint. Doing it afterwards
+       left the previous ship's name in the header until a long save finished. */
+    if (isChengAioEmbedded()) {
+      try {
+        installChengAioVesselSync();
+        await syncActiveVesselFromChengAio();
+        paintActiveVesselLabel();
+      } catch (syncErr) {
+        console.warn('AIO vessel sync before first paint:', syncErr);
+      }
+    }
+
     /* First paint with loaded vessel data — defer one-time formula rebuild so the
        UI is usable while older voyages catch up in the background. */
     updateActivity('boot', { label: 'Refreshing the program…' });
@@ -36683,12 +37031,36 @@ document.getElementById('btnFoCopyPassword')?.addEventListener('click', copyFoPa
          and ?page=data is exactly how the AIO Backup screen opens this app. */
       applyConsumptionPlanVisibility();
       if (isChengAioEmbedded()) {
+        const wantLatest = /[?&]aioLoadLatest=1\b/.test(location.search || '')
+          || (function(){ try { return sessionStorage.getItem('chengAioLoadLatest') === '1'; } catch (_) { return false; } })();
         try { window.parent.postMessage({ type: 'chengaio-voyage-ready' }, '*'); } catch (_) {}
         try {
           installChengAioVesselSync();
-          await syncActiveVesselFromChengAio();
+          const switched = await syncActiveVesselFromChengAio();
+          if (wantLatest){
+            try { sessionStorage.removeItem('chengAioLoadLatest'); } catch (_) {}
+            const result = switched === false
+              ? { loaded: 'empty', voyageNumber: '', condition: 'B', entryCount: 0 }
+              : await loadLatestVoyageDataForActiveVessel();
+            try {
+              window.parent.postMessage(Object.assign({
+                type: 'chengaio-vessel-data-loaded',
+                program: 'voyage'
+              }, result || { loaded: 'empty', entryCount: 0 }), '*');
+            } catch (_) {}
+          }
         } catch (syncErr) {
           console.warn('AIO vessel sync on boot:', syncErr);
+          if (wantLatest){
+            try {
+              window.parent.postMessage({
+                type: 'chengaio-vessel-data-loaded',
+                program: 'voyage',
+                loaded: 'error',
+                error: syncErr && syncErr.message
+              }, '*');
+            } catch (_) {}
+          }
         }
       }
     } catch (_) {}

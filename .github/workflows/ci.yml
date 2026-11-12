@@ -70,6 +70,11 @@ jobs:
       - name: Check sync and load progress reporting
         run: node tests/test_activity_progress.js
 
+      - name: Load vessel data and hull matching
+        run: |
+          node tests/test_load_vessel_data.js
+          node tests/test_vessel_import_match.js
+
       - name: Note calendar and alarm
         run: |
           node tests/test_note_reminders.js
