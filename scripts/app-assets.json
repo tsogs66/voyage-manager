@@ -18,6 +18,7 @@
     "save-file.js",
     "camera-capture.js",
     "guide.js",
+    "note-reminders.js",
     "notes.js",
     "clock-picker.js",
     "signed-numeric-input.js",
