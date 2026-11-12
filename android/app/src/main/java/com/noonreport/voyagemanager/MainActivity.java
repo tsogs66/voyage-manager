@@ -72,10 +72,11 @@ public class MainActivity extends BridgeActivity {
       if (!bridgesInstalled) {
         webView.addJavascriptInterface(new PrintBridge(), "ChengAndroidPrint");
         webView.addJavascriptInterface(new FileBridge(), "ChengAndroidFiles");
+        webView.addJavascriptInterface(new ReminderBridge(this), "ChengAndroidReminders");
         bridgesInstalled = true;
       }
       webView.post(() -> webView.evaluateJavascript(
-          "window.__CHENG_ANDROID_PRINT__=true;window.__CHENG_ANDROID_FILES__=true;"
+          "window.__CHENG_ANDROID_PRINT__=true;window.__CHENG_ANDROID_FILES__=true;window.__CHENG_ANDROID_REMINDERS__=true;"
               + "try{window.dispatchEvent(new CustomEvent('cheng-android-print-ready'));}catch(e){}",
           null
       ));
