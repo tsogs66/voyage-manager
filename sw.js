@@ -33,6 +33,7 @@ const PRECACHE = [
   './camera-capture.js',
   './guide.js',
   './note-reminders.js',
+  './lan-sync.js',
   './notes.js',
   './clock-picker.js',
   './signed-numeric-input.js',
