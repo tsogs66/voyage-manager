@@ -235,18 +235,33 @@ public class ReminderBootReceiver extends BroadcastReceiver {
 const BRIDGE = `package ${PKG};
 
 import android.app.Activity;
+import android.content.ContentResolver;
+import android.content.ContentUris;
+import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
+import android.net.Uri;
 import android.os.Build;
 import android.provider.CalendarContract;
 import android.webkit.JavascriptInterface;
 
+import java.util.TimeZone;
+
 /**
- * What the Notes page can ask of the phone: keep these alarms, and open the
- * calendar to save this event. The page is the only caller.
+ * What the Notes page can ask of the phone: keep these alarms, and keep this
+ * note's event in the calendar. The page is the only caller.
+ *
+ * A note's calendar event is written straight into the calendar and remembered
+ * against the note's id, so editing the note changes that same event instead of
+ * leaving the old one behind and opening a screen to add another.
  */
 public class ReminderBridge {
   private static final int NOTIFY_REQUEST = 4711;
+  private static final int CALENDAR_REQUEST = 4712;
+  private static final String CAL_PREFS = "cheng_calendar_events";
   private final Activity activity;
 
   ReminderBridge(Activity activity) {
@@ -265,9 +280,88 @@ public class ReminderBridge {
     }
   }
 
+  /** "granted" once the calendar can be read and written. */
+  @JavascriptInterface
+  public String calendarPermission() {
+    if (Build.VERSION.SDK_INT < 23) return "granted";
+    boolean read = activity.checkSelfPermission("android.permission.READ_CALENDAR") == PackageManager.PERMISSION_GRANTED;
+    boolean write = activity.checkSelfPermission("android.permission.WRITE_CALENDAR") == PackageManager.PERMISSION_GRANTED;
+    return read && write ? "granted" : "denied";
+  }
+
+  /** Asks the user once; the page polls calendarPermission() for the answer. */
+  @JavascriptInterface
+  public void requestCalendarPermission() {
+    if (Build.VERSION.SDK_INT < 23) return;
+    activity.runOnUiThread(() -> activity.requestPermissions(
+        new String[] {"android.permission.READ_CALENDAR", "android.permission.WRITE_CALENDAR"}, CALENDAR_REQUEST));
+  }
+
   /**
-   * Opens the calendar's new-event screen, filled in. The user saves it there:
-   * nothing is written without their say, and no calendar permission is held.
+   * Puts the note in the calendar, or brings its event up to date. Returns
+   * "ok:inserted", "ok:updated", "denied" (no permission), "nocalendar" (no
+   * writable calendar on the device) or "error:...".
+   */
+  @JavascriptInterface
+  public String upsertCalendarEvent(String noteId, String title, String description,
+                                    double startMs, double durationMin, double leadMin) {
+    try {
+      if (!"granted".equals(calendarPermission())) return "denied";
+      if (noteId == null || noteId.isEmpty()) return "error:no id";
+      ContentResolver cr = activity.getContentResolver();
+      long start = (long) startMs;
+      long end = start + (long) (durationMin * 60000d);
+      SharedPreferences prefs = activity.getSharedPreferences(CAL_PREFS, Context.MODE_PRIVATE);
+      long eventId = prefs.getLong(noteId, -1L);
+      boolean exists = eventId >= 0 && eventExists(cr, eventId);
+
+      ContentValues v = new ContentValues();
+      v.put(CalendarContract.Events.TITLE, title);
+      v.put(CalendarContract.Events.DESCRIPTION, description);
+      v.put(CalendarContract.Events.DTSTART, start);
+      v.put(CalendarContract.Events.DTEND, end);
+      v.put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().getID());
+      v.put(CalendarContract.Events.HAS_ALARM, 1);
+
+      if (exists) {
+        cr.update(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId), v, null, null);
+        replaceReminder(cr, eventId, (int) leadMin);
+        return "ok:updated";
+      }
+      long calendarId = writableCalendarId(cr);
+      if (calendarId < 0) return "nocalendar";
+      v.put(CalendarContract.Events.CALENDAR_ID, calendarId);
+      Uri created = cr.insert(CalendarContract.Events.CONTENT_URI, v);
+      if (created == null) return "error:the calendar refused the event";
+      eventId = ContentUris.parseId(created);
+      prefs.edit().putLong(noteId, eventId).apply();
+      replaceReminder(cr, eventId, (int) leadMin);
+      return "ok:inserted";
+    } catch (Exception e) {
+      return "error:" + e.getMessage();
+    }
+  }
+
+  /** Takes the note's event out of the calendar. "ok", "none" (it had none) or "denied". */
+  @JavascriptInterface
+  public String removeCalendarEvent(String noteId) {
+    try {
+      SharedPreferences prefs = activity.getSharedPreferences(CAL_PREFS, Context.MODE_PRIVATE);
+      long eventId = prefs.getLong(noteId, -1L);
+      if (eventId < 0) return "none";
+      if (!"granted".equals(calendarPermission())) return "denied";
+      activity.getContentResolver().delete(
+          ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId), null, null);
+      prefs.edit().remove(noteId).apply();
+      return "ok";
+    } catch (Exception e) {
+      return "error:" + e.getMessage();
+    }
+  }
+
+  /**
+   * Opens the calendar's new-event screen, filled in, for a phone where the
+   * calendar permission was refused. The user saves it there.
    */
   @JavascriptInterface
   public boolean addToCalendar(String title, String description, double startMs, double durationMin, double leadMin) {
@@ -293,6 +387,66 @@ public class ReminderBridge {
     }
   }
 
+  private boolean eventExists(ContentResolver cr, long eventId) {
+    Cursor c = null;
+    try {
+      c = cr.query(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId),
+          new String[] {CalendarContract.Events._ID, CalendarContract.Events.DELETED}, null, null, null);
+      return c != null && c.moveToFirst() && c.getInt(1) == 0;
+    } catch (Exception e) {
+      return false;
+    } finally {
+      if (c != null) c.close();
+    }
+  }
+
+  /** The calendar to put events in: one the user can write to, their own account's first. */
+  private long writableCalendarId(ContentResolver cr) {
+    Cursor c = null;
+    try {
+      c = cr.query(CalendarContract.Calendars.CONTENT_URI,
+          new String[] {CalendarContract.Calendars._ID, CalendarContract.Calendars.ACCOUNT_TYPE,
+              CalendarContract.Calendars.ACCOUNT_NAME, CalendarContract.Calendars.OWNER_ACCOUNT},
+          CalendarContract.Calendars.VISIBLE + "=1 AND "
+              + CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL + ">=" + CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR,
+          null, null);
+      long best = -1;
+      int bestScore = -1;
+      while (c != null && c.moveToNext()) {
+        int score = 0;
+        String type = c.getString(1);
+        String account = c.getString(2);
+        String owner = c.getString(3);
+        if (account != null && account.equals(owner)) score += 4;
+        if (type != null && !CalendarContract.ACCOUNT_TYPE_LOCAL.equals(type)) score += 2;
+        if (score > bestScore) {
+          bestScore = score;
+          best = c.getLong(0);
+        }
+      }
+      return best;
+    } catch (Exception e) {
+      return -1;
+    } finally {
+      if (c != null) c.close();
+    }
+  }
+
+  /** One alert, at the lead the note asked for, in place of whatever the event had. */
+  private void replaceReminder(ContentResolver cr, long eventId, int leadMin) {
+    try {
+      cr.delete(CalendarContract.Reminders.CONTENT_URI,
+          CalendarContract.Reminders.EVENT_ID + "=?", new String[] {String.valueOf(eventId)});
+      ContentValues r = new ContentValues();
+      r.put(CalendarContract.Reminders.EVENT_ID, eventId);
+      r.put(CalendarContract.Reminders.MINUTES, Math.max(0, leadMin));
+      r.put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT);
+      cr.insert(CalendarContract.Reminders.CONTENT_URI, r);
+    } catch (Exception ignored) {
+      /* The event is in; only its alert is missing. */
+    }
+  }
+
   /** From Android 13 a notification, and so the alarm's ring, needs the user's yes. */
   private void askToNotify() {
     if (Build.VERSION.SDK_INT < 33) return;
@@ -304,11 +458,160 @@ public class ReminderBridge {
 }
 `;
 
+
+const SPEECH = `package ${PKG};
+
+import android.app.Activity;
+import android.content.Context;
+import android.media.AudioAttributes;
+import android.os.Bundle;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import android.speech.tts.Voice;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+/**
+ * The Android WebView does not speak. Chrome's speechSynthesis is there in a
+ * browser, but inside this app it either does not exist or has no voices, so
+ * the bunkering warning was a horn and nothing else. The tablet's own
+ * text-to-speech engine (Samsung's or Google's) is reached here instead.
+ *
+ * It prefers a voice stored on the device: one that has to be fetched from a
+ * server says nothing at sea. The page is told when the order has been spoken
+ * (the event cheng-tts) so the horn can come back up.
+ */
+public class SpeechBridge {
+  private final WebView web;
+  private TextToSpeech tts;
+  private volatile String state = "starting";
+  private final List<Runnable> waiting = new ArrayList<>();
+
+  SpeechBridge(Activity activity, WebView web) {
+    this.web = web;
+    try {
+      tts = new TextToSpeech(activity.getApplicationContext(), status -> {
+        if (status != TextToSpeech.SUCCESS) {
+          state = "unavailable";
+          return;
+        }
+        configure();
+        state = "ready";
+        List<Runnable> run;
+        synchronized (waiting) {
+          run = new ArrayList<>(waiting);
+          waiting.clear();
+        }
+        for (Runnable r : run) r.run();
+      });
+    } catch (Exception e) {
+      state = "unavailable";
+    }
+  }
+
+  private void configure() {
+    try {
+      tts.setAudioAttributes(new AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_MEDIA)
+          .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+          .build());
+      Voice best = null;
+      int bestScore = Integer.MIN_VALUE;
+      Set<Voice> voices = tts.getVoices();
+      if (voices != null) {
+        for (Voice v : voices) {
+          Locale l = v.getLocale();
+          if (l == null || !"en".equalsIgnoreCase(l.getLanguage())) continue;
+          if (v.isNetworkConnectionRequired()) continue;
+          if (v.getFeatures() != null && v.getFeatures().contains("notInstalled")) continue;
+          int score = v.getQuality();
+          if ("GB".equalsIgnoreCase(l.getCountry())) score += 50;
+          if (score > bestScore) {
+            bestScore = score;
+            best = v;
+          }
+        }
+      }
+      if (best != null) {
+        tts.setVoice(best);
+      } else if (tts.isLanguageAvailable(Locale.UK) >= TextToSpeech.LANG_AVAILABLE) {
+        tts.setLanguage(Locale.UK);
+      } else {
+        tts.setLanguage(Locale.US);
+      }
+      tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+        @Override public void onStart(String id) {}
+        @Override public void onDone(String id) { finished(id, "done"); }
+        @Override public void onError(String id) { finished(id, "error"); }
+      });
+    } catch (Exception ignored) {
+      /* the default voice still speaks */
+    }
+  }
+
+  private void finished(String id, String how) {
+    if (id == null || !id.endsWith(":last") || web == null) return;
+    web.post(() -> web.evaluateJavascript(
+        "try{window.dispatchEvent(new CustomEvent('cheng-tts',{detail:{state:'" + how + "'}}));}catch(e){}", null));
+  }
+
+  /** "ready", "starting" (the engine is still binding) or "unavailable" (no engine). */
+  @JavascriptInterface
+  public String status() {
+    return state;
+  }
+
+  /**
+   * Speaks the phrases in order, a short pause between them. Returns false
+   * when this device has no speech engine, so the page can try another way.
+   */
+  @JavascriptInterface
+  public boolean speak(final String phrasesJoined, final float rate, final float pitch) {
+    if ("unavailable".equals(state) || tts == null) return false;
+    final Runnable go = () -> {
+      try {
+        tts.stop();
+        tts.setSpeechRate(rate > 0 ? rate : 0.9f);
+        tts.setPitch(pitch > 0 ? pitch : 0.9f);
+        String[] parts = phrasesJoined == null ? new String[0] : phrasesJoined.split("\\\\|");
+        String stamp = String.valueOf(System.nanoTime());
+        for (int i = 0; i < parts.length; i++) {
+          boolean last = i == parts.length - 1;
+          Bundle params = new Bundle();
+          params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1f);
+          tts.speak(parts[i], TextToSpeech.QUEUE_ADD, params, stamp + ":" + i + (last ? ":last" : ""));
+          if (!last) tts.playSilentUtterance(220, TextToSpeech.QUEUE_ADD, stamp + ":gap" + i);
+        }
+      } catch (Exception ignored) {
+      }
+    };
+    if ("starting".equals(state)) {
+      synchronized (waiting) { waiting.add(go); }
+    } else {
+      go.run();
+    }
+    return true;
+  }
+
+  @JavascriptInterface
+  public void stop() {
+    try { if (tts != null) tts.stop(); } catch (Exception ignored) { }
+  }
+}
+`;
+
 /** Manifest additions: permissions, and the two receivers. */
 const PERMISSIONS = [
   'android.permission.POST_NOTIFICATIONS',
   'android.permission.RECEIVE_BOOT_COMPLETED',
   'android.permission.VIBRATE',
+  'android.permission.READ_CALENDAR',
+  'android.permission.WRITE_CALENDAR',
 ];
 
 const RECEIVERS = `

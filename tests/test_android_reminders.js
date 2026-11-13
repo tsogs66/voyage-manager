@@ -27,8 +27,11 @@ for (const f of ['ReminderScheduler', 'ReminderReceiver', 'ReminderBootReceiver'
 }
 check('the page can reach the bridge as ChengAndroidReminders', /addJavascriptInterface\(new ReminderBridge\(this\), "ChengAndroidReminders"\)/.test(read('MainActivity.java')));
 check('alarms go to the system clock', /setAlarmClock/.test(read('ReminderScheduler.java')));
-check('the calendar hand-off opens its own event screen, with no calendar permission',
-  /ACTION_INSERT/.test(read('ReminderBridge.java')) && !/READ_CALENDAR|WRITE_CALENDAR/.test(manifest));
+check('a note\'s event is written straight into the calendar', /upsertCalendarEvent/.test(read('ReminderBridge.java')) && /cr\.insert\(CalendarContract\.Events\.CONTENT_URI/.test(read('ReminderBridge.java')));
+check('an edit updates that same event, remembered by the note id', /cr\.update\(ContentUris\.withAppendedId/.test(read('ReminderBridge.java')) && /prefs\.getLong\(noteId/.test(read('ReminderBridge.java')));
+check('it is removed when the note is deleted', /removeCalendarEvent/.test(read('ReminderBridge.java')));
+check('the calendar\'s own event screen stays as the fallback', /ACTION_INSERT/.test(read('ReminderBridge.java')));
+check('calendar access is declared', /android\.permission\.READ_CALENDAR/.test(manifest) && /android\.permission\.WRITE_CALENDAR/.test(manifest));
 for (const perm of ['POST_NOTIFICATIONS', 'RECEIVE_BOOT_COMPLETED']) {
   check(perm + ' is requested', manifest.includes('android.permission.' + perm));
 }
