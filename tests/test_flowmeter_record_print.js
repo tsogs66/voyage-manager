@@ -103,7 +103,12 @@ check('fit prefers zoom on desktop, transform on Android', /zoom shrinks layout 
 check('print document re-fits on load for Android', /Android print WebView re-fits/.test(HTML) && /fitLogEntryDataRoot\.toString\(\)/.test(HTML));
 check('print forces iframe layout before fit', /void iframe\.offsetHeight[\s\S]{0,80}fitLogEntryDataRoot\(doc\)/.test(HTML));
 check('LED includes ME LO and tanks ROB fields', /ledMini\('ME LO temp'\)/.test(HTML) && /ledMini\('Bilge ROB/.test(HTML) && /ledField\('FW ROB/.test(HTML));
-check('preview sample opens without noopener flag', /function previewLogEntryDataSample\(\)\{[\s\S]{0,250}window\.open\('',\s*'_blank',\s*'width=1280,height=900'\)/.test(HTML));
+/* The preview is an in-page viewer (zoomable, works in the Android app and the AIO frame), not window.open:
+   the card fits its own A4 box once the preview document exists. */
+check('preview sample opens in the in-page viewer', /function previewLogEntryDataSample\(\)\{[\s\S]{0,700}ChengFileViewer\.openHtml\(/.test(HTML));
+check('preview sample fits the card inside the viewer document', /previewLogEntryDataSample\(\)\{[\s\S]{0,900}onDocument:[^\n]*fitLogEntryDataRoot\(doc\)/.test(HTML));
+check('flowmeter sample opens in the in-page viewer', /function previewFlowmeterRecordSample\(\)\{[\s\S]{0,2500}ChengFileViewer\.openHtml\(/.test(HTML));
+check('no preview uses window.open', !/window\.open\(/.test(HTML));
 check('remarks outside body above footer', /<\/div>\s*<div class="pr-led-remarks">[\s\S]{0,200}pr-led-foot/.test(HTML));
 check('maximized layout packed body', /pr-led-body\{[\s\S]{0,80}flex:0 0 auto/.test(HTML));
 check('edge inset avoids left/top clip', /padding:4\.5mm 4\.2mm 4\.2mm/.test(HTML));
