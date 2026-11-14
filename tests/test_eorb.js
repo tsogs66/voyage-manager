@@ -537,6 +537,41 @@ console.log('\nretention stays live and every entry is checked against tank limi
   checkTrue('Part II residues: taking more than the slop tank holds is an error', j.some(w => w.code === 'NEGATIVE_ROB'));
 }
 
+console.log('\ntanker cargo: loading, transfer and unloading move the tank R.O.B. and are checked');
+{
+  const tk = EORB.defaultOrbSetup({ flag: 'MH', shipType: 'tanker', tanks: { cargo: [
+    { id: 'c1', name: 'No.1 Cargo P', capacityM3: 1000, robM3: 400 },
+    { id: 'c2', name: 'No.1 Cargo S', capacityM3: 1000, robM3: 100 }] } });
+  const run = (code, items, v) => { const f = EORB.autofillOperationValues(tk, 2, code, items, v);
+    return { f, codes: EORB.capacityWarnings(tk, 2, code, items, f.values).filter(w => w.level !== 'info').map(w => w.code) }; };
+  let r = run('A', ['1', '2', '3'], { place: 'X', oilType: 'Crude', tanks: ['c1'], qtyAdded: 300 });
+  check('loading: total content follows the quantity loaded', r.f.values.totalContent, 700);
+  check('and is live', r.f.derived.indexOf('totalContent') !== -1, true);
+  r = run('A', ['1', '2', '3'], { tanks: ['c1'], qtyAdded: 700 });
+  check('loading past the capacity is an overfill', r.codes, ['OVERFILL']);
+  r = run('A', ['1', '2', '3'], { tanks: ['c1', 'c2'], qtyAdded: 500 });
+  checkTrue('several tanks without a split are reported, not guessed', r.f.notes.some(n => /several tanks/.test(n)) && r.f.values.totalContent === undefined);
+  r = run('A', ['1', '2', '3'], { tanks: ['c1', 'c2'], qtyAdded: 500, qtySplit: 'c1=300, c2=200' });
+  check('a per-tank split gives the total content', r.f.values.totalContent, 1000);
+  const rob = JSON.parse(JSON.stringify(tk));
+  EORB.applyOperationRob(rob, 2, 'A', ['1', '2', '3'], { tanks: ['c1', 'c2'], qtyAdded: 500, qtySplit: 'c1=300, c2=200' });
+  check('saving the load updates each tank', rob.tanks.cargo.map(t => t.robM3), [700, 300]);
+  r = run('B', ['4.1', '4.2', '5'], { fromTank: ['c1'], toTank: ['c2'], qty: 150, emptied: 'No' });
+  check('transfer: retained and receiving total follow the quantity', [r.f.values.retained, r.f.values.toTotal], [250, 250]);
+  r = run('B', ['4.1', '4.2', '5'], { fromTank: ['c2'], toTank: ['c1'], qty: 150, emptied: 'No' });
+  checkTrue('moving more than the source holds is an error', r.codes.indexOf('NEGATIVE_ROB') !== -1);
+  const mv = JSON.parse(JSON.stringify(tk));
+  EORB.applyOperationRob(mv, 2, 'B', ['4.1', '4.2', '5'], { fromTank: ['c1'], toTank: ['c2'], qty: 150, emptied: 'No' });
+  check('saving the transfer moves the R.O.B.', mv.tanks.cargo.map(t => t.robM3), [250, 250]);
+  r = run('C', ['6', '7', '8'], { tanks: ['c1'], emptied: 'No', retained: 50 });
+  check('unloading with a quantity retained is accepted', r.codes, []);
+  r = run('C', ['6', '7', '8'], { tanks: ['c2'], emptied: 'No', retained: 500 });
+  checkTrue('retaining more than the tank held is an error', r.codes.indexOf('ROB_EXCEEDED') !== -1);
+  const un = JSON.parse(JSON.stringify(tk));
+  EORB.applyOperationRob(un, 2, 'C', ['6', '7', '8'], { tanks: ['c1', 'c2'], emptied: 'Yes' });
+  check('unloading with the tanks emptied empties them', un.tanks.cargo.map(t => t.robM3), [0, 0]);
+}
+
 console.log('\nPart III only where the flag requires it');
 {
   const withPartIII = EORB.FLAGS.filter(f => EORB.flagHasPartIII({ flag: f.code })).map(f => f.code);

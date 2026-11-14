@@ -56,6 +56,9 @@ function run(device, server) {
     slimPrintRecord: (r) => r,
     ensureSyncConfig: () => box.sync,
     applyVesselMiscCarry: () => {},
+    /* The oil record book has its own tests; this one is about voyage legs. */
+    adoptOrbEntries: (list) => list,
+    collectedOrbEntries: (body) => ((body && body.orbEntries) || []),
   });
   box.state = {
     activeVesselId: 'v1',
