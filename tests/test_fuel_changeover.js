@@ -59,9 +59,10 @@ vm.createContext(sandbox);
 vm.runInContext([
   extract('numOrNull'),
   extract('computeFuelChangeover'),
+  extract('computeFuelChangeoverMulti'),
   extract('changeoverThermalMinutes')
 ].join('\n'), sandbox);
-const { computeFuelChangeover, changeoverThermalMinutes } = sandbox;
+const { computeFuelChangeover, computeFuelChangeoverMulti, changeoverThermalMinutes } = sandbox;
 
 /* A realistic case: 3.0 m3 service system, 24 MT/day at 890 kg/m3,
    0.48 % in service, changing to 0.07 %, limit 0.10 %. */
@@ -172,6 +173,27 @@ check('and says the calculated time is only a plan',
   /the entry in the record is the completion actually observed/.test(HTML), true);
 check('copying to setup warns the record needs observed times',
   /These are the planned times\. Record the times actually observed/.test(HTML), true);
+
+
+console.log('\nper-consumer windows: complete when the slowest consumer is under the limit');
+{
+  const me = { name: 'M/E', volumeM3: 3.0, consMtDay: 24 };
+  const ge = { name: 'G/E 1', volumeM3: 1.0, consMtDay: 3 };
+  const blr = { name: 'Boiler', volumeM3: 0.4, consMtDay: 2 };
+  const single = computeFuelChangeover(Object.assign({}, base, { volumeM3: me.volumeM3, consMtDay: me.consMtDay }));
+  const gen = computeFuelChangeover(Object.assign({}, base, { volumeM3: ge.volumeM3, consMtDay: ge.consMtDay }));
+  const multi = computeFuelChangeoverMulti(base, [me, ge, blr]);
+  check('the slowest consumer sets the time', multi.slowest, gen.hours > single.hours ? 'G/E 1' : 'M/E');
+  near('and the time is that consumer\'s', multi.hours, Math.max(single.hours, gen.hours), 1e-9);
+  const sum = [me, ge, blr].map(c => computeFuelChangeover(Object.assign({}, base, { volumeM3: c.volumeM3, consMtDay: c.consMtDay })).lowSulphurUsedMt).reduce((a, b) => a + b, 0);
+  near('low-sulphur fuel displaced is the sum over the consumers', multi.lowSulphurUsedMt, sum, 1e-9);
+  check('total consumption is the sum', multi.consMtDayTotal, 29);
+  check('one row per consumer, one marked slowest', [multi.perConsumer.length, multi.perConsumer.filter(r => r.slowest).length], [3, 1]);
+  check('no consumers falls back to the single window', computeFuelChangeoverMulti(base, []).hours, computeFuelChangeover(base).hours);
+  check('a consumer left half filled is ignored', computeFuelChangeoverMulti(base, [{ name: 'x', volumeM3: 2 }]).hours, computeFuelChangeover(base).hours);
+  const bad = computeFuelChangeoverMulti(base, [me, { name: 'Boiler', volumeM3: 1, consMtDay: 0 }]);
+  check('a consumer that cannot finish is named in the reason', [bad.ok, /^Boiler:/.test(bad.reason)], [false, true]);
+}
 
 console.log(fails ? `\nFAILED — ${fails} of ${checks} checks` : `\nPASSED — ${checks} checks`);
 process.exit(fails ? 1 : 0);
