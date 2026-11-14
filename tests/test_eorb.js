@@ -502,6 +502,41 @@ console.log('\ninput boxes cover what Appendix III asks for each item');
   check('G 24 reads quantity then oil type', EORB.buildItemLines(1, 'G', ['24'], { qty: 1.2, oilType: 'HFO' }, st)[0].text, '1.2 m³ HFO');
 }
 
+console.log('\nretention stays live and every entry is checked against tank limits');
+{
+  const st = EORB.defaultOrbSetup({ flag: 'MH', tanks: {
+    sludge: [{ id: 'sl1', name: 'Sludge Tank', capacityM3: 5, robM3: 4 }],
+    bilge: [{ id: 'bh', name: 'Bilge Holding', capacityM3: 6, robM3: 5.5 }],
+    bilgeWells: [{ id: 'bw', name: 'ER Wells', capacityM3: 1, robM3: 0.2 }] } });
+  st.equipment.incineratorM3PerH = 0.5; st.equipment.incineratorFitted = true;
+  const run = (p, c, items, v) => { const f = EORB.autofillOperationValues(st, p, c, items, v);
+    return { f, codes: EORB.capacityWarnings(st, p, c, items, f.values).map(w => w.code) }; };
+  let r = run(1, 'C', ['12.3'], { qtyDisposed: 2, tankEmptied: 'sl1', incinHours: 1 });
+  checkTrue('incineration faster than the rated capacity is an error', r.codes.indexOf('INCIN_RATE_EXCEEDED') !== -1);
+  check('and retained is worked out live', r.f.values.retained, 2);
+  check('retained is marked live (overwritten as the quantity changes)', r.f.derived.indexOf('retained') !== -1, true);
+  r = run(1, 'C', ['12.3'], { qtyDisposed: 0.5, tankEmptied: 'sl1', incinHours: 1 });
+  checkTrue('incineration at the rated capacity passes', r.codes.indexOf('INCIN_RATE_EXCEEDED') === -1);
+  r = run(1, 'C', ['12.1'], { qtyDisposed: 6, tankEmptied: 'sl1', receptionPort: 'X' });
+  checkTrue('taking more than is on board warns', r.codes.length > 0);
+  r = run(1, 'C', ['12.1'], { qtyDisposed: 1, tankEmptied: 'sl1', receptionPort: 'X', retained: 99 });
+  check('a stale retained figure is replaced when the quantity changes', r.f.values.retained, 3);
+  r = run(1, 'C', ['11.4'], { tank: 'sl1', manualCollected: 2 });
+  check('manual collection past the capacity is an overfill', r.codes, ['OVERFILL']);
+  check('and retention follows the collection', r.f.values.retention, 6);
+  r = run(1, 'D', ['13', '14', '15.3'], { qty: 1, toTank: 'bh', timeStart: '10:00', timeStop: '11:00' });
+  check('bilge to a holding tank over its capacity is an overfill', r.codes, ['OVERFILL']);
+  r = run(1, 'D', ['13', '14', '15.1'], { qty: 3, fromTank: 'bw', timeStart: '10:00', timeStop: '10:10' });
+  check('bilge wells are not checked or tracked', r.codes, []);
+  check('and give no retained figure', r.f.values.fromRetained, undefined);
+  r = run(1, 'D', ['13', '14', '15.1'], { qty: 3, fromTank: 'bh', timeStart: '10:00', timeStop: '10:10' });
+  check('no bilge pump rate check on a fast discharge', r.codes, []);
+  checkTrue('no bilge pump rate in the setup', st.equipment.bilgePumpM3PerH === undefined);
+  const stT = EORB.defaultOrbSetup({ flag: 'MH', shipType: 'tanker', tanks: { slop: [{ id: 'sp', name: 'Slop P', capacityM3: 100, robM3: 90 }] } });
+  const j = EORB.capacityWarnings(stT, 2, 'J', ['55', '56', '57.3'], { tanks: ['sp'], qty: 120 });
+  checkTrue('Part II residues: taking more than the slop tank holds is an error', j.some(w => w.code === 'NEGATIVE_ROB'));
+}
+
 console.log('\nPart III only where the flag requires it');
 {
   const withPartIII = EORB.FLAGS.filter(f => EORB.flagHasPartIII({ flag: f.code })).map(f => f.code);
