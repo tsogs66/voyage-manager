@@ -111,7 +111,9 @@ check('C.12 transfer is not a weekly inventory',
   EORB.isWeeklySludgeInventory({ code: 'C', selectedItems: ['12.2'] }), false);
 
 console.log('\nbunkering beORB layout — summary, per-tank MT added / ROB, sulphur %');
-const bunkerLayoutSetup = { tanks: { fuel: [
+/* Part III belongs to the flags whose book has one (Panama); every Part III check below runs on a Panama ship,
+   and the checks after 'Part III only where the flag requires it' show the other flags get none. */
+const bunkerLayoutSetup = { flag: 'PA', tanks: { fuel: [
   { id: 'fo1', name: 'No.1 H.F.O. TK.', frameNo: 'FR 71-101 (P)', capacityM3: 500, robM3: 100 },
   { id: 'fo2', name: 'No.2 H.F.O. TK.', frameNo: 'FR 41-71 (S)', capacityM3: 500, robM3: 200 }
 ] } };
@@ -157,7 +159,7 @@ check('accept when total matches per-tank sum',
   bunkerQtyOk.some(e => /must equal the sum of per-tank MT added/i.test(e)), false);
 
 console.log('\nlube bunkering uses the same per-tank MT added / ROB layout');
-const lubeSetup = { tanks: { lube: [
+const lubeSetup = { flag: 'PA', tanks: { lube: [
   { id: 'cyl1', name: 'Cyl. Oil TK.', capacityM3: 40, robM3: 8 },
   { id: 'sump1', name: 'M.E. Sump TK.', capacityM3: 30, robM3: 10 }
 ] } };
@@ -190,8 +192,7 @@ const lubeSupp = EORB.buildItemLines(1, 'H', ['26.4'], {
   place: 'Singapore', lubeType: 'Cylinder oil', lubeQty: 12,
   lubeTank: 'cyl1', lubeSplit: 'cyl1=12', lubeRobSplit: 'cyl1=20'
 }, lubeSetup);
-checkTrue('lube Part III supplement uses litres', lubeSupp.some(l =>
-  l.recordPart === 3 && /12 Ltrs bulk lubricating oil/i.test(l.text)));
+checkTrue('lube bunkering is not a Part III item on the official form', !lubeSupp.some(l => l.recordPart === 3));
 
 console.log('\nbunkering fuel family — residual vs distillate tanks');
 checkTrue('residual ISO list includes RMG 380', EORB.BUNKER_FUEL_FAMILY.residual.iso.indexOf('RMG 380') !== -1);
@@ -219,7 +220,7 @@ const incLines = EORB.buildItemLines(1, 'C', ['12.3'], {
   posStart: '01 deg 12 min N, 103 deg 51 min E', timeStart: '08:00',
   posEnd: '01 deg 18 min N, 103 deg 55 min E', timeStop: '10:30',
   oxygenPct: 8, chamberTempC: 850
-}, EORB.defaultOrbSetup({ equipment: { incineratorM3PerH: 0.05 }, tanks: { sludge: [
+}, EORB.defaultOrbSetup({ flag: 'PA', equipment: { incineratorM3PerH: 0.05 }, tanks: { sludge: [
   { id: 'sludge1', name: 'Sludge Tank', capacityM3: 5, robM3: 1 }
 ] } }));
 checkTrue('sludge burn keeps Code C quantity', incLines.some(l => l.itemNo === '12.3' && /0\.5 m³/.test(l.text)));
@@ -229,12 +230,12 @@ checkTrue('sludge burn records oxygen and temperature',
   incLines.some(l => l.itemNo === '7' && /8%/.test(l.text)) &&
   incLines.some(l => l.itemNo === '8' && /850 Deg Celsius/.test(l.text)));
 const owsLines = EORB.buildItemLines(1, 'I', ['I'], { remarks: 'Weekly test', testDurationMin: 15 },
-  EORB.defaultOrbSetup({}), 'ows-weekly-test');
-checkTrue('OWS weekly test adds Part III supplement', owsLines.some(l => l.recordPart === 3 && /OWS/i.test(l.text)));
+  EORB.defaultOrbSetup({ flag: 'PA' }), 'ows-weekly-test');
+checkTrue('OWS weekly test stays in Part I (no Part III item on the official form)', !owsLines.some(l => l.recordPart === 3));
 const debLines = EORB.buildItemLines(1, 'I', ['I'], {
   remarks: 'Fuel oil de-bunkered', extraQtyT: 50, extraPlace: 'Singapore', extraFromTank: 'fo1'
 }, bunkerLayoutSetup, 'debunker-fuel');
-checkTrue('de-bunkering adds Part III supplement', debLines.some(l => l.recordPart === 3 && /de-bunkering/i.test(l.text)));
+checkTrue('de-bunkering stays in Part I (no Part III item on the official form)', !debLines.some(l => l.recordPart === 3));
 const part3Book = EORB.bookRowsHtml([{
   date: '2026-09-01', code: 'H', part: 1, officerName: 'Test', officerRank: '2/E',
   officerSignedAt: '2026-09-01T12:00:00',
@@ -426,8 +427,14 @@ console.log('\nthe operation list covers what the flag e-ORB offers');
     ['I', 'I', 'garbage incinerated']
   ];
   const WANTED_PART3 = [
-    ['C', '2', 'change over completion from HFO to MGO'],
-    ['C', '3', 'change over commencement from MGO to HFO']
+    ['A', '1.1', 'recharge of ODS equipment'],
+    ['A', '1.4', 'discharge of ODS to a reception facility'],
+    ['A', '1.5', 'supply of ODS'],
+    ['B', '2', 'NOx Tier III engine status at ECA entry / exit'],
+    ['C', '3', 'bunkering SOx data'],
+    ['C', '4', 'low-sulphur changeover for an ECA'],
+    ['D', '5', 'vapour collection system'],
+    ['E', '6', 'use of incinerator']
   ];
   const part1 = EORB.SCENARIOS.filter(s => Number(s.part) === 1);
   const covered = (code, item) => part1.some(s => s.code === code && (s.items || []).indexOf(item) !== -1);
@@ -483,13 +490,83 @@ console.log('\nCode I carries the tank, quantity and duration MARPOL gives it no
     (owsTest.extraFields || []).some(f => f.name === 'testDurationMin'));
 }
 
+console.log('\ninput boxes cover what Appendix III asks for each item');
+{
+  const st = EORB.defaultOrbSetup({ flag: 'MH', shipType: 'tanker' });
+  const fieldsOf = (p, c, n) => EORB.getPartOps(p).find(o => o.code === c).items.find(i => i.no === n).fields.map(f => f.name);
+  checkTrue('C 11.4 asks where the oil was collected from', fieldsOf(1, 'C', '11.4').indexOf('manualSource') !== -1);
+  check('C 11.4 prints the source', EORB.buildItemLines(1, 'C', ['11.4'], { manualCollected: 0.3, manualSource: 'purifier room drain tank' }, st)[0].text, '0.3 m³ collected from purifier room drain tank');
+  checkTrue('G 30 asks for chemical type and quantity', ['chemType', 'chemQty'].every(n => fieldsOf(2, 'G', '30').indexOf(n) !== -1));
+  check('G 30 prints the chemicals', EORB.buildItemLines(2, 'G', ['30'], { method: 'Machine washing', chemType: 'Degreaser', chemQty: 0.4 }, st)[0].text, 'Machine washing, chemical cleaning with Degreaser, 0.4 m³');
+  check('E 16 position is a lat/lon box', EORB.getPartOps(1).find(o => o.code === 'E').items[0].fields.find(f => f.name === 'position').type, 'position');
+  check('G 24 reads quantity then oil type', EORB.buildItemLines(1, 'G', ['24'], { qty: 1.2, oilType: 'HFO' }, st)[0].text, '1.2 m³ HFO');
+}
+
+console.log('\nretention stays live and every entry is checked against tank limits');
+{
+  const st = EORB.defaultOrbSetup({ flag: 'MH', tanks: {
+    sludge: [{ id: 'sl1', name: 'Sludge Tank', capacityM3: 5, robM3: 4 }],
+    bilge: [{ id: 'bh', name: 'Bilge Holding', capacityM3: 6, robM3: 5.5 }],
+    bilgeWells: [{ id: 'bw', name: 'ER Wells', capacityM3: 1, robM3: 0.2 }] } });
+  st.equipment.incineratorM3PerH = 0.5; st.equipment.incineratorFitted = true;
+  const run = (p, c, items, v) => { const f = EORB.autofillOperationValues(st, p, c, items, v);
+    return { f, codes: EORB.capacityWarnings(st, p, c, items, f.values).map(w => w.code) }; };
+  let r = run(1, 'C', ['12.3'], { qtyDisposed: 2, tankEmptied: 'sl1', incinHours: 1 });
+  checkTrue('incineration faster than the rated capacity is an error', r.codes.indexOf('INCIN_RATE_EXCEEDED') !== -1);
+  check('and retained is worked out live', r.f.values.retained, 2);
+  check('retained is marked live (overwritten as the quantity changes)', r.f.derived.indexOf('retained') !== -1, true);
+  r = run(1, 'C', ['12.3'], { qtyDisposed: 0.5, tankEmptied: 'sl1', incinHours: 1 });
+  checkTrue('incineration at the rated capacity passes', r.codes.indexOf('INCIN_RATE_EXCEEDED') === -1);
+  r = run(1, 'C', ['12.1'], { qtyDisposed: 6, tankEmptied: 'sl1', receptionPort: 'X' });
+  checkTrue('taking more than is on board warns', r.codes.length > 0);
+  r = run(1, 'C', ['12.1'], { qtyDisposed: 1, tankEmptied: 'sl1', receptionPort: 'X', retained: 99 });
+  check('a stale retained figure is replaced when the quantity changes', r.f.values.retained, 3);
+  r = run(1, 'C', ['11.4'], { tank: 'sl1', manualCollected: 2 });
+  check('manual collection past the capacity is an overfill', r.codes, ['OVERFILL']);
+  check('and retention follows the collection', r.f.values.retention, 6);
+  r = run(1, 'D', ['13', '14', '15.3'], { qty: 1, toTank: 'bh', timeStart: '10:00', timeStop: '11:00' });
+  check('bilge to a holding tank over its capacity is an overfill', r.codes, ['OVERFILL']);
+  r = run(1, 'D', ['13', '14', '15.1'], { qty: 3, fromTank: 'bw', timeStart: '10:00', timeStop: '10:10' });
+  check('bilge wells are not checked or tracked', r.codes, []);
+  check('and give no retained figure', r.f.values.fromRetained, undefined);
+  r = run(1, 'D', ['13', '14', '15.1'], { qty: 3, fromTank: 'bh', timeStart: '10:00', timeStop: '10:10' });
+  check('no bilge pump rate check on a fast discharge', r.codes, []);
+  checkTrue('no bilge pump rate in the setup', st.equipment.bilgePumpM3PerH === undefined);
+  const stT = EORB.defaultOrbSetup({ flag: 'MH', shipType: 'tanker', tanks: { slop: [{ id: 'sp', name: 'Slop P', capacityM3: 100, robM3: 90 }] } });
+  const j = EORB.capacityWarnings(stT, 2, 'J', ['55', '56', '57.3'], { tanks: ['sp'], qty: 120 });
+  checkTrue('Part II residues: taking more than the slop tank holds is an error', j.some(w => w.code === 'NEGATIVE_ROB'));
+}
+
+console.log('\nPart III only where the flag requires it');
+{
+  const withPartIII = EORB.FLAGS.filter(f => EORB.flagHasPartIII({ flag: f.code })).map(f => f.code);
+  check('only Panama is confirmed to require a Part III', withPartIII, ['PA']);
+  const burn = { qtyDisposed: 0.5, tankEmptied: 'sludge1', retained: 0.2, incinHours: 10 };
+  const tanks = { sludge: [{ id: 'sludge1', name: 'Sludge Tank', capacityM3: 5, robM3: 1 }] };
+  EORB.FLAGS.forEach(f => {
+    const setup = EORB.defaultOrbSetup({ flag: f.code, tanks });
+    const needs = f.code === 'PA';
+    const lines = EORB.buildItemLines(1, 'C', ['12.3'], Object.assign({ posStart: '01 deg 12 min N, 103 deg 51 min E', timeStart: '08:00', posEnd: '01 deg 18 min N, 103 deg 55 min E', timeStop: '10:30', oxygenPct: 8, chamberTempC: 850 }, burn), setup);
+    check(f.code + ': sludge burn ' + (needs ? 'continues as Part III E' : 'is Code C only'), lines.some(l => l.recordPart === 3), needs);
+    const errs = EORB.validateEntry(1, 'C', ['12.3'], Object.assign({ posStart: '', timeStart: '' }, burn), setup, 'sludge-incinerated');
+    check(f.code + ': Part III E fields ' + (needs ? 'are required' : 'are not asked for'), errs.some(e => /Part III|Start Position|Oxygen/i.test(e)), needs);
+    check(f.code + ': Part III scenarios ' + (needs ? 'offered' : 'not offered'), EORB.getScenarios(setup, 3).length > 0, needs);
+    const bdn = EORB.buildItemLines(1, 'H', ['26.3'], { place: 'Singapore', fuelType: 'VLSFO', fuelQty: 10, fuelTank: 'fo1', fuelSplit: 'fo1=10', fuelRobSplit: 'fo1=20' }, EORB.defaultOrbSetup({ flag: f.code, tanks: { fuel: [{ id: 'fo1', name: 'HFO 1', capacityM3: 50, robM3: 10 }] } }));
+    check(f.code + ': bunker BDN ' + (needs ? 'adds' : 'does not add') + ' a Part III C supplement', bdn.some(l => l.recordPart === 3), needs);
+    const form = EORB.buildWizardFormSheet(1, 'C', EORB.getOperation(1, 'C'), setup, { scenarioId: 'sludge-incinerated' }, ['12.3']).html;
+    check(f.code + ': burn form ' + (needs ? 'has' : 'has no') + ' Part III E section', form.indexOf('Part III E') !== -1, needs);
+  });
+}
+
 console.log('\nPart III — fuel changeover (Annex VI Reg. 14.6)');
 {
-  const s5 = EORB.defaultOrbSetup({});
-  check('Part III operations', EORB.getPartOps(3).map(op => op.code), ['C', 'E']);
-  check('four changeover events', EORB.getPartOps(3)[0].items.map(i => i.no), ['1', '2', '3', '4']);
-  check('incinerator items are 6, 7 and 8', EORB.getPartOps(3)[1].items.map(i => i.no), ['6', '7', '8']);
-  check('a scenario for each changeover', EORB.getScenarios(s5, 3).length, 4);
+  const s5 = EORB.defaultOrbSetup({ flag: 'PA' });
+  check('Part III operations (official form A-E)', EORB.getPartOps(3).map(op => op.code), ['A', 'B', 'C', 'D', 'E']);
+  check('ODS items', EORB.getPartOps(3)[0].items.map(i => i.no), ['1', '1.1', '1.4', '1.5']);
+  check('SOx items 3 and 4', EORB.getPartOps(3)[2].items.map(i => i.no), ['3', '4']);
+  check('incinerator items are 6, 7 and 8', EORB.getPartOps(3)[4].items.map(i => i.no), ['6', '7', '8']);
+  check('Part III cards on a non-tanker (vapour collection is tankers only)', EORB.getScenarios(s5, 3).length, 8);
+  check('and on a tanker', EORB.getScenarios(EORB.defaultOrbSetup({ flag: 'PA', shipType: 'tanker' }), 3).length, 9);
   const garbScenario = EORB.getScenario('incinerator-garbage');
   check('garbage burning starts as Code I', garbScenario && garbScenario.code, 'I');
   check('garbage burning is a Part I entry', garbScenario && garbScenario.part, 1);
@@ -529,21 +606,27 @@ console.log('\nPart III — fuel changeover (Annex VI Reg. 14.6)');
   checkTrue('combustion chamber temperature', garbLines[2].text.indexOf('850 Deg Celsius') !== -1);
   const garb = garbLines[0];
   const garbHtml = EORB.buildPrintHtml(s5, [{ date: '2026-08-02', code: 'E', part: 3, lines: garbLines, officerName: 'A. Ruiz' }], 'test');
-  checkTrue('incinerator prints under its own heading', garbHtml.indexOf('Incinerator Record — Part III') !== -1);
+  checkTrue('incinerator prints under its own heading', garbHtml.indexOf('Oil Record Book and Emissions — Part III') !== -1);
   checkTrue('Part III code reads PART III E on the sheet', garbHtml.indexOf('PART III E') !== -1);
-  const v = { coTime: '06:30', coPosition: '51 20 N 002 10 E', coToGrade: 'LSMGO', coSulphur: 0.08, coVolume: 145 };
-  const done = EORB.buildItemLines(3, 'C', ['2'], v, s5)[0];
-  checkTrue('completion reads as completed', done.text.indexOf('Changeover completed') !== -1);
-  checkTrue('to low-sulphur fuel', done.text.indexOf('low-sulphur fuel') !== -1);
+  const v = { coEvent: 'Completed before entering the ECA', coTime: '06:30', coPosition: '51 20 N 002 10 E', coVolume: 145 };
+  const done = EORB.buildItemLines(3, 'C', ['4'], v, s5)[0];
+  checkTrue('completion reads as completed before the ECA', done.text.indexOf('Completed before entering the ECA') !== -1);
   checkTrue('carries the position', done.text.indexOf('51 20 N 002 10 E') !== -1);
   checkTrue('and the volume on board', done.text.indexOf('145 m³') !== -1);
-  const start = EORB.buildItemLines(3, 'C', ['3'], v, s5)[0];
-  checkTrue('the reverse leg reads as commenced', start.text.indexOf('Changeover commenced') !== -1);
-  checkTrue('and back to residual', start.text.indexOf('residual fuel') !== -1);
+  const start = EORB.buildItemLines(3, 'C', ['4'], Object.assign({}, v, { coEvent: 'Commenced after leaving the ECA' }), s5)[0];
+  checkTrue('the reverse leg reads as commenced after the ECA', start.text.indexOf('Commenced after leaving the ECA') !== -1);
+  const bk = EORB.buildItemLines(3, 'C', ['3'], { posStart: 'A', timeStart: '01:00', posEnd: 'B', timeStop: '03:00', bkType: 'VLSFO', bkApi: 20, bkDensity: 935, bkSulphur: 0.49 }, s5)[0];
+  checkTrue('item 3 carries type, density and sulphur', /VLSFO/.test(bk.text) && /935 kg\/m³/.test(bk.text) && /0\.49% m\/m/.test(bk.text));
+  const nox = EORB.buildItemLines(3, 'B', ['2'], { noxTime: '15:00', noxPosition: 'P', noxEngines: 'MAIN ENGINE / TIER III / STATUS ON' }, s5)[0];
+  checkTrue('item 2 carries time, position and engine status', /15:00/.test(nox.text) && /TIER III \/ STATUS ON/.test(nox.text));
+  const ods = EORB.buildItemLines(3, 'A', ['1.1'], { odsQty: 5, odsType: 'R-134a', odsEquipment: 'provision plant' }, s5)[0];
+  checkTrue('item 1.1 reads as a recharge in kg', /Recharge of 5 kg \(R-134a\)/.test(ods.text));
+  const vc = EORB.buildItemLines(3, 'D', ['5'], { vcPosition: 'P', vcPort: 'Rotterdam' }, s5)[0];
+  checkTrue('item 5 carries the port', /Port: Rotterdam/.test(vc.text));
   /* Changeover moves fuel between service tanks, not Annex I oil residue. */
-  check('no Annex I tank R.O.B. effect', EORB.applyOperationRob(s5, 3, 'C', ['2'], v), []);
+  check('no Annex I tank R.O.B. effect', EORB.applyOperationRob(s5, 3, 'C', ['4'], v), []);
   const html3 = EORB.buildPrintHtml(s5, [{ date: '2026-08-01', code: 'C', part: 3, lines: [done], officerName: 'A. Ruiz' }], 'test');
-  checkTrue('prints under its own heading', html3.indexOf('Fuel Oil Changeover Record — Part III') !== -1);
+  checkTrue('prints under its own heading', html3.indexOf('Oil Record Book and Emissions — Part III') !== -1);
   checkTrue('Part III code reads PART III C on the sheet', html3.indexOf('PART III C') !== -1);
 
   const seaForm = EORB.buildWizardFormSheet(1, 'D', EORB.getOperation(1, 'D'), s5,
@@ -747,7 +830,7 @@ console.log('\nOWS overboard discharge sequence (OCM test then valve unseal)');
     EORB.scenarioOpenErrors([], { date: '2026-09-29', scenarioId: 'bilge-ows-sea' }).length >= 2);
   const lr = EORB.defaultOrbSetup({ flag: 'LR' });
   const pa = EORB.defaultOrbSetup({ flag: 'PA' });
-  const co = EORB.getScenario('changeover-to-ls-complete');
+  const co = EORB.getScenario('p3-changeover-complete');
   checkTrue('Part III changeover warns on Liberia', !!EORB.scenarioFlagWarning(lr, co));
   check('Part III changeover is allowed on Panama', EORB.scenarioFlagWarning(pa, co), '');
 }
@@ -790,20 +873,26 @@ console.log('\nbeORB-style date / code / item No. columns');
 
 console.log('\nflag state ORB signatory policy');
 {
-  check('Marshall Islands requires dual signatures', EORB.flagSignatoryPolicy('MH').mode,
-    EORB.SIGNATORY_MODES.engineer_and_chief_engineer);
-  check('Liberia requires dual signatures (beORB layout)', EORB.flagSignatoryPolicy('LR').mode,
-    EORB.SIGNATORY_MODES.engineer_and_chief_engineer);
-  checkTrue('requiresDualSignatory helper', EORB.requiresDualSignatory('LR') && EORB.requiresDualSignatory('MH'));
+  /* Marshall Islands (MG 2-13-3 Rev. Dec/2017, MI-402A): the officer in charge signs; the Chief Engineer, Chief
+     Mate or an SMS-named person REVIEWS the entry, they do not co-sign it. */
+  check('Marshall Islands: the officer in charge signs', EORB.flagSignatoryPolicy('MH').mode, EORB.SIGNATORY_MODES.engineer_or_ce);
+  /* No flag asks for a second signature row today; the two-row layout stays available for a flag that does, so it
+     is exercised here with a stand-in flag. */
+  EORB.FLAGS.push({ code: 'ZZ', name: 'Two-row test flag', admin: 'test', language: 'English',
+    signatory: { mode: EORB.SIGNATORY_MODES.engineer_and_chief_engineer, label: 'Officer in charge + Chief Engineer', note: 'test' }, tips: [] });
+  /* Liberia (Marine Operations Note 07/2010) and Malta (Technical Notice MARPOL.7) name the officer in
+     charge as the signatory and the Master for each page; neither asks for the Chief Engineer as well. */
+  check('Liberia: the officer in charge signs', EORB.flagSignatoryPolicy('LR').mode, EORB.SIGNATORY_MODES.engineer_or_ce);
+  checkTrue('requiresDualSignatory helper', !EORB.requiresDualSignatory('LR') && !EORB.requiresDualSignatory('MH') && EORB.requiresDualSignatory('ZZ'));
   checkTrue('single-sign flags excluded', !EORB.requiresDualSignatory('PA') && !EORB.requiresDualSignatory('MT'));
-  check('Malta expects Chief Engineer only', EORB.flagSignatoryPolicy('MT').mode,
-    EORB.SIGNATORY_MODES.chief_engineer_only);
+  check('Malta: the officer in charge signs', EORB.flagSignatoryPolicy('MT').mode, EORB.SIGNATORY_MODES.engineer_or_ce);
+  check('Cyprus follows the Convention default', EORB.flagSignatoryPolicy('CY').mode, EORB.SIGNATORY_MODES.engineer_or_ce);
   checkTrue('C/E rank is recognised', EORB.isChiefEngineerRank('C/E'));
   checkTrue('4/E is not C/E', !EORB.isChiefEngineerRank('4/E'));
   const mtSetup = EORB.defaultOrbSetup({ flag: 'MT', chiefEng: 'A. Ruiz' });
-  check('Malta rejects non-C/E rank on save',
-    EORB.validateEntrySignatory(mtSetup, { officerName: 'Jay', officerRank: '4/E' }).length, 1);
-  const mhSetup = EORB.defaultOrbSetup({ flag: 'MH', chiefEng: 'Marvin C. Endozo' });
+  check('Malta accepts a 4/E as officer in charge',
+    EORB.validateEntrySignatory(mtSetup, { officerName: 'Jay', officerRank: '4/E' }).length, 0);
+  const mhSetup = EORB.defaultOrbSetup({ flag: 'ZZ', chiefEng: 'Marvin C. Endozo' });
   const mhEntry = {
     date: '2026-08-18', code: 'D', part: 1,
     officerName: 'Jaycee S. Lugtu', officerRank: '4/E', officerSignedAt: '2026-08-18',
@@ -813,6 +902,25 @@ console.log('\nflag state ORB signatory policy');
   check('dual policy prints two signature rows',
     (EORB.bookRowsHtml([mhEntry], mhSetup).match(/orb-sign-row/g) || []).length, 2);
   check('dual signatory lines differ', EORB.orbSignatoryLines(mhEntry, mhSetup).length, 2);
+  /* Who signs against who the setup lists: warn, and switch off the line the flag does not need. */
+  EORB.FLAGS.push({ code: 'ZY', name: 'Chief-only test flag', admin: 'test', language: 'English',
+    signatory: { mode: EORB.SIGNATORY_MODES.chief_engineer_only, label: 'Chief Engineer', note: 'test' }, tips: [] });
+  const onlyCe = { flag: 'ZZ', chiefEng: 'A. Chief', officers: [{ id: 'o1', rank: 'C/E', name: 'A. Chief' }] };
+  const dualOnlyCe = EORB.signatoryStaffing(onlyCe);
+  check('both lines needed, only the Chief Engineer set up: warns', dualOnlyCe.warnings.length, 1);
+  checkTrue('and the warning says an officer in charge is missing', /officer in charge/.test(dualOnlyCe.warnings[0]) && /only the Chief Engineer/.test(dualOnlyCe.warnings[0]));
+  checkTrue('both lines stay on', dualOnlyCe.showOfficerInCharge && dualOnlyCe.showChiefEngineer);
+  check('both needed and both set up: no warning', EORB.signatoryStaffing({ flag: 'ZZ', chiefEng: 'A. Chief',
+    officers: [{ rank: 'C/E', name: 'A. Chief' }, { rank: '2/E', name: 'B. Second' }] }).warnings.length, 0);
+  check('both needed and nobody set up: warns about the Chief Engineer and the officer', EORB.signatoryStaffing({ flag: 'ZZ', officers: [] }).warnings.length, 2);
+  const ceOnly = EORB.signatoryStaffing({ flag: 'ZY', chiefEng: 'A. Chief', officers: [] });
+  checkTrue('Chief Engineer only: the officer-in-charge line is off', ceOnly.showOfficerInCharge === false && ceOnly.showChiefEngineer === false);
+  check('Chief Engineer only with a Chief Engineer set: no warning', ceOnly.warnings.length, 0);
+  check('Chief Engineer only with none set: warns', EORB.signatoryStaffing({ flag: 'ZY', officers: [] }).warnings.length, 1);
+  const officerOnly = EORB.signatoryStaffing({ flag: 'MH', chiefEng: 'A. Chief', officers: [{ rank: '2/E', name: 'B. Second' }] });
+  checkTrue('Chief Engineer line not needed: it is off and the officer line is on', officerOnly.showChiefEngineer === false && officerOnly.showOfficerInCharge === true);
+  check('officer-in-charge flag with only the Chief Engineer: no warning (the C/E may sign)', EORB.signatoryStaffing({ flag: 'MH', chiefEng: 'A. Chief', officers: [{ rank: 'C/E', name: 'A. Chief' }] }).warnings.length, 0);
+  EORB.FLAGS.pop();
 }
 
 console.log('\ndates inherit mm/dd/yyyy and compare as ISO');
