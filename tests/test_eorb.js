@@ -867,6 +867,24 @@ console.log('\nflag state ORB signatory policy');
   check('dual policy prints two signature rows',
     (EORB.bookRowsHtml([mhEntry], mhSetup).match(/orb-sign-row/g) || []).length, 2);
   check('dual signatory lines differ', EORB.orbSignatoryLines(mhEntry, mhSetup).length, 2);
+  /* Who signs against who the setup lists: warn, and switch off the line the flag does not need. */
+  EORB.FLAGS.push({ code: 'ZY', name: 'Chief-only test flag', admin: 'test', language: 'English',
+    signatory: { mode: EORB.SIGNATORY_MODES.chief_engineer_only, label: 'Chief Engineer', note: 'test' }, tips: [] });
+  const onlyCe = { flag: 'ZZ', chiefEng: 'A. Chief', officers: [{ id: 'o1', rank: 'C/E', name: 'A. Chief' }] };
+  const dualOnlyCe = EORB.signatoryStaffing(onlyCe);
+  check('both lines needed, only the Chief Engineer set up: warns', dualOnlyCe.warnings.length, 1);
+  checkTrue('and the warning says an officer in charge is missing', /officer in charge/.test(dualOnlyCe.warnings[0]) && /only the Chief Engineer/.test(dualOnlyCe.warnings[0]));
+  checkTrue('both lines stay on', dualOnlyCe.showOfficerInCharge && dualOnlyCe.showChiefEngineer);
+  check('both needed and both set up: no warning', EORB.signatoryStaffing({ flag: 'ZZ', chiefEng: 'A. Chief',
+    officers: [{ rank: 'C/E', name: 'A. Chief' }, { rank: '2/E', name: 'B. Second' }] }).warnings.length, 0);
+  check('both needed and nobody set up: warns about the Chief Engineer and the officer', EORB.signatoryStaffing({ flag: 'ZZ', officers: [] }).warnings.length, 2);
+  const ceOnly = EORB.signatoryStaffing({ flag: 'ZY', chiefEng: 'A. Chief', officers: [] });
+  checkTrue('Chief Engineer only: the officer-in-charge line is off', ceOnly.showOfficerInCharge === false && ceOnly.showChiefEngineer === false);
+  check('Chief Engineer only with a Chief Engineer set: no warning', ceOnly.warnings.length, 0);
+  check('Chief Engineer only with none set: warns', EORB.signatoryStaffing({ flag: 'ZY', officers: [] }).warnings.length, 1);
+  const officerOnly = EORB.signatoryStaffing({ flag: 'MH', chiefEng: 'A. Chief', officers: [{ rank: '2/E', name: 'B. Second' }] });
+  checkTrue('Chief Engineer line not needed: it is off and the officer line is on', officerOnly.showChiefEngineer === false && officerOnly.showOfficerInCharge === true);
+  check('officer-in-charge flag with only the Chief Engineer: no warning (the C/E may sign)', EORB.signatoryStaffing({ flag: 'MH', chiefEng: 'A. Chief', officers: [{ rank: 'C/E', name: 'A. Chief' }] }).warnings.length, 0);
   EORB.FLAGS.pop();
 }
 
