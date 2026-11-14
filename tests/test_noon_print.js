@@ -185,10 +185,19 @@ console.log('\nsignature block sizing and the stamp struck over the line');
   check('the space above the line grew with it', HTML.includes('height:16.8mm; width:42mm; margin-left:auto;'), true);
   check('the signature line itself is untouched at 42mm', HTML.includes('.pr-sign-line{ width:42mm;'), true);
 
-  /* Out of flow, so it overlaps what is under it instead of displacing it, with its
-     right edge on the line's quarter mark. */
-  check('stamp is taken out of flow at the quarter mark', HTML.includes('position:absolute; left:25%; top:16.8mm;'), true);
-  check('its right edge lands on that point, not its centre', HTML.includes('transform:translate(-100%, -50%);'), true);
+  /* Zero-height strip, so it overlaps what is under it instead of displacing it, with its
+     right edge on the line's quarter mark (10.5mm of the 42mm block). Flex + a relative
+     lift, not absolute + transform: Android PrintManager drops images placed that way. */
+  check('stamp is a zero-height strip at the quarter mark',
+    HTML.includes('position:relative; height:0; width:10.5mm; overflow:visible;'), true);
+  check('its right edge lands on that point, not its centre',
+    HTML.includes('display:flex; align-items:flex-start; justify-content:flex-end;'), true);
+  check('it is lifted to centre on the signature line (21.32mm - 16.8mm)',
+    HTML.includes('flex:0 0 auto; position:relative; top:-4.52mm;'), true);
+  check('no absolute position or transform on the stamp',
+    /position:absolute; left:25%|translate\(-100%/.test(HTML), false);
+  check('a stamped signature row is tall enough to hold the stamp',
+    HTML.includes('.pr-sign-row.has-stamp{ min-height:38.2mm; }'), true);
   check('stamp sits inside the block it is measured against', HTML.includes('.pr-sign-block{ flex:0 0 42mm; text-align:right; position:relative; }'), true);
   check('stamp markup moved inside the signature block',
     /pr-sign-block">\s*\$\{stamp\}/.test(HTML), true);
