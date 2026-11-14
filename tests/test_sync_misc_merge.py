@@ -127,5 +127,19 @@ check("a newer setup stamp does not keep an older consumption plan",
 check("a requisition raised on this device still reaches the server",
       "rq-new" in [r["id"] for r in newer_plan["data"]["setup"]["requisitions"]], True)
 
+
+two_records = server.merge_snapshots(
+    leg({
+        "sync": {"lastModifiedAt": "2026-10-01T00:00:00Z"},
+        "changeoverRecords": [{"id": "co-a", "updatedAt": "2026-10-01T00:00:00Z", "kind": "eca"}],
+    }),
+    leg({
+        "sync": {"lastModifiedAt": "2026-10-02T00:00:00Z"},
+        "changeoverRecords": [{"id": "co-b", "updatedAt": "2026-10-02T00:00:00Z", "kind": "eu"}],
+    }),
+)
+check("fuel changeover records from both devices are kept",
+      sorted(r["id"] for r in two_records["data"]["setup"]["changeoverRecords"]), ["co-a", "co-b"])
+
 print(f"sync misc merge ok ({checks})" if not failures else f"{len(failures)} failed")
 sys.exit(1 if failures else 0)

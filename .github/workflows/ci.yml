@@ -40,6 +40,9 @@ jobs:
       - name: Check e-ORB scenarios and weekly inventory window
         run: node tests/test_eorb.js
 
+      - name: Check the fuel changeover regulation log
+        run: node tests/test_fuel_changeover_log.js
+
       - name: Check ship's clock / timezone change hours
         run: node tests/test_clock_change.js
 
