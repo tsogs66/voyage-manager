@@ -84,7 +84,7 @@ const check = (l, a, e) => {
   check('the sludge transfer offers both tanks',
     ['fromTank', 'toTank'].every(n => (grids['sludge-transfer'] || []).includes(n)), true);
   check('bunkering offers its tank list', (grids['bunker-fuel'] || []).includes('fuelTank'), true);
-  check('and the changeover its tanks', (grids['changeover-to-ls-complete'] || []).includes('coTanks'), true);
+  check('and the changeover its tanks', (grids['p3-changeover-complete'] || []).includes('coTanks'), true);
 
   console.log('\nthe reference list of operations is all reachable');
   const scen = await pg.evaluate(() => {
@@ -102,9 +102,9 @@ const check = (l, a, e) => {
     'aircooler-condensate', 'incinerator-garbage'];
   check('every newly added Part I operation has a card',
     wanted.filter(id => !scen[1].includes(id)), []);
-  check('changeover events are on Part III', scen[3], [
-    'changeover-to-ls-start', 'changeover-to-ls-complete',
-    'changeover-to-hs-start', 'changeover-to-hs-complete']);
+  check('Part III cards follow the official form (A-E)', scen[3], [
+    'p3-ods-recharge', 'p3-ods-discharge', 'p3-ods-supply', 'p3-nox-status', 'p3-bunker-sox',
+    'p3-changeover-complete', 'p3-changeover-start', 'p3-incinerator']);
 
   console.log('\na Code I operation that moves oil moves the R.O.B. with it');
   const moved = await pg.evaluate(async () => {

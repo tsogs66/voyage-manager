@@ -192,8 +192,7 @@ const lubeSupp = EORB.buildItemLines(1, 'H', ['26.4'], {
   place: 'Singapore', lubeType: 'Cylinder oil', lubeQty: 12,
   lubeTank: 'cyl1', lubeSplit: 'cyl1=12', lubeRobSplit: 'cyl1=20'
 }, lubeSetup);
-checkTrue('lube Part III supplement uses litres', lubeSupp.some(l =>
-  l.recordPart === 3 && /12 Ltrs bulk lubricating oil/i.test(l.text)));
+checkTrue('lube bunkering is not a Part III item on the official form', !lubeSupp.some(l => l.recordPart === 3));
 
 console.log('\nbunkering fuel family — residual vs distillate tanks');
 checkTrue('residual ISO list includes RMG 380', EORB.BUNKER_FUEL_FAMILY.residual.iso.indexOf('RMG 380') !== -1);
@@ -232,11 +231,11 @@ checkTrue('sludge burn records oxygen and temperature',
   incLines.some(l => l.itemNo === '8' && /850 Deg Celsius/.test(l.text)));
 const owsLines = EORB.buildItemLines(1, 'I', ['I'], { remarks: 'Weekly test', testDurationMin: 15 },
   EORB.defaultOrbSetup({ flag: 'PA' }), 'ows-weekly-test');
-checkTrue('OWS weekly test adds Part III supplement', owsLines.some(l => l.recordPart === 3 && /OWS/i.test(l.text)));
+checkTrue('OWS weekly test stays in Part I (no Part III item on the official form)', !owsLines.some(l => l.recordPart === 3));
 const debLines = EORB.buildItemLines(1, 'I', ['I'], {
   remarks: 'Fuel oil de-bunkered', extraQtyT: 50, extraPlace: 'Singapore', extraFromTank: 'fo1'
 }, bunkerLayoutSetup, 'debunker-fuel');
-checkTrue('de-bunkering adds Part III supplement', debLines.some(l => l.recordPart === 3 && /de-bunkering/i.test(l.text)));
+checkTrue('de-bunkering stays in Part I (no Part III item on the official form)', !debLines.some(l => l.recordPart === 3));
 const part3Book = EORB.bookRowsHtml([{
   date: '2026-09-01', code: 'H', part: 1, officerName: 'Test', officerRank: '2/E',
   officerSignedAt: '2026-09-01T12:00:00',
@@ -428,8 +427,14 @@ console.log('\nthe operation list covers what the flag e-ORB offers');
     ['I', 'I', 'garbage incinerated']
   ];
   const WANTED_PART3 = [
-    ['C', '2', 'change over completion from HFO to MGO'],
-    ['C', '3', 'change over commencement from MGO to HFO']
+    ['A', '1.1', 'recharge of ODS equipment'],
+    ['A', '1.4', 'discharge of ODS to a reception facility'],
+    ['A', '1.5', 'supply of ODS'],
+    ['B', '2', 'NOx Tier III engine status at ECA entry / exit'],
+    ['C', '3', 'bunkering SOx data'],
+    ['C', '4', 'low-sulphur changeover for an ECA'],
+    ['D', '5', 'vapour collection system'],
+    ['E', '6', 'use of incinerator']
   ];
   const part1 = EORB.SCENARIOS.filter(s => Number(s.part) === 1);
   const covered = (code, item) => part1.some(s => s.code === code && (s.items || []).indexOf(item) !== -1);
@@ -509,10 +514,12 @@ console.log('\nPart III only where the flag requires it');
 console.log('\nPart III — fuel changeover (Annex VI Reg. 14.6)');
 {
   const s5 = EORB.defaultOrbSetup({ flag: 'PA' });
-  check('Part III operations', EORB.getPartOps(3).map(op => op.code), ['C', 'E']);
-  check('four changeover events', EORB.getPartOps(3)[0].items.map(i => i.no), ['1', '2', '3', '4']);
-  check('incinerator items are 6, 7 and 8', EORB.getPartOps(3)[1].items.map(i => i.no), ['6', '7', '8']);
-  check('a scenario for each changeover', EORB.getScenarios(s5, 3).length, 4);
+  check('Part III operations (official form A-E)', EORB.getPartOps(3).map(op => op.code), ['A', 'B', 'C', 'D', 'E']);
+  check('ODS items', EORB.getPartOps(3)[0].items.map(i => i.no), ['1', '1.1', '1.4', '1.5']);
+  check('SOx items 3 and 4', EORB.getPartOps(3)[2].items.map(i => i.no), ['3', '4']);
+  check('incinerator items are 6, 7 and 8', EORB.getPartOps(3)[4].items.map(i => i.no), ['6', '7', '8']);
+  check('Part III cards on a non-tanker (vapour collection is tankers only)', EORB.getScenarios(s5, 3).length, 8);
+  check('and on a tanker', EORB.getScenarios(EORB.defaultOrbSetup({ flag: 'PA', shipType: 'tanker' }), 3).length, 9);
   const garbScenario = EORB.getScenario('incinerator-garbage');
   check('garbage burning starts as Code I', garbScenario && garbScenario.code, 'I');
   check('garbage burning is a Part I entry', garbScenario && garbScenario.part, 1);
@@ -552,21 +559,27 @@ console.log('\nPart III — fuel changeover (Annex VI Reg. 14.6)');
   checkTrue('combustion chamber temperature', garbLines[2].text.indexOf('850 Deg Celsius') !== -1);
   const garb = garbLines[0];
   const garbHtml = EORB.buildPrintHtml(s5, [{ date: '2026-08-02', code: 'E', part: 3, lines: garbLines, officerName: 'A. Ruiz' }], 'test');
-  checkTrue('incinerator prints under its own heading', garbHtml.indexOf('Incinerator Record — Part III') !== -1);
+  checkTrue('incinerator prints under its own heading', garbHtml.indexOf('Oil Record Book and Emissions — Part III') !== -1);
   checkTrue('Part III code reads PART III E on the sheet', garbHtml.indexOf('PART III E') !== -1);
-  const v = { coTime: '06:30', coPosition: '51 20 N 002 10 E', coToGrade: 'LSMGO', coSulphur: 0.08, coVolume: 145 };
-  const done = EORB.buildItemLines(3, 'C', ['2'], v, s5)[0];
-  checkTrue('completion reads as completed', done.text.indexOf('Changeover completed') !== -1);
-  checkTrue('to low-sulphur fuel', done.text.indexOf('low-sulphur fuel') !== -1);
+  const v = { coEvent: 'Completed before entering the ECA', coTime: '06:30', coPosition: '51 20 N 002 10 E', coVolume: 145 };
+  const done = EORB.buildItemLines(3, 'C', ['4'], v, s5)[0];
+  checkTrue('completion reads as completed before the ECA', done.text.indexOf('Completed before entering the ECA') !== -1);
   checkTrue('carries the position', done.text.indexOf('51 20 N 002 10 E') !== -1);
   checkTrue('and the volume on board', done.text.indexOf('145 m³') !== -1);
-  const start = EORB.buildItemLines(3, 'C', ['3'], v, s5)[0];
-  checkTrue('the reverse leg reads as commenced', start.text.indexOf('Changeover commenced') !== -1);
-  checkTrue('and back to residual', start.text.indexOf('residual fuel') !== -1);
+  const start = EORB.buildItemLines(3, 'C', ['4'], Object.assign({}, v, { coEvent: 'Commenced after leaving the ECA' }), s5)[0];
+  checkTrue('the reverse leg reads as commenced after the ECA', start.text.indexOf('Commenced after leaving the ECA') !== -1);
+  const bk = EORB.buildItemLines(3, 'C', ['3'], { posStart: 'A', timeStart: '01:00', posEnd: 'B', timeStop: '03:00', bkType: 'VLSFO', bkApi: 20, bkDensity: 935, bkSulphur: 0.49 }, s5)[0];
+  checkTrue('item 3 carries type, density and sulphur', /VLSFO/.test(bk.text) && /935 kg\/m³/.test(bk.text) && /0\.49% m\/m/.test(bk.text));
+  const nox = EORB.buildItemLines(3, 'B', ['2'], { noxTime: '15:00', noxPosition: 'P', noxEngines: 'MAIN ENGINE / TIER III / STATUS ON' }, s5)[0];
+  checkTrue('item 2 carries time, position and engine status', /15:00/.test(nox.text) && /TIER III \/ STATUS ON/.test(nox.text));
+  const ods = EORB.buildItemLines(3, 'A', ['1.1'], { odsQty: 5, odsType: 'R-134a', odsEquipment: 'provision plant' }, s5)[0];
+  checkTrue('item 1.1 reads as a recharge in kg', /Recharge of 5 kg \(R-134a\)/.test(ods.text));
+  const vc = EORB.buildItemLines(3, 'D', ['5'], { vcPosition: 'P', vcPort: 'Rotterdam' }, s5)[0];
+  checkTrue('item 5 carries the port', /Port: Rotterdam/.test(vc.text));
   /* Changeover moves fuel between service tanks, not Annex I oil residue. */
-  check('no Annex I tank R.O.B. effect', EORB.applyOperationRob(s5, 3, 'C', ['2'], v), []);
+  check('no Annex I tank R.O.B. effect', EORB.applyOperationRob(s5, 3, 'C', ['4'], v), []);
   const html3 = EORB.buildPrintHtml(s5, [{ date: '2026-08-01', code: 'C', part: 3, lines: [done], officerName: 'A. Ruiz' }], 'test');
-  checkTrue('prints under its own heading', html3.indexOf('Fuel Oil Changeover Record — Part III') !== -1);
+  checkTrue('prints under its own heading', html3.indexOf('Oil Record Book and Emissions — Part III') !== -1);
   checkTrue('Part III code reads PART III C on the sheet', html3.indexOf('PART III C') !== -1);
 
   const seaForm = EORB.buildWizardFormSheet(1, 'D', EORB.getOperation(1, 'D'), s5,
@@ -770,7 +783,7 @@ console.log('\nOWS overboard discharge sequence (OCM test then valve unseal)');
     EORB.scenarioOpenErrors([], { date: '2026-09-29', scenarioId: 'bilge-ows-sea' }).length >= 2);
   const lr = EORB.defaultOrbSetup({ flag: 'LR' });
   const pa = EORB.defaultOrbSetup({ flag: 'PA' });
-  const co = EORB.getScenario('changeover-to-ls-complete');
+  const co = EORB.getScenario('p3-changeover-complete');
   checkTrue('Part III changeover warns on Liberia', !!EORB.scenarioFlagWarning(lr, co));
   check('Part III changeover is allowed on Panama', EORB.scenarioFlagWarning(pa, co), '');
 }
