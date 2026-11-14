@@ -813,12 +813,17 @@ console.log('\nbeORB-style date / code / item No. columns');
 
 console.log('\nflag state ORB signatory policy');
 {
-  check('Marshall Islands requires dual signatures', EORB.flagSignatoryPolicy('MH').mode,
-    EORB.SIGNATORY_MODES.engineer_and_chief_engineer);
+  /* Marshall Islands (MG 2-13-3 Rev. Dec/2017, MI-402A): the officer in charge signs; the Chief Engineer, Chief
+     Mate or an SMS-named person REVIEWS the entry, they do not co-sign it. */
+  check('Marshall Islands: the officer in charge signs', EORB.flagSignatoryPolicy('MH').mode, EORB.SIGNATORY_MODES.engineer_or_ce);
+  /* No flag asks for a second signature row today; the two-row layout stays available for a flag that does, so it
+     is exercised here with a stand-in flag. */
+  EORB.FLAGS.push({ code: 'ZZ', name: 'Two-row test flag', admin: 'test', language: 'English',
+    signatory: { mode: EORB.SIGNATORY_MODES.engineer_and_chief_engineer, label: 'Officer in charge + Chief Engineer', note: 'test' }, tips: [] });
   /* Liberia (Marine Operations Note 07/2010) and Malta (Technical Notice MARPOL.7) name the officer in
      charge as the signatory and the Master for each page; neither asks for the Chief Engineer as well. */
   check('Liberia: the officer in charge signs', EORB.flagSignatoryPolicy('LR').mode, EORB.SIGNATORY_MODES.engineer_or_ce);
-  checkTrue('requiresDualSignatory helper', !EORB.requiresDualSignatory('LR') && EORB.requiresDualSignatory('MH'));
+  checkTrue('requiresDualSignatory helper', !EORB.requiresDualSignatory('LR') && !EORB.requiresDualSignatory('MH') && EORB.requiresDualSignatory('ZZ'));
   checkTrue('single-sign flags excluded', !EORB.requiresDualSignatory('PA') && !EORB.requiresDualSignatory('MT'));
   check('Malta: the officer in charge signs', EORB.flagSignatoryPolicy('MT').mode, EORB.SIGNATORY_MODES.engineer_or_ce);
   check('Cyprus follows the Convention default', EORB.flagSignatoryPolicy('CY').mode, EORB.SIGNATORY_MODES.engineer_or_ce);
@@ -827,7 +832,7 @@ console.log('\nflag state ORB signatory policy');
   const mtSetup = EORB.defaultOrbSetup({ flag: 'MT', chiefEng: 'A. Ruiz' });
   check('Malta accepts a 4/E as officer in charge',
     EORB.validateEntrySignatory(mtSetup, { officerName: 'Jay', officerRank: '4/E' }).length, 0);
-  const mhSetup = EORB.defaultOrbSetup({ flag: 'MH', chiefEng: 'Marvin C. Endozo' });
+  const mhSetup = EORB.defaultOrbSetup({ flag: 'ZZ', chiefEng: 'Marvin C. Endozo' });
   const mhEntry = {
     date: '2026-08-18', code: 'D', part: 1,
     officerName: 'Jaycee S. Lugtu', officerRank: '4/E', officerSignedAt: '2026-08-18',
@@ -837,6 +842,7 @@ console.log('\nflag state ORB signatory policy');
   check('dual policy prints two signature rows',
     (EORB.bookRowsHtml([mhEntry], mhSetup).match(/orb-sign-row/g) || []).length, 2);
   check('dual signatory lines differ', EORB.orbSignatoryLines(mhEntry, mhSetup).length, 2);
+  EORB.FLAGS.pop();
 }
 
 console.log('\ndates inherit mm/dd/yyyy and compare as ISO');
