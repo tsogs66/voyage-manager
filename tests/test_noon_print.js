@@ -439,7 +439,7 @@ console.log('\nthe preview containers are white so ink shows on them');
     HTML.includes('border:1px solid #c8d2e0; border-radius:4px; background:#fdfefe; padding:8px;'), true);
   /* The checkerboard proved transparency but hid dark ink on the dark theme. */
   check('the checkerboard is gone', HTML.includes('linear-gradient(45deg, rgba(128,128,128,0.22) 25%'), false);
-  check('the empty-state text is legible on white', HTML.includes('.stamp-preview .stamp-empty{font-size:11px; color:#5a6578;'), true);
+  check('the empty-state text is legible on white', HTML.includes('.stamp-preview .stamp-empty{font-size:12px; color:#5a6578;'), true);
   /* Display only: what is stored, and printed, is still the transparent cut-out. */
   check('the cut-out still runs on upload', HTML.includes('url = await removeWhiteBackgroundDataUrl(url);'), true);
 }
