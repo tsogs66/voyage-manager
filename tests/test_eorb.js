@@ -815,17 +815,18 @@ console.log('\nflag state ORB signatory policy');
 {
   check('Marshall Islands requires dual signatures', EORB.flagSignatoryPolicy('MH').mode,
     EORB.SIGNATORY_MODES.engineer_and_chief_engineer);
-  check('Liberia requires dual signatures (beORB layout)', EORB.flagSignatoryPolicy('LR').mode,
-    EORB.SIGNATORY_MODES.engineer_and_chief_engineer);
-  checkTrue('requiresDualSignatory helper', EORB.requiresDualSignatory('LR') && EORB.requiresDualSignatory('MH'));
+  /* Liberia (Marine Operations Note 07/2010) and Malta (Technical Notice MARPOL.7) name the officer in
+     charge as the signatory and the Master for each page; neither asks for the Chief Engineer as well. */
+  check('Liberia: the officer in charge signs', EORB.flagSignatoryPolicy('LR').mode, EORB.SIGNATORY_MODES.engineer_or_ce);
+  checkTrue('requiresDualSignatory helper', !EORB.requiresDualSignatory('LR') && EORB.requiresDualSignatory('MH'));
   checkTrue('single-sign flags excluded', !EORB.requiresDualSignatory('PA') && !EORB.requiresDualSignatory('MT'));
-  check('Malta expects Chief Engineer only', EORB.flagSignatoryPolicy('MT').mode,
-    EORB.SIGNATORY_MODES.chief_engineer_only);
+  check('Malta: the officer in charge signs', EORB.flagSignatoryPolicy('MT').mode, EORB.SIGNATORY_MODES.engineer_or_ce);
+  check('Cyprus follows the Convention default', EORB.flagSignatoryPolicy('CY').mode, EORB.SIGNATORY_MODES.engineer_or_ce);
   checkTrue('C/E rank is recognised', EORB.isChiefEngineerRank('C/E'));
   checkTrue('4/E is not C/E', !EORB.isChiefEngineerRank('4/E'));
   const mtSetup = EORB.defaultOrbSetup({ flag: 'MT', chiefEng: 'A. Ruiz' });
-  check('Malta rejects non-C/E rank on save',
-    EORB.validateEntrySignatory(mtSetup, { officerName: 'Jay', officerRank: '4/E' }).length, 1);
+  check('Malta accepts a 4/E as officer in charge',
+    EORB.validateEntrySignatory(mtSetup, { officerName: 'Jay', officerRank: '4/E' }).length, 0);
   const mhSetup = EORB.defaultOrbSetup({ flag: 'MH', chiefEng: 'Marvin C. Endozo' });
   const mhEntry = {
     date: '2026-08-18', code: 'D', part: 1,
