@@ -64,6 +64,12 @@ jobs:
       - name: Check pinch zoom stays on and the stamp fits the sheet
         run: node tests/test_pinch_zoom.js
 
+      - name: Check the file viewer, Reports tab order and flowmeter popup
+        run: node tests/test_file_viewer.js
+
+      - name: Check e-ORB Browse and Print layout
+        run: node tests/test_orb_browse.js
+
       - name: Check device enrollment helpers
         run: node tests/test_device_enrollment.js
 
