@@ -490,6 +490,18 @@ console.log('\nCode I carries the tank, quantity and duration MARPOL gives it no
     (owsTest.extraFields || []).some(f => f.name === 'testDurationMin'));
 }
 
+console.log('\ninput boxes cover what Appendix III asks for each item');
+{
+  const st = EORB.defaultOrbSetup({ flag: 'MH', shipType: 'tanker' });
+  const fieldsOf = (p, c, n) => EORB.getPartOps(p).find(o => o.code === c).items.find(i => i.no === n).fields.map(f => f.name);
+  checkTrue('C 11.4 asks where the oil was collected from', fieldsOf(1, 'C', '11.4').indexOf('manualSource') !== -1);
+  check('C 11.4 prints the source', EORB.buildItemLines(1, 'C', ['11.4'], { manualCollected: 0.3, manualSource: 'purifier room drain tank' }, st)[0].text, '0.3 m³ collected from purifier room drain tank');
+  checkTrue('G 30 asks for chemical type and quantity', ['chemType', 'chemQty'].every(n => fieldsOf(2, 'G', '30').indexOf(n) !== -1));
+  check('G 30 prints the chemicals', EORB.buildItemLines(2, 'G', ['30'], { method: 'Machine washing', chemType: 'Degreaser', chemQty: 0.4 }, st)[0].text, 'Machine washing, chemical cleaning with Degreaser, 0.4 m³');
+  check('E 16 position is a lat/lon box', EORB.getPartOps(1).find(o => o.code === 'E').items[0].fields.find(f => f.name === 'position').type, 'position');
+  check('G 24 reads quantity then oil type', EORB.buildItemLines(1, 'G', ['24'], { qty: 1.2, oilType: 'HFO' }, st)[0].text, '1.2 m³ HFO');
+}
+
 console.log('\nPart III only where the flag requires it');
 {
   const withPartIII = EORB.FLAGS.filter(f => EORB.flagHasPartIII({ flag: f.code })).map(f => f.code);
