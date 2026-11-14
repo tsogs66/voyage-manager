@@ -70,6 +70,9 @@ jobs:
       - name: Check e-ORB Browse and Print layout
         run: node tests/test_orb_browse.js
 
+      - name: Check every e-ORB entry type for every flag
+        run: node tests/test_eorb_flags_sweep.js
+
       - name: Check device enrollment helpers
         run: node tests/test_device_enrollment.js
 
