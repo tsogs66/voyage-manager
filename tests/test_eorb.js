@@ -572,6 +572,39 @@ console.log('\ntanker cargo: loading, transfer and unloading move the tank R.O.B
   check('unloading with the tanks emptied empties them', un.tanks.cargo.map(t => t.robM3), [0, 0]);
 }
 
+console.log('\ntanker: cargo washing, slop decanting, dirty ballast and ballasting move and check the tank R.O.B.');
+{
+  const tk = EORB.defaultOrbSetup({ flag: 'MH', shipType: 'tanker', tanks: {
+    cargo: [{ id: 'c1', name: 'No.1 Cargo P', capacityM3: 1000, robM3: 600 }, { id: 'c2', name: 'No.1 Cargo S', capacityM3: 1000, robM3: 0 }],
+    slop: [{ id: 'sl', name: 'Slop P', capacityM3: 200, robM3: 150 }] } });
+  const run = (code, items, v) => { const f = EORB.autofillOperationValues(tk, 2, code, items, v);
+    return { f, codes: EORB.capacityWarnings(tk, 2, code, items, f.values).filter(w => w.level !== 'info').map(w => w.code) }; };
+  const apply = (code, items, v) => { const c = JSON.parse(JSON.stringify(tk)); EORB.applyOperationRob(c, 2, code, items, v); return [c.tanks.cargo.map(t => t.robM3), c.tanks.slop.map(t => t.robM3)]; };
+  checkTrue('washing has its own cards', ['cargo-tank-cleaning', 'cargo-tank-cleaning-ashore'].every(id => EORB.getScenario(id)));
+  let r = run('G', ['27', '28', '29', '30', '31.2'], { tanks: ['c1'], toTank: 'sl', qty: 30 });
+  check('washings to a slop tank: total follows', r.f.values.toTotal, 180);
+  r = run('G', ['27', '28', '29', '30', '31.2'], { tanks: ['c1'], toTank: 'sl', qty: 80 });
+  check('washings past the slop tank capacity are an overfill', r.codes, ['OVERFILL']);
+  check('saving the washings fills the slop tank', apply('G', ['27', '28', '29', '30', '31.2'], { tanks: ['c1'], toTank: 'sl', qty: 30 })[1], [180]);
+  check('washings ashore change no tank', apply('G', ['27', '28', '29', '30', '31.1'], { tanks: ['c1'], qty: 30 }), [[600, 0], [150]]);
+  r = run('I', ['41', '44', '47', '48', '49', '50', '54'], { tanks: ['sl'], bulkQty: 100, finalQty: 20 });
+  check('decanting within what the slop tank holds is accepted', r.codes, []);
+  check('saving the decant empties the slop tank by the quantities', apply('I', ['41', '47', '48'], { tanks: ['sl'], bulkQty: 100, finalQty: 20 })[1], [30]);
+  r = run('I', ['41', '47', '48'], { tanks: ['sl'], bulkQty: 140, finalQty: 20 });
+  checkTrue('decanting more than the slop tank holds is an error', r.codes.indexOf('NEGATIVE_ROB') !== -1);
+  r = run('H', ['32', '35', '39', '40'], { tanks: ['c1'], seaQty: 300, slopTank: 'sl', slopQty: 40, shoreQty: 50 });
+  check('dirty ballast: three outlets within the tank content', r.codes, []);
+  check('saving it takes all three from the tank and puts the slop share in the slop tank', apply('H', ['32', '35', '39', '40'], { tanks: ['c1'], seaQty: 300, slopTank: 'sl', slopQty: 40, shoreQty: 50 }), [[210, 0], [190]]);
+  r = run('H', ['32', '35'], { tanks: ['c1'], seaQty: 700 });
+  checkTrue('discharging more than the tank holds is an error', r.codes.indexOf('NEGATIVE_ROB') !== -1);
+  r = run('E', ['18', '19.1', '19.2', '19.3'], { tanks: ['c2'], qty: 1200 });
+  check('ballasting past the capacity is an overfill', r.codes, ['OVERFILL']);
+  check('saving the ballast fills the tank', apply('E', ['19.1', '19.3'], { tanks: ['c2'], qty: 400 })[0], [600, 400]);
+  r = run('E', ['19.1', '19.3'], { tanks: ['c1', 'c2'], qty: 700 });
+  checkTrue('several ballast tanks without a split are reported', r.f.notes.some(n => /several tanks/.test(n)));
+  check('with a split each tank is filled', apply('E', ['19.1', '19.3'], { tanks: ['c1', 'c2'], qty: 700, qtySplit: 'c1=300, c2=400' })[0], [900, 400]);
+}
+
 console.log('\nPart III only where the flag requires it');
 {
   const withPartIII = EORB.FLAGS.filter(f => EORB.flagHasPartIII({ flag: f.code })).map(f => f.code);
