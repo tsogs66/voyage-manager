@@ -605,6 +605,34 @@ console.log('\ntanker: cargo washing, slop decanting, dirty ballast and ballasti
   check('with a split each tank is filled', apply('E', ['19.1', '19.3'], { tanks: ['c1', 'c2'], qty: 700, qtySplit: 'c1=300, c2=400' })[0], [900, 400]);
 }
 
+console.log('\ntanker: clean ballast tanks and clean ballast discharge move and check the tank R.O.B.');
+{
+  const base = { shipType: 'tanker', tanks: {
+    cargo: [{ id: 'c1', name: 'No.1 Cargo P', capacityM3: 1000, robM3: 300 }, { id: 'c2', name: 'No.1 Cargo S', capacityM3: 1000, robM3: 0 }],
+    cbt: [{ id: 'b1', name: 'No.1 WBT P', capacityM3: 800, robM3: 100 }, { id: 'b2', name: 'No.1 WBT S', capacityM3: 800, robM3: 0 }],
+    slop: [{ id: 'sl', name: 'Slop P', capacityM3: 200, robM3: 150 }] } };
+  const tk = EORB.defaultOrbSetup(Object.assign({ flag: 'MH' }, base));
+  tk.equipment.cbtFitted = true;
+  const run = (code, items, v) => { const f = EORB.autofillOperationValues(tk, 2, code, items, v);
+    return { f, codes: EORB.capacityWarnings(tk, 2, code, items, f.values).filter(w => w.level !== 'info').map(w => w.code) }; };
+  const apply = (code, items, v) => { const c = JSON.parse(JSON.stringify(tk)); EORB.applyOperationRob(c, 2, code, items, v); return [c.tanks.cargo.map(t => t.robM3), c.tanks.cbt.map(t => t.robM3), c.tanks.slop.map(t => t.robM3)]; };
+  const noCbt = EORB.defaultOrbSetup(Object.assign({ flag: 'MH' }, base));
+  const has = (setup, id) => EORB.getScenarios(setup, 2).some(x => x.id === id);
+  checkTrue('the CBT cards need CBT fitted', has(tk, 'cbt-ballasting') && has(tk, 'cbt-discharge') && !has(noCbt, 'cbt-ballasting') && !has(noCbt, 'cbt-discharge'));
+  checkTrue('clean ballast from cargo tanks has a card', has(noCbt, 'clean-ballast-discharge'));
+  check('ballasting the CBT fills it', apply('F', ['20', '26'], { tanks: ['b2'], qty: 500 })[1], [100, 500]);
+  check('and the oily water from flushing goes to the slop tank', apply('F', ['20', '23', '26'], { tanks: ['b2'], qty: 500, slopTank: 'sl', oilyQty: 20 })[2], [170]);
+  let r = run('F', ['20', '26'], { tanks: ['b1'], qty: 900 });
+  check('ballasting past the CBT capacity is an overfill', r.codes, ['OVERFILL']);
+  r = run('F', ['20', '26'], { tanks: ['b1', 'b2'], qty: 500 });
+  checkTrue('several CBTs without a split are reported', r.f.notes.some(n => /several clean ballast tanks/.test(n)));
+  check('discharge from the CBT: sea and ashore leave the tank', apply('L', ['63', '66.1', '66.2'], { tanks: ['b1'], seaQty: 60, shoreQty: 20 })[1], [20, 0]);
+  r = run('L', ['63', '66.1'], { tanks: ['b1'], seaQty: 150 });
+  checkTrue('discharging more than the CBT holds is an error', r.codes.indexOf('NEGATIVE_ROB') !== -1);
+  check('clean ballast discharged from cargo tanks, reported empty, sets them to zero', apply('K', ['58', '59', '60'], { tanks: ['c1'], emptied: 'Yes' })[0], [0, 0]);
+  check('not empty leaves the R.O.B. alone', apply('K', ['58', '59', '60'], { tanks: ['c1'], emptied: 'No' })[0], [300, 0]);
+}
+
 console.log('\nPart III only where the flag requires it');
 {
   const withPartIII = EORB.FLAGS.filter(f => EORB.flagHasPartIII({ flag: f.code })).map(f => f.code);
