@@ -43,6 +43,9 @@ jobs:
       - name: Check the fuel changeover regulation log
         run: node tests/test_fuel_changeover_log.js
 
+      - name: R.O.B. page shows a bunker received after the latest report
+        run: node tests/test_rob_pending_receipts.js
+
       - name: Check ship's clock / timezone change hours
         run: node tests/test_clock_change.js
 
