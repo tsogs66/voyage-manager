@@ -286,7 +286,7 @@ console.log('\nthe operations a watch can be logged against');
     'DRIFTING - START', 'DRIFTING - END',
     'ARRIVAL - STANDBY', 'ARRIVAL - FIRST LINE', 'ARRIVAL - ANCHORAGE',
     'ARRIVAL - FINISHED ENGINE',
-    'ECA - CHANGEOVER START', 'ECA - ENTRY', 'ECA - EXIT', 'ECA - CHANGEOVER COMPLETE',
+    'ECA - CHANGEOVER START', 'ECA - CHANGEOVER COMPLETE', 'ECA - ENTRY', 'ECA - DEPARTURE', 'ECA - EXIT',
     'BUNKERING', 'BUNKER SURVEY'
   ]);
   check('none is listed twice', ops.length, new Set(ops).size);
@@ -526,7 +526,7 @@ console.log('\nthe rest of this batch is wired in');
   check('bilge and sludge print their movement', HTML.includes("printRow('Bilge R.O.B.', robWithDelta("), true);
   check('ECA is gated by the leg — every changeover step counts',
     [...sandbox.ECA_OPS].sort(),
-    ['ECA - CHANGEOVER COMPLETE', 'ECA - CHANGEOVER START', 'ECA - ENTRY', 'ECA - EXIT']);
+    ['ECA - CHANGEOVER COMPLETE', 'ECA - CHANGEOVER START', 'ECA - DEPARTURE', 'ECA - ENTRY', 'ECA - EXIT']);
   check('an entry already carrying changeover data stays editable', HTML.includes('function entryHasEcaData(entry){'), true);
   check('R.O.B. per report table', HTML.includes('function renderRobByReport(){'), true);
   check('gauges can be pointed at a report', HTML.includes('function robGaugeSource(){'), true);
