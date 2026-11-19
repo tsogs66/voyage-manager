@@ -10,6 +10,9 @@ check('every system print says it was sent', (html.match(/notePrintSent\(\);/g) 
 check('JSON, CSV and named-file saves say where the file went', /showToast\('File ' \+ downloadWhereLabel\(saved\)\)/.test(html) && (html.match(/showToast\('File ' \+ ChengSaveFile\.whereLabel\(saved\)\)/g) || []).length === 2);
 check('Add Entry says the entry was saved or updated', /showToast\(existing \? 'Log entry updated' : 'Log entry saved'\)/.test(html));
 check('requisition save, voyage-report Print & Save and Fetch Records answer', /showToast\('Requisition saved'\)/.test(html) && /showToast\('Voyage report saved'\)/.test(html) && /records? fetched|record\$\{n === 1/.test(html));
+check('Load Voyage ROB, Clear plan and the Refresh list buttons answer', /showToast\('Current ROB loaded from the log'\)/.test(html) && /showToast\('Bunker consumption plan cleared'\)/.test(html) && (html.match(/showToast\('List refreshed'\)/g) || []).length === 2);
+const notes = fs.readFileSync(path.join(__dirname, '../notes.js'), 'utf8');
+check('saving, updating and deleting a note say so', /'Note updated\.' : 'Note saved\.'/.test(notes) && /status = 'Note deleted\.'/.test(notes));
 const a = html.indexOf('function showToast(msg){'), b = html.indexOf('function notePrintSent');
 const shown = []; const els = {};
 const doc = { getElementById: (id) => els[id], createElement: () => { const e = { classList: { add() { this.on = true; }, remove() { this.on = false; }, on: false }, setAttribute() {} }; return e; }, body: { appendChild(e) { els[e.id] = e; } } };
