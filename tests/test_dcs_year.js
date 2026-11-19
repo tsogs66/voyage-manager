@@ -93,6 +93,7 @@ const sandbox = {
   loadRangeLegPool: async () => sandbox._pool,
   _pool: null,
   rangePoolEntries: () => [],
+  printSignatory: () => "",
   Promise
 };
 vm.createContext(sandbox);

@@ -1,0 +1,23 @@
+/* Saves, prints, exports and fetches tell the user they worked (a small message, not silence). */
+'use strict';
+const fs = require('fs'), path = require('path'), vm = require('vm');
+const html = fs.readFileSync(path.join(__dirname, '../voyage_manager.html'), 'utf8');
+let fails = 0, checks = 0;
+const check = (n, ok) => { checks++; if (!ok) { fails++; console.log('  FAIL ' + n); } else console.log('  ok   ' + n); };
+check('the page defines showToast (it was called in places but never defined)', /\nfunction showToast\(msg\)\{/.test(html));
+check('the toast has a style', /\.app-toast\{/.test(html) && /\.app-toast\.show\{/.test(html));
+check('every system print says it was sent', (html.match(/notePrintSent\(\);/g) || []).length >= 3);
+check('JSON, CSV and named-file saves say where the file went', /showToast\('File ' \+ downloadWhereLabel\(saved\)\)/.test(html) && (html.match(/showToast\('File ' \+ ChengSaveFile\.whereLabel\(saved\)\)/g) || []).length === 2);
+check('Add Entry says the entry was saved or updated', /showToast\(existing \? 'Log entry updated' : 'Log entry saved'\)/.test(html));
+check('requisition save, voyage-report Print & Save and Fetch Records answer', /showToast\('Requisition saved'\)/.test(html) && /showToast\('Voyage report saved'\)/.test(html) && /records? fetched|record\$\{n === 1/.test(html));
+check('Load Voyage ROB, Clear plan and the Refresh list buttons answer', /showToast\('Current ROB loaded from the log'\)/.test(html) && /showToast\('Bunker consumption plan cleared'\)/.test(html) && (html.match(/showToast\('List refreshed'\)/g) || []).length === 2);
+const notes = fs.readFileSync(path.join(__dirname, '../notes.js'), 'utf8');
+check('saving, updating and deleting a note say so', /'Note updated\.' : 'Note saved\.'/.test(notes) && /status = 'Note deleted\.'/.test(notes));
+const a = html.indexOf('function showToast(msg){'), b = html.indexOf('function notePrintSent');
+const shown = []; const els = {};
+const doc = { getElementById: (id) => els[id], createElement: () => { const e = { classList: { add() { this.on = true; }, remove() { this.on = false; }, on: false }, setAttribute() {} }; return e; }, body: { appendChild(e) { els[e.id] = e; } } };
+const sb = { document: doc, Date, setTimeout, clearTimeout, String };
+vm.createContext(sb); vm.runInContext(html.slice(a, b), sb);
+sb.showToast('Saved'); check('a toast shows its text', els.appToast && els.appToast.textContent === 'Saved' && els.appToast.classList.on);
+sb.showToast('Sent to print'); check('a second message waits instead of wiping the first', els.appToast.textContent === 'Saved');
+setTimeout(() => { check('and appears after it', els.appToast.textContent === 'Sent to print'); console.log(fails ? `\nFAILED — ${fails} of ${checks} checks` : `\nPASSED — ${checks} checks`); process.exit(fails ? 1 : 0); }, 1500);
