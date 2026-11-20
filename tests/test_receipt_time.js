@@ -3,9 +3,8 @@
  * Receipts carry a time, and R.O.B. follows the clock:
  *  - a receipt joins the first report at or after the time it was logged (not the whole day);
  *  - Present R.O.B. = Previous + receipts − consumption;
- *  - a Correction (+/−) is added to or taken off the book WITH the receipts, it never wipes one;
- *  - a Measured (survey) figure is that report's R.O.B. and the Previous of the next report;
- *  - a receipt logged after the survey report still counts; an old date-only receipt keeps its whole-day rule.
+ *  - an old date-only receipt keeps its whole-day rule.
+ * (How a bunker survey and a late receipt work together is in test_survey_previous_basis.js.)
  * Run: node tests/test_receipt_time.js
  */
 'use strict';
@@ -60,32 +59,6 @@ console.log('\n1) a receipt goes into the first report at or after its time');
   st.receipts = [rcpt({ date: '2026-09-01', time: '12:00' })];
   check('the list names the report it goes into', sb.receiptTargetEntry(st.receipts[0]).id === 'e2');
   check('a receipt after the last report goes into none yet', sb.receiptTargetEntry(rcpt({ date: '2026-09-03', time: '01:00' })) === null);
-}
-
-console.log('\n2) a Measured (survey) figure is that report\'s R.O.B. and the Previous of the next');
-{
-  const rs = rows3();
-  const st = { setup: { rob: { hfo: 500 } }, entries: entriesOf(rs, { e2: { robSurvey: { measured: { hfo: 470 }, calculated: { hfo: 480 }, difference: { hfo: -10 } } } }), receipts: [], _rows: rs };
-  check('book 480 measured 470 at the 2nd report: 490, 470, 460', eq(rob(sandbox(st), rs), [490, 470, 460]));
-}
-
-console.log('\n3) a Correction is added to the book WITH the receipts — it never wipes one');
-{
-  const rs = rows3();
-  const st = { setup: { rob: { hfo: 500 } }, entries: entriesOf(rs, { e2: { robSurvey: { measured: { hfo: 575 }, calculated: { hfo: 580 }, difference: { hfo: -5 } } } }), receipts: [rcpt({ date: '2026-09-01', time: '12:00' })], _rows: rs };
-  const sb = sandbox(st);
-  check('the book the correction is typed against holds the receipt: 580', sb.robAsOfComputedRow(rs[1], rs, { excludeOwnSurvey: true }).rob.hfo === 580);
-  check('−5 against it: 490, 575 (not 475), 565', eq(rob(sb, rs), [490, 575, 565]));
-  check('no correction taken: the same book, 490, 580, 570', eq(rob(sandbox(Object.assign({}, st, { entries: entriesOf(rs) })), rs), [490, 580, 570]));
-}
-
-console.log('\n4) a receipt logged after the survey report still counts');
-{
-  const rs = rows3();
-  const st = { setup: { rob: { hfo: 500 } }, entries: entriesOf(rs, { e2: { robSurvey: { measured: { hfo: 470 }, calculated: { hfo: 480 }, difference: { hfo: -10 } } } }), receipts: [rcpt({ date: '2026-09-01', time: '20:00' })], _rows: rs };
-  check('survey 470 at 18:00, 100 MT received at 20:00 the same day: 490, 470, 560', eq(rob(sandbox(st), rs), [490, 470, 560]));
-  st.receipts = [rcpt({ date: '2026-09-01', time: '12:00' })];
-  check('a receipt before the survey is inside the measured figure and not added twice: 490, 470, 460', eq(rob(sandbox(st), rs), [490, 470, 460]));
 }
 
 console.log('');
