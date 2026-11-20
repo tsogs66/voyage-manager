@@ -84,7 +84,6 @@ function makeSandbox(state) {
       if (t) robLube[t.id] = (robLube[t.id] || 0) - amount;
     },
     latestRobSurveyAtOrBefore: () => null,
-    receiptDayAfter: (a, b) => String(a || '').slice(0, 10) > String(b || '').slice(0, 10),
     computeDerived: () => ({ rows: state._rows }),
     latestFwRob: () => 50000,
     sortedEntries: () => (state.entries || []).slice().sort((a, b) => new Date(a.datetime) - new Date(b.datetime)),
@@ -105,6 +104,10 @@ function makeSandbox(state) {
   };
   vm.createContext(sandbox);
   vm.runInContext([
+    'receiptDayAfter',
+    'receiptMoment',
+    'receiptJoinedBy',
+    'receiptAfterSurvey',
     'entryHasStampedReceived',
     'stampedReceivedAsOf',
     'receiptMatchesTankStrict',

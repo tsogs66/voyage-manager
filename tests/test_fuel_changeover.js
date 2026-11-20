@@ -59,16 +59,17 @@ vm.createContext(sandbox);
 vm.runInContext([
   extract('numOrNull'),
   extract('computeFuelChangeover'),
+  extract('consOfRow'),
   extract('computeFuelChangeoverMulti'),
   extract('changeoverThermalMinutes')
 ].join('\n'), sandbox);
 const { computeFuelChangeover, computeFuelChangeoverMulti, changeoverThermalMinutes } = sandbox;
 
-/* A realistic case: 3.0 m3 service system, 24 MT/day at 890 kg/m3,
+/* A realistic case: 3.0 m3 service system, 1 MT/hr (24 MT/day) at 890 kg/m3,
    0.48 % in service, changing to 0.07 %, limit 0.10 %. */
 const base = {
   sHigh: 0.48, sLow: 0.07, sLimit: 0.10,
-  volumeM3: 3.0, consMtDay: 24, density: 890, marginHrs: 1
+  volumeM3: 3.0, consMtHr: 1, density: 890, marginHrs: 1
 };
 const r = computeFuelChangeover(base);
 
@@ -103,7 +104,7 @@ const longer = (label, patch) => {
   if (!ok) fails += 1;
 };
 longer('a bigger service system takes longer', { volumeM3: 6 });
-longer('a lower load takes longer', { consMtDay: 12 });
+longer('a lower load takes longer', { consMtHr: 0.5 });
 longer('dirtier fuel in service takes longer', { sHigh: 0.9 });
 longer('a tighter limit takes longer', { sLimit: 0.08 });
 longer('a new fuel closer to the limit takes longer', { sLow: 0.095 });
@@ -124,13 +125,13 @@ const bad = (label, patch, mustSay) => {
    non-compliant fuel, and reporting some large number of hours would be a lie. */
 bad('a new fuel at the limit is refused, not given a long time', { sLow: 0.10 }, 'never reaches the limit');
 bad('a new fuel over the limit likewise', { sLow: 0.15 }, 'never reaches the limit');
-bad('a stopped engine displaces nothing', { consMtDay: 0 }, 'never completes');
+bad('a stopped engine displaces nothing', { consMtHr: 0 }, 'never completes');
 bad('no service volume is refused', { volumeM3: 0 });
 bad('zero density is refused', { density: 0 });
 bad('a new fuel no cleaner than the old is refused', { sLow: 0.48 }, 'Nothing to change over');
 bad('a dirtier new fuel is refused', { sLow: 0.9 }, 'Nothing to change over');
 bad('missing figures are refused', { volumeM3: '' }, 'Fill in every figure');
-bad('nonsense figures are refused', { consMtDay: 'abc' }, 'Fill in every figure');
+bad('nonsense figures are refused', { consMtHr: 'abc' }, 'Fill in every figure');
 
 /* Already under the limit is a pass, not a failure — and no time needed. */
 const already = computeFuelChangeover(Object.assign({}, base, { sHigh: 0.09 }));
@@ -177,22 +178,34 @@ check('copying to setup warns the record needs observed times',
 
 console.log('\nper-consumer windows: complete when the slowest consumer is under the limit');
 {
-  const me = { name: 'M/E', volumeM3: 3.0, consMtDay: 24 };
-  const ge = { name: 'G/E 1', volumeM3: 1.0, consMtDay: 3 };
-  const blr = { name: 'Boiler', volumeM3: 0.4, consMtDay: 2 };
-  const single = computeFuelChangeover(Object.assign({}, base, { volumeM3: me.volumeM3, consMtDay: me.consMtDay }));
-  const gen = computeFuelChangeover(Object.assign({}, base, { volumeM3: ge.volumeM3, consMtDay: ge.consMtDay }));
+  const me = { name: 'M/E', volumeM3: 3.0, consMtHr: 1 };
+  const ge = { name: 'G/E 1', volumeM3: 1.0, consMtHr: 0.125 };
+  const blr = { name: 'Boiler', volumeM3: 0.4, consMtHr: 2 / 24 };
+  const single = computeFuelChangeover(Object.assign({}, base, { volumeM3: me.volumeM3, consMtHr: me.consMtHr }));
+  const gen = computeFuelChangeover(Object.assign({}, base, { volumeM3: ge.volumeM3, consMtHr: ge.consMtHr }));
   const multi = computeFuelChangeoverMulti(base, [me, ge, blr]);
   check('the slowest consumer sets the time', multi.slowest, gen.hours > single.hours ? 'G/E 1' : 'M/E');
   near('and the time is that consumer\'s', multi.hours, Math.max(single.hours, gen.hours), 1e-9);
-  const sum = [me, ge, blr].map(c => computeFuelChangeover(Object.assign({}, base, { volumeM3: c.volumeM3, consMtDay: c.consMtDay })).lowSulphurUsedMt).reduce((a, b) => a + b, 0);
+  const sum = [me, ge, blr].map(c => computeFuelChangeover(Object.assign({}, base, { volumeM3: c.volumeM3, consMtHr: c.consMtHr })).lowSulphurUsedMt).reduce((a, b) => a + b, 0);
   near('low-sulphur fuel displaced is the sum over the consumers', multi.lowSulphurUsedMt, sum, 1e-9);
-  check('total consumption is the sum', multi.consMtDayTotal, 29);
+  check('total consumption is the sum', Math.round(multi.consMtHrTotal * 24 * 1e6) / 1e6, 29);
   check('one row per consumer, one marked slowest', [multi.perConsumer.length, multi.perConsumer.filter(r => r.slowest).length], [3, 1]);
   check('no consumers falls back to the single window', computeFuelChangeoverMulti(base, []).hours, computeFuelChangeover(base).hours);
   check('a consumer left half filled is ignored', computeFuelChangeoverMulti(base, [{ name: 'x', volumeM3: 2 }]).hours, computeFuelChangeover(base).hours);
-  const bad = computeFuelChangeoverMulti(base, [me, { name: 'Boiler', volumeM3: 1, consMtDay: 0 }]);
+  const bad = computeFuelChangeoverMulti(base, [me, { name: 'Boiler', volumeM3: 1, consMtHr: 0 }]);
   check('a consumer that cannot finish is named in the reason', [bad.ok, /^Boiler:/.test(bad.reason)], [false, true]);
+}
+
+console.log('\nMT/hr basis (fuel-oil changeover calculator): tau = V*rho/1000 / Q(MT/hr)');
+{
+  const x = computeFuelChangeover({ sHigh: 2.5, sLow: 0.07, sLimit: 0.10, volumeM3: 12, consMtHr: 1, density: 890, marginHrs: 1 });
+  near('one system volume', x.tauHours, 12 * 890 / 1000 / 1, 1e-9);
+  near('time = tau * ln((Sh-Sl)/(Slim-Sl))', x.hours, x.tauHours * Math.log((2.5 - 0.07) / (0.10 - 0.07)), 1e-9);
+  near('low-S displaced = MT/hr x hours', x.lowSulphurUsedMt, x.hours, 1e-9);
+  const d = computeFuelChangeover({ sHigh: 2.5, sLow: 0.07, sLimit: 0.10, volumeM3: 12, consMtDay: 24, density: 890 });
+  near('an older MT/day figure gives the same answer (24 MT/day = 1 MT/hr)', d.hours, x.hours, 1e-9);
+  const m = computeFuelChangeoverMulti({ sHigh: 2.5, sLow: 0.07, sLimit: 0.10, density: 890 }, [{ name: 'M/E', volumeM3: 12, consMtDay: 24 }]);
+  near('an older saved consumer row (MT/day) still works', m.hours, x.hours, 1e-9);
 }
 
 console.log(fails ? `\nFAILED — ${fails} of ${checks} checks` : `\nPASSED — ${checks} checks`);

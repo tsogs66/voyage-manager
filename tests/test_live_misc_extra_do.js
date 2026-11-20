@@ -49,7 +49,8 @@ check('Clear survey does not wipe ROB bunkers',
   /async function clearRobSurvey[\s\S]*?must not wipe bunkers/.test(HTML) ||
   HTML.includes('Bunkers received on the ROB table are kept'));
 check('live ROB uses Previous + Received − Consumption',
-  HTML.includes('prevVal + recvVal - consVal') || HTML.includes('prevVal + recvVal − consVal'));
+  HTML.includes('prevVal + recvVal - consVal') || HTML.includes('prevVal + recvVal − consVal')
+  || HTML.includes('prevVal + vsReceivedForRow(entry, r, recvVal) - consVal'));
 check('survey live diffs are sounding only',
   HTML.includes('sounding correction only') || HTML.includes('Measured − book') ||
   HTML.includes('Measured - book') || HTML.includes('Correction (+/−)'));
