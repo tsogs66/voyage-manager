@@ -77,6 +77,9 @@ function makeSandbox(state) {
     [
       extract('latestRobSurveyAtOrBefore'),
       extract('receiptDayAfter'),
+      extract('receiptMoment'),
+      extract('receiptJoinedBy'),
+      extract('receiptAfterSurvey'),
       extract('receiptMatchesTankStrict'),
       extract('entryHasStampedReceived'),
       extract('stampedReceivedAsOf'),

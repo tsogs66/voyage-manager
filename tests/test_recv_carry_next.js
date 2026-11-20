@@ -42,7 +42,7 @@ console.log('\nsource guards');
 check('stampedReceivedAsOf helper', HTML.includes('function stampedReceivedAsOf'));
 check('entryHasStampedReceived helper', HTML.includes('function entryHasStampedReceived'));
 check('robAsOf uses stamped Received', HTML.includes('bookReceivedPreferOnce(t, \'fuel\''));
-check('day-based receipt cutoff', HTML.includes('rDay > cutoffDay'));
+check('receipts join by their time (date-only by day)', HTML.includes('receiptJoinedBy(r, cutoff'));
 check('sync stores entry.datetime on receipt', HTML.includes('Use the entry datetime'));
 
 console.log('\nstamped Received carries into later ROB');
