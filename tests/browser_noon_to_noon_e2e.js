@@ -207,7 +207,7 @@ const SCRAPE = `(html) => {
   check('the preview shows the same sheet', prev, { title: 'Noon to Noon Report', signed: true });
 
   console.log('\nprint history');
-  await pg.evaluate(async (id) => { window.printPortraitSinglePage = () => ''; await printNoonToNoon(id); }, ids.noon2);
+  await pg.evaluate(async (id) => { const real = window.printPortraitSinglePage; window.printPortraitSinglePage = () => ''; try { await printNoonToNoon(id); } finally { window.printPortraitSinglePage = real; } }, ids.noon2);
   await pg.waitForTimeout(400);
   const hist = await pg.evaluate(() => state.printHistory.filter(p => p.type === 'noon-to-noon').length);
   check('the print is recorded', hist >= 1, true);
@@ -235,6 +235,140 @@ const SCRAPE = `(html) => {
   check('a clock change in the period is named on the sheet', clock.note, true);
   const unknown = await pg.evaluate(() => buildNoonToNoonSheetHTML('no-such-entry'));
   check('an unknown noon builds nothing', unknown, '');
+
+  console.log('\nevery noon in a range (one print)');
+  const batch = await pg.evaluate(async (ids) => {
+    const real = window.printPortraitPages; let out = null, sheets = null;
+    window.printPortraitPages = (list) => { sheets = list; out = real(list); return out; };
+    const histBefore = state.printHistory.filter(p => p.type === 'noon-to-noon').length;
+    try { await printNoonToNoonBatch(ids.first, ids.noon3); } finally { window.printPortraitPages = real; }
+    const d = document.createElement('div'); d.innerHTML = out || '';
+    const pages = [...d.querySelectorAll('.pr-page-portrait')];
+    return {
+      sheets: Array.isArray(sheets) ? sheets.length : -1,
+      pages: pages.length,
+      signed: pages.every(p => !!p.querySelector('.pr-sign')),
+      titles: pages.map(p => p.querySelector('.pr-doc-title')?.textContent.trim()),
+      dates: pages.map(p => p.querySelectorAll('.pr-meta-val')[0]?.textContent.trim()),
+      hist: state.printHistory.filter(p => p.type === 'noon-to-noon').length - histBefore,
+      expected: noonToNoonRange(ids.first, ids.noon3, null).map(x => x.id)
+    };
+  }, ids);
+  check('one sheet per noon in the range', batch.sheets, 3);
+  check('printed as one page each', batch.pages, 3);
+  check('every page is a Noon to Noon report and is signed', [batch.titles.every(t => t === 'Noon to Noon Report'), batch.signed], [true, true]);
+  check('the noons are in time order', batch.expected, [ids.first, ids.noon2, ids.noon3]);
+  check('each noon is filed in the print history', batch.hist, 3);
+  const perNoon = await pg.evaluate((ids) => [ids.first, ids.noon2, ids.noon3].map(id => {
+    const d = noonToNoonData(id, null); return { hrs: d.agg.hrs, n: d.views.length };
+  }), ids);
+  check('the second noon is the 4-report period', perNoon[1].n, 4);
+  check('and each period is worked on its own (hours differ by period, not cumulative)', perNoon[2].hrs <= 24.01 && perNoon[1].hrs <= 24.01, true);
+
+  console.log('\na long period still fits one page');
+  const longRun = await pg.evaluate(async () => {
+    const keep = state.entries;
+    const base = keep.find(e => e.id === 'n2n-noon2');
+    const start = new Date(base.datetime).getTime();
+    const extra = [];
+    for (let i = 1; i <= 12; i++) {
+      extra.push({ ...JSON.parse(JSON.stringify(base)), id: 'n2n-long-' + i, operation: i % 2 ? 'CHANGE SPEED' : 'HEAVY WEATHER',
+        datetime: new Date(start + (i * 1.5 + 0.5) * 3600 * 1000).toISOString().slice(0, 16),
+        report: { ...(base.report || {}), remarks: 'Report ' + i + ': a short remark about the watch.' } });
+    }
+    const noon = { ...JSON.parse(JSON.stringify(base)), id: 'n2n-long-noon', operation: 'NOON - AT SEA',
+      datetime: new Date(start + 23.5 * 3600 * 1000).toISOString().slice(0, 16) };
+    state.entries = keep.concat(extra, [noon]);
+    try {
+      /* The sheet is fitted to the page: the signature has to end up inside the A4 page, not past its edge. */
+      switchTab('reports'); renderNoonToNoonPanel(); document.getElementById('n2nEnd').value = 'n2n-long-noon'; updateNoonToNoonPanel(); previewNoonToNoon();
+      await new Promise(r => setTimeout(r, 900));
+      const fr = document.querySelector('#n2nPreviewHost iframe'), fd = fr && fr.contentDocument;
+      const pageEl = fd && fd.querySelector('.pr-page-portrait'), sign = fd && fd.querySelector('.pr-sign');
+      var fit = (pageEl && sign) ? { signBottom: Math.round(sign.getBoundingClientRect().bottom), pageBottom: Math.round(pageEl.getBoundingClientRect().bottom) } : null;
+      const real = window.printPortraitSinglePage; let out = null;
+      window.printPortraitSinglePage = (h) => { out = real(h); return out; };
+      try { printNoonToNoon('n2n-long-noon'); } finally { window.printPortraitSinglePage = real; }
+      const d = document.createElement('div'); d.innerHTML = out || '';
+      const w = noonToNoonWindow('n2n-long-noon');
+      return { sheets: d.querySelectorAll('.pr-sheet').length, signed: !!d.querySelector('.pr-sign'), n: w ? w.ids.length : -1,
+               rows: d.querySelectorAll('.pr-section')[0] ? 1 : 0, win: w && w.ids, fit };
+    } finally { state.entries = keep; }
+  });
+  check('the period holds many reports', longRun.n >= 13, true);
+  check('and prints as one signed sheet', [longRun.sheets, longRun.signed], [1, true]);
+  check('with the signature inside the A4 page', !!longRun.fit && longRun.fit.signBottom <= longRun.fit.pageBottom + 1, true);
+
+  console.log('\na period across a voyage-leg change');
+  const cross = await pg.evaluate(async (ids) => {
+    const keep = state.entries, keepPool = _rangeLegPool, keepFlag = _n2nIncludeArchived;
+    const act = keep.filter(e => e.id.startsWith('n2n-') && !e.id.startsWith('n2n-long'));
+    const first = act.find(e => e.id === ids.first);
+    const t0 = new Date(first.datetime).getTime(), H = 3600 * 1000;
+    let me = first.me.meter - 4000, ge = first.ge.meter - 400, blr = first.blr.meter - 100, rc = (first.revCounter || 0) - 90000, cyl = (first.cylMeter || 0) - 300;
+    const mk = (id, hoursBefore, op, span) => {
+      rc += 78 * 60 * span; me += 1700 * span; ge += 58 * span; blr += 12 * span; cyl += 16 * span;
+      return { ...JSON.parse(JSON.stringify(first)), id, operation: op, datetime: new Date(t0 - hoursBefore * H).toISOString().slice(0, 16),
+        distanceShip: 14 * span, rpm: 78, revCounter: rc, cylMeter: cyl,
+        me: { ...first.me, meter: me, type: 'LSFO' }, ge: { ...first.ge, meter: ge, type: 'MDO/MGO' }, blr: { ...first.blr, meter: blr },
+        report: { ...(first.report || {}), remarks: id === 'old-arr' ? 'All fast, voyage ended' : '' }, robSurvey: null, clockChangeMin: 0 };
+    };
+    const oldEntries = [mk('old-noon', 36, 'NOON - AT SEA', 24), mk('old-arr', 20, 'ARRIVAL - FIRST LINE', 16)];
+    const pack = { setup: JSON.parse(JSON.stringify(state.setup)), entries: oldEntries, receipts: [], documents: [], abstracts: [], printHistory: [] };
+    state.entries = act;
+    const vid = vesselRegistryId(state.activeVesselId || LEGACY_VESSEL_ID);
+    const oldLeg = { key: 'old-leg', label: 'Voyage 07 · Laden', voyageNumber: '07', condition: 'L', active: false, pack,
+      entries: oldEntries.map(e => normalizeEntry(cloneEntry(e))) };
+    const activeLeg = { key: 'active', label: 'Voyage 08 · Ballast · open', voyageNumber: '08', condition: 'B', active: true, pack: null, entries: sortedEntries().slice() };
+    _rangeLegPool = { vesselId: vid, legs: [oldLeg, activeLeg] };
+    try {
+      const box = document.getElementById('n2nIncludeArchived');
+      box.checked = true; box.dispatchEvent(new Event('change'));
+      await new Promise(r => setTimeout(r, 400));
+      const opts = [...document.getElementById('n2nEnd').options].map(o => o.value);
+      const groups = [...document.querySelectorAll('#n2nEnd optgroup')].map(g => g.label);
+      const w = noonToNoonWindow(ids.first, _rangeLegPool);
+      const d = noonToNoonData(ids.first, _rangeLegPool);
+      const flatIds = w.ids;
+      const ref = aggregateAcrossLegs(_rangeLegPool, 'old-noon', ids.first, true);
+      const html = buildNoonToNoonSheetHTML(ids.first, _rangeLegPool);
+      const dd = document.createElement('div'); dd.innerHTML = html;
+      const fuel = [...dd.querySelectorAll('.pr-section')].find(s => s.querySelector('.pr-section-title').textContent.startsWith('Fuel Consumption'));
+      const fr = [...fuel.querySelectorAll('tr')].map(tr => [...tr.children].map(td => td.textContent.trim()));
+      const inc = [...dd.querySelectorAll('.pr-section')].find(s => s.querySelector('.pr-section-title').textContent.startsWith('Reports Included'));
+      const ir = [...inc.querySelectorAll('tr')].map(tr => [...tr.children].map(td => td.textContent.trim()));
+      const panelWin = document.getElementById('n2nWindow').textContent;
+      document.getElementById('n2nEnd').value = ids.first;
+      updateNoonToNoonPanel();
+      return {
+        opts: opts.slice(0, 5), groups, start: w.startEntry && w.startEntry.id, ids: flatIds, spans: w.spansLegs, segs: w.segments.map(s => s.legKey),
+        hrs: d.agg.hrs, refHrs: ref.hrs, dist: d.agg.distShip, refDist: ref.distShip, fuel: d.agg.fuelTotal, refFuel: ref.fuelTotal,
+        views: d.views.map(v => v.id), fuelRows: fr, incRows: ir, remarks: dd.querySelector('.pr-remarks-body').textContent,
+        subtitle: dd.querySelector('.pr-doc-subtitle').textContent, signed: !!dd.querySelector('.pr-sign'),
+        rob: !!d.robRows, panel: document.getElementById('n2nWindow').textContent
+      };
+    } finally {
+      state.entries = keep; _rangeLegPool = keepPool; _n2nIncludeArchived = keepFlag;
+      const box = document.getElementById('n2nIncludeArchived'); if (box) box.checked = keepFlag;
+      renderNoonToNoonPanel();
+    }
+  }, ids);
+  check('the saved leg\'s noons are offered, grouped by leg', cross.groups.length, 2);
+  check('the previous noon is in the earlier leg', cross.start, 'old-noon');
+  check('the period holds the old leg\'s closing report and the new leg\'s noon', cross.ids, ['old-arr', ids.first]);
+  check('it spans two legs', [cross.spans, cross.segs], [true, ['old-leg', 'active']]);
+  check('hours are Range Totals\' hours across the same legs', cross.hrs.toFixed(3), cross.refHrs.toFixed(3));
+  check('distance too', cross.dist.toFixed(2), cross.refDist.toFixed(2));
+  check('and fuel', cross.fuel.toFixed(3), cross.refFuel.toFixed(3));
+  check('the list names both reports and the total', [cross.views, cross.incRows.length], [['old-arr', ids.first], 4]);
+  const cu = cross.fuelRows.slice(1, -1), ct = cross.fuelRows[cross.fuelRows.length - 1];
+  for (let col = 1; col < ct.length; col++) {
+    check(`fuel column ${cross.fuelRows[0][col]}: units add up to the total across legs`, cu.reduce((a, r) => a + mt(r[col]), 0).toFixed(3), mt(ct[col]).toFixed(3));
+  }
+  check('the sheet says it crosses legs and carries the old leg\'s remark',
+    [/across 2 voyage legs/.test(cross.remarks), /All fast, voyage ended/.test(cross.remarks)], [true, true]);
+  check('it is signed and has the stock table', [cross.signed, cross.rob], [true, true]);
+  check('the panel says the period crosses legs', /across 2 voyage legs/.test(cross.panel), true);
 
   check('no script errors', errs, []);
   console.log(`\n${c - f}/${c} passed`);
