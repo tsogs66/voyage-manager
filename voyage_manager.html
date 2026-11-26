@@ -17350,6 +17350,7 @@ function mountBunkerPlan(){
   _bunkerPlanCtl = ConsumptionPlan.mount(inner, {
     ui: { panel: 'panel', btn: 'ghost small', primary: 'primary small', hist: 'panel' },
     fuels: planFuels,
+    sea: ConsumptionPlan.seaLoader('./sea-distance/'),
     load(){
       if (!Array.isArray(state.setup.bunkerPlanHistory)) state.setup.bunkerPlanHistory = [];
       return { plan: state.setup.bunkerPlan, history: state.setup.bunkerPlanHistory };
@@ -17391,10 +17392,15 @@ function mountBunkerPlan(){
     printHeader: (i)=> printDocHeader({ title: 'Bunker Consumption Calculation', subtitle: 'Voyage fuel plan — sea / port legs with margin', badge: i.voyageNo }),
     printSignature: ()=> printSignatory(),
     printExtraMeta: ()=> [{ label: 'Condition', value: escPrint(state.setup.shipCondition || '—') }],
-    printSheet(html){
+    printMapSeparate: true,
+    printSheet(html, plan, extra){
       beginPrintHold();
       try {
-        printPortraitSinglePage(`<div class="pr-sheet pr-bunker-sheet">${html}</div>`);
+        if (extra && extra.mapHtml){
+          /* the route map gets its own A4 page after the plan */
+          const mapPage = `<div class="pr-sheet pr-bunker-sheet">${printDocHeader({ title: 'Route Map', subtitle: 'Consumption plan routes', badge: (plan && plan.voyageNo) || '' })}${extra.mapHtml}${printSignatory()}</div>`;
+          printPortraitPages([`<div class="pr-sheet pr-bunker-sheet">${html}</div>`, mapPage]);
+        } else printPortraitSinglePage(`<div class="pr-sheet pr-bunker-sheet">${html}</div>`);
       } catch (err) {
         endPrintHold();
         throw err;
@@ -31579,6 +31585,13 @@ let androidInstallAssets = [
   './eorb.js',
   './stem-advice.js',
   './consumption-plan.js',
+  './sea-distance/port-list.js',
+  './sea-distance/sea-route.js',
+  './sea-distance/eca-zones.js',
+  './sea-distance/sea-map.js',
+  './sea-distance/land.json',
+  './sea-distance/ports.json',
+  './sea-distance/marnet.json',
   './ship_time.js',
   './theme.js',
   './license-config.js',
