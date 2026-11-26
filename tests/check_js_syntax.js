@@ -14,7 +14,7 @@ const { execFileSync } = require('child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const STANDALONE = ['eorb.js', 'ship_time.js', 'sw.js', 'save-file.js', 'file-viewer.js', 'fuel-changeover-log.js',
- 'tank-fuel-register.js', 'camera-capture.js', 'guide.js', 'notes.js', 'note-reminders.js', 'lan-sync.js', 'scripts/sync-www.js'];
+ 'tank-fuel-register.js', 'camera-capture.js', 'guide.js', 'ui-zoom.js', 'notes.js', 'note-reminders.js', 'lan-sync.js', 'scripts/sync-www.js'];
 const HTML = 'voyage_manager.html';
 
 const failures = [];
