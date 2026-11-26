@@ -43,6 +43,7 @@ const PRECACHE = [
   './tank-fuel-register.js',
   './camera-capture.js',
   './guide.js',
+  './ui-zoom.js',
   './note-reminders.js',
   './lan-sync.js',
   './notes.js',
